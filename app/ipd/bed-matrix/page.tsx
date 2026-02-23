@@ -3,10 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import {
     Bed, RefreshCw, Loader2, ArrowLeft, User, Clock, Stethoscope,
-    AlertTriangle, Shield, CheckCircle, Wrench, Sparkles, Ban
+    AlertTriangle, Shield, CheckCircle, Wrench, Sparkles, Ban, Activity
 } from 'lucide-react';
 import Link from 'next/link';
 import { getWardsWithBeds, getAllBeds } from '@/app/actions/ipd-actions';
+import { AppShell } from '@/app/components/layout/AppShell';
 
 const statusConfig: Record<string, { color: string; bg: string; border: string; icon: any; label: string }> = {
     Available: { color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', icon: CheckCircle, label: 'Available' },
@@ -61,39 +62,18 @@ export default function BedMatrixPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#0B0F1A] text-white font-sans">
-            {/* HEADER */}
-            <header className="bg-[#0F1425]/90 backdrop-blur-xl border-b border-white/5 px-6 py-3 sticky top-0 z-50">
-                <div className="max-w-[1600px] mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <Link href="/ipd" className="p-2 hover:bg-white/5 rounded-lg transition-all">
-                            <ArrowLeft className="h-4 w-4 text-white/40" />
-                        </Link>
-                        <div className="relative">
-                            <div className="absolute inset-0 bg-gradient-to-br from-violet-400 to-indigo-600 rounded-xl blur-md opacity-50" />
-                            <div className="relative bg-gradient-to-br from-violet-400 to-indigo-600 p-2 rounded-xl shadow-lg shadow-violet-500/20">
-                                <Bed className="h-5 w-5 text-white" />
-                            </div>
-                        </div>
-                        <div>
-                            <h1 className="text-sm font-black tracking-tight">Bed Matrix</h1>
-                            <p className="text-[10px] text-white/30 font-medium">Real-time bed availability</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <span className="text-[10px] text-white/20 font-mono">
-                            Last updated: {lastRefresh.toLocaleTimeString()}
-                        </span>
-                        <button onClick={loadData} disabled={loading}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs font-bold text-white/60 hover:bg-white/10 transition-all">
-                            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                            Refresh
-                        </button>
-                    </div>
-                </div>
-            </header>
-
-            <main className="max-w-[1600px] mx-auto p-6 space-y-6">
+        <AppShell
+            pageTitle="Bed Matrix"
+            pageIcon={<Activity className="h-5 w-5" />}
+            onRefresh={loadData}
+            refreshing={loading}
+            headerActions={
+                <span className="text-[10px] text-gray-400 font-mono">
+                    Last updated: {lastRefresh.toLocaleTimeString()}
+                </span>
+            }
+        >
+            <div className="space-y-6">
                 {/* SUMMARY BAR */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                     {[
@@ -103,8 +83,8 @@ export default function BedMatrixPage() {
                         { label: 'Cleaning', value: cleaning, color: 'from-amber-400 to-amber-500' },
                         { label: 'Occupancy', value: `${occupancyRate}%`, color: 'from-violet-400 to-indigo-500' },
                     ].map((stat) => (
-                        <div key={stat.label} className="bg-[#131A2E] border border-white/5 rounded-xl p-4">
-                            <p className="text-[10px] font-black text-white/30 uppercase tracking-wider">{stat.label}</p>
+                        <div key={stat.label} className="bg-white border border-gray-200 shadow-sm rounded-xl p-4">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{stat.label}</p>
                             <p className={`text-2xl font-black mt-1 bg-gradient-to-r ${stat.color} bg-clip-text text-transparent`}>
                                 {stat.value}
                             </p>
@@ -134,11 +114,11 @@ export default function BedMatrixPage() {
                             if (wardBeds.length === 0) return null;
 
                             return (
-                                <div key={ward.ward_id} className="bg-[#131A2E] border border-white/5 rounded-2xl p-5">
+                                <div key={ward.ward_id} className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5">
                                     <div className="flex items-center justify-between mb-4">
                                         <div>
-                                            <h3 className="text-sm font-black text-white">{ward.ward_name}</h3>
-                                            <p className="text-[10px] text-white/30 font-medium">
+                                            <h3 className="text-sm font-black text-gray-900">{ward.ward_name}</h3>
+                                            <p className="text-[10px] text-gray-400 font-medium">
                                                 {ward.ward_type} &bull; {ward.totalBeds} beds &bull; {ward.available} free
                                             </p>
                                         </div>
@@ -172,19 +152,19 @@ export default function BedMatrixPage() {
 
                                                     {activeAdmission ? (
                                                         <div className="space-y-1">
-                                                            <p className="text-[10px] font-bold text-white truncate" title={activeAdmission.patient?.full_name}>
+                                                            <p className="text-[10px] font-bold text-gray-900 truncate" title={activeAdmission.patient?.full_name}>
                                                                 {activeAdmission.patient?.full_name || 'Unknown'}
                                                             </p>
                                                             <div className="flex items-center gap-1">
-                                                                <Clock className="h-2.5 w-2.5 text-white/30" />
-                                                                <span className="text-[9px] text-white/30 font-medium">
+                                                                <Clock className="h-2.5 w-2.5 text-gray-400" />
+                                                                <span className="text-[9px] text-gray-400 font-medium">
                                                                     {days}d
                                                                 </span>
                                                             </div>
                                                             {activeAdmission.doctor_name && (
                                                                 <div className="flex items-center gap-1">
-                                                                    <Stethoscope className="h-2.5 w-2.5 text-white/20" />
-                                                                    <span className="text-[9px] text-white/20 font-medium truncate">
+                                                                    <Stethoscope className="h-2.5 w-2.5 text-gray-300" />
+                                                                    <span className="text-[9px] text-gray-300 font-medium truncate">
                                                                         {activeAdmission.doctor_name}
                                                                     </span>
                                                                 </div>
@@ -204,14 +184,7 @@ export default function BedMatrixPage() {
                         })}
                     </div>
                 )}
-            </main>
-
-            <footer className="mt-8 border-t border-white/5 py-6 px-6">
-                <div className="max-w-[1600px] mx-auto flex items-center justify-between">
-                    <p className="text-[10px] font-bold text-white/15 uppercase tracking-wider">Avani Hospital OS &bull; Bed Matrix &bull; v2.0</p>
-                    <p className="text-[10px] font-medium text-white/15">Auto-refreshes every 30 seconds</p>
-                </div>
-            </footer>
-        </div>
+            </div>
+        </AppShell>
     );
 }

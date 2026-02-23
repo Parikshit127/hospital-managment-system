@@ -2,14 +2,13 @@
 
 import React, { useState } from 'react';
 import {
-    Zap, AlertTriangle, CheckCircle, Clock, Users, ArrowRight, X,
-    Plus, Minus, Activity, Shield, Stethoscope, FlaskConical,
-    HeartPulse, Thermometer, Loader2, FileText, ChevronRight,
-    Brain, Siren, Clipboard, Phone, LogOut
+    Zap, AlertTriangle, CheckCircle, Users, ArrowRight, X,
+    Plus, Shield, Stethoscope, FlaskConical,
+    HeartPulse, Loader2, FileText, ChevronRight,
+    Siren, Clipboard
 } from 'lucide-react';
-import Link from 'next/link';
 import { performTriage } from '@/app/actions/triage-actions';
-import { registerPatient } from '@/app/actions/register-patient';
+import { AppShell } from '@/app/components/layout/AppShell';
 
 const COMMON_SYMPTOMS = [
     'Fever', 'Headache', 'Cough', 'Chest Pain', 'Abdominal Pain',
@@ -133,44 +132,18 @@ export default function TriagePage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#0B0F1A] text-white font-sans">
-            {/* HEADER */}
-            <header className="bg-[#0F1425]/90 backdrop-blur-xl border-b border-white/5 px-6 py-3 sticky top-0 z-50">
-                <div className="max-w-7xl mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="relative">
-                            <div className="absolute inset-0 bg-gradient-to-br from-teal-400 to-emerald-600 rounded-xl blur-md opacity-50" />
-                            <div className="relative bg-gradient-to-br from-teal-400 to-emerald-600 p-2 rounded-xl shadow-lg shadow-teal-500/20">
-                                <HeartPulse className="h-5 w-5 text-white" />
-                            </div>
-                        </div>
-                        <div>
-                            <h1 className="text-lg font-black tracking-tight bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">Avani Hospital OS</h1>
-                            <p className="text-[10px] font-bold text-teal-400 uppercase tracking-[0.2em]">Receptionist · AI Triage</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <div className="hidden md:flex items-center gap-2 text-xs text-white/30 font-medium">
-                            <Shield className="h-3.5 w-3.5" />
-                            <span>Receptionist Portal</span>
-                        </div>
-                        <Link href="/login" className="flex items-center gap-2 text-xs font-bold text-rose-400 hover:text-rose-300 px-3 py-2 rounded-lg hover:bg-rose-500/10 transition-all">
-                            <LogOut className="h-3.5 w-3.5" /> Logout
-                        </Link>
-                    </div>
-                </div>
-            </header>
+        <AppShell pageTitle="AI Triage" pageIcon={<Zap className="h-5 w-5" />}>
 
-            <main className="max-w-7xl mx-auto px-6 py-8">
+            <div className="max-w-7xl mx-auto">
                 {triageResult ? (
                     /* ============== TRIAGE RESULT VIEW ============== */
                     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h2 className="text-2xl font-black tracking-tight">Triage Assessment Complete</h2>
-                                <p className="text-white/40 font-medium mt-1">AI-generated clinical triage for {patientName}</p>
+                                <h2 className="text-2xl font-black tracking-tight text-gray-900">Triage Assessment Complete</h2>
+                                <p className="text-gray-500 font-medium mt-1">AI-generated clinical triage for {patientName}</p>
                             </div>
-                            <button onClick={resetForm} className="px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white/60 hover:text-white hover:bg-white/10 transition-all flex items-center gap-2">
+                            <button onClick={resetForm} className="px-5 py-2.5 bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-700 hover:text-gray-900 hover:bg-gray-100 transition-all flex items-center gap-2">
                                 <Plus className="h-3.5 w-3.5" /> New Patient
                             </button>
                         </div>
@@ -184,8 +157,8 @@ export default function TriagePage() {
                                 <div className="flex items-center gap-4">
                                     {getTriageBadge(triageResult.triageLevel)}
                                     <div>
-                                        <h3 className="font-black text-white text-lg">{patientName}</h3>
-                                        <p className="text-white/40 text-sm font-medium">
+                                        <h3 className="font-black text-gray-900 text-lg">{patientName}</h3>
+                                        <p className="text-gray-500 text-sm font-medium">
                                             {age && `${age}y`}{gender && ` / ${gender}`} · {selectedSymptoms.length} symptoms reported
                                         </p>
                                     </div>
@@ -203,9 +176,9 @@ export default function TriagePage() {
                                             <span className="text-sm font-black text-violet-400 font-mono">{triageResult.appointmentId}</span>
                                         </div>
                                     )}
-                                    <div className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl">
-                                        <span className="text-[10px] font-black text-white/30 uppercase tracking-wider block">Department</span>
-                                        <span className="text-sm font-black text-white">{triageResult.recommendedDepartment}</span>
+                                    <div className="px-4 py-2 bg-gray-100 border border-gray-200 rounded-xl">
+                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Department</span>
+                                        <span className="text-sm font-black text-gray-900">{triageResult.recommendedDepartment}</span>
                                     </div>
                                 </div>
                             </div>
@@ -214,8 +187,8 @@ export default function TriagePage() {
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             {/* RISK ALERTS */}
                             {triageResult.riskAlerts.length > 0 && (
-                                <div className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl border border-white/5 overflow-hidden lg:col-span-2">
-                                    <div className="p-4 border-b border-white/5">
+                                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden lg:col-span-2">
+                                    <div className="p-4 border-b border-gray-200">
                                         <h4 className="font-black text-rose-400 text-xs uppercase tracking-[0.15em] flex items-center gap-2">
                                             <AlertTriangle className="h-3.5 w-3.5" /> Risk Alerts ({triageResult.riskAlerts.length})
                                         </h4>
@@ -224,7 +197,7 @@ export default function TriagePage() {
                                         {triageResult.riskAlerts.map((alert: string, i: number) => (
                                             <div key={i} className="flex items-start gap-3 p-3 bg-rose-500/5 border border-rose-500/10 rounded-xl">
                                                 <Shield className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
-                                                <span className="text-sm text-white/70 font-medium">{alert}</span>
+                                                <span className="text-sm text-gray-700 font-medium">{alert}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -232,8 +205,8 @@ export default function TriagePage() {
                             )}
 
                             {/* POSSIBLE CONDITIONS */}
-                            <div className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl border border-white/5 overflow-hidden">
-                                <div className="p-4 border-b border-white/5">
+                            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                                <div className="p-4 border-b border-gray-200">
                                     <h4 className="font-black text-violet-400 text-xs uppercase tracking-[0.15em] flex items-center gap-2">
                                         <Stethoscope className="h-3.5 w-3.5" /> Possible Conditions
                                     </h4>
@@ -244,15 +217,15 @@ export default function TriagePage() {
                                             <div className="h-6 w-6 rounded-full bg-violet-500/10 flex items-center justify-center text-[10px] font-black text-violet-400">
                                                 {i + 1}
                                             </div>
-                                            <span className="text-sm text-white/70 font-medium">{cond}</span>
+                                            <span className="text-sm text-gray-700 font-medium">{cond}</span>
                                         </div>
                                     ))}
                                 </div>
                             </div>
 
                             {/* RECOMMENDED TESTS */}
-                            <div className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl border border-white/5 overflow-hidden">
-                                <div className="p-4 border-b border-white/5">
+                            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                                <div className="p-4 border-b border-gray-200">
                                     <h4 className="font-black text-amber-400 text-xs uppercase tracking-[0.15em] flex items-center gap-2">
                                         <FlaskConical className="h-3.5 w-3.5" /> Recommended Tests
                                     </h4>
@@ -268,23 +241,23 @@ export default function TriagePage() {
                         </div>
 
                         {/* SOAP NOTE */}
-                        <div className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl border border-white/5 overflow-hidden">
-                            <div className="p-4 border-b border-white/5 flex items-center justify-between">
+                        <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
                                 <h4 className="font-black text-teal-400 text-xs uppercase tracking-[0.15em] flex items-center gap-2">
                                     <FileText className="h-3.5 w-3.5" /> Clinical Summary (SOAP)
                                 </h4>
-                                <button onClick={() => navigator.clipboard.writeText(triageResult.clinicalSummary)} className="text-[10px] font-bold text-white/30 hover:text-white px-3 py-1 rounded-lg hover:bg-white/5 transition-all">
+                                <button onClick={() => navigator.clipboard.writeText(triageResult.clinicalSummary)} className="text-[10px] font-bold text-gray-400 hover:text-gray-900 px-3 py-1 rounded-lg hover:bg-gray-100 transition-all">
                                     Copy
                                 </button>
                             </div>
-                            <pre className="p-6 text-sm text-white/60 font-mono whitespace-pre-wrap leading-relaxed overflow-auto max-h-[500px]">
+                            <pre className="p-6 text-sm text-gray-700 font-mono whitespace-pre-wrap leading-relaxed overflow-auto max-h-[500px]">
                                 {triageResult.clinicalSummary}
                             </pre>
                         </div>
 
                         <div className="text-center py-4">
-                            <p className="text-[10px] text-white/20 font-medium">
-                                ⚕️ This is an AI-assisted assessment. Final clinical decisions must be made by a qualified physician.
+                            <p className="text-[10px] text-gray-300 font-medium">
+                                This is an AI-assisted assessment. Final clinical decisions must be made by a qualified physician.
                             </p>
                         </div>
                     </div>
@@ -292,8 +265,8 @@ export default function TriagePage() {
                     /* ============== TRIAGE INPUT FORM ============== */
                     <div className="max-w-3xl mx-auto space-y-8">
                         <div className="text-center">
-                            <h2 className="text-3xl font-black tracking-tight">AI Patient Intake</h2>
-                            <p className="text-white/40 font-medium mt-2">
+                            <h2 className="text-3xl font-black tracking-tight text-gray-900">AI Patient Intake</h2>
+                            <p className="text-gray-500 font-medium mt-2">
                                 Smart triage with automated risk assessment & department routing
                             </p>
                         </div>
@@ -312,61 +285,61 @@ export default function TriagePage() {
                                             ? 'bg-violet-500/20 border border-violet-500/30 text-violet-300'
                                             : step > s.n
                                                 ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
-                                                : 'bg-white/5 border border-white/10 text-white/30'
+                                                : 'bg-gray-100 border border-gray-200 text-gray-400'
                                             }`}
                                     >
                                         <span className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-black ${step === s.n ? 'bg-violet-500 text-white' :
-                                            step > s.n ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/30'
+                                            step > s.n ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-400'
                                             }`}>
-                                            {step > s.n ? '✓' : s.n}
+                                            {step > s.n ? '\u2713' : s.n}
                                         </span>
                                         {s.label}
                                     </button>
-                                    {i < 2 && <ChevronRight className="h-3 w-3 text-white/10" />}
+                                    {i < 2 && <ChevronRight className="h-3 w-3 text-gray-300" />}
                                 </React.Fragment>
                             ))}
                         </div>
 
                         {/* STEP 1: Patient Info */}
                         {step === 1 && (
-                            <div className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl border border-white/5 p-8 space-y-6 animate-in fade-in duration-300">
-                                <h3 className="font-black text-white/90 text-lg flex items-center gap-2">
+                            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-8 space-y-6 animate-in fade-in duration-300">
+                                <h3 className="font-black text-gray-700 text-lg flex items-center gap-2">
                                     <Users className="h-5 w-5 text-violet-400" /> Patient Information
                                 </h3>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="col-span-2 space-y-1.5">
-                                        <label className="text-[10px] font-black text-white/30 uppercase tracking-wider ml-1">Full Name *</label>
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Full Name *</label>
                                         <input
                                             value={patientName} onChange={e => setPatientName(e.target.value)}
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-bold placeholder:text-white/20 focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20 outline-none transition-all"
+                                            className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20 outline-none transition-all"
                                             placeholder="Enter patient's full name"
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-[10px] font-black text-white/30 uppercase tracking-wider ml-1">Age</label>
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Age</label>
                                         <input
                                             type="number" value={age} onChange={e => setAge(e.target.value)}
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-bold placeholder:text-white/20 focus:border-violet-500/50 outline-none transition-all"
+                                            className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-violet-500/50 outline-none transition-all"
                                             placeholder="e.g. 42"
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-[10px] font-black text-white/30 uppercase tracking-wider ml-1">Gender</label>
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Gender</label>
                                         <select
                                             value={gender} onChange={e => setGender(e.target.value)}
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-bold focus:border-violet-500/50 outline-none transition-all"
+                                            className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 font-bold focus:border-violet-500/50 outline-none transition-all"
                                         >
-                                            <option value="" className="bg-[#131A2E]">Select</option>
-                                            <option value="Male" className="bg-[#131A2E]">Male</option>
-                                            <option value="Female" className="bg-[#131A2E]">Female</option>
-                                            <option value="Other" className="bg-[#131A2E]">Other</option>
+                                            <option value="" className="bg-white text-gray-900">Select</option>
+                                            <option value="Male" className="bg-white text-gray-900">Male</option>
+                                            <option value="Female" className="bg-white text-gray-900">Female</option>
+                                            <option value="Other" className="bg-white text-gray-900">Other</option>
                                         </select>
                                     </div>
                                     <div className="col-span-2 space-y-1.5">
-                                        <label className="text-[10px] font-black text-white/30 uppercase tracking-wider ml-1">Phone</label>
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Phone</label>
                                         <input
                                             value={phone} onChange={e => setPhone(e.target.value)}
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-bold placeholder:text-white/20 focus:border-violet-500/50 outline-none transition-all"
+                                            className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-violet-500/50 outline-none transition-all"
                                             placeholder="+91 XXXXX XXXXX"
                                         />
                                     </div>
@@ -384,8 +357,8 @@ export default function TriagePage() {
 
                         {/* STEP 2: Symptoms */}
                         {step === 2 && (
-                            <div className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl border border-white/5 p-8 space-y-6 animate-in fade-in duration-300">
-                                <h3 className="font-black text-white/90 text-lg flex items-center gap-2">
+                            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-8 space-y-6 animate-in fade-in duration-300">
+                                <h3 className="font-black text-gray-700 text-lg flex items-center gap-2">
                                     <Clipboard className="h-5 w-5 text-amber-400" /> Symptoms & Complaints
                                 </h3>
 
@@ -412,7 +385,7 @@ export default function TriagePage() {
                                             onClick={() => toggleSymptom(s)}
                                             className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all border ${selectedSymptoms.includes(s)
                                                 ? 'bg-violet-500/20 border-violet-500/30 text-violet-300'
-                                                : 'bg-white/5 border-white/10 text-white/40 hover:text-white hover:bg-white/10'
+                                                : 'bg-gray-100 border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-100'
                                                 }`}
                                         >
                                             {s}
@@ -425,10 +398,10 @@ export default function TriagePage() {
                                     <input
                                         value={customSymptom} onChange={e => setCustomSymptom(e.target.value)}
                                         onKeyDown={e => e.key === 'Enter' && addCustomSymptom()}
-                                        className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-bold placeholder:text-white/20 focus:border-violet-500/50 outline-none transition-all"
+                                        className="flex-1 bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-violet-500/50 outline-none transition-all"
                                         placeholder="Add custom symptom..."
                                     />
-                                    <button onClick={addCustomSymptom} className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white/40 hover:text-white hover:bg-white/10 transition-all">
+                                    <button onClick={addCustomSymptom} className="px-4 py-3 bg-gray-100 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-all">
                                         <Plus className="h-4 w-4" />
                                     </button>
                                 </div>
@@ -436,15 +409,15 @@ export default function TriagePage() {
                                 {/* Duration & Severity */}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
-                                        <label className="text-[10px] font-black text-white/30 uppercase tracking-wider ml-1">Duration</label>
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Duration</label>
                                         <input
                                             value={duration} onChange={e => setDuration(e.target.value)}
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-bold placeholder:text-white/20 focus:border-violet-500/50 outline-none transition-all"
+                                            className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-violet-500/50 outline-none transition-all"
                                             placeholder="e.g. 3 days"
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-[10px] font-black text-white/30 uppercase tracking-wider ml-1">Severity</label>
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Severity</label>
                                         <div className="flex gap-2">
                                             {['Mild', 'Moderate', 'Severe'].map(s => (
                                                 <button
@@ -454,7 +427,7 @@ export default function TriagePage() {
                                                         ? s === 'Severe' ? 'bg-red-500/20 border-red-500/30 text-red-400' :
                                                             s === 'Moderate' ? 'bg-amber-500/20 border-amber-500/30 text-amber-400' :
                                                                 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
-                                                        : 'bg-white/5 border-white/10 text-white/30'
+                                                        : 'bg-gray-100 border-gray-200 text-gray-400'
                                                         }`}
                                                 >
                                                     {s}
@@ -465,7 +438,7 @@ export default function TriagePage() {
                                 </div>
 
                                 <div className="flex justify-between pt-2">
-                                    <button onClick={() => setStep(1)} className="px-5 py-3 text-white/30 text-sm font-bold hover:text-white transition-all">
+                                    <button onClick={() => setStep(1)} className="px-5 py-3 text-gray-400 text-sm font-bold hover:text-gray-900 transition-all">
                                         ← Back
                                     </button>
                                     <button
@@ -482,36 +455,36 @@ export default function TriagePage() {
                         {step === 3 && (
                             <div className="space-y-6 animate-in fade-in duration-300">
                                 {/* Medical History */}
-                                <div className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl border border-white/5 p-8 space-y-5">
-                                    <h3 className="font-black text-white/90 text-lg flex items-center gap-2">
+                                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-8 space-y-5">
+                                    <h3 className="font-black text-gray-700 text-lg flex items-center gap-2">
                                         <Shield className="h-5 w-5 text-blue-400" /> Medical History
                                     </h3>
                                     <div className="space-y-4">
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black text-white/30 uppercase tracking-wider ml-1">Past Medical History</label>
+                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Past Medical History</label>
                                             <textarea
                                                 value={pmh} onChange={e => setPmh(e.target.value)}
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-medium placeholder:text-white/20 focus:border-violet-500/50 outline-none transition-all resize-none"
+                                                className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 font-medium placeholder:text-gray-400 focus:border-violet-500/50 outline-none transition-all resize-none"
                                                 placeholder="e.g. Diabetes Type 2, Hypertension..."
                                                 rows={2}
                                             />
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="space-y-1.5">
-                                                <label className="text-[10px] font-black text-white/30 uppercase tracking-wider ml-1">Current Medications</label>
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Current Medications</label>
                                                 <input
                                                     value={currentMeds} onChange={e => setCurrentMeds(e.target.value)}
-                                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-bold placeholder:text-white/20 focus:border-violet-500/50 outline-none transition-all"
+                                                    className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-violet-500/50 outline-none transition-all"
                                                     placeholder="e.g. Metformin 500mg"
                                                 />
                                             </div>
                                             <div className="space-y-1.5">
-                                                <label className="text-[10px] font-black text-white/30 uppercase tracking-wider ml-1 flex items-center gap-1">
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1 flex items-center gap-1">
                                                     Allergies <AlertTriangle className="h-2.5 w-2.5 text-rose-400" />
                                                 </label>
                                                 <input
                                                     value={allergies} onChange={e => setAllergies(e.target.value)}
-                                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-bold placeholder:text-white/20 focus:border-rose-500/50 outline-none transition-all"
+                                                    className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-rose-500/50 outline-none transition-all"
                                                     placeholder="e.g. Penicillin, Sulfa drugs"
                                                 />
                                             </div>
@@ -520,40 +493,40 @@ export default function TriagePage() {
                                 </div>
 
                                 {/* Vitals */}
-                                <div className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl border border-white/5 p-8 space-y-5">
-                                    <h3 className="font-black text-white/90 text-lg flex items-center gap-2">
-                                        <HeartPulse className="h-5 w-5 text-rose-400" /> Vitals <span className="text-white/20 text-xs font-medium">(Optional)</span>
+                                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-8 space-y-5">
+                                    <h3 className="font-black text-gray-700 text-lg flex items-center gap-2">
+                                        <HeartPulse className="h-5 w-5 text-rose-400" /> Vitals <span className="text-gray-300 text-xs font-medium">(Optional)</span>
                                     </h3>
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black text-white/30 uppercase tracking-wider ml-1">BP (mmHg)</label>
+                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">BP (mmHg)</label>
                                             <input
                                                 value={bp} onChange={e => setBp(e.target.value)}
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-mono font-bold placeholder:text-white/20 focus:border-violet-500/50 outline-none transition-all text-center"
+                                                className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 font-mono font-bold placeholder:text-gray-400 focus:border-violet-500/50 outline-none transition-all text-center"
                                                 placeholder="120/80"
                                             />
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black text-white/30 uppercase tracking-wider ml-1">Heart Rate</label>
+                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Heart Rate</label>
                                             <input
                                                 type="number" value={hr} onChange={e => setHr(e.target.value)}
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-mono font-bold placeholder:text-white/20 focus:border-violet-500/50 outline-none transition-all text-center"
+                                                className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 font-mono font-bold placeholder:text-gray-400 focus:border-violet-500/50 outline-none transition-all text-center"
                                                 placeholder="72"
                                             />
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black text-white/30 uppercase tracking-wider ml-1">Temp (°C)</label>
+                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Temp (°C)</label>
                                             <input
                                                 type="number" step="0.1" value={temp} onChange={e => setTemp(e.target.value)}
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-mono font-bold placeholder:text-white/20 focus:border-violet-500/50 outline-none transition-all text-center"
+                                                className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 font-mono font-bold placeholder:text-gray-400 focus:border-violet-500/50 outline-none transition-all text-center"
                                                 placeholder="37.0"
                                             />
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black text-white/30 uppercase tracking-wider ml-1">SpO2 (%)</label>
+                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">SpO2 (%)</label>
                                             <input
                                                 type="number" value={spo2} onChange={e => setSpo2(e.target.value)}
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-mono font-bold placeholder:text-white/20 focus:border-violet-500/50 outline-none transition-all text-center"
+                                                className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 font-mono font-bold placeholder:text-gray-400 focus:border-violet-500/50 outline-none transition-all text-center"
                                                 placeholder="98"
                                             />
                                         </div>
@@ -562,7 +535,7 @@ export default function TriagePage() {
 
                                 {/* Actions */}
                                 <div className="flex justify-between pt-2">
-                                    <button onClick={() => setStep(2)} className="px-5 py-3 text-white/30 text-sm font-bold hover:text-white transition-all">
+                                    <button onClick={() => setStep(2)} className="px-5 py-3 text-gray-400 text-sm font-bold hover:text-gray-900 transition-all">
                                         ← Back
                                     </button>
                                     <button
@@ -581,7 +554,8 @@ export default function TriagePage() {
                         )}
                     </div>
                 )}
-            </main>
-        </div>
+            </div>
+
+        </AppShell>
     );
 }

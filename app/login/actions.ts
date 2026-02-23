@@ -30,6 +30,7 @@ export async function login(prevState: any, formData: FormData) {
             username: user.username,
             role: user.role,
             name: user.name,
+            specialty: user.specialty || null,
             hospital_id: user.hospital_id || 'avani-default',
         }), {
             httpOnly: true,
@@ -57,6 +58,7 @@ export async function login(prevState: any, formData: FormData) {
                     username: user.username,
                     role: user.role,
                     name: user.name,
+                    specialty: user.specialty || null,
                     hospital_id: user.hospital_id || 'avani-default',
                 }), {
                     httpOnly: true,
@@ -92,7 +94,7 @@ export async function login(prevState: any, formData: FormData) {
     if (!user) return { success: false, error: 'User not found' }; // Should not happen
 
     switch (user.role) {
-        case 'receptionist': redirect('/reception/triage');
+        case 'receptionist': redirect('/reception');
         case 'doctor': redirect('/doctor/dashboard');
         case 'lab_technician': redirect('/lab/technician');
         case 'pharmacist': redirect('/pharmacy/billing');

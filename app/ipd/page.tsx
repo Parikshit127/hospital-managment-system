@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-    Bed, Users, Activity, Clock, LogOut, RefreshCw, Loader2, ChevronRight,
+    Bed, Users, Activity, Clock, RefreshCw, Loader2, ChevronRight,
     Search, Plus, Eye, CheckCircle, AlertTriangle, ArrowUpRight, HeartPulse,
     Building2, Stethoscope, FileText, Shield, CircleDollarSign,
-    ClipboardList, UserPlus, Thermometer, XCircle
+    ClipboardList, UserPlus, Thermometer, XCircle, LogOut
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -13,6 +13,7 @@ import {
     admitPatientIPD, updateBedStatus, dischargePatientIPD,
     searchPatientsForAdmission, addMedicalNote, accrueIPDDailyCharges,
 } from '@/app/actions/ipd-actions';
+import { AppShell } from '@/app/components/layout/AppShell';
 
 export default function IPDDashboard() {
     const [stats, setStats] = useState<any>(null);
@@ -143,63 +144,34 @@ export default function IPDDashboard() {
             Isolation: 'bg-red-500/20 border-red-500/30 text-red-400',
             Blocked: 'bg-slate-500/20 border-slate-500/30 text-slate-400',
         };
-        return map[status || 'Available'] || 'bg-white/5 border-white/10 text-white/40';
+        return map[status || 'Available'] || 'bg-gray-100 border-gray-200 text-gray-500';
     };
 
     const availableBeds = beds.filter(b => b.status === 'Available');
 
     return (
-        <div className="min-h-screen bg-[#0B0F1A] text-white font-sans">
-            {/* HEADER */}
-            <header className="bg-[#0F1425]/90 backdrop-blur-xl border-b border-white/5 px-6 py-3 sticky top-0 z-50">
-                <div className="max-w-[1600px] mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="relative">
-                            <div className="absolute inset-0 bg-gradient-to-br from-violet-400 to-indigo-600 rounded-xl blur-md opacity-50" />
-                            <div className="relative bg-gradient-to-br from-violet-400 to-indigo-600 p-2 rounded-xl shadow-lg shadow-violet-500/20">
-                                <Building2 className="h-5 w-5 text-white" />
-                            </div>
-                        </div>
-                        <div>
-                            <h1 className="text-lg font-black tracking-tight bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
-                                IPD Management
-                            </h1>
-                            <p className="text-[10px] font-bold text-violet-400 uppercase tracking-[0.2em]">
-                                Inpatient Department
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <Link href="/admin/dashboard" className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white/60 hover:text-white hover:bg-white/10 transition-all flex items-center gap-2">
-                            <Activity className="h-3.5 w-3.5" /> Admin
-                        </Link>
-                        <Link href="/finance/dashboard" className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white/60 hover:text-white hover:bg-white/10 transition-all flex items-center gap-2">
-                            <CircleDollarSign className="h-3.5 w-3.5" /> Finance
-                        </Link>
-                        <button onClick={() => setAdmitModal(true)} className="px-4 py-2 bg-gradient-to-r from-violet-500 to-indigo-500 rounded-xl text-xs font-bold text-white shadow-lg shadow-violet-500/20 flex items-center gap-2">
-                            <UserPlus className="h-3.5 w-3.5" /> Admit Patient
-                        </button>
-                        <button onClick={loadData} disabled={loading} className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-white/60 hover:text-white transition-all">
-                            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
-                        </button>
-                        <Link href="/login" className="flex items-center gap-2 text-xs font-bold text-rose-400 hover:text-rose-300 px-3 py-2 rounded-lg hover:bg-rose-500/10 transition-all">
-                            <LogOut className="h-3.5 w-3.5" /> Logout
-                        </Link>
-                    </div>
-                </div>
-            </header>
-
-            <main className="max-w-[1600px] mx-auto px-6 py-8 space-y-8">
+        <AppShell
+            pageTitle="IPD Management"
+            pageIcon={<Bed className="h-5 w-5" />}
+            onRefresh={loadData}
+            refreshing={loading}
+            headerActions={
+                <button onClick={() => setAdmitModal(true)} className="px-4 py-2 bg-gradient-to-r from-violet-500 to-indigo-500 rounded-xl text-xs font-bold text-white shadow-lg shadow-violet-500/20 flex items-center gap-2">
+                    <UserPlus className="h-3.5 w-3.5" /> Admit Patient
+                </button>
+            }
+        >
+            <div className="space-y-8">
                 {/* TITLE + TABS */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                     <div>
-                        <h2 className="text-3xl font-black tracking-tight">Inpatient Dashboard</h2>
-                        <p className="text-white/40 mt-1 font-medium">Bed management, admissions, and patient care</p>
+                        <h2 className="text-3xl font-black tracking-tight text-gray-900">Inpatient Dashboard</h2>
+                        <p className="text-gray-500 mt-1 font-medium">Bed management, admissions, and patient care</p>
                     </div>
                     <div className="flex gap-2">
                         {['overview', 'beds', 'admissions'].map(tab => (
                             <button key={tab} onClick={() => setActiveTab(tab)}
-                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === tab ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'bg-white/5 text-white/40 border border-white/10 hover:text-white'}`}>
+                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === tab ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:text-gray-900'}`}>
                                 {tab === 'overview' ? 'Overview' : tab === 'beds' ? 'Bed Map' : 'Admissions'}
                             </button>
                         ))}
@@ -210,56 +182,56 @@ export default function IPDDashboard() {
                     <div className="flex items-center justify-center py-32">
                         <div className="flex flex-col items-center gap-4">
                             <Loader2 className="h-10 w-10 animate-spin text-violet-400" />
-                            <p className="text-white/30 font-bold text-sm">Loading IPD data...</p>
+                            <p className="text-gray-400 font-bold text-sm">Loading IPD data...</p>
                         </div>
                     </div>
                 ) : (
                     <>
                         {/* KPI CARDS */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="group relative bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl p-5 border border-white/5 hover:border-violet-500/30 transition-all overflow-hidden">
+                            <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-violet-500/30 transition-all overflow-hidden">
                                 <div className="absolute top-0 right-0 w-24 h-24 bg-violet-500/5 rounded-full blur-2xl" />
                                 <div className="flex items-center justify-between mb-3">
-                                    <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.15em]">Admitted</span>
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Admitted</span>
                                     <div className="p-1.5 bg-violet-500/10 rounded-lg"><Users className="h-3.5 w-3.5 text-violet-400" /></div>
                                 </div>
-                                <p className="text-3xl font-black text-white tracking-tight">{stats?.totalAdmitted || 0}</p>
+                                <p className="text-3xl font-black text-gray-900 tracking-tight">{stats?.totalAdmitted || 0}</p>
                                 <div className="flex items-center gap-1 mt-2 text-xs font-bold text-violet-400">
                                     <Activity className="h-3 w-3" /> Active patients
                                 </div>
                             </div>
 
-                            <div className="group relative bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl p-5 border border-white/5 hover:border-emerald-500/30 transition-all overflow-hidden">
+                            <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-emerald-500/30 transition-all overflow-hidden">
                                 <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl" />
                                 <div className="flex items-center justify-between mb-3">
-                                    <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.15em]">Available Beds</span>
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Available Beds</span>
                                     <div className="p-1.5 bg-emerald-500/10 rounded-lg"><Bed className="h-3.5 w-3.5 text-emerald-400" /></div>
                                 </div>
-                                <p className="text-3xl font-black text-white tracking-tight">{stats?.availableBeds || 0}</p>
+                                <p className="text-3xl font-black text-gray-900 tracking-tight">{stats?.availableBeds || 0}</p>
                                 <div className="flex items-center gap-1 mt-2 text-xs font-bold text-emerald-400">
                                     <CheckCircle className="h-3 w-3" /> of {stats?.totalBeds || 0} total
                                 </div>
                             </div>
 
-                            <div className="group relative bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl p-5 border border-white/5 hover:border-amber-500/30 transition-all overflow-hidden">
+                            <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-amber-500/30 transition-all overflow-hidden">
                                 <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl" />
                                 <div className="flex items-center justify-between mb-3">
-                                    <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.15em]">Occupancy</span>
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Occupancy</span>
                                     <div className="p-1.5 bg-amber-500/10 rounded-lg"><Activity className="h-3.5 w-3.5 text-amber-400" /></div>
                                 </div>
-                                <p className="text-3xl font-black text-white tracking-tight">{stats?.occupancyRate || 0}%</p>
+                                <p className="text-3xl font-black text-gray-900 tracking-tight">{stats?.occupancyRate || 0}%</p>
                                 <div className="flex items-center gap-1 mt-2 text-xs font-bold text-amber-400">
                                     <Bed className="h-3 w-3" /> {stats?.occupiedBeds || 0} occupied
                                 </div>
                             </div>
 
-                            <div className="group relative bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl p-5 border border-white/5 hover:border-teal-500/30 transition-all overflow-hidden">
+                            <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-teal-500/30 transition-all overflow-hidden">
                                 <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/5 rounded-full blur-2xl" />
                                 <div className="flex items-center justify-between mb-3">
-                                    <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.15em]">Discharged</span>
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Discharged</span>
                                     <div className="p-1.5 bg-teal-500/10 rounded-lg"><CheckCircle className="h-3.5 w-3.5 text-teal-400" /></div>
                                 </div>
-                                <p className="text-3xl font-black text-white tracking-tight">{stats?.totalDischarged || 0}</p>
+                                <p className="text-3xl font-black text-gray-900 tracking-tight">{stats?.totalDischarged || 0}</p>
                                 <div className="flex items-center gap-1 mt-2 text-xs font-bold text-teal-400">
                                     <ArrowUpRight className="h-3 w-3" /> All time
                                 </div>
@@ -270,30 +242,30 @@ export default function IPDDashboard() {
                         {activeTab === 'overview' && (
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 {/* Ward Summary */}
-                                <div className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl border border-white/5 overflow-hidden">
-                                    <div className="p-5 border-b border-white/5">
-                                        <h3 className="font-black text-white/90 flex items-center gap-2 text-sm">
+                                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                                    <div className="p-5 border-b border-gray-200">
+                                        <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
                                             <Building2 className="h-4 w-4 text-violet-400" /> Ward Overview
                                         </h3>
                                     </div>
                                     <div className="p-5 space-y-3">
                                         {wards.length === 0 ? (
-                                            <p className="text-xs text-white/20 py-8 text-center">No wards configured. Run seed script to populate.</p>
+                                            <p className="text-xs text-gray-300 py-8 text-center">No wards configured. Run seed script to populate.</p>
                                         ) : wards.map((ward: any) => (
-                                            <div key={ward.ward_id} className="p-4 bg-white/[0.03] border border-white/5 rounded-xl">
+                                            <div key={ward.ward_id} className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
                                                 <div className="flex items-center justify-between mb-2">
                                                     <div>
-                                                        <span className="text-sm font-black text-white/80">{ward.ward_name}</span>
-                                                        <span className="ml-2 text-[10px] font-bold text-white/30 bg-white/5 px-2 py-0.5 rounded">{ward.ward_type}</span>
+                                                        <span className="text-sm font-black text-gray-700">{ward.ward_name}</span>
+                                                        <span className="ml-2 text-[10px] font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{ward.ward_type}</span>
                                                     </div>
-                                                    <span className="text-xs font-mono text-white/30">{'\u20B9'}{ward.cost_per_day}/day</span>
+                                                    <span className="text-xs font-mono text-gray-400">{'\u20B9'}{ward.cost_per_day}/day</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                                                    <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
                                                         <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full"
                                                             style={{ width: `${ward.totalBeds > 0 ? (ward.occupied / ward.totalBeds) * 100 : 0}%` }} />
                                                     </div>
-                                                    <span className="text-[10px] font-black text-white/40">{ward.occupied}/{ward.totalBeds}</span>
+                                                    <span className="text-[10px] font-black text-gray-500">{ward.occupied}/{ward.totalBeds}</span>
                                                 </div>
                                                 <div className="flex gap-3 mt-2 text-[10px] font-bold">
                                                     <span className="text-emerald-400">{ward.available} free</span>
@@ -306,36 +278,36 @@ export default function IPDDashboard() {
                                 </div>
 
                                 {/* Recent Admissions */}
-                                <div className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl border border-white/5 overflow-hidden">
-                                    <div className="p-5 border-b border-white/5 flex items-center justify-between">
-                                        <h3 className="font-black text-white/90 flex items-center gap-2 text-sm">
+                                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                                    <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+                                        <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
                                             <Users className="h-4 w-4 text-teal-400" /> Current Admissions
                                         </h3>
-                                        <span className="text-[10px] font-black text-white/20">{admissions.length} patients</span>
+                                        <span className="text-[10px] font-black text-gray-300">{admissions.length} patients</span>
                                     </div>
                                     <div className="max-h-[400px] overflow-auto">
                                         {admissions.length === 0 ? (
-                                            <div className="py-16 flex flex-col items-center text-white/20">
+                                            <div className="py-16 flex flex-col items-center text-gray-300">
                                                 <Bed className="h-8 w-8 mb-2" />
                                                 <span className="text-xs font-bold">No active admissions</span>
                                             </div>
                                         ) : admissions.map((adm: any) => (
-                                            <div key={adm.admission_id} className="px-5 py-4 border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                                            <div key={adm.admission_id} className="px-5 py-4 border-b border-gray-200 hover:bg-gray-50 transition-colors">
                                                 <div className="flex items-center justify-between">
                                                     <div>
-                                                        <p className="text-xs font-black text-white/80">{adm.patient?.full_name}</p>
-                                                        <p className="text-[10px] text-white/30">
+                                                        <p className="text-xs font-black text-gray-700">{adm.patient?.full_name}</p>
+                                                        <p className="text-[10px] text-gray-400">
                                                             {adm.patient?.patient_id} &bull; {adm.wardName} &bull; Bed: {adm.bed_id || 'N/A'}
                                                         </p>
-                                                        <p className="text-[10px] text-white/20 mt-0.5">{adm.diagnosis}</p>
+                                                        <p className="text-[10px] text-gray-300 mt-0.5">{adm.diagnosis}</p>
                                                     </div>
                                                     <div className="text-right space-y-1">
                                                         <span className="text-[10px] font-black text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded">
                                                             Day {adm.daysAdmitted}
                                                         </span>
                                                         <div className="flex gap-1 justify-end">
-                                                            <button onClick={() => setNoteModal(adm)} className="p-1 hover:bg-white/10 rounded transition-all" title="Add Note">
-                                                                <ClipboardList className="h-3 w-3 text-white/30 hover:text-white" />
+                                                            <button onClick={() => setNoteModal(adm)} className="p-1 hover:bg-gray-100 rounded transition-all" title="Add Note">
+                                                                <ClipboardList className="h-3 w-3 text-gray-400 hover:text-gray-900" />
                                                             </button>
                                                             {adm.status === 'Admitted' && (
                                                                 <button onClick={() => setDischargeModal(adm)} className="p-1 hover:bg-rose-500/10 rounded transition-all" title="Discharge">
@@ -356,13 +328,13 @@ export default function IPDDashboard() {
                         {activeTab === 'beds' && (
                             <div className="space-y-6">
                                 {wards.map((ward: any) => (
-                                    <div key={ward.ward_id} className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl border border-white/5 overflow-hidden">
-                                        <div className="p-5 border-b border-white/5 flex items-center justify-between">
+                                    <div key={ward.ward_id} className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                                        <div className="p-5 border-b border-gray-200 flex items-center justify-between">
                                             <div className="flex items-center gap-3">
-                                                <h3 className="font-black text-white/90 text-sm">{ward.ward_name}</h3>
+                                                <h3 className="font-black text-gray-700 text-sm">{ward.ward_name}</h3>
                                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-violet-500/10 text-violet-400">{ward.ward_type}</span>
                                             </div>
-                                            <span className="text-xs font-mono text-white/30">{ward.occupied}/{ward.totalBeds} occupied</span>
+                                            <span className="text-xs font-mono text-gray-400">{ward.occupied}/{ward.totalBeds} occupied</span>
                                         </div>
                                         <div className="p-5 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
                                             {ward.beds.map((bed: any) => (
@@ -371,10 +343,10 @@ export default function IPDDashboard() {
                                                     <p className="text-[10px] font-black">{bed.bed_id}</p>
                                                     <p className="text-[8px] font-bold opacity-60">{bed.status}</p>
                                                     {/* Status change dropdown on hover */}
-                                                    <div className="absolute top-full left-0 mt-1 bg-[#1a1f3a] border border-white/10 rounded-lg overflow-hidden z-10 hidden group-hover:block w-28 shadow-xl">
+                                                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg overflow-hidden z-10 hidden group-hover:block w-28 shadow-xl">
                                                         {['Available', 'Maintenance', 'Cleaning', 'Blocked'].filter(s => s !== bed.status).map(s => (
                                                             <button key={s} onClick={() => handleBedStatusChange(bed.bed_id, s)}
-                                                                className="block w-full text-left px-3 py-1.5 text-[10px] font-bold text-white/60 hover:bg-white/10 hover:text-white">{s}</button>
+                                                                className="block w-full text-left px-3 py-1.5 text-[10px] font-bold text-gray-500 hover:bg-gray-100 hover:text-gray-900">{s}</button>
                                                         ))}
                                                     </div>
                                                 </div>
@@ -383,7 +355,7 @@ export default function IPDDashboard() {
                                     </div>
                                 ))}
                                 {wards.length === 0 && (
-                                    <div className="py-20 text-center text-white/20">
+                                    <div className="py-20 text-center text-gray-300">
                                         <Building2 className="h-12 w-12 mx-auto mb-3" />
                                         <p className="text-sm font-bold">No wards configured</p>
                                         <p className="text-xs mt-1">Run the seed script to populate wards and beds</p>
@@ -398,45 +370,45 @@ export default function IPDDashboard() {
                                 <div className="flex gap-2">
                                     {['Admitted', 'Discharged'].map(f => (
                                         <button key={f} onClick={() => setAdmissionFilter(f)}
-                                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${admissionFilter === f ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'bg-white/5 text-white/40 border border-white/10'}`}>
+                                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${admissionFilter === f ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
                                             {f}
                                         </button>
                                     ))}
                                 </div>
 
-                                <div className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl border border-white/5 overflow-hidden">
+                                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
                                     <div className="overflow-x-auto">
                                         <table className="w-full">
                                             <thead>
-                                                <tr className="border-b border-white/5">
-                                                    <th className="text-left px-5 py-3.5 text-[10px] font-black text-white/30 uppercase tracking-wider">Patient</th>
-                                                    <th className="text-left px-5 py-3.5 text-[10px] font-black text-white/30 uppercase tracking-wider">Ward / Bed</th>
-                                                    <th className="text-left px-5 py-3.5 text-[10px] font-black text-white/30 uppercase tracking-wider">Diagnosis</th>
-                                                    <th className="text-left px-5 py-3.5 text-[10px] font-black text-white/30 uppercase tracking-wider">Doctor</th>
-                                                    <th className="text-center px-5 py-3.5 text-[10px] font-black text-white/30 uppercase tracking-wider">Days</th>
-                                                    <th className="text-right px-5 py-3.5 text-[10px] font-black text-white/30 uppercase tracking-wider">Est. Room</th>
-                                                    <th className="text-center px-5 py-3.5 text-[10px] font-black text-white/30 uppercase tracking-wider">Actions</th>
+                                                <tr className="border-b border-gray-200">
+                                                    <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Patient</th>
+                                                    <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Ward / Bed</th>
+                                                    <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Diagnosis</th>
+                                                    <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Doctor</th>
+                                                    <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Days</th>
+                                                    <th className="text-right px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Est. Room</th>
+                                                    <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Actions</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {admissions.length === 0 ? (
                                                     <tr>
-                                                        <td colSpan={7} className="px-5 py-16 text-center text-white/20">
+                                                        <td colSpan={7} className="px-5 py-16 text-center text-gray-300">
                                                             <Users className="h-8 w-8 mx-auto mb-2" />
                                                             <p className="text-xs font-bold">No {admissionFilter.toLowerCase()} patients</p>
                                                         </td>
                                                     </tr>
                                                 ) : admissions.map((adm: any) => (
-                                                    <tr key={adm.admission_id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                                                    <tr key={adm.admission_id} className="border-b border-gray-200 hover:bg-gray-50">
                                                         <td className="px-5 py-3.5">
-                                                            <p className="text-xs font-bold text-white/80">{adm.patient?.full_name}</p>
-                                                            <p className="text-[10px] text-white/30">{adm.patient?.patient_id}</p>
+                                                            <p className="text-xs font-bold text-gray-700">{adm.patient?.full_name}</p>
+                                                            <p className="text-[10px] text-gray-400">{adm.patient?.patient_id}</p>
                                                         </td>
-                                                        <td className="px-5 py-3.5 text-xs text-white/60">
+                                                        <td className="px-5 py-3.5 text-xs text-gray-500">
                                                             {adm.wardName} / {adm.bed_id || 'N/A'}
                                                         </td>
-                                                        <td className="px-5 py-3.5 text-xs text-white/60 max-w-[200px] truncate">{adm.diagnosis || '-'}</td>
-                                                        <td className="px-5 py-3.5 text-xs text-white/50">{adm.doctor_name || '-'}</td>
+                                                        <td className="px-5 py-3.5 text-xs text-gray-500 max-w-[200px] truncate">{adm.diagnosis || '-'}</td>
+                                                        <td className="px-5 py-3.5 text-xs text-gray-500">{adm.doctor_name || '-'}</td>
                                                         <td className="px-5 py-3.5 text-center">
                                                             <span className="text-xs font-black text-violet-400">{adm.daysAdmitted}</span>
                                                         </td>
@@ -445,8 +417,8 @@ export default function IPDDashboard() {
                                                         </td>
                                                         <td className="px-5 py-3.5 text-center">
                                                             <div className="flex items-center justify-center gap-1.5">
-                                                                <button onClick={() => setNoteModal(adm)} className="p-1.5 hover:bg-white/10 rounded-lg" title="Add Note">
-                                                                    <ClipboardList className="h-3.5 w-3.5 text-white/40" />
+                                                                <button onClick={() => setNoteModal(adm)} className="p-1.5 hover:bg-gray-100 rounded-lg" title="Add Note">
+                                                                    <ClipboardList className="h-3.5 w-3.5 text-gray-500" />
                                                                 </button>
                                                                 {adm.status === 'Admitted' && (
                                                                     <button onClick={() => setDischargeModal(adm)} className="p-1.5 hover:bg-rose-500/10 rounded-lg" title="Discharge">
@@ -465,34 +437,34 @@ export default function IPDDashboard() {
                         )}
                     </>
                 )}
-            </main>
+            </div>
 
             {/* ADMIT MODAL */}
             {admitModal && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <div className="bg-[#131A2E] border border-white/10 rounded-2xl w-full max-w-lg p-6 space-y-5">
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl w-full max-w-lg p-6 space-y-5">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-lg font-black text-white flex items-center gap-2">
+                            <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                                 <UserPlus className="h-5 w-5 text-violet-400" /> Admit Patient
                             </h3>
-                            <button onClick={() => { setAdmitModal(false); setSelectedPatient(null); setAdmitError(''); }} className="text-white/30 hover:text-white text-xl">&times;</button>
+                            <button onClick={() => { setAdmitModal(false); setSelectedPatient(null); setAdmitError(''); }} className="text-gray-400 hover:text-gray-900 text-xl">&times;</button>
                         </div>
 
                         {/* Patient search */}
                         {!selectedPatient ? (
                             <div className="space-y-3">
                                 <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                                     <input type="text" placeholder="Search patient by name, ID, or phone..."
                                         value={searchQuery} onChange={e => handleSearch(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder:text-white/30 focus:border-violet-500/50 focus:outline-none" />
+                                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-500/50 focus:outline-none" />
                                 </div>
                                 <div className="max-h-48 overflow-auto space-y-1.5">
                                     {searchResults.map((p: any) => (
                                         <button key={p.patient_id} onClick={() => setSelectedPatient(p)}
-                                            className="w-full text-left p-3 bg-white/5 hover:bg-violet-500/10 border border-white/10 rounded-xl transition-all">
-                                            <p className="text-xs font-bold text-white/80">{p.full_name}</p>
-                                            <p className="text-[10px] text-white/30">{p.patient_id} &bull; {p.phone}</p>
+                                            className="w-full text-left p-3 bg-gray-100 hover:bg-violet-500/10 border border-gray-200 rounded-xl transition-all">
+                                            <p className="text-xs font-bold text-gray-700">{p.full_name}</p>
+                                            <p className="text-[10px] text-gray-400">{p.patient_id} &bull; {p.phone}</p>
                                         </button>
                                     ))}
                                 </div>
@@ -502,25 +474,25 @@ export default function IPDDashboard() {
                                 <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl p-3 flex items-center justify-between">
                                     <div>
                                         <p className="text-xs font-bold text-violet-400">{selectedPatient.full_name}</p>
-                                        <p className="text-[10px] text-white/30">{selectedPatient.patient_id}</p>
+                                        <p className="text-[10px] text-gray-400">{selectedPatient.patient_id}</p>
                                     </div>
-                                    <button onClick={() => setSelectedPatient(null)} className="text-white/30 hover:text-white"><XCircle className="h-4 w-4" /></button>
+                                    <button onClick={() => setSelectedPatient(null)} className="text-gray-400 hover:text-gray-900"><XCircle className="h-4 w-4" /></button>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
-                                        <label className="text-[10px] font-black text-white/40 uppercase tracking-wider block mb-1">Ward *</label>
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Ward *</label>
                                         <select value={admitForm.ward_id} onChange={e => {
                                             setAdmitForm({ ...admitForm, ward_id: e.target.value, bed_id: '' });
                                             setAdmitError('');
                                         }}
-                                            className="w-full px-4 py-2.5 bg-[#1a1f3a] border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:border-violet-500/50">
-                                            <option value="" className="bg-[#1a1f3a] text-white/50">Select Ward</option>
-                                            {wards.map((w: any) => <option key={w.ward_id} value={w.ward_id} className="bg-[#1a1f3a] text-white">{w.ward_name} ({w.available} free)</option>)}
+                                            className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-violet-500/50">
+                                            <option value="" className="bg-white text-gray-500">Select Ward</option>
+                                            {wards.map((w: any) => <option key={w.ward_id} value={w.ward_id} className="bg-white text-gray-900">{w.ward_name} ({w.available} free)</option>)}
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-black text-white/40 uppercase tracking-wider block mb-1">Bed *</label>
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Bed *</label>
                                         <select value={admitForm.bed_id} onChange={e => {
                                             const bedId = e.target.value;
                                             const selectedBed = availableBeds.find(b => b.bed_id === bedId);
@@ -531,24 +503,24 @@ export default function IPDDashboard() {
                                             });
                                             setAdmitError('');
                                         }}
-                                            className="w-full px-4 py-2.5 bg-[#1a1f3a] border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:border-violet-500/50">
-                                            <option value="" className="bg-[#1a1f3a] text-white/50">{admitForm.ward_id ? 'Select Bed' : 'Select ward first'}</option>
+                                            className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-violet-500/50">
+                                            <option value="" className="bg-white text-gray-500">{admitForm.ward_id ? 'Select Bed' : 'Select ward first'}</option>
                                             {availableBeds.filter(b => admitForm.ward_id ? b.ward_id === parseInt(admitForm.ward_id) : false).map((b: any) => (
-                                                <option key={b.bed_id} value={b.bed_id} className="bg-[#1a1f3a] text-white">{b.bed_id}</option>
+                                                <option key={b.bed_id} value={b.bed_id} className="bg-white text-gray-900">{b.bed_id}</option>
                                             ))}
                                         </select>
                                     </div>
                                 </div>
 
                                 <div>
-                                    <label className="text-[10px] font-black text-white/40 uppercase tracking-wider block mb-1">Diagnosis</label>
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Diagnosis</label>
                                     <input type="text" value={admitForm.diagnosis} onChange={e => setAdmitForm({ ...admitForm, diagnosis: e.target.value })}
-                                        className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:border-violet-500/50 focus:outline-none" placeholder="Primary diagnosis" />
+                                        className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-violet-500/50 focus:outline-none" placeholder="Primary diagnosis" />
                                 </div>
                                 <div>
-                                    <label className="text-[10px] font-black text-white/40 uppercase tracking-wider block mb-1">Doctor</label>
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Doctor</label>
                                     <input type="text" value={admitForm.doctor_name} onChange={e => setAdmitForm({ ...admitForm, doctor_name: e.target.value })}
-                                        className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:border-violet-500/50 focus:outline-none" placeholder="Attending doctor" />
+                                        className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-violet-500/50 focus:outline-none" placeholder="Attending doctor" />
                                 </div>
 
                                 {admitError && (
@@ -571,23 +543,23 @@ export default function IPDDashboard() {
 
             {/* DISCHARGE MODAL */}
             {dischargeModal && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <div className="bg-[#131A2E] border border-white/10 rounded-2xl w-full max-w-md p-6 space-y-5">
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl w-full max-w-md p-6 space-y-5">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-lg font-black text-white flex items-center gap-2">
+                            <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                                 <LogOut className="h-5 w-5 text-rose-400" /> Discharge Patient
                             </h3>
-                            <button onClick={() => setDischargeModal(null)} className="text-white/30 hover:text-white text-xl">&times;</button>
+                            <button onClick={() => setDischargeModal(null)} className="text-gray-400 hover:text-gray-900 text-xl">&times;</button>
                         </div>
-                        <div className="bg-white/5 rounded-xl p-3 text-xs space-y-1">
-                            <p className="font-bold text-white/80">{dischargeModal.patient?.full_name}</p>
-                            <p className="text-white/30">Ward: {dischargeModal.wardName} &bull; Bed: {dischargeModal.bed_id} &bull; Day {dischargeModal.daysAdmitted}</p>
+                        <div className="bg-gray-100 rounded-xl p-3 text-xs space-y-1">
+                            <p className="font-bold text-gray-700">{dischargeModal.patient?.full_name}</p>
+                            <p className="text-gray-400">Ward: {dischargeModal.wardName} &bull; Bed: {dischargeModal.bed_id} &bull; Day {dischargeModal.daysAdmitted}</p>
                             <p className="text-amber-400 font-bold">Est. Room Charge: {'\u20B9'}{dischargeModal.estimatedRoomCharge?.toLocaleString()}</p>
                         </div>
                         <div>
-                            <label className="text-[10px] font-black text-white/40 uppercase tracking-wider block mb-1">Discharge Notes</label>
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Discharge Notes</label>
                             <textarea value={dischargeNotes} onChange={e => setDischargeNotes(e.target.value)}
-                                rows={3} className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:border-rose-500/50 focus:outline-none" placeholder="Discharge instructions..." />
+                                rows={3} className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-rose-500/50 focus:outline-none" placeholder="Discharge instructions..." />
                         </div>
                         <button onClick={handleDischarge} disabled={dischargeLoading}
                             className="w-full py-3 bg-gradient-to-r from-rose-500 to-pink-500 text-white text-sm font-black rounded-xl hover:shadow-lg hover:shadow-rose-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
@@ -600,27 +572,27 @@ export default function IPDDashboard() {
 
             {/* NOTE MODAL */}
             {noteModal && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <div className="bg-[#131A2E] border border-white/10 rounded-2xl w-full max-w-md p-6 space-y-5">
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl w-full max-w-md p-6 space-y-5">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-lg font-black text-white flex items-center gap-2">
+                            <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                                 <ClipboardList className="h-5 w-5 text-teal-400" /> Add Medical Note
                             </h3>
-                            <button onClick={() => setNoteModal(null)} className="text-white/30 hover:text-white text-xl">&times;</button>
+                            <button onClick={() => setNoteModal(null)} className="text-gray-400 hover:text-gray-900 text-xl">&times;</button>
                         </div>
                         <div>
-                            <label className="text-[10px] font-black text-white/40 uppercase tracking-wider block mb-1">Note Type</label>
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Note Type</label>
                             <select value={noteForm.type} onChange={e => setNoteForm({ ...noteForm, type: e.target.value })}
-                                className="w-full px-4 py-2.5 bg-[#1a1f3a] border border-white/10 rounded-xl text-sm text-white focus:outline-none">
+                                className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none">
                                 {['Admission Note', 'Routine Check', 'Nursing', 'Discharge Advice', 'Doctor Visit'].map(t =>
-                                    <option key={t} value={t} className="bg-[#1a1f3a] text-white">{t}</option>
+                                    <option key={t} value={t} className="bg-white text-gray-900">{t}</option>
                                 )}
                             </select>
                         </div>
                         <div>
-                            <label className="text-[10px] font-black text-white/40 uppercase tracking-wider block mb-1">Details</label>
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Details</label>
                             <textarea value={noteForm.details} onChange={e => setNoteForm({ ...noteForm, details: e.target.value })}
-                                rows={4} className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:border-teal-500/50 focus:outline-none" placeholder="Note details..." />
+                                rows={4} className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-teal-500/50 focus:outline-none" placeholder="Note details..." />
                         </div>
                         <button onClick={handleAddNote} disabled={!noteForm.details}
                             className="w-full py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white text-sm font-black rounded-xl hover:shadow-lg hover:shadow-teal-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
@@ -629,13 +601,6 @@ export default function IPDDashboard() {
                     </div>
                 </div>
             )}
-
-            <footer className="mt-8 border-t border-white/5 py-6 px-6">
-                <div className="max-w-[1600px] mx-auto flex items-center justify-between">
-                    <p className="text-[10px] font-bold text-white/15 uppercase tracking-wider">Avani Hospital OS &bull; IPD Module &bull; v2.0</p>
-                    <p className="text-[10px] font-medium text-white/15">Bed management &bull; Admission lifecycle</p>
-                </div>
-            </footer>
-        </div>
+        </AppShell>
     );
 }

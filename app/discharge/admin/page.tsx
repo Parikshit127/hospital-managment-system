@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
-    Users, LogOut, TrendingUp, Search, Download,
+    Users, TrendingUp, Download,
     FileText, CheckSquare, X, Activity, ChevronLeft, ChevronRight,
-    HeartPulse, Bed, Clock, Loader2, CheckCircle, AlertTriangle, Sparkles
+    Bed, Clock, Loader2, CheckCircle, AlertTriangle, Sparkles
 } from 'lucide-react';
 import { getAdmittedPatients, processDischarge, generateAISummary } from '@/app/actions/discharge-actions';
-import Link from 'next/link';
+import { AppShell } from '@/app/components/layout/AppShell';
 
 type Patient = {
     id: string;
@@ -33,13 +33,15 @@ export default function DischargePage() {
     const [aiSummary, setAiSummary] = useState('');
     const [aiLoading, setAiLoading] = useState(false);
 
+    const loadData = async () => {
+        setLoading(true);
+        const res = await getAdmittedPatients();
+        if (res.success) setPatients(res.data);
+        setLoading(false);
+    };
+
     useEffect(() => {
-        async function init() {
-            const res = await getAdmittedPatients();
-            if (res.success) setPatients(res.data);
-            setLoading(false);
-        }
-        init();
+        loadData();
     }, []);
 
     const handleOpenDischarge = (p: Patient) => {
@@ -79,130 +81,93 @@ export default function DischargePage() {
     const readyCount = patients.filter(p => p.status.includes('Ready')).length;
 
     return (
-        <div className="min-h-screen bg-[#0B0F1A] text-white font-sans relative overflow-hidden">
-            {/* Animated background */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-1/4 -left-32 w-96 h-96 bg-rose-500/5 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '5s' }} />
-                <div className="absolute bottom-1/4 -right-32 w-96 h-96 bg-violet-500/5 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '7s' }} />
-                <div className="absolute inset-0" style={{
-                    backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.02) 1px, transparent 1px)',
-                    backgroundSize: '40px 40px'
-                }} />
-            </div>
-
-            {/* Header */}
-            <header className="bg-[#0F1425]/90 backdrop-blur-xl border-b border-white/5 px-6 py-3 sticky top-0 z-50">
-                <div className="max-w-[1400px] mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="relative">
-                            <div className="absolute inset-0 bg-gradient-to-br from-teal-400 to-emerald-600 rounded-xl blur-md opacity-50" />
-                            <div className="relative bg-gradient-to-br from-teal-400 to-emerald-600 p-2 rounded-xl shadow-lg shadow-teal-500/20">
-                                <HeartPulse className="h-5 w-5 text-white" />
-                            </div>
-                        </div>
-                        <div>
-                            <h1 className="text-lg font-black tracking-tight bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
-                                Avani Hospital OS
-                            </h1>
-                            <p className="text-[10px] font-bold text-rose-400 uppercase tracking-[0.2em]">
-                                Discharge Hub
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <div className="hidden md:flex items-center gap-2 bg-white/5 rounded-xl px-4 py-2 border border-white/5">
-                            <Search className="text-white/20 h-4 w-4" />
-                            <input className="bg-transparent border-none focus:ring-0 text-sm w-48 placeholder:text-white/20 p-0 text-white font-medium outline-none" placeholder="Search patient..." />
-                        </div>
-                        <Link href="/login" className="flex items-center gap-2 text-xs font-bold text-rose-400 hover:text-rose-300 px-3 py-2 rounded-lg hover:bg-rose-500/10 transition-all">
-                            <LogOut className="h-3.5 w-3.5" /> Logout
-                        </Link>
-                    </div>
-                </div>
-            </header>
-
-            <main className="relative z-10 max-w-[1400px] mx-auto px-6 py-8">
-
+        <AppShell
+            pageTitle="Discharge Hub"
+            pageIcon={<FileText className="h-5 w-5" />}
+            onRefresh={loadData}
+            refreshing={loading}
+            headerActions={
+                <button className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:text-gray-900 transition-all flex items-center gap-2">
+                    <FileText className="h-3.5 w-3.5" /> Export CSV
+                </button>
+            }
+        >
+            <div className="space-y-8">
                 {/* Title */}
-                <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
+                <div className="flex flex-wrap items-end justify-between gap-4">
                     <div>
-                        <h2 className="text-3xl font-black tracking-tight">Discharge & Administration</h2>
-                        <p className="text-white/40 mt-1 font-medium">Manage patient status and hospital discharge workflows</p>
-                    </div>
-                    <div className="flex gap-3">
-                        <button className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-white/60 hover:text-white transition-all flex items-center gap-2">
-                            <FileText className="h-3.5 w-3.5" /> Export CSV
-                        </button>
+                        <h2 className="text-3xl font-black tracking-tight text-gray-900">Discharge & Administration</h2>
+                        <p className="text-gray-500 mt-1 font-medium">Manage patient status and hospital discharge workflows</p>
                     </div>
                 </div>
 
                 {/* KPI Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                    <div className="group relative bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl p-5 border border-white/5 hover:border-teal-500/30 transition-all overflow-hidden">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-teal-500/30 transition-all overflow-hidden">
                         <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/5 rounded-full blur-2xl group-hover:bg-teal-500/10 transition-all" />
                         <div className="flex items-center justify-between mb-3">
-                            <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.15em]">Total Admissions</span>
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Total Admissions</span>
                             <div className="p-1.5 bg-teal-500/10 rounded-lg">
                                 <Users className="h-3.5 w-3.5 text-teal-400" />
                             </div>
                         </div>
-                        <p className="text-3xl font-black text-white tracking-tight">{patients.length + 120}</p>
+                        <p className="text-3xl font-black text-gray-900 tracking-tight">{patients.length + 120}</p>
                         <div className="flex items-center gap-1 mt-2 text-xs font-bold text-teal-400">
                             <TrendingUp className="h-3 w-3" /> 12% vs last month
                         </div>
                     </div>
 
-                    <div className="group relative bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl p-5 border border-white/5 hover:border-amber-500/30 transition-all overflow-hidden">
+                    <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-amber-500/30 transition-all overflow-hidden">
                         <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-all" />
                         <div className="flex items-center justify-between mb-3">
-                            <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.15em]">Pending Discharges</span>
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Pending Discharges</span>
                             <div className="p-1.5 bg-amber-500/10 rounded-lg">
                                 <Clock className="h-3.5 w-3.5 text-amber-400" />
                             </div>
                         </div>
-                        <p className="text-3xl font-black text-white tracking-tight">{readyCount + 14}</p>
+                        <p className="text-3xl font-black text-gray-900 tracking-tight">{readyCount + 14}</p>
                         <div className="flex items-center gap-1 mt-2 text-xs font-bold text-amber-400">
                             <AlertTriangle className="h-3 w-3" /> 5% critical
                         </div>
                     </div>
 
-                    <div className="group relative bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl p-5 border border-white/5 hover:border-emerald-500/30 transition-all overflow-hidden">
+                    <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-emerald-500/30 transition-all overflow-hidden">
                         <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-all" />
                         <div className="flex items-center justify-between mb-3">
-                            <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.15em]">Revenue Today</span>
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Revenue Today</span>
                             <div className="p-1.5 bg-emerald-500/10 rounded-lg">
                                 <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
                             </div>
                         </div>
-                        <p className="text-3xl font-black text-white tracking-tight">₹12,450</p>
-                        <div className="flex items-center gap-1 mt-2 text-xs font-bold text-white/30">
+                        <p className="text-3xl font-black text-gray-900 tracking-tight">{'\u20B9'}12,450</p>
+                        <div className="flex items-center gap-1 mt-2 text-xs font-bold text-gray-400">
                             <Activity className="h-3 w-3" /> Updated 5 mins ago
                         </div>
                     </div>
                 </div>
 
                 {/* Patients Table */}
-                <div className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl border border-white/5 overflow-hidden">
-                    <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center">
-                        <h3 className="font-black text-white/90 flex items-center gap-2 text-sm">
+                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                    <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                        <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
                             <Bed className="h-4 w-4 text-violet-400" /> Admitted Patients
                         </h3>
-                        <span className="text-xs font-bold text-white/25">{patients.length} records</span>
+                        <span className="text-xs font-bold text-gray-300">{patients.length} records</span>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
-                            <thead className="border-b border-white/5">
+                            <thead className="border-b border-gray-200">
                                 <tr>
                                     {['Patient Name', 'Attending Doctor', 'Diagnosis', 'Stay Duration', 'Status', 'Action'].map(h => (
-                                        <th key={h} className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.15em] text-white/25 last:text-right">
+                                        <th key={h} className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.15em] text-gray-300 last:text-right">
                                             {h}
                                         </th>
                                     ))}
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-white/5">
+                            <tbody className="divide-y divide-gray-100">
                                 {loading ? (
-                                    <tr><td colSpan={6} className="text-center py-16 text-white/30">
+                                    <tr><td colSpan={6} className="text-center py-16 text-gray-400">
                                         <div className="flex items-center justify-center gap-3">
                                             <Loader2 className="h-5 w-5 animate-spin text-teal-400" /> Loading patients...
                                         </div>
@@ -210,26 +175,26 @@ export default function DischargePage() {
                                 ) : patients.length === 0 ? (
                                     <tr><td colSpan={6} className="text-center py-20">
                                         <div className="flex flex-col items-center">
-                                            <div className="h-16 w-16 bg-white/5 rounded-2xl flex items-center justify-center mb-4">
-                                                <Bed className="h-8 w-8 text-white/15" />
+                                            <div className="h-16 w-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-4">
+                                                <Bed className="h-8 w-8 text-gray-300" />
                                             </div>
-                                            <p className="text-white/30 font-bold">No admitted patients</p>
+                                            <p className="text-gray-400 font-bold">No admitted patients</p>
                                         </div>
                                     </td></tr>
                                 ) : patients.map(patient => (
-                                    <tr key={patient.id} className="hover:bg-white/[0.02] transition-colors">
+                                    <tr key={patient.id} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
-                                                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-500/20 to-indigo-500/20 border border-white/10 flex items-center justify-center text-[10px] font-black text-violet-400">
+                                                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-500/20 to-indigo-500/20 border border-gray-200 flex items-center justify-center text-[10px] font-black text-violet-400">
                                                     {patient.patient_name.split(' ').map(n => n[0]).join('')}
                                                 </div>
-                                                <span className="text-sm font-bold text-white/80">{patient.patient_name}</span>
+                                                <span className="text-sm font-bold text-gray-700">{patient.patient_name}</span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-white/50 font-medium">{patient.doctor}</td>
-                                        <td className="px-6 py-4 text-sm text-white/50 font-medium">{patient.diagnosis}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-500 font-medium">{patient.doctor}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-500 font-medium">{patient.diagnosis}</td>
                                         <td className="px-6 py-4">
-                                            <span className="text-sm font-bold text-white/60 bg-white/5 px-2.5 py-1 rounded-lg border border-white/5">{patient.days} Days</span>
+                                            <span className="text-sm font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg border border-gray-200">{patient.days} Days</span>
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-[0.1em] border ${patient.status === 'Admitted'
@@ -244,7 +209,7 @@ export default function DischargePage() {
                                                 {patient.admission_id && (
                                                     <button
                                                         onClick={() => window.open(`/api/discharge/${patient.admission_id}/pdf`, '_blank')}
-                                                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white/5 border border-white/10 text-white/60 rounded-xl text-xs font-bold hover:bg-white/10 transition-all"
+                                                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-gray-100 border border-gray-200 text-gray-500 rounded-xl text-xs font-bold hover:bg-gray-200 transition-all"
                                                     >
                                                         <Download className="h-3.5 w-3.5" /> PDF
                                                     </button>
@@ -263,87 +228,86 @@ export default function DischargePage() {
                         </table>
                     </div>
                     {/* Pagination */}
-                    <div className="px-6 py-4 border-t border-white/5 flex items-center justify-between">
-                        <p className="text-xs text-white/25 font-medium">Showing {patients.length} of {patients.length + 120} patients</p>
+                    <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                        <p className="text-xs text-gray-300 font-medium">Showing {patients.length} of {patients.length + 120} patients</p>
                         <div className="flex gap-2">
-                            <button disabled className="h-8 w-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/20 disabled:opacity-50">
+                            <button disabled className="h-8 w-8 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-300 disabled:opacity-50">
                                 <ChevronLeft className="h-4 w-4" />
                             </button>
-                            <button className="h-8 w-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:bg-white/10 hover:text-white/60 transition-all">
+                            <button className="h-8 w-8 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-all">
                                 <ChevronRight className="h-4 w-4" />
                             </button>
                         </div>
                     </div>
                 </div>
-
-            </main>
+            </div>
 
             {/* Discharge Modal */}
             {selectedPatient && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
-                    <div className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] w-full max-w-md rounded-2xl shadow-2xl border border-white/10 overflow-hidden">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                    <div className="bg-white border border-gray-200 shadow-sm w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
                         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-teal-400 via-emerald-500 to-teal-400" />
 
-                        <div className="p-6 border-b border-white/5 flex justify-between items-center">
-                            <h3 className="text-lg font-black text-white flex items-center gap-2">
+                        <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+                            <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                                 <CheckSquare className="h-5 w-5 text-teal-400" /> Discharge Checklist
                             </h3>
-                            <button onClick={() => setSelectedPatient(null)} className="text-white/30 hover:text-white/60 transition-colors bg-white/5 rounded-full p-2 hover:bg-white/10">
+                            <button onClick={() => setSelectedPatient(null)} className="text-gray-400 hover:text-gray-700 transition-colors bg-gray-100 rounded-full p-2 hover:bg-gray-200">
                                 <X className="h-5 w-5" />
                             </button>
                         </div>
 
                         <div className="p-6 space-y-6">
                             {/* Patient Info */}
-                            <div className="bg-white/5 p-4 rounded-xl border border-white/5 flex items-center gap-4">
-                                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-teal-500/20 to-emerald-500/20 border border-white/10 flex items-center justify-center text-teal-400 font-bold text-sm">
+                            <div className="bg-gray-100 p-4 rounded-xl border border-gray-200 flex items-center gap-4">
+                                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-teal-500/20 to-emerald-500/20 border border-gray-200 flex items-center justify-center text-teal-400 font-bold text-sm">
                                     {selectedPatient.patient_name[0]}
                                 </div>
                                 <div>
-                                    <p className="text-sm font-bold text-white/90">{selectedPatient.patient_name}</p>
-                                    <p className="text-xs text-white/30">Admitted for: {selectedPatient.diagnosis}</p>
+                                    <p className="text-sm font-bold text-gray-700">{selectedPatient.patient_name}</p>
+                                    <p className="text-xs text-gray-400">Admitted for: {selectedPatient.diagnosis}</p>
                                 </div>
                             </div>
 
                             {/* Checklist */}
                             <div className="space-y-3">
                                 <label className="flex items-center gap-3 p-3 bg-emerald-500/5 border border-emerald-500/10 rounded-xl">
-                                    <input type="checkbox" checked={checklist.medical} disabled className="h-4 w-4 rounded border-white/20 bg-white/5 text-teal-500 focus:ring-teal-500" />
-                                    <span className="text-sm font-medium text-white/60">Medical Clearance Approved</span>
+                                    <input type="checkbox" checked={checklist.medical} disabled className="h-4 w-4 rounded border-gray-300 bg-white text-teal-500 focus:ring-teal-500" />
+                                    <span className="text-sm font-medium text-gray-500">Medical Clearance Approved</span>
                                     <CheckCircle className="h-3.5 w-3.5 text-emerald-400 ml-auto" />
                                 </label>
                                 <label className="flex items-center gap-3 p-3 bg-emerald-500/5 border border-emerald-500/10 rounded-xl">
-                                    <input type="checkbox" checked={checklist.meds} disabled className="h-4 w-4 rounded border-white/20 bg-white/5 text-teal-500 focus:ring-teal-500" />
-                                    <span className="text-sm font-medium text-white/60">Medications Prepared</span>
+                                    <input type="checkbox" checked={checklist.meds} disabled className="h-4 w-4 rounded border-gray-300 bg-white text-teal-500 focus:ring-teal-500" />
+                                    <span className="text-sm font-medium text-gray-500">Medications Prepared</span>
                                     <CheckCircle className="h-3.5 w-3.5 text-emerald-400 ml-auto" />
                                 </label>
-                                <label className="flex items-center gap-3 p-3 bg-white/[0.02] border border-white/5 rounded-xl hover:bg-white/[0.04] transition-colors cursor-pointer">
+                                <label className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer">
                                     <input
                                         type="checkbox"
                                         checked={checklist.billing}
                                         onChange={(e) => setChecklist(prev => ({ ...prev, billing: e.target.checked }))}
-                                        className="h-4 w-4 rounded border-white/20 bg-white/5 text-teal-500 focus:ring-teal-500"
+                                        className="h-4 w-4 rounded border-gray-300 bg-white text-teal-500 focus:ring-teal-500"
                                     />
-                                    <span className="text-sm font-bold text-white/80">Final Bill Cleared?</span>
+                                    <span className="text-sm font-bold text-gray-700">Final Bill Cleared?</span>
                                 </label>
-                                <label className="flex items-center gap-3 p-3 bg-white/[0.02] border border-white/5 rounded-xl hover:bg-white/[0.04] transition-colors cursor-pointer">
+                                <label className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer">
                                     <input
                                         type="checkbox"
                                         checked={checklist.followup}
                                         onChange={(e) => setChecklist(prev => ({ ...prev, followup: e.target.checked }))}
-                                        className="h-4 w-4 rounded border-white/20 bg-white/5 text-teal-500 focus:ring-teal-500"
+                                        className="h-4 w-4 rounded border-gray-300 bg-white text-teal-500 focus:ring-teal-500"
                                     />
-                                    <span className="text-sm font-bold text-white/80">Follow-up Scheduled</span>
+                                    <span className="text-sm font-bold text-gray-700">Follow-up Scheduled</span>
                                 </label>
                             </div>
 
                             {/* Notes */}
                             <div>
-                                <label className="text-[10px] font-black text-white/30 uppercase tracking-[0.15em] mb-2 block ml-1">Special Instructions</label>
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-2 block ml-1">Special Instructions</label>
                                 <textarea
                                     value={notes}
                                     onChange={(e) => setNotes(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 placeholder:text-white/15 p-3 outline-none font-medium text-white resize-none"
+                                    className="w-full bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 placeholder:text-gray-300 p-3 outline-none font-medium text-gray-900 resize-none"
                                     placeholder="Enter discharge notes..."
                                     rows={2}
                                 />
@@ -355,7 +319,7 @@ export default function DischargePage() {
                             <button
                                 onClick={handleGenerateAI}
                                 disabled={aiLoading || !selectedPatient?.admission_id}
-                                className="w-full py-2.5 bg-gradient-to-r from-violet-500/20 to-indigo-500/20 border border-violet-500/30 text-violet-300 rounded-xl text-xs font-bold hover:from-violet-500/30 hover:to-indigo-500/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                className="w-full py-2.5 bg-gradient-to-r from-violet-500/20 to-indigo-500/20 border border-violet-500/30 text-violet-500 rounded-xl text-xs font-bold hover:from-violet-500/30 hover:to-indigo-500/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                             >
                                 {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                                 {aiLoading ? 'Generating AI Summary...' : 'Generate AI Summary'}
@@ -366,39 +330,27 @@ export default function DischargePage() {
                                     <textarea
                                         value={aiSummary}
                                         onChange={(e) => setAiSummary(e.target.value)}
-                                        className="w-full bg-violet-500/5 border border-violet-500/20 rounded-xl text-xs focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/30 placeholder:text-white/15 p-3 outline-none font-medium text-white/80 resize-none"
+                                        className="w-full bg-violet-500/5 border border-violet-500/20 rounded-xl text-xs focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/30 placeholder:text-gray-300 p-3 outline-none font-medium text-gray-700 resize-none"
                                         rows={8}
                                     />
                                 </div>
                             )}
                         </div>
 
-                        <div className="p-6 bg-white/[0.02] border-t border-white/5 flex flex-col gap-3">
+                        <div className="p-6 bg-gray-50 border-t border-gray-200 flex flex-col gap-3">
                             <button
                                 onClick={handleConfirmDischarge}
                                 className="w-full py-3.5 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
                             >
                                 <FileText className="h-5 w-5" /> Confirm Discharge
                             </button>
-                            <button onClick={() => setSelectedPatient(null)} className="w-full py-2 text-white/30 font-bold text-sm hover:text-white/50 transition-colors">
+                            <button onClick={() => setSelectedPatient(null)} className="w-full py-2 text-gray-400 font-bold text-sm hover:text-gray-500 transition-colors">
                                 Cancel
                             </button>
                         </div>
                     </div>
                 </div>
             )}
-
-            {/* Footer */}
-            <footer className="relative z-10 mt-8 border-t border-white/5 py-6 px-6">
-                <div className="max-w-[1400px] mx-auto flex items-center justify-between">
-                    <p className="text-[10px] font-bold text-white/15 uppercase tracking-wider">
-                        Avani Hospital OS · Discharge Module · v2.0
-                    </p>
-                    <p className="text-[10px] font-medium text-white/15">
-                        🔒 Encrypted · HIPAA-compliant
-                    </p>
-                </div>
-            </footer>
-        </div>
+        </AppShell>
     );
 }

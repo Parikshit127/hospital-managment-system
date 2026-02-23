@@ -7,26 +7,36 @@ import { searchICD10 } from '@/app/lib/icd10';
 const WEBHOOK_EHR_SAVE = 'https://n8n.srv1336142.hstgr.cloud/webhook-test/doctor-visit';
 const WEBHOOK_LAB_ORDER = 'https://n8n.srv1336142.hstgr.cloud/webhook/create-lab-order';
 
-export async function getPatientQueue() {
+export async function getPatientQueue(options?: { doctor_id?: string; specialty?: string; view?: 'my' | 'all' }) {
     try {
-        // Fetch appointments joined with patient details
-        const appointments = await prisma.appointments.findMany({
-            where: {
-                status: {
-                    in: ['Pending', 'Scheduled', 'Checked In', 'In Progress', 'Admitted']
-                },
-                appointment_date: {
-                    gte: new Date(new Date().setHours(0, 0, 0, 0)),
-                    lt: new Date(new Date().setHours(23, 59, 59, 999))
-                }
+        const where: any = {
+            status: {
+                in: ['Pending', 'Scheduled', 'Checked In', 'In Progress', 'Admitted']
             },
+            appointment_date: {
+                gte: new Date(new Date().setHours(0, 0, 0, 0)),
+                lt: new Date(new Date().setHours(23, 59, 59, 999))
+            }
+        };
+
+        // Filter by doctor if "My Patients" view
+        if (options?.view === 'my' && options?.doctor_id) {
+            where.doctor_id = options.doctor_id;
+        }
+
+        // Filter by specialty/department
+        if (options?.specialty) {
+            where.department = options.specialty;
+        }
+
+        const appointments = await prisma.appointments.findMany({
+            where,
             include: {
                 patient: true,
             },
             orderBy: { appointment_date: 'asc' },
         });
 
-        // Map to flat structure for UI — now includes more patient detail
         const queue = appointments.map(appt => ({
             ...appt.patient,
             age: appt.patient.age,
@@ -36,6 +46,8 @@ export async function getPatientQueue() {
             appointment_id: appt.appointment_id,
             internal_id: appt.id,
             digital_id: appt.patient.patient_id,
+            doctor_id: appt.doctor_id,
+            doctor_name: appt.doctor_name,
             reason_for_visit: appt.reason_for_visit,
             appointment_date: appt.appointment_date,
         }));
@@ -43,6 +55,20 @@ export async function getPatientQueue() {
         return { success: true, data: queue };
     } catch (error) {
         console.error('Queue Fetch Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+export async function getDoctorsList() {
+    try {
+        const doctors = await prisma.user.findMany({
+            where: { role: 'doctor' },
+            select: { id: true, name: true, specialty: true, username: true },
+            orderBy: { name: 'asc' },
+        });
+        return { success: true, data: doctors };
+    } catch (error) {
+        console.error('Doctors List Error:', error);
         return { success: false, data: [] };
     }
 }

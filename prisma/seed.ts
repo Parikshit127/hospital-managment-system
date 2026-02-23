@@ -11,27 +11,32 @@ async function main() {
 
     // 1. Users (including new roles)
     const users = [
-        { username: 'admin', role: 'admin', name: 'Super Admin' },
-        { username: 'doc1', role: 'doctor', name: 'Dr. Sarah Smith' },
-        { username: 'recep1', role: 'receptionist', name: 'Ravi Receptionist' },
-        { username: 'lab1', role: 'lab_technician', name: 'Amit Lab Tech' },
-        { username: 'pharm1', role: 'pharmacist', name: 'Priya Pharmacist' },
-        { username: 'finance1', role: 'finance', name: 'Ankit Finance' },
-        { username: 'ipd1', role: 'ipd_manager', name: 'Neha IPD Manager' },
+        { username: 'admin', role: 'admin', name: 'Super Admin', specialty: null },
+        { username: 'doc1', role: 'doctor', name: 'Dr. Sarah Smith', specialty: 'General Medicine' },
+        { username: 'doc2', role: 'doctor', name: 'Dr. Rajesh Kumar', specialty: 'Cardiology' },
+        { username: 'doc3', role: 'doctor', name: 'Dr. Priya Sharma', specialty: 'Orthopedics' },
+        { username: 'doc4', role: 'doctor', name: 'Dr. Anil Gupta', specialty: 'Pediatrics' },
+        { username: 'doc5', role: 'doctor', name: 'Dr. Meena Patel', specialty: 'Neurology' },
+        { username: 'recep1', role: 'receptionist', name: 'Ravi Receptionist', specialty: null },
+        { username: 'lab1', role: 'lab_technician', name: 'Amit Lab Tech', specialty: null },
+        { username: 'pharm1', role: 'pharmacist', name: 'Priya Pharmacist', specialty: null },
+        { username: 'finance1', role: 'finance', name: 'Ankit Finance', specialty: null },
+        { username: 'ipd1', role: 'ipd_manager', name: 'Neha IPD Manager', specialty: null },
     ];
 
     for (const u of users) {
         const user = await prisma.user.upsert({
             where: { username: u.username },
-            update: {},
+            update: { specialty: u.specialty },
             create: {
                 username: u.username,
                 password,
                 role: u.role,
                 name: u.name,
+                specialty: u.specialty,
             },
         });
-        console.log(`Created user: ${user.username} (${u.role})`);
+        console.log(`Created user: ${user.username} (${u.role}${u.specialty ? ' - ' + u.specialty : ''})`);
     }
 
     // 2. Lab Inventory

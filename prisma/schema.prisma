@@ -32,6 +32,7 @@ model User {
   password    String
   role        String   // admin, doctor, receptionist, lab_technician, pharmacist, finance, ipd_manager
   name        String?
+  specialty   String?  // Doctor specialty: General Medicine, Cardiology, Orthopedics, Pediatrics, Neurology, ENT, Dermatology, Pulmonology
   hospital_id String?
   createdAt   DateTime @default(now())
 
@@ -64,6 +65,7 @@ model appointments {
   appointment_id   String   @unique
   patient_id       String
   doctor_name      String?
+  doctor_id        String?  // User.id of assigned doctor
   department       String?
   status           String   @default("Pending")
   reason_for_visit String?
@@ -75,6 +77,7 @@ model appointments {
   @@index([status])
   @@index([patient_id])
   @@index([appointment_date])
+  @@index([doctor_id])
 }
 
 // 2. Clinical & Doctor Module

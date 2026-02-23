@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-    Microscope, Search, Clock, AlertTriangle, CheckCircle,
-    FileText, Upload, X, Send, Cloud, LogOut, RefreshCw, Loader2,
-    HeartPulse, Activity, FlaskConical, Zap
+    Search, Clock, AlertTriangle, CheckCircle,
+    FileText, Upload, X, Send, Cloud, Loader2,
+    Activity, FlaskConical, Zap
 } from 'lucide-react';
 import { getLabOrders, getLabStats, uploadResult } from '@/app/actions/lab-actions';
-import Link from 'next/link';
+import { AppShell } from '@/app/components/layout/AppShell';
 
 type LabOrder = {
     order_id: string;
@@ -78,7 +78,7 @@ export default function LabPage() {
             'Completed': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
             'Cancelled': 'bg-rose-500/10 text-rose-400 border-rose-500/20'
         };
-        const colorClass = styles[status] || 'bg-white/5 text-white/50 border-white/10';
+        const colorClass = styles[status] || 'bg-gray-100 text-gray-500 border-gray-200';
         return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-[0.1em] border ${colorClass}`}>
                 {status}
@@ -87,153 +87,98 @@ export default function LabPage() {
     };
 
     return (
-        <div className="min-h-screen bg-[#0B0F1A] text-white font-sans relative overflow-hidden">
-            {/* Animated background effects */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-1/3 -left-32 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '5s' }} />
-                <div className="absolute bottom-1/3 -right-32 w-96 h-96 bg-teal-500/5 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '7s' }} />
-                <div className="absolute inset-0" style={{
-                    backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.02) 1px, transparent 1px)',
-                    backgroundSize: '40px 40px'
-                }} />
-            </div>
+        <AppShell pageTitle="Lab Worklist" pageIcon={<FlaskConical className="h-5 w-5" />} onRefresh={loadData} refreshing={loading}>
 
-            {/* Header */}
-            <header className="bg-[#0F1425]/90 backdrop-blur-xl border-b border-white/5 px-6 py-3 sticky top-0 z-50">
-                <div className="max-w-[1400px] mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="relative">
-                            <div className="absolute inset-0 bg-gradient-to-br from-teal-400 to-emerald-600 rounded-xl blur-md opacity-50" />
-                            <div className="relative bg-gradient-to-br from-teal-400 to-emerald-600 p-2 rounded-xl shadow-lg shadow-teal-500/20">
-                                <HeartPulse className="h-5 w-5 text-white" />
-                            </div>
-                        </div>
-                        <div>
-                            <h1 className="text-lg font-black tracking-tight bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
-                                Avani Hospital OS
-                            </h1>
-                            <p className="text-[10px] font-bold text-amber-400 uppercase tracking-[0.2em]">
-                                Laboratory
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <div className="hidden md:flex items-center gap-3 px-4 py-1.5 bg-white/5 rounded-xl border border-white/5">
-                            <div className="h-7 w-7 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center text-white font-bold text-[10px] ring-2 ring-white/10">
-                                LT
-                            </div>
-                            <div className="flex flex-col">
-                                <span className="text-xs font-bold text-white/60">Technician</span>
-                                <span className="text-[10px] text-white/25 font-medium">Lab Operations</span>
-                            </div>
-                        </div>
-                        <Link href="/login" className="flex items-center gap-2 text-xs font-bold text-rose-400 hover:text-rose-300 px-3 py-2 rounded-lg hover:bg-rose-500/10 transition-all">
-                            <LogOut className="h-3.5 w-3.5" /> Logout
-                        </Link>
-                    </div>
-                </div>
-            </header>
-
-            <main className="relative z-10 max-w-[1400px] mx-auto px-6 py-8">
+            <div className="max-w-[1400px] mx-auto">
 
                 {/* Title & Actions */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                     <div>
-                        <h2 className="text-3xl font-black tracking-tight">Worklist Dashboard</h2>
-                        <p className="text-white/40 mt-1 font-medium">Manage test orders and processing queue</p>
+                        <h2 className="text-3xl font-black tracking-tight text-gray-900">Worklist Dashboard</h2>
+                        <p className="text-gray-500 mt-1 font-medium">Manage test orders and processing queue</p>
                     </div>
-                    <button
-                        onClick={() => loadData()}
-                        disabled={loading}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-white/60 hover:text-white transition-all"
-                    >
-                        <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh Data
-                    </button>
                 </div>
 
                 {/* Stats Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                    <div className="group relative bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl p-5 border border-white/5 hover:border-amber-500/30 transition-all overflow-hidden">
-                        <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-all" />
+                    <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-amber-500/30 transition-all overflow-hidden">
                         <div className="flex items-center justify-between mb-3">
-                            <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.15em]">Pending Orders</span>
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Pending Orders</span>
                             <div className="p-1.5 bg-amber-500/10 rounded-lg">
                                 <Clock className="h-3.5 w-3.5 text-amber-400" />
                             </div>
                         </div>
-                        <p className="text-3xl font-black text-white tracking-tight">{stats.pendingCount}</p>
+                        <p className="text-3xl font-black text-gray-900 tracking-tight">{stats.pendingCount}</p>
                         <div className="flex items-center gap-1 mt-2 text-xs font-bold text-amber-400">
                             <AlertTriangle className="h-3 w-3" /> Requires Attention
                         </div>
                     </div>
 
-                    <div className="group relative bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl p-5 border border-white/5 hover:border-emerald-500/30 transition-all overflow-hidden">
-                        <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-all" />
+                    <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-emerald-500/30 transition-all overflow-hidden">
                         <div className="flex items-center justify-between mb-3">
-                            <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.15em]">Completed Today</span>
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Completed Today</span>
                             <div className="p-1.5 bg-emerald-500/10 rounded-lg">
                                 <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
                             </div>
                         </div>
-                        <p className="text-3xl font-black text-white tracking-tight">{stats.completedToday}</p>
+                        <p className="text-3xl font-black text-gray-900 tracking-tight">{stats.completedToday}</p>
                         <div className="flex items-center gap-1 mt-2 text-xs font-bold text-emerald-400">
                             <Activity className="h-3 w-3" /> Processed
                         </div>
                     </div>
 
-                    <div className="group relative bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl p-5 border border-white/5 hover:border-rose-500/20 transition-all overflow-hidden opacity-60">
-                        <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/5 rounded-full blur-2xl" />
+                    <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-rose-500/20 transition-all overflow-hidden opacity-60">
                         <div className="flex items-center justify-between mb-3">
-                            <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.15em]">Urgent Requests</span>
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Urgent Requests</span>
                             <div className="p-1.5 bg-rose-500/10 rounded-lg">
                                 <Zap className="h-3.5 w-3.5 text-rose-400" />
                             </div>
                         </div>
-                        <p className="text-3xl font-black text-white/40 tracking-tight">0</p>
-                        <div className="flex items-center gap-1 mt-2 text-xs font-bold text-white/30">
+                        <p className="text-3xl font-black text-gray-500 tracking-tight">0</p>
+                        <div className="flex items-center gap-1 mt-2 text-xs font-bold text-gray-400">
                             <CheckCircle className="h-3 w-3" /> Normal Load
                         </div>
                     </div>
                 </div>
 
                 {/* Tabs */}
-                <div className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl border border-white/5 p-1.5 flex items-center justify-between mb-6">
+                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-1.5 flex items-center justify-between mb-6">
                     <div className="flex items-center gap-1">
                         <button
                             onClick={() => setActiveTab('Pending')}
-                            className={`px-5 py-2.5 text-sm font-bold rounded-xl transition-all flex items-center gap-2 ${activeTab === 'Pending' ? 'bg-white/10 text-white shadow-sm' : 'text-white/40 hover:text-white/60 hover:bg-white/5'}`}
+                            className={`px-5 py-2.5 text-sm font-bold rounded-xl transition-all flex items-center gap-2 ${activeTab === 'Pending' ? 'bg-gray-100 text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
                         >
                             <Clock className="h-4 w-4" /> Pending
                         </button>
                         <button
                             onClick={() => setActiveTab('Completed')}
-                            className={`px-5 py-2.5 text-sm font-bold rounded-xl transition-all flex items-center gap-2 ${activeTab === 'Completed' ? 'bg-white/10 text-white shadow-sm' : 'text-white/40 hover:text-white/60 hover:bg-white/5'}`}
+                            className={`px-5 py-2.5 text-sm font-bold rounded-xl transition-all flex items-center gap-2 ${activeTab === 'Completed' ? 'bg-gray-100 text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
                         >
                             <CheckCircle className="h-4 w-4" /> Completed
                         </button>
                     </div>
                     <div className="relative hidden md:block mr-2">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20 h-4 w-4" />
-                        <input className="bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 w-64 outline-none transition-all placeholder:text-white/20 font-medium text-white" placeholder="Search orders..." />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 h-4 w-4" />
+                        <input className="bg-white border border-gray-300 rounded-xl pl-9 pr-4 py-2 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 w-64 outline-none transition-all placeholder:text-gray-400 font-medium text-gray-900" placeholder="Search orders..." />
                     </div>
                 </div>
 
                 {/* Table */}
-                <div className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] rounded-2xl border border-white/5 overflow-hidden">
+                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
-                            <thead className="border-b border-white/5">
+                            <thead className="border-b border-gray-200">
                                 <tr>
                                     {['Order ID', 'Patient Name', 'Test Type', 'Status', ...(activeTab === 'Completed' ? ['Result'] : []), 'Action'].map((head) => (
-                                        <th key={head} className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.15em] text-white/25 first:pl-8 last:pr-8 last:text-right">
+                                        <th key={head} className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.15em] text-gray-400 first:pl-8 last:pr-8 last:text-right">
                                             {head}
                                         </th>
                                     ))}
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-white/5">
+                            <tbody className="divide-y divide-gray-100">
                                 {loading ? (
-                                    <tr><td colSpan={6} className="text-center py-16 text-white/30 font-medium">
+                                    <tr><td colSpan={6} className="text-center py-16 text-gray-400 font-medium">
                                         <div className="flex items-center justify-center gap-3">
                                             <Loader2 className="h-5 w-5 animate-spin text-teal-400" />
                                             Fetching orders...
@@ -243,28 +188,28 @@ export default function LabPage() {
                                     <tr>
                                         <td colSpan={6} className="text-center py-20">
                                             <div className="flex flex-col items-center justify-center">
-                                                <div className="h-16 w-16 bg-white/5 rounded-2xl flex items-center justify-center mb-4">
-                                                    <FlaskConical className="h-8 w-8 text-white/15" />
+                                                <div className="h-16 w-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-4">
+                                                    <FlaskConical className="h-8 w-8 text-gray-300" />
                                                 </div>
-                                                <p className="text-white/30 font-bold">No {activeTab.toLowerCase()} orders found</p>
-                                                <p className="text-white/15 text-xs mt-1">Orders will appear here when created</p>
+                                                <p className="text-gray-400 font-bold">No {activeTab.toLowerCase()} orders found</p>
+                                                <p className="text-gray-300 text-xs mt-1">Orders will appear here when created</p>
                                             </div>
                                         </td>
                                     </tr>
                                 ) : (
                                     orders.map((order) => (
-                                        <tr key={order.order_id} className="hover:bg-white/[0.02] transition-colors group">
-                                            <td className="px-6 py-5 pl-8 text-sm font-bold text-white/70 font-mono">#{String(order.order_id).slice(0, 8)}</td>
+                                        <tr key={order.order_id} className="hover:bg-gray-50 transition-colors group">
+                                            <td className="px-6 py-5 pl-8 text-sm font-bold text-gray-700 font-mono">#{String(order.order_id).slice(0, 8)}</td>
                                             <td className="px-6 py-5">
-                                                <div className="font-bold text-white/80">{order.patient_name}</div>
-                                                <div className="text-[10px] text-white/25 font-medium">{new Date(order.created_at).toLocaleDateString()}</div>
+                                                <div className="font-bold text-gray-700">{order.patient_name}</div>
+                                                <div className="text-[10px] text-gray-400 font-medium">{new Date(order.created_at).toLocaleDateString()}</div>
                                             </td>
                                             <td className="px-6 py-5">
-                                                <span className="bg-white/5 text-white/50 px-3 py-1 rounded-lg text-xs font-bold border border-white/10">{order.test_type}</span>
+                                                <span className="bg-gray-100 text-gray-500 px-3 py-1 rounded-lg text-xs font-bold border border-gray-200">{order.test_type}</span>
                                             </td>
                                             <td className="px-6 py-5">{getStatusBadge(order.status)}</td>
                                             {activeTab === 'Completed' && (
-                                                <td className="px-6 py-5 text-sm text-white/50 font-mono font-medium">{order.result_value || '-'}</td>
+                                                <td className="px-6 py-5 text-sm text-gray-500 font-mono font-medium">{order.result_value || '-'}</td>
                                             )}
                                             <td className="px-6 py-5 pr-8 text-right">
                                                 {activeTab === 'Pending' ? (
@@ -275,7 +220,7 @@ export default function LabPage() {
                                                         <Upload className="h-3.5 w-3.5" /> Process Order
                                                     </button>
                                                 ) : (
-                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-white/25 rounded-lg text-xs font-bold border border-white/5">
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-400 rounded-lg text-xs font-bold border border-gray-200">
                                                         <CheckCircle className="h-3.5 w-3.5" /> Archived
                                                     </span>
                                                 )}
@@ -288,26 +233,26 @@ export default function LabPage() {
                     </div>
                 </div>
 
-            </main>
+            </div>
 
             {/* Upload Modal */}
             {selectedOrder && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-md">
-                    <div className="bg-gradient-to-br from-[#131A2E] to-[#0F1425] w-full max-w-lg rounded-2xl shadow-2xl border border-white/10 overflow-hidden">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-md">
+                    <div className="bg-white border border-gray-200 shadow-sm w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden relative">
                         {/* Gradient top */}
                         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-teal-400 via-emerald-500 to-teal-400" />
 
-                        <div className="px-6 py-5 border-b border-white/5 flex justify-between items-center">
+                        <div className="px-6 py-5 border-b border-gray-200 flex justify-between items-center">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-teal-500/10 rounded-lg">
                                     <Cloud className="h-5 w-5 text-teal-400" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-black text-white leading-none">Upload Results</h3>
-                                    <p className="text-[10px] font-bold text-white/25 mt-1">Order #{String(selectedOrder.order_id).slice(0, 8)}</p>
+                                    <h3 className="text-lg font-black text-gray-900 leading-none">Upload Results</h3>
+                                    <p className="text-[10px] font-bold text-gray-400 mt-1">Order #{String(selectedOrder.order_id).slice(0, 8)}</p>
                                 </div>
                             </div>
-                            <button onClick={() => setSelectedOrder(null)} className="text-white/30 hover:text-white/60 transition-colors bg-white/5 rounded-full p-2 hover:bg-white/10 border border-white/5">
+                            <button onClick={() => setSelectedOrder(null)} className="text-gray-400 hover:text-gray-700 transition-colors bg-gray-100 rounded-full p-2 hover:bg-gray-100 border border-gray-200">
                                 <X className="h-5 w-5" />
                             </button>
                         </div>
@@ -317,7 +262,7 @@ export default function LabPage() {
                                 <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-violet-400 to-indigo-500" />
                                 <div className="pl-2">
                                     <p className="text-[10px] font-black text-violet-400/60 uppercase tracking-[0.15em] mb-1">Patient</p>
-                                    <p className="text-sm font-bold text-white/90">{selectedOrder.patient_name}</p>
+                                    <p className="text-sm font-bold text-gray-700">{selectedOrder.patient_name}</p>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-[10px] font-black text-violet-400/60 uppercase tracking-[0.15em] mb-1">Test Requested</p>
@@ -326,13 +271,13 @@ export default function LabPage() {
                             </div>
 
                             <div>
-                                <label className="block text-[10px] font-black text-white/30 uppercase tracking-[0.15em] mb-2 ml-1">Result Value / File</label>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-2 ml-1">Result Value / File</label>
                                 <div className="relative group">
-                                    <FileText className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-teal-400 transition-colors h-4 w-4" />
+                                    <FileText className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-teal-400 transition-colors h-4 w-4" />
                                     <input
                                         value={resultValue}
                                         onChange={(e) => setResultValue(e.target.value)}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-bold text-white transition-all placeholder:text-white/15"
+                                        className="w-full bg-white border border-gray-300 rounded-xl pl-10 pr-4 py-3 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-bold text-gray-900 transition-all placeholder:text-gray-400"
                                         placeholder="Enter numeric result (e.g. 12.5 g/dL)"
                                         autoFocus
                                     />
@@ -340,19 +285,19 @@ export default function LabPage() {
                             </div>
 
                             <div>
-                                <label className="block text-[10px] font-black text-white/30 uppercase tracking-[0.15em] mb-2 ml-1">Technician Remarks</label>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-2 ml-1">Technician Remarks</label>
                                 <textarea
                                     value={remarks}
                                     onChange={(e) => setRemarks(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none resize-none transition-all font-medium text-white placeholder:text-white/15"
+                                    className="w-full bg-white border border-gray-300 rounded-xl p-4 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none resize-none transition-all font-medium text-gray-900 placeholder:text-gray-400"
                                     placeholder="Add clinical observations or notes..."
                                     rows={3}
                                 ></textarea>
                             </div>
                         </div>
 
-                        <div className="px-6 py-5 bg-white/[0.02] flex gap-3 justify-end border-t border-white/5">
-                            <button onClick={() => setSelectedOrder(null)} className="px-6 py-3 text-sm font-bold text-white/40 hover:text-white/70 transition-colors">
+                        <div className="px-6 py-5 bg-gray-50 flex gap-3 justify-end border-t border-gray-200">
+                            <button onClick={() => setSelectedOrder(null)} className="px-6 py-3 text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors">
                                 Cancel
                             </button>
                             <button
@@ -371,17 +316,6 @@ export default function LabPage() {
                 </div>
             )}
 
-            {/* Footer */}
-            <footer className="relative z-10 mt-8 border-t border-white/5 py-6 px-6">
-                <div className="max-w-[1400px] mx-auto flex items-center justify-between">
-                    <p className="text-[10px] font-bold text-white/15 uppercase tracking-wider">
-                        Avani Hospital OS · Laboratory Module · v2.0
-                    </p>
-                    <p className="text-[10px] font-medium text-white/15">
-                        🔒 Encrypted · HIPAA-compliant
-                    </p>
-                </div>
-            </footer>
-        </div>
+        </AppShell>
     );
 }

@@ -4,6 +4,8 @@ export interface SessionData {
     id: string
     username: string
     role: string
+    name: string
+    specialty: string | null
     hospital_id: string | null
 }
 
@@ -20,6 +22,8 @@ export async function getSession(): Promise<SessionData | null> {
             id: session.id || '',
             username: session.username || '',
             role: session.role || '',
+            name: session.name || '',
+            specialty: session.specialty || null,
             hospital_id: session.hospital_id || DEFAULT_HOSPITAL_ID,
         }
     } catch {
