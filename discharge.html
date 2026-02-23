@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Discharge &amp; Admin Dashboard - Avani Enterprise Hospital OS</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Font: Inter -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0d9186",
+                        "background-light": "#f6f8f8",
+                        "background-dark": "#102220",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-800 dark:text-slate-100 min-h-screen relative">
+<!-- Top Navigation Bar -->
+<header class="flex items-center justify-between border-b border-solid border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-3 sticky top-0 z-40">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-3">
+<div class="bg-primary p-1.5 rounded-lg text-white flex items-center justify-center">
+<span class="material-symbols-outlined text-2xl">local_hospital</span>
+</div>
+<h2 class="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-tight">Avani Hospital OS</h2>
+</div>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors" href="#">Dashboard</a>
+<a class="text-primary text-sm font-bold border-b-2 border-primary py-4 -mb-4" href="#">Discharge &amp; Admin</a>
+<a class="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors" href="#">Inventory</a>
+<a class="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors" href="#">Staff</a>
+<a class="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors" href="#">Reports</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl px-3 py-1.5 w-64">
+<span class="material-symbols-outlined text-slate-400 text-lg">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-full placeholder:text-slate-400" placeholder="Search patient or record" type="text"/>
+</div>
+<div class="flex gap-2">
+<button class="flex items-center justify-center rounded-xl size-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="flex items-center justify-center rounded-xl size-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border border-slate-200 dark:border-slate-700" data-alt="Professional profile picture of a doctor" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuD54B-wn-zelpkbXdMEf-ZFCHKB183q8x_Fb_nX7rX9p1VNzXQrYOQUAHoEzUfkyJbp90JEUNS8bhMB54SzhPr_m-VFdjtSnnc2EfPdZm5zxbqzcquZMNxCUB50c4ZvdDZD7bAFG0Am7-KsT0qMNZjo_y4FEyiKGnIJpeJSZIr2sAN_yFnfFDBw45VZgEe60Wm-DTNSeMf0Nx3vu66SNywoSiwHOvGy03QXbUwUw9ZV7MOSxqjTAaLhU5owTSJ_xWMSwwIBo688WBo");'></div>
+</div>
+</header>
+<main class="max-w-[1200px] mx-auto px-6 py-8">
+<!-- Dashboard Header Section -->
+<div class="flex flex-wrap items-center justify-between gap-4 mb-8">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-3xl">apartment</span>
+<h1 class="text-slate-900 dark:text-white text-3xl font-black tracking-tight">Discharge &amp; Administration</h1>
+</div>
+<p class="text-slate-500 dark:text-slate-400 text-base">Manage patient status and hospital discharge workflows.</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors shadow-sm">
+<span class="material-symbols-outlined text-lg">file_download</span>
+                    Export CSV
+                </button>
+<button class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold hover:brightness-110 transition-colors shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-lg">add</span>
+                    New Admission
+                </button>
+</div>
+</div>
+<!-- KPI Cards Row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+<div class="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col gap-2">
+<div class="flex justify-between items-start">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-semibold uppercase tracking-wider">Total Admissions</p>
+<span class="material-symbols-outlined text-primary bg-primary/10 p-2 rounded-lg">group</span>
+</div>
+<div class="flex items-baseline gap-2">
+<p class="text-3xl font-bold text-slate-900 dark:text-white">124</p>
+<span class="text-emerald-500 text-sm font-bold flex items-center">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+                        12%
+                    </span>
+</div>
+<p class="text-slate-400 text-xs mt-1">Vs last month avg</p>
+</div>
+<div class="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col gap-2">
+<div class="flex justify-between items-start">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-semibold uppercase tracking-wider">Pending Discharges</p>
+<span class="material-symbols-outlined text-orange-500 bg-orange-100 p-2 rounded-lg">logout</span>
+</div>
+<div class="flex items-baseline gap-2">
+<p class="text-3xl font-bold text-slate-900 dark:text-white">18</p>
+<span class="text-emerald-500 text-sm font-bold flex items-center">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+                        5%
+                    </span>
+</div>
+<p class="text-slate-400 text-xs mt-1">Critical status tasks</p>
+</div>
+<div class="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-slate-100 dark:border-slate-800 flex flex-col gap-2">
+<div class="flex justify-between items-start">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-semibold uppercase tracking-wider">Revenue Today</p>
+<span class="material-symbols-outlined text-blue-500 bg-blue-100 p-2 rounded-lg">payments</span>
+</div>
+<div class="flex items-baseline gap-2">
+<p class="text-3xl font-bold text-slate-900 dark:text-white">$12,450</p>
+<span class="text-emerald-500 text-sm font-bold flex items-center">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+                        8%
+                    </span>
+</div>
+<p class="text-slate-400 text-xs mt-1">Updated 5 mins ago</p>
+</div>
+</div>
+<!-- Main Content Section: Admitted Patients Table -->
+<div class="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
+<div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
+<h2 class="text-slate-900 dark:text-white text-lg font-bold">Admitted Patients</h2>
+<div class="flex gap-2">
+<button class="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors">All Units</button>
+<button class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors">ICU</button>
+<button class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors">General Ward</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-800/50">
+<th class="px-6 py-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">Patient Name</th>
+<th class="px-6 py-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">Attending Doctor</th>
+<th class="px-6 py-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">Diagnosis</th>
+<th class="px-6 py-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">Date of Stay</th>
+<th class="px-6 py-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">Status</th>
+<th class="px-6 py-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider text-right">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<!-- Patient 1 -->
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">JD</div>
+<span class="text-sm font-semibold text-slate-900 dark:text-white">John Doe</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">Dr. Smith</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">Hypertension</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">3 Days</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-primary text-white">Admitted</span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-primary text-sm font-bold hover:underline">Process Discharge</button>
+</td>
+</tr>
+<!-- Patient 2 -->
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">JR</div>
+<span class="text-sm font-semibold text-slate-900 dark:text-white">Jane Roe</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">Dr. Adams</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">Post-Op Recovery</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">5 Days</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border-2 border-primary text-primary">Ready for Discharge</span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-primary text-sm font-bold hover:underline">Process Discharge</button>
+</td>
+</tr>
+<!-- Patient 3 -->
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">RB</div>
+<span class="text-sm font-semibold text-slate-900 dark:text-white">Robert Brown</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">Dr. Wilson</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">Type 2 Diabetes</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">2 Days</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-primary text-white">Admitted</span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-primary text-sm font-bold hover:underline">Process Discharge</button>
+</td>
+</tr>
+<!-- Patient 4 -->
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">ED</div>
+<span class="text-sm font-semibold text-slate-900 dark:text-white">Emily Davis</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">Dr. Taylor</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">Acute Appendicitis</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">4 Days</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border-2 border-primary text-primary">Ready for Discharge</span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-primary text-sm font-bold hover:underline">Process Discharge</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+<p class="text-xs text-slate-500 dark:text-slate-400">Showing 4 of 124 patients</p>
+<div class="flex gap-2">
+<button class="size-8 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined text-sm">chevron_left</span>
+</button>
+<button class="size-8 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Simulated Discharge Modal Overlay -->
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+<!-- Backdrop -->
+<div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+<!-- Modal Card -->
+<div class="relative bg-white dark:bg-slate-900 w-full max-w-md rounded-xl shadow-2xl overflow-hidden">
+<div class="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+<h3 class="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">assignment_turned_in</span>
+                    Discharge Checklist
+                </h3>
+<button class="text-slate-400 hover:text-slate-600 transition-colors">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<div class="p-6 space-y-6">
+<!-- Patient Info in Modal -->
+<div class="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg flex items-center gap-4">
+<div class="size-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">JR</div>
+<div>
+<p class="text-sm font-bold text-slate-900 dark:text-white">Jane Roe</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Record: #HN-2023-0892</p>
+</div>
+</div>
+<!-- Checklist Items -->
+<div class="space-y-4">
+<label class="flex items-center gap-3 cursor-pointer group">
+<input checked="" class="size-5 rounded border-slate-300 text-primary focus:ring-primary" disabled="" type="checkbox"/>
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Medical Clearance Approved</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<input checked="" class="size-5 rounded border-slate-300 text-primary focus:ring-primary" disabled="" type="checkbox"/>
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Medications Prepared</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<input class="size-5 rounded border-slate-300 text-primary focus:ring-primary" type="checkbox"/>
+<span class="text-sm font-medium text-slate-900 dark:text-slate-100">Final Bill Cleared?</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<input class="size-5 rounded border-slate-300 text-primary focus:ring-primary" type="checkbox"/>
+<span class="text-sm font-medium text-slate-900 dark:text-slate-100">Follow-up Appointment Scheduled</span>
+</label>
+</div>
+<!-- Notes -->
+<div class="flex flex-col gap-2">
+<label class="text-xs font-bold text-slate-500 uppercase">Special Instructions</label>
+<textarea class="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-lg text-sm focus:ring-primary placeholder:text-slate-400" placeholder="Enter any specific discharge notes..." rows="2"></textarea>
+</div>
+</div>
+<div class="p-6 bg-slate-50 dark:bg-slate-800/50 flex flex-col gap-3">
+<button class="w-full py-3 bg-primary text-white rounded-xl font-bold hover:brightness-110 transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-lg">receipt_long</span>
+                    Generate Discharge Summary
+                </button>
+<button class="w-full py-2 bg-transparent text-slate-500 dark:text-slate-400 font-semibold text-sm hover:text-slate-700 dark:hover:text-slate-200">
+                    Cancel and Return
+                </button>
+</div>
+</div>
+</div>
+</body></html>

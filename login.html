@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Avani Hospital OS Login</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "primary": "#16acac",
+                "background-light": "#f6f8f8",
+                "background-dark": "#112121",
+              },
+              fontFamily: {
+                "display": ["Inter", "sans-serif"]
+              },
+              borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+            },
+          },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .role-card:hover {
+            transform: translateY(-4px) scale(1.02);
+            border-color: #16acac;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 48;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-[#0e1b1b] dark:text-white transition-colors duration-300">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<!-- Header Section -->
+<header class="flex items-center justify-between border-b border-solid border-primary/10 px-6 py-4 lg:px-40">
+<div class="flex items-center gap-3">
+<div class="flex items-center justify-center rounded-lg bg-primary/10 p-2 text-primary">
+<span class="material-symbols-outlined text-3xl">stethoscope</span>
+</div>
+<h2 class="text-xl font-bold leading-tight tracking-tight">Avani Enterprise Hospital OS</h2>
+</div>
+<div class="flex items-center gap-4">
+<button class="flex items-center justify-center rounded-lg bg-primary/10 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/20 transition-all">
+                        IT Support
+                    </button>
+<button class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-[#0e1b1b] dark:text-white">
+<span class="material-symbols-outlined text-xl">dark_mode</span>
+</button>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex flex-1 flex-col items-center justify-center px-4 py-12 lg:px-40">
+<div class="max-w-[960px] w-full text-center">
+<div class="mb-10">
+<h1 class="text-4xl font-extrabold tracking-tight text-[#0e1b1b] dark:text-white lg:text-5xl">
+                            Welcome Back
+                        </h1>
+<p class="mt-4 text-lg text-slate-500 dark:text-slate-400">
+                            Select your role to access your personalized workspace
+                        </p>
+</div>
+<!-- Role Selection Grid -->
+<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+<!-- Role Card: Receptionist -->
+<div class="role-card group cursor-pointer flex flex-col items-center gap-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 p-8 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-primary/5">
+<div class="flex h-20 w-20 items-center justify-center rounded-full bg-primary/5 text-primary group-hover:bg-primary group-hover:text-white transition-colors duration-300">
+<span class="material-symbols-outlined text-4xl">content_paste</span>
+</div>
+<div class="text-center">
+<h3 class="text-xl font-bold">Receptionist</h3>
+<p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Patient registration &amp; clinical scheduling</p>
+</div>
+<div class="mt-auto pt-4">
+<span class="text-sm font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity">Select Role →</span>
+</div>
+</div>
+<!-- Role Card: Doctor -->
+<div class="role-card group cursor-pointer flex flex-col items-center gap-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 p-8 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-primary/5">
+<div class="flex h-20 w-20 items-center justify-center rounded-full bg-primary/5 text-primary group-hover:bg-primary group-hover:text-white transition-colors duration-300">
+<span class="material-symbols-outlined text-4xl">stethoscope</span>
+</div>
+<div class="text-center">
+<h3 class="text-xl font-bold">Doctor</h3>
+<p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Electronic medical records &amp; consultations</p>
+</div>
+<div class="mt-auto pt-4">
+<span class="text-sm font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity">Select Role →</span>
+</div>
+</div>
+<!-- Role Card: Lab Technician -->
+<div class="role-card group cursor-pointer flex flex-col items-center gap-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 p-8 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-primary/5">
+<div class="flex h-20 w-20 items-center justify-center rounded-full bg-primary/5 text-primary group-hover:bg-primary group-hover:text-white transition-colors duration-300">
+<span class="material-symbols-outlined text-4xl">science</span>
+</div>
+<div class="text-center">
+<h3 class="text-xl font-bold">Lab Tech</h3>
+<p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Pathology management &amp; diagnostic reports</p>
+</div>
+<div class="mt-auto pt-4">
+<span class="text-sm font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity">Select Role →</span>
+</div>
+</div>
+<!-- Role Card: Pharmacist -->
+<div class="role-card group cursor-pointer flex flex-col items-center gap-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 p-8 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-primary/5">
+<div class="flex h-20 w-20 items-center justify-center rounded-full bg-primary/5 text-primary group-hover:bg-primary group-hover:text-white transition-colors duration-300">
+<span class="material-symbols-outlined text-4xl">medication</span>
+</div>
+<div class="text-center">
+<h3 class="text-xl font-bold">Pharmacist</h3>
+<p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Inventory control &amp; drug dispensing</p>
+</div>
+<div class="mt-auto pt-4">
+<span class="text-sm font-semibold text-primary opacity-0 group-hover:opacity-100 transition-opacity">Select Role →</span>
+</div>
+</div>
+</div>
+<!-- Additional Options -->
+<div class="mt-12 flex flex-wrap justify-center gap-8">
+<button class="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-xl">help</span>
+                            Need help signing in?
+                        </button>
+<button class="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-xl">key</span>
+                            Forgot password?
+                        </button>
+</div>
+</div>
+</main>
+<!-- Footer Section -->
+<footer class="flex flex-col items-center gap-4 border-t border-primary/5 px-6 py-8 text-center lg:px-40">
+<div class="flex flex-wrap justify-center gap-8">
+<a class="text-sm font-medium text-slate-400 hover:text-primary transition-colors" href="#">System Status</a>
+<a class="text-sm font-medium text-slate-400 hover:text-primary transition-colors" href="#">Security Policy</a>
+<a class="text-sm font-medium text-slate-400 hover:text-primary transition-colors" href="#">Contact Admin</a>
+</div>
+<p class="text-sm text-slate-400">
+                    © 2024 Avani Enterprise Hospital OS. All healthcare data is encrypted and HIPAA compliant.
+                </p>
+</footer>
+</div>
+</div>
+<!-- Background Pattern -->
+<div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none opacity-20 dark:opacity-5">
+<svg class="absolute top-0 left-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="40" id="dots" patternunits="userSpaceOnUse" width="40" x="0" y="0">
+<circle cx="2" cy="2" fill="#16acac" r="1"></circle>
+</pattern>
+</defs>
+<rect fill="url(#dots)" height="100%" width="100%"></rect>
+</svg>
+</div>
+</body></html>
