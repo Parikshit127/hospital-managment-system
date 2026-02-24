@@ -269,7 +269,7 @@ export default function PharmacyPage() {
                                         </div>
                                     </div>
                                     <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 pl-2">
-                                        <button onClick={() => setSelectedOrder(order)} className="px-6 py-2.5 bg-gradient-to-r from-violet-500 to-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-violet-500/20 hover:from-violet-400 hover:to-indigo-500 transition-all flex items-center gap-2">
+                                        <button onClick={() => setSelectedOrder(order)} className="px-6 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-teal-500/20 hover:from-teal-400 hover:to-emerald-500 transition-all flex items-center gap-2">
                                             <Receipt className="h-4 w-4" /> Process Order
                                         </button>
                                     </div>

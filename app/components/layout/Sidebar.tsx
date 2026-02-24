@@ -94,24 +94,23 @@ export function Sidebar({ session }: SidebarProps) {
 
             {/* Sidebar */}
             <aside
-                className={`fixed top-0 left-0 h-screen bg-slate-800 text-white z-50 flex flex-col transition-all duration-300 ${
-                    collapsed ? 'w-16' : 'w-60'
-                } ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+                className={`fixed top-0 left-0 h-screen bg-[var(--ink)] text-white z-50 flex flex-col transition-all duration-300 ${collapsed ? 'w-16' : 'w-60'
+                    } ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
             >
                 {/* Header */}
-                <div className={`flex items-center gap-3 px-4 py-4 border-b border-slate-700 ${collapsed ? 'justify-center' : ''}`}>
-                    <div className="bg-gradient-to-br from-blue-500 to-teal-500 p-2 rounded-xl shrink-0">
+                <div className={`flex items-center gap-3 px-4 py-4 border-b border-white/10 ${collapsed ? 'justify-center' : ''}`}>
+                    <div className="bg-gradient-to-br from-teal-500 to-emerald-600 p-2 rounded-xl shrink-0">
                         <HeartPulse className="h-5 w-5 text-white" />
                     </div>
                     {!collapsed && (
                         <div className="min-w-0">
                             <h1 className="text-sm font-black tracking-tight truncate">Hospital OS</h1>
-                            <p className="text-[10px] text-slate-400">Management System</p>
+                            <p className="text-[10px] text-teal-400/80">Management System</p>
                         </div>
                     )}
                     <button
                         onClick={() => { setCollapsed(!collapsed); setMobileOpen(false); }}
-                        className={`p-1 rounded hover:bg-slate-700 text-slate-400 transition-colors ${collapsed ? 'mx-auto mt-2' : 'ml-auto'} hidden lg:block`}
+                        className={`p-1 rounded hover:bg-white/10 text-white/50 transition-colors ${collapsed ? 'mx-auto mt-2' : 'ml-auto'} hidden lg:block`}
                     >
                         <ChevronLeft className={`h-4 w-4 transition-transform ${collapsed ? 'rotate-180' : ''}`} />
                     </button>
@@ -129,14 +128,13 @@ export function Sidebar({ session }: SidebarProps) {
                                 key={item.href}
                                 href={item.href}
                                 onClick={() => setMobileOpen(false)}
-                                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                                    isActive
-                                        ? 'bg-blue-600/20 text-blue-400'
-                                        : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
-                                } ${collapsed ? 'justify-center px-2' : ''}`}
+                                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${isActive
+                                        ? 'bg-teal-500/20 text-teal-400'
+                                        : 'text-white/60 hover:bg-white/5 hover:text-white'
+                                    } ${collapsed ? 'justify-center px-2' : ''}`}
                                 title={collapsed ? item.label : undefined}
                             >
-                                <span className={isActive ? 'text-blue-400' : 'text-slate-400'}>{item.icon}</span>
+                                <span className={isActive ? 'text-teal-400' : 'text-white/50'}>{item.icon}</span>
                                 {!collapsed && <span className="truncate">{item.label}</span>}
                             </Link>
                         );
@@ -144,19 +142,19 @@ export function Sidebar({ session }: SidebarProps) {
                 </nav>
 
                 {/* User info + Logout */}
-                <div className={`border-t border-slate-700 px-3 py-3 ${collapsed ? 'text-center' : ''}`}>
+                <div className={`border-t border-white/10 px-3 py-3 ${collapsed ? 'text-center' : ''}`}>
                     {!collapsed && session && (
                         <div className="mb-2">
                             <p className="text-xs font-bold text-white truncate">{session.name || session.username}</p>
-                            <p className="text-[10px] text-slate-400">{roleLabelMap[session.role] || session.role}</p>
+                            <p className="text-[10px] text-white/50">{roleLabelMap[session.role] || session.role}</p>
                             {session.specialty && (
-                                <p className="text-[10px] text-blue-400">{session.specialty}</p>
+                                <p className="text-[10px] text-teal-400">{session.specialty}</p>
                             )}
                         </div>
                     )}
                     <Link
                         href="/login"
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-700 hover:text-white transition-all ${collapsed ? 'justify-center px-2' : ''}`}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-white/60 hover:bg-white/10 hover:text-white transition-all ${collapsed ? 'justify-center px-2' : ''}`}
                     >
                         <LogOut className="h-4 w-4" />
                         {!collapsed && <span>Logout</span>}

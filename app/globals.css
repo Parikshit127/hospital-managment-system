@@ -1,16 +1,50 @@
 @import "tailwindcss";
 
+@theme {
+  --color-gray-50: #f8fbf9;
+  --color-gray-100: #f0faf6;
+  --color-gray-200: #deeee8;
+  --color-gray-300: #c8ddd7;
+  --color-gray-400: #8bada0;
+  --color-gray-500: #7a9d8e;
+  --color-gray-600: #3d6554;
+  --color-gray-700: #2a473a;
+  --color-gray-800: #1a2f24;
+  --color-gray-900: #0e2018;
+
+  --color-teal-400: #34c48a;
+  --color-teal-500: #1aab74;
+  --color-teal-600: #0f8f5e;
+  --color-emerald-400: #34c48a;
+  --color-emerald-500: #1aab74;
+  --color-emerald-600: #0f8f5e;
+
+  --font-sans: 'Outfit', system-ui, sans-serif;
+  --font-serif: 'Playfair Display', Georgia, serif;
+}
+
 :root {
-  --background: #0B0F1A;
-  --foreground: #ffffff;
-  --card-bg: #131A2E;
-  --card-border: rgba(255, 255, 255, 0.05);
-  --accent-teal: #14b8a6;
-  --accent-violet: #8b5cf6;
-  --accent-amber: #f59e0b;
-  --accent-emerald: #10b981;
-  --accent-rose: #f43f5e;
-  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --background: #f8fbf9;
+  --foreground: #0e2018;
+  --card-bg: #ffffff;
+  --card-border: #deeee8;
+
+  /* Original Login Page variables for compatibility */
+  --g50: #f0faf6;
+  --g100: #d4f0e3;
+  --g200: #a8e0c7;
+  --g400: #34c48a;
+  --g500: #1aab74;
+  --g600: #0f8f5e;
+  --sage: #8bada0;
+  --sage-light: #c8ddd7;
+  --white: #ffffff;
+  --off: #f8fbf9;
+  --ink: #0e2018;
+  --mid: #3d6554;
+  --soft: #7a9d8e;
+  --border: #deeee8;
+  --shadow: rgba(26, 171, 116, 0.12);
 }
 
 /* Global styles */
@@ -37,40 +71,61 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--color-gray-300);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--color-gray-400);
 }
 
 /* Selection */
 ::selection {
-  background: rgba(139, 92, 246, 0.3);
-  color: #ffffff;
+  background: rgba(26, 171, 116, 0.2);
+  color: var(--ink);
 }
 
 /* Focus styles */
 :focus-visible {
-  outline: 2px solid rgba(139, 92, 246, 0.5);
+  outline: 2px solid rgba(26, 171, 116, 0.4);
   outline-offset: 2px;
 }
 
 /* Animations */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.3); }
-  50% { box-shadow: 0 0 20px 5px rgba(20, 184, 166, 0.15); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(26, 171, 116, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 0 20px 5px rgba(26, 171, 116, 0.15);
+  }
 }
 
 .animate-in {
@@ -79,12 +134,14 @@ body {
 
 /* Utility classes */
 .glass {
+  background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, #14b8a6, #8b5cf6);
+  background: linear-gradient(135deg, var(--g500), var(--g600));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;

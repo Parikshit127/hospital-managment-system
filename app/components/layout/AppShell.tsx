@@ -22,7 +22,7 @@ export function AppShell({ children, pageTitle, pageIcon, headerActions, onRefre
             .then(data => {
                 if (data?.id) setSession(data);
             })
-            .catch(() => {});
+            .catch(() => { });
     }, []);
 
     return (
@@ -37,7 +37,7 @@ export function AppShell({ children, pageTitle, pageIcon, headerActions, onRefre
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3 pl-10 lg:pl-0">
                                 {pageIcon && (
-                                    <div className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-teal-500 text-white">
+                                    <div className="p-2 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white shadow-lg shadow-teal-500/20">
                                         {pageIcon}
                                     </div>
                                 )}

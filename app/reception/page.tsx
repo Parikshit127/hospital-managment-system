@@ -86,7 +86,7 @@ export default function ReceptionDashboard() {
     const headerActions = (
         <div className="flex items-center gap-2">
             <Link href="/reception/register"
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-teal-600 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md transition-all">
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md transition-all">
                 <UserPlus className="h-3.5 w-3.5" /> Register Patient
             </Link>
             <Link href="/reception/triage"
@@ -110,7 +110,7 @@ export default function ReceptionDashboard() {
                     <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Today's Registrations</span>
-                            <div className="p-1.5 bg-blue-50 rounded-lg"><UserPlus className="h-3.5 w-3.5 text-blue-500" /></div>
+                            <div className="p-1.5 bg-teal-50 rounded-lg"><UserPlus className="h-3.5 w-3.5 text-teal-500" /></div>
                         </div>
                         <p className="text-2xl font-black text-gray-900">{stats?.todayRegistrations || 0}</p>
                     </div>
@@ -153,7 +153,7 @@ export default function ReceptionDashboard() {
                             value={searchInput}
                             onChange={e => setSearchInput(e.target.value)}
                             placeholder="Search by name, patient ID, or phone..."
-                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                         />
                     </div>
                     <div className="flex items-center gap-2">
@@ -161,7 +161,7 @@ export default function ReceptionDashboard() {
                         <select
                             value={department}
                             onChange={e => { setDepartment(e.target.value); setPage(1); }}
-                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-blue-500"
+                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500"
                         >
                             <option value="">All Departments</option>
                             <option value="General Medicine">General Medicine</option>
@@ -176,7 +176,7 @@ export default function ReceptionDashboard() {
                         <select
                             value={dateRange}
                             onChange={e => { setDateRange(e.target.value as any); setPage(1); }}
-                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-blue-500"
+                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500"
                         >
                             <option value="all">All Time</option>
                             <option value="today">Today</option>
@@ -201,7 +201,7 @@ export default function ReceptionDashboard() {
                                 {loading && patients.length === 0 ? (
                                     <tr>
                                         <td colSpan={8} className="text-center py-16">
-                                            <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" />
+                                            <Loader2 className="h-6 w-6 animate-spin text-teal-500 mx-auto" />
                                             <p className="text-gray-400 text-xs mt-2">Loading patients...</p>
                                         </td>
                                     </tr>
@@ -216,7 +216,7 @@ export default function ReceptionDashboard() {
                                 ) : patients.map((patient: any) => (
                                     <tr key={patient.patient_id} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-4 py-3">
-                                            <span className="text-xs font-mono font-bold text-blue-600">{patient.patient_id}</span>
+                                            <span className="text-xs font-mono font-bold text-teal-600">{patient.patient_id}</span>
                                         </td>
                                         <td className="px-4 py-3 font-medium text-gray-900">{patient.full_name}</td>
                                         <td className="px-4 py-3 text-gray-500">
@@ -246,7 +246,7 @@ export default function ReceptionDashboard() {
                                         <td className="px-4 py-3">
                                             <button
                                                 onClick={() => openPatientDetail(patient.patient_id)}
-                                                className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-blue-600 transition-colors"
+                                                className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-teal-600 transition-colors"
                                                 title="View Details"
                                             >
                                                 <Eye className="h-4 w-4" />
@@ -300,7 +300,7 @@ export default function ReceptionDashboard() {
 
                         {detailLoading ? (
                             <div className="flex items-center justify-center py-16">
-                                <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+                                <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
                             </div>
                         ) : patientDetail ? (
                             <div className="p-6 space-y-6">
@@ -308,7 +308,7 @@ export default function ReceptionDashboard() {
                                 <div className="bg-gray-50 rounded-xl p-4 space-y-3">
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-lg font-bold text-gray-900">{patientDetail.patient.full_name}</h3>
-                                        <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
+                                        <span className="text-xs font-mono font-bold text-teal-600 bg-teal-50 px-2 py-1 rounded-lg">
                                             {patientDetail.patient.patient_id}
                                         </span>
                                     </div>
@@ -335,7 +335,7 @@ export default function ReceptionDashboard() {
                                 {/* Appointment History */}
                                 <div>
                                     <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-3">
-                                        <Calendar className="h-4 w-4 text-blue-500" /> Appointment History
+                                        <Calendar className="h-4 w-4 text-teal-500" /> Appointment History
                                     </h4>
                                     {patientDetail.appointments?.length > 0 ? (
                                         <div className="space-y-2">
@@ -371,11 +371,10 @@ export default function ReceptionDashboard() {
                                             {patientDetail.triageHistory.map((t: any) => (
                                                 <div key={t.id} className="p-3 bg-gray-50 rounded-xl">
                                                     <div className="flex items-center justify-between mb-1">
-                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                                            t.triage_level === 'Emergency' ? 'bg-rose-50 text-rose-700' :
-                                                            t.triage_level === 'Urgent' ? 'bg-amber-50 text-amber-700' :
-                                                            'bg-blue-50 text-blue-700'
-                                                        }`}>{t.triage_level}</span>
+                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${t.triage_level === 'Emergency' ? 'bg-rose-50 text-rose-700' :
+                                                                t.triage_level === 'Urgent' ? 'bg-amber-50 text-amber-700' :
+                                                                    'bg-blue-50 text-blue-700'
+                                                            }`}>{t.triage_level}</span>
                                                         <span className="text-[10px] text-gray-400">
                                                             {new Date(t.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                                                         </span>
