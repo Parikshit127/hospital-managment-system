@@ -1,6 +1,6 @@
 'use server';
 
-import { prisma } from '@/app/lib/db';
+import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
@@ -38,7 +38,9 @@ export async function createInvoice(data: {
     notes?: string;
 }) {
     try {
-        const invoice = await prisma.invoices.create({
+        const { db, organizationId } = await requireTenantContext();
+
+        const invoice = await db.invoices.create({
             data: {
                 invoice_number: generateInvoiceNumber(),
                 patient_id: data.patient_id,
@@ -46,16 +48,18 @@ export async function createInvoice(data: {
                 invoice_type: data.invoice_type,
                 status: 'Draft',
                 notes: data.notes || null,
+                organizationId,
             },
         });
 
-        await prisma.system_audit_logs.create({
+        await db.system_audit_logs.create({
             data: {
                 action: 'CREATE_INVOICE',
                 module: 'finance',
                 entity_type: 'invoice',
                 entity_id: invoice.invoice_number,
                 details: JSON.stringify({ patient_id: data.patient_id, type: data.invoice_type }),
+                organizationId,
             },
         });
 
@@ -77,11 +81,13 @@ export async function addInvoiceItem(data: {
     ref_id?: string;
 }) {
     try {
+        const { db } = await requireTenantContext();
+
         const discount = data.discount || 0;
         const total_price = data.quantity * data.unit_price;
         const net_price = total_price - discount;
 
-        const item = await prisma.invoice_items.create({
+        const item = await db.invoice_items.create({
             data: {
                 invoice_id: data.invoice_id,
                 department: data.department,
@@ -107,19 +113,21 @@ export async function addInvoiceItem(data: {
 
 // Recalculate invoice totals from items
 async function recalculateInvoice(invoiceId: number) {
-    const items = await prisma.invoice_items.findMany({
+    const { db } = await requireTenantContext();
+
+    const items = await db.invoice_items.findMany({
         where: { invoice_id: invoiceId },
     });
 
-    const total_amount = items.reduce((sum, item) => sum + Number(item.total_price), 0);
-    const total_discount = items.reduce((sum, item) => sum + Number(item.discount), 0);
-    const net_amount = items.reduce((sum, item) => sum + Number(item.net_price), 0);
+    const total_amount = items.reduce((sum: any, item: any) => sum + Number(item.total_price), 0);
+    const total_discount = items.reduce((sum: any, item: any) => sum + Number(item.discount), 0);
+    const net_amount = items.reduce((sum: any, item: any) => sum + Number(item.net_price), 0);
 
-    const invoice = await prisma.invoices.findUnique({ where: { id: invoiceId } });
+    const invoice = await db.invoices.findUnique({ where: { id: invoiceId } });
     const paid_amount = Number(invoice?.paid_amount || 0);
     const balance_due = net_amount - paid_amount;
 
-    await prisma.invoices.update({
+    await db.invoices.update({
         where: { id: invoiceId },
         data: {
             total_amount,
@@ -139,12 +147,14 @@ export async function getInvoices(filters?: {
     limit?: number;
 }) {
     try {
+        const { db } = await requireTenantContext();
+
         const where: any = {};
         if (filters?.status) where.status = filters.status;
         if (filters?.patient_id) where.patient_id = filters.patient_id;
         if (filters?.invoice_type) where.invoice_type = filters.invoice_type;
 
-        const invoices = await prisma.invoices.findMany({
+        const invoices = await db.invoices.findMany({
             where,
             include: {
                 patient: { select: { full_name: true, phone: true } },
@@ -166,7 +176,9 @@ export async function getInvoices(filters?: {
 // Get single invoice detail
 export async function getInvoiceDetail(invoiceId: number) {
     try {
-        const invoice = await prisma.invoices.findUnique({
+        const { db } = await requireTenantContext();
+
+        const invoice = await db.invoices.findUnique({
             where: { id: invoiceId },
             include: {
                 patient: true,
@@ -188,7 +200,9 @@ export async function getInvoiceDetail(invoiceId: number) {
 // Finalize invoice (Draft -> Final)
 export async function finalizeInvoice(invoiceId: number) {
     try {
-        const invoice = await prisma.invoices.update({
+        const { db, organizationId } = await requireTenantContext();
+
+        const invoice = await db.invoices.update({
             where: { id: invoiceId },
             data: {
                 status: 'Final',
@@ -196,13 +210,14 @@ export async function finalizeInvoice(invoiceId: number) {
             },
         });
 
-        await prisma.system_audit_logs.create({
+        await db.system_audit_logs.create({
             data: {
                 action: 'FINALIZE_INVOICE',
                 module: 'finance',
                 entity_type: 'invoice',
                 entity_id: invoice.invoice_number,
                 details: JSON.stringify({ net_amount: Number(invoice.net_amount) }),
+                organizationId,
             },
         });
 
@@ -216,18 +231,21 @@ export async function finalizeInvoice(invoiceId: number) {
 // Cancel invoice (soft delete)
 export async function cancelInvoice(invoiceId: number, reason?: string) {
     try {
-        const invoice = await prisma.invoices.update({
+        const { db, organizationId } = await requireTenantContext();
+
+        const invoice = await db.invoices.update({
             where: { id: invoiceId },
             data: { status: 'Cancelled', notes: reason || 'Cancelled by admin' },
         });
 
-        await prisma.system_audit_logs.create({
+        await db.system_audit_logs.create({
             data: {
                 action: 'CANCEL_INVOICE',
                 module: 'finance',
                 entity_type: 'invoice',
                 entity_id: invoice.invoice_number,
                 details: JSON.stringify({ reason }),
+                organizationId,
             },
         });
 
@@ -253,7 +271,9 @@ export async function recordPayment(data: {
     notes?: string;
 }) {
     try {
-        const payment = await prisma.payments.create({
+        const { db, organizationId } = await requireTenantContext();
+
+        const payment = await db.payments.create({
             data: {
                 receipt_number: generateReceiptNumber(),
                 invoice_id: data.invoice_id,
@@ -268,12 +288,12 @@ export async function recordPayment(data: {
         });
 
         // Update invoice paid_amount and balance
-        const allPayments = await prisma.payments.findMany({
+        const allPayments = await db.payments.findMany({
             where: { invoice_id: data.invoice_id, status: 'Completed' },
         });
 
-        const totalPaid = allPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-        const invoice = await prisma.invoices.findUnique({ where: { id: data.invoice_id } });
+        const totalPaid = allPayments.reduce((sum: any, p: any) => sum + Number(p.amount), 0);
+        const invoice = await db.invoices.findUnique({ where: { id: data.invoice_id } });
         const netAmount = Number(invoice?.net_amount || 0);
         const balance = netAmount - totalPaid;
 
@@ -281,7 +301,7 @@ export async function recordPayment(data: {
         if (balance <= 0) newStatus = 'Paid';
         else if (totalPaid > 0) newStatus = 'Partial';
 
-        await prisma.invoices.update({
+        await db.invoices.update({
             where: { id: data.invoice_id },
             data: {
                 paid_amount: totalPaid,
@@ -290,7 +310,7 @@ export async function recordPayment(data: {
             },
         });
 
-        await prisma.system_audit_logs.create({
+        await db.system_audit_logs.create({
             data: {
                 action: 'RECORD_PAYMENT',
                 module: 'finance',
@@ -302,6 +322,7 @@ export async function recordPayment(data: {
                     method: data.payment_method,
                     type: data.payment_type,
                 }),
+                organizationId,
             },
         });
 
@@ -315,22 +336,24 @@ export async function recordPayment(data: {
 // Reverse a payment (refund)
 export async function reversePayment(paymentId: number, reason: string) {
     try {
-        const payment = await prisma.payments.update({
+        const { db, organizationId } = await requireTenantContext();
+
+        const payment = await db.payments.update({
             where: { id: paymentId },
             data: { status: 'Reversed', notes: reason },
         });
 
         // Recalculate invoice
-        const allPayments = await prisma.payments.findMany({
+        const allPayments = await db.payments.findMany({
             where: { invoice_id: payment.invoice_id, status: 'Completed' },
         });
 
-        const totalPaid = allPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-        const invoice = await prisma.invoices.findUnique({ where: { id: payment.invoice_id } });
+        const totalPaid = allPayments.reduce((sum: any, p: any) => sum + Number(p.amount), 0);
+        const invoice = await db.invoices.findUnique({ where: { id: payment.invoice_id } });
         const netAmount = Number(invoice?.net_amount || 0);
         const balance = netAmount - totalPaid;
 
-        await prisma.invoices.update({
+        await db.invoices.update({
             where: { id: payment.invoice_id },
             data: {
                 paid_amount: totalPaid,
@@ -339,13 +362,14 @@ export async function reversePayment(paymentId: number, reason: string) {
             },
         });
 
-        await prisma.system_audit_logs.create({
+        await db.system_audit_logs.create({
             data: {
                 action: 'REVERSE_PAYMENT',
                 module: 'finance',
                 entity_type: 'payment',
                 entity_id: payment.receipt_number,
                 details: JSON.stringify({ reason, amount: Number(payment.amount) }),
+                organizationId,
             },
         });
 
@@ -362,10 +386,12 @@ export async function reversePayment(paymentId: number, reason: string) {
 
 export async function getChargeCatalog(category?: string) {
     try {
+        const { db } = await requireTenantContext();
+
         const where: any = { is_active: true };
         if (category) where.category = category;
 
-        const catalog = await prisma.charge_catalog.findMany({
+        const catalog = await db.charge_catalog.findMany({
             where,
             orderBy: { category: 'asc' },
         });
@@ -385,13 +411,16 @@ export async function addCatalogItem(data: {
     department?: string;
 }) {
     try {
-        const item = await prisma.charge_catalog.create({
+        const { db, organizationId } = await requireTenantContext();
+
+        const item = await db.charge_catalog.create({
             data: {
                 category: data.category,
                 item_code: data.item_code,
                 item_name: data.item_name,
                 default_price: data.default_price,
                 department: data.department || null,
+                organizationId,
             },
         });
 
@@ -408,7 +437,9 @@ export async function updateCatalogItem(id: number, data: {
     is_active?: boolean;
 }) {
     try {
-        const item = await prisma.charge_catalog.update({
+        const { db } = await requireTenantContext();
+
+        const item = await db.charge_catalog.update({
             where: { id },
             data,
         });
@@ -426,6 +457,8 @@ export async function updateCatalogItem(id: number, data: {
 
 export async function getFinanceDashboardStats() {
     try {
+        const { db } = await requireTenantContext();
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
@@ -449,31 +482,31 @@ export async function getFinanceDashboardStats() {
             aging30to60,
             aging60plus,
         ] = await Promise.all([
-            prisma.invoices.count({ where: { status: { not: 'Cancelled' } } }),
-            prisma.invoices.count({ where: { status: 'Draft' } }),
-            prisma.invoices.aggregate({
+            db.invoices.count({ where: { status: { not: 'Cancelled' } } }),
+            db.invoices.count({ where: { status: 'Draft' } }),
+            db.invoices.aggregate({
                 _sum: { balance_due: true },
                 where: { status: { in: ['Final', 'Partial'] } },
             }),
-            prisma.payments.aggregate({
+            db.payments.aggregate({
                 _sum: { amount: true },
                 where: { status: 'Completed', created_at: { gte: today } },
             }),
-            prisma.payments.aggregate({
+            db.payments.aggregate({
                 _sum: { amount: true },
                 where: { status: 'Completed' },
             }),
-            prisma.payments.count({
+            db.payments.count({
                 where: { status: 'Completed', created_at: { gte: today } },
             }),
-            prisma.invoices.count({
+            db.invoices.count({
                 where: { status: { in: ['Final', 'Partial'] }, balance_due: { gt: 0 } },
             }),
-            prisma.invoice_items.groupBy({
+            db.invoice_items.groupBy({
                 by: ['department'],
                 _sum: { net_price: true },
             }),
-            prisma.invoices.aggregate({
+            db.invoices.aggregate({
                 _sum: { balance_due: true },
                 where: {
                     status: { in: ['Final', 'Partial'] },
@@ -481,7 +514,7 @@ export async function getFinanceDashboardStats() {
                     created_at: { gte: thirtyDaysAgo },
                 },
             }),
-            prisma.invoices.aggregate({
+            db.invoices.aggregate({
                 _sum: { balance_due: true },
                 where: {
                     status: { in: ['Final', 'Partial'] },
@@ -489,7 +522,7 @@ export async function getFinanceDashboardStats() {
                     created_at: { gte: sixtyDaysAgo, lt: thirtyDaysAgo },
                 },
             }),
-            prisma.invoices.aggregate({
+            db.invoices.aggregate({
                 _sum: { balance_due: true },
                 where: {
                     status: { in: ['Final', 'Partial'] },
@@ -509,7 +542,7 @@ export async function getFinanceDashboardStats() {
                 totalRevenue: Number(totalRevenue._sum.amount || 0),
                 totalPaymentsToday,
                 outstandingInvoices,
-                revenueByDepartment: revenueByDept.map(d => ({
+                revenueByDepartment: revenueByDept.map((d: any) => ({
                     department: d.department,
                     amount: Number(d._sum.net_price || 0),
                 })),
@@ -536,11 +569,13 @@ export async function autoCreateBillingRecord(data: {
     ref_id?: string;
 }) {
     try {
+        const { db, organizationId } = await requireTenantContext();
+
         // If no invoice_id, try to find an existing Draft invoice or create new
         let invoiceId = data.invoice_id;
 
         if (!invoiceId) {
-            const existingDraft = await prisma.invoices.findFirst({
+            const existingDraft = await db.invoices.findFirst({
                 where: {
                     patient_id: data.patient_id,
                     status: 'Draft',
@@ -551,12 +586,13 @@ export async function autoCreateBillingRecord(data: {
             if (existingDraft) {
                 invoiceId = existingDraft.id;
             } else {
-                const newInvoice = await prisma.invoices.create({
+                const newInvoice = await db.invoices.create({
                     data: {
                         invoice_number: generateInvoiceNumber(),
                         patient_id: data.patient_id,
                         invoice_type: 'OPD',
                         status: 'Draft',
+                        organizationId,
                     },
                 });
                 invoiceId = newInvoice.id;
@@ -565,7 +601,7 @@ export async function autoCreateBillingRecord(data: {
 
         // Add line item
         await addInvoiceItem({
-            invoice_id: invoiceId,
+            invoice_id: invoiceId!,
             department: data.department,
             description: data.description,
             quantity: 1,
@@ -583,7 +619,9 @@ export async function autoCreateBillingRecord(data: {
 // Get provisional bill for an admission (running total)
 export async function getProvisionalBill(admissionId: string) {
     try {
-        const invoice = await prisma.invoices.findFirst({
+        const { db } = await requireTenantContext();
+
+        const invoice = await db.invoices.findFirst({
             where: { admission_id: admissionId, status: { not: 'Cancelled' } },
             include: {
                 patient: { select: { full_name: true, patient_id: true } },

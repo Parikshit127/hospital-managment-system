@@ -1,18 +1,19 @@
 'use server';
 
-import { prisma } from '@/app/lib/db';
+import { requireTenantContext } from '@/backend/tenant';
 import { sendDischargeSummary } from '@/app/lib/whatsapp';
 import OpenAI from 'openai';
 
-const WEBHOOK_DISCHARGE = 'https://n8n.srv1336142.hstgr.cloud/webhook/discharge-patient';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function dischargePatient(patientId: string) {
     try {
+        const { db, organizationId } = await requireTenantContext();
+
         console.log(`Initiating Discharge for Patient: ${patientId}`);
 
-        const activeAdmission = await prisma.admissions.findFirst({
+        const activeAdmission = await db.admissions.findFirst({
             where: {
                 patient_id: patientId,
                 status: 'Admitted'
@@ -20,7 +21,7 @@ export async function dischargePatient(patientId: string) {
         });
 
         if (activeAdmission) {
-            await prisma.admissions.update({
+            await db.admissions.update({
                 where: { admission_id: activeAdmission.admission_id },
                 data: {
                     status: 'Discharged',
@@ -30,33 +31,21 @@ export async function dischargePatient(patientId: string) {
         }
 
         // Log audit event
-        await prisma.system_audit_logs.create({
+        await db.system_audit_logs.create({
             data: {
                 action: 'DISCHARGE_PATIENT',
                 module: 'discharge',
                 entity_type: 'patient',
                 entity_id: patientId,
                 details: JSON.stringify({ admission_id: activeAdmission?.admission_id }),
+                organizationId,
             }
         });
 
-        // Call n8n Webhook
-        const response = await fetch(WEBHOOK_DISCHARGE, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ patient_id: patientId }),
-        });
-
-        if (!response.ok) {
-            throw new Error(`Webhook failed with status: ${response.status}`);
-        }
-
-        const pdfArrayBuffer = await response.arrayBuffer();
-        const base64Pdf = Buffer.from(pdfArrayBuffer).toString('base64');
-
+        // Return success for client to download via local API
         return {
             success: true,
-            pdfBase64: base64Pdf
+            pdfBase64: null
         };
 
     } catch (error: any) {
@@ -68,7 +57,9 @@ export async function dischargePatient(patientId: string) {
 // Get all admitted patients for discharge management
 export async function getAdmittedPatients() {
     try {
-        const admissions = await prisma.admissions.findMany({
+        const { db } = await requireTenantContext();
+
+        const admissions = await db.admissions.findMany({
             where: { status: 'Admitted' },
             include: {
                 patient: true,
@@ -76,7 +67,7 @@ export async function getAdmittedPatients() {
             orderBy: { admission_date: 'desc' }
         });
 
-        const data = admissions.map(a => {
+        const data = admissions.map((a: any) => {
             const daysDiff = Math.ceil((new Date().getTime() - a.admission_date.getTime()) / (1000 * 60 * 60 * 24));
             return {
                 id: a.patient_id,
@@ -100,13 +91,15 @@ export async function getAdmittedPatients() {
 // Process discharge with summary generation
 export async function processDischarge(patientId: string, patientName: string, notes: string) {
     try {
+        const { db, organizationId } = await requireTenantContext();
+
         // Update admission status
-        const activeAdmission = await prisma.admissions.findFirst({
+        const activeAdmission = await db.admissions.findFirst({
             where: { patient_id: patientId, status: 'Admitted' }
         });
 
         if (activeAdmission) {
-            await prisma.admissions.update({
+            await db.admissions.update({
                 where: { admission_id: activeAdmission.admission_id },
                 data: {
                     status: 'Discharged',
@@ -115,39 +108,31 @@ export async function processDischarge(patientId: string, patientName: string, n
             });
 
             // Create discharge summary record
-            await prisma.discharge_summaries.create({
+            await db.discharge_summaries.create({
                 data: {
                     admission_id: activeAdmission.admission_id,
                     patient_name: patientName,
                     generated_summary: `<h2>Discharge Summary</h2><p>Patient: ${patientName}</p><p>Notes: ${notes}</p><p>Date: ${new Date().toLocaleString()}</p>`,
+                    organizationId,
                 }
             });
         }
 
         // Log audit event
-        await prisma.system_audit_logs.create({
+        await db.system_audit_logs.create({
             data: {
                 action: 'PROCESS_DISCHARGE',
                 module: 'discharge',
                 entity_type: 'patient',
                 entity_id: patientId,
                 details: JSON.stringify({ patientName, notes }),
+                organizationId,
             }
         });
 
-        // Try webhook, but don't fail if webhook is down
-        try {
-            await fetch(WEBHOOK_DISCHARGE, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ patient_id: patientId, patient_name: patientName, notes }),
-            });
-        } catch (webhookErr) {
-            console.warn('Discharge webhook failed:', webhookErr);
-        }
 
         // Send WhatsApp discharge notification (non-blocking)
-        const patient = await prisma.oPD_REG.findFirst({ where: { patient_id: patientId }, select: { phone: true } });
+        const patient = await db.oPD_REG.findFirst({ where: { patient_id: patientId }, select: { phone: true } });
         if (patient?.phone) {
             sendDischargeSummary(patient.phone, patientName).catch(err =>
                 console.warn('[WhatsApp] Failed to send discharge summary:', err)
@@ -164,7 +149,9 @@ export async function processDischarge(patientId: string, patientName: string, n
 // Generate AI-powered discharge summary for doctor review
 export async function generateAISummary(admissionId: string) {
     try {
-        const admission = await prisma.admissions.findUnique({
+        const { db, organizationId } = await requireTenantContext();
+
+        const admission = await db.admissions.findUnique({
             where: { admission_id: admissionId },
             include: { patient: true },
         });
@@ -174,16 +161,16 @@ export async function generateAISummary(admissionId: string) {
         }
 
         const [vitals, ehrNotes, labOrders] = await Promise.all([
-            prisma.vital_signs.findMany({
+            db.vital_signs.findMany({
                 where: { patient_id: admission.patient_id },
                 orderBy: { created_at: 'desc' },
                 take: 10,
             }),
-            prisma.clinical_EHR.findMany({
+            db.clinical_EHR.findMany({
                 where: { patient_id: admission.patient_id },
                 orderBy: { created_at: 'desc' },
             }),
-            prisma.lab_orders.findMany({
+            db.lab_orders.findMany({
                 where: { patient_id: admission.patient_id },
                 orderBy: { created_at: 'desc' },
             }),
@@ -191,9 +178,9 @@ export async function generateAISummary(admissionId: string) {
 
         const patientName = admission.patient?.full_name || 'Unknown';
         const patientAge = admission.patient?.age || 'Unknown';
-        const diagnosisList = ehrNotes.filter(n => n.diagnosis).map(n => n.diagnosis).join(', ') || admission.diagnosis || 'Not recorded';
-        const doctorNotes = ehrNotes.filter(n => n.doctor_notes).map(n => n.doctor_notes).join('. ') || 'No clinical notes';
-        const labResults = labOrders.map(l => `${l.test_type}: ${l.result_value ?? 'Pending'}`).join(', ') || 'No lab orders';
+        const diagnosisList = ehrNotes.filter((n: any) => n.diagnosis).map((n: any) => n.diagnosis).join(', ') || admission.diagnosis || 'Not recorded';
+        const doctorNotes = ehrNotes.filter((n: any) => n.doctor_notes).map((n: any) => n.doctor_notes).join('. ') || 'No clinical notes';
+        const labResults = labOrders.map((l: any) => `${l.test_type}: ${l.result_value ?? 'Pending'}`).join(', ') || 'No lab orders';
         const vitalsSummary = vitals.length > 0
             ? `BP: ${vitals[0].blood_pressure || '-'}, HR: ${vitals[0].heart_rate || '-'}, Temp: ${vitals[0].temperature || '-'}, SpO2: ${vitals[0].oxygen_sat || '-'}%`
             : 'No vitals recorded';
@@ -228,13 +215,14 @@ Keep it clinical, concise, and professional. Use HTML formatting with <h3> tags 
         const summary = completion.choices[0]?.message?.content || 'AI summary generation failed.';
 
         // Log audit event
-        await prisma.system_audit_logs.create({
+        await db.system_audit_logs.create({
             data: {
                 action: 'AI_DISCHARGE_SUMMARY',
                 module: 'discharge',
                 entity_type: 'admission',
                 entity_id: admissionId,
                 details: JSON.stringify({ patient_id: admission.patient_id, model: 'gpt-4o' }),
+                organizationId,
             },
         });
 
@@ -244,4 +232,3 @@ Keep it clinical, concise, and professional. Use HTML formatting with <h3> tags 
         return { success: false, error: error.message || 'Failed to generate AI summary' };
     }
 }
-

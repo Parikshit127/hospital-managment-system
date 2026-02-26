@@ -10,7 +10,7 @@ import { AppShell } from '@/app/components/layout/AppShell';
 
 export default function ReceptionPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [successData, setSuccessData] = useState<{ patient_id: string; appointment_id?: string; user_type?: string } | null>(null);
+    const [successData, setSuccessData] = useState<{ patient_id: string; appointment_id?: string; user_type?: string; generatedPassword?: string } | null>(null);
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -22,7 +22,8 @@ export default function ReceptionPage() {
             setSuccessData({
                 patient_id: result.patient_id!,
                 appointment_id: result.appointment_id,
-                user_type: result.user_type
+                user_type: result.user_type,
+                generatedPassword: result.generatedPassword
             });
             (event.target as HTMLFormElement).reset();
         } else {
@@ -136,6 +137,12 @@ export default function ReceptionPage() {
                                             <div className="mt-4 pt-4 border-t border-gray-200">
                                                 <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.15em] mb-1">Appointment</p>
                                                 <p className="text-sm font-bold text-teal-400 font-mono">{successData.appointment_id}</p>
+                                            </div>
+                                        )}
+                                        {successData.generatedPassword && (
+                                            <div className="mt-4 pt-4 border-t border-gray-200">
+                                                <p className="text-[10px] font-black text-pink-400 uppercase tracking-[0.15em] mb-1">Portal Password (Give to Patient)</p>
+                                                <p className="text-sm font-bold text-pink-600 font-mono">{successData.generatedPassword}</p>
                                             </div>
                                         )}
                                     </div>

@@ -1,14 +1,15 @@
 'use server';
 
-import { prisma } from '@/app/lib/db';
+import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { logAudit } from '@/app/lib/audit';
 import { checkDrugInteractions } from '@/app/lib/drug-safety';
-const WEBHOOK_INVOICE = 'https://n8n.srv1336142.hstgr.cloud/webhook-test/dispense-medicine';
 
 export async function getInventory() {
     try {
-        const inventory = await prisma.pharmacy_batch_inventory.findMany({
+        const { db } = await requireTenantContext();
+
+        const inventory = await db.pharmacy_batch_inventory.findMany({
             where: { current_stock: { gt: 0 } },
             include: { medicine: true }, // Include Master Data
             orderBy: { expiry_date: 'asc' },
@@ -22,18 +23,20 @@ export async function getInventory() {
 
 export async function generateInvoice(patientId: string, items: any[]) {
     try {
+        const { db } = await requireTenantContext();
+
         let total = 0;
         const invoiceItems = [];
 
         // 1. Transaction: Deduct Stock & Calculate Total
         for (const item of items) {
-            const batch = await prisma.pharmacy_batch_inventory.findUnique({
+            const batch = await db.pharmacy_batch_inventory.findUnique({
                 where: { batch_no: item.batch_no },
                 include: { medicine: true }
             });
 
             if (batch && batch.current_stock >= item.quantity) {
-                await prisma.pharmacy_batch_inventory.update({
+                await db.pharmacy_batch_inventory.update({
                     where: { batch_no: item.batch_no },
                     data: { current_stock: { decrement: item.quantity } }
                 });
@@ -49,25 +52,6 @@ export async function generateInvoice(patientId: string, items: any[]) {
             }
         }
 
-        // 2. Send to Webhook (Generates PDF Invoice)
-        // The Agent 'Pharmacy.json' expects: { batch_id, qty_to_deduct } in a loop? 
-        // Actually looking at 'Pharmacy.json' node 'Check Stock', it takes 'body.medicines.name'.
-        // And 'Split Out1' takes 'updates'. 
-        // This agent seems complex. For MVP, we send the "Bill Data" to generate the invoice.
-
-        // We will send a simplified payload that matched the "Report" node logic if possible, 
-        // or just trigger it to get a PDF back.
-
-        await fetch(WEBHOOK_INVOICE, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                patient_id: patientId,
-                medicines: invoiceItems,
-                total_amount: total,
-                date: new Date()
-            }),
-        }).catch(err => console.error(err));
 
         await logAudit({
             action: 'MEDICINE_DISPENSED',
@@ -87,21 +71,23 @@ export async function generateInvoice(patientId: string, items: any[]) {
 
 export async function getPharmacyQueue() {
     try {
-        const orders = await prisma.pharmacy_orders.findMany({
+        const { db } = await requireTenantContext();
+
+        const orders = await db.pharmacy_orders.findMany({
             where: { status: { in: ['Pending', 'Processed'] } },
             orderBy: { created_at: 'desc' },
             include: { items: true }
         });
 
         // Manual Join for Patient Details (since relation is missing in schema)
-        const patientIds = Array.from(new Set(orders.map(o => o.patient_id)));
-        const patients = await prisma.oPD_REG.findMany({
+        const patientIds = Array.from(new Set(orders.map((o: any) => o.patient_id)));
+        const patients = await db.oPD_REG.findMany({
             where: { patient_id: { in: patientIds } }
         });
 
-        const ordersWithPatient = orders.map(order => ({
+        const ordersWithPatient = orders.map((order: any) => ({
             ...order,
-            patient: patients.find(p => p.patient_id === order.patient_id) || null
+            patient: patients.find((p: any) => p.patient_id === order.patient_id) || null
         }));
 
         return { success: true, data: ordersWithPatient };
@@ -113,7 +99,9 @@ export async function getPharmacyQueue() {
 
 export async function markOrderAsPaid(orderId: number) {
     try {
-        await prisma.pharmacy_orders.update({
+        const { db } = await requireTenantContext();
+
+        await db.pharmacy_orders.update({
             where: { id: orderId },
             data: { status: 'Completed' }
         });
@@ -145,15 +133,18 @@ export async function addInventoryBatch(data: {
     rack: string
 }) {
     try {
+        const { db, organizationId } = await requireTenantContext();
+
         let medicineId = data.medicine_id;
 
         // If new medicine, create master entry first
         if (!medicineId && data.brand_name) {
-            const newMed = await prisma.pharmacy_medicine_master.create({
+            const newMed = await db.pharmacy_medicine_master.create({
                 data: {
                     brand_name: data.brand_name,
                     generic_name: data.generic_name || '',
                     price_per_unit: data.price,
+                    organizationId,
                 }
             });
             medicineId = newMed.id;
@@ -162,7 +153,7 @@ export async function addInventoryBatch(data: {
         if (!medicineId) return { success: false, error: 'Invalid Medicine ID' };
 
         // Create Batch
-        await prisma.pharmacy_batch_inventory.create({
+        await db.pharmacy_batch_inventory.create({
             data: {
                 medicine_id: medicineId,
                 batch_no: data.batch_no,

@@ -1,6 +1,6 @@
 'use server';
 
-import { prisma } from '@/app/lib/db';
+import { requireTenantContext } from '@/backend/tenant';
 
 // Log an audit event
 export async function logAuditEvent(params: {
@@ -14,7 +14,9 @@ export async function logAuditEvent(params: {
     details?: string;
 }) {
     try {
-        await prisma.system_audit_logs.create({
+        const { db, organizationId } = await requireTenantContext();
+
+        await db.system_audit_logs.create({
             data: {
                 user_id: params.userId,
                 username: params.username,
@@ -24,6 +26,7 @@ export async function logAuditEvent(params: {
                 entity_type: params.entityType,
                 entity_id: params.entityId,
                 details: params.details,
+                organizationId,
             }
         });
         return { success: true };
@@ -40,19 +43,21 @@ export async function getAuditLogs(page: number = 1, limit: number = 50, filters
     username?: string;
 }) {
     try {
+        const { db } = await requireTenantContext();
+
         const where: any = {};
         if (filters?.module) where.module = filters.module;
         if (filters?.action) where.action = { contains: filters.action, mode: 'insensitive' };
         if (filters?.username) where.username = { contains: filters.username, mode: 'insensitive' };
 
         const [logs, total] = await Promise.all([
-            prisma.system_audit_logs.findMany({
+            db.system_audit_logs.findMany({
                 where,
                 orderBy: { created_at: 'desc' },
                 skip: (page - 1) * limit,
                 take: limit
             }),
-            prisma.system_audit_logs.count({ where })
+            db.system_audit_logs.count({ where })
         ]);
 
         return {
@@ -74,13 +79,15 @@ export async function getAuditLogs(page: number = 1, limit: number = 50, filters
 // Get audit stats
 export async function getAuditStats() {
     try {
+        const { db } = await requireTenantContext();
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
         const [totalToday, totalAll, loginCount] = await Promise.all([
-            prisma.system_audit_logs.count({ where: { created_at: { gte: today } } }),
-            prisma.system_audit_logs.count(),
-            prisma.system_audit_logs.count({ where: { action: 'LOGIN', created_at: { gte: today } } })
+            db.system_audit_logs.count({ where: { created_at: { gte: today } } }),
+            db.system_audit_logs.count(),
+            db.system_audit_logs.count({ where: { action: 'LOGIN', created_at: { gte: today } } })
         ]);
 
         return {

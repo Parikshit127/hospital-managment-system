@@ -1,10 +1,14 @@
 'use server';
 
-import { prisma } from '@/app/lib/db';
+import { requireTenantContext } from '@/backend/tenant';
+import { addUserSchema, updateUserSchema } from '@/app/lib/validations';
+import * as bcrypt from 'bcryptjs';
 
 // Get dashboard overview stats
 export async function getDashboardStats() {
     try {
+        const { db } = await requireTenantContext();
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
@@ -18,27 +22,27 @@ export async function getDashboardStats() {
             pendingDischarges,
             appointmentsToday,
         ] = await Promise.all([
-            prisma.oPD_REG.count({
+            db.oPD_REG.count({
                 where: { created_at: { gte: today } }
             }),
-            prisma.oPD_REG.count(),
-            prisma.admissions.count({
+            db.oPD_REG.count(),
+            db.admissions.count({
                 where: { status: 'Admitted' }
             }),
-            prisma.lab_orders.count({
+            db.lab_orders.count({
                 where: { status: 'Pending' }
             }),
-            prisma.lab_orders.count({
+            db.lab_orders.count({
                 where: { status: 'Completed', created_at: { gte: today } }
             }),
-            prisma.billing_records.aggregate({
+            db.billing_records.aggregate({
                 _sum: { net_amount: true },
                 where: { payment_status: 'Paid' }
             }),
-            prisma.admissions.count({
+            db.admissions.count({
                 where: { status: 'Admitted' }
             }),
-            prisma.appointments.count({
+            db.appointments.count({
                 where: { appointment_date: { gte: today } }
             })
         ]);
@@ -65,12 +69,14 @@ export async function getDashboardStats() {
 // Get bed occupancy stats
 export async function getBedOccupancy() {
     try {
+        const { db } = await requireTenantContext();
+
         const [total, occupied, available, maintenance, wardBeds] = await Promise.all([
-            prisma.beds.count(),
-            prisma.beds.count({ where: { status: 'Occupied' } }),
-            prisma.beds.count({ where: { status: 'Available' } }),
-            prisma.beds.count({ where: { status: 'Maintenance' } }),
-            prisma.beds.findMany({
+            db.beds.count(),
+            db.beds.count({ where: { status: 'Occupied' } }),
+            db.beds.count({ where: { status: 'Available' } }),
+            db.beds.count({ where: { status: 'Maintenance' } }),
+            db.beds.findMany({
                 select: { status: true, wards: { select: { ward_name: true, ward_type: true } } }
             }),
         ]);
@@ -111,25 +117,27 @@ export async function getBedOccupancy() {
 // Get department-wise revenue breakdown
 export async function getRevenueBreakdown() {
     try {
+        const { db } = await requireTenantContext();
+
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
         const [byDeptRaw, byTypeRaw, totalAgg, recentRecords] = await Promise.all([
-            prisma.billing_records.groupBy({
+            db.billing_records.groupBy({
                 by: ['department'],
                 _sum: { net_amount: true },
                 where: { payment_status: 'Paid' },
             }),
-            prisma.billing_records.groupBy({
+            db.billing_records.groupBy({
                 by: ['bill_type'],
                 _sum: { net_amount: true },
                 where: { payment_status: 'Paid' },
             }),
-            prisma.billing_records.aggregate({
+            db.billing_records.aggregate({
                 _sum: { net_amount: true },
                 where: { payment_status: 'Paid' },
             }),
-            prisma.billing_records.findMany({
+            db.billing_records.findMany({
                 where: { payment_status: 'Paid', created_at: { gte: sevenDaysAgo } },
                 select: { created_at: true, net_amount: true },
                 orderBy: { created_at: 'asc' },
@@ -146,8 +154,8 @@ export async function getRevenueBreakdown() {
             success: true,
             data: {
                 totalRevenue: totalAgg._sum.net_amount || 0,
-                byDepartment: byDeptRaw.map(r => ({ name: r.department || 'General', amount: r._sum.net_amount || 0 })),
-                byBillType: byTypeRaw.map(r => ({ name: r.bill_type, amount: r._sum.net_amount || 0 })),
+                byDepartment: byDeptRaw.map((r: any) => ({ name: r.department || 'General', amount: r._sum.net_amount || 0 })),
+                byBillType: byTypeRaw.map((r: any) => ({ name: r.bill_type, amount: r._sum.net_amount || 0 })),
                 dailyTrend: Object.entries(dailyRevenue).map(([day, amount]) => ({ day, amount })),
             }
         };
@@ -160,7 +168,9 @@ export async function getRevenueBreakdown() {
 // Get recent activity / audit log
 export async function getRecentActivity(limit: number = 20) {
     try {
-        const logs = await prisma.system_audit_logs.findMany({
+        const { db } = await requireTenantContext();
+
+        const logs = await db.system_audit_logs.findMany({
             orderBy: { created_at: 'desc' },
             take: limit
         });
@@ -175,10 +185,12 @@ export async function getRecentActivity(limit: number = 20) {
 // Get patient flow data (registrations per day for the last 7 days)
 export async function getPatientFlow() {
     try {
+        const { db } = await requireTenantContext();
+
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-        const patients = await prisma.oPD_REG.findMany({
+        const patients = await db.oPD_REG.findMany({
             where: { created_at: { gte: sevenDaysAgo } },
             select: { created_at: true },
             orderBy: { created_at: 'asc' },
@@ -203,16 +215,18 @@ export async function getPatientFlow() {
 // Get pharmacy inventory alerts (low stock + expiring)
 export async function getInventoryAlerts() {
     try {
+        const { db } = await requireTenantContext();
+
         const thirtyDaysFromNow = new Date();
         thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
         const [lowStock, expiringSoon] = await Promise.all([
-            prisma.pharmacy_batch_inventory.findMany({
+            db.pharmacy_batch_inventory.findMany({
                 where: { current_stock: { lte: 10 } },
                 include: { medicine: true },
                 take: 10,
             }),
-            prisma.pharmacy_batch_inventory.findMany({
+            db.pharmacy_batch_inventory.findMany({
                 where: { expiry_date: { lte: thirtyDaysFromNow } },
                 include: { medicine: true },
                 take: 10,
@@ -236,6 +250,316 @@ export async function getInventoryAlerts() {
         };
     } catch (error: any) {
         console.error('getInventoryAlerts error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// ========================================
+// STAFF MANAGEMENT ACTIONS
+// ========================================
+
+// Get paginated staff list with filters
+export async function getUsersList(options?: {
+    search?: string;
+    role?: string;
+    is_active?: boolean;
+    page?: number;
+    limit?: number;
+}) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const page = options?.page || 1;
+        const limit = options?.limit || 25;
+        const skip = (page - 1) * limit;
+
+        const where: any = {};
+
+        if (options?.role) {
+            where.role = options.role;
+        }
+        if (options?.is_active !== undefined) {
+            where.is_active = options.is_active;
+        }
+        if (options?.search) {
+            where.OR = [
+                { name: { contains: options.search, mode: 'insensitive' } },
+                { username: { contains: options.search, mode: 'insensitive' } },
+                { email: { contains: options.search, mode: 'insensitive' } },
+            ];
+        }
+
+        const [users, total] = await Promise.all([
+            db.user.findMany({
+                where,
+                select: {
+                    id: true,
+                    username: true,
+                    name: true,
+                    role: true,
+                    specialty: true,
+                    email: true,
+                    phone: true,
+                    is_active: true,
+                    createdAt: true,
+                },
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+            db.user.count({ where }),
+        ]);
+
+        return {
+            success: true,
+            data: {
+                users,
+                total,
+                totalPages: Math.ceil(total / limit),
+                page,
+            },
+        };
+    } catch (error: any) {
+        console.error('getUsersList error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Get staff stats for KPI cards
+export async function getStaffStats() {
+    try {
+        const { db } = await requireTenantContext();
+
+        const [total, active, inactive, byRole] = await Promise.all([
+            db.user.count(),
+            db.user.count({ where: { is_active: true } }),
+            db.user.count({ where: { is_active: false } }),
+            db.user.groupBy({ by: ['role'], _count: true }),
+        ]);
+
+        const doctors = byRole.find((r: any) => r.role === 'doctor')?._count || 0;
+
+        return {
+            success: true,
+            data: {
+                total,
+                active,
+                inactive,
+                doctors,
+                byRole: byRole.map((r: any) => ({ role: r.role, count: r._count })),
+            },
+        };
+    } catch (error: any) {
+        console.error('getStaffStats error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Add a new staff member
+export async function addUser(data: {
+    username: string;
+    password: string;
+    name: string;
+    role: string;
+    specialty?: string;
+    email?: string;
+    phone?: string;
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        // Validate input with Zod
+        const validated = addUserSchema.parse(data);
+
+        const existing = await db.user.findUnique({ where: { username: validated.username } });
+        if (existing) {
+            return { success: false, error: 'Username already exists' };
+        }
+
+        const hashedPassword = await bcrypt.hash(validated.password, 10);
+
+        const user = await db.user.create({
+            data: {
+                username: validated.username,
+                password: hashedPassword,
+                name: validated.name,
+                role: validated.role,
+                specialty: validated.role === 'doctor' ? (validated.specialty || null) : null,
+                email: validated.email || null,
+                phone: validated.phone || null,
+                organizationId,
+                is_active: true,
+            },
+            select: {
+                id: true,
+                username: true,
+                name: true,
+                role: true,
+                specialty: true,
+                email: true,
+                phone: true,
+                is_active: true,
+            },
+        });
+
+        await db.system_audit_logs.create({
+            data: {
+                user_id: user.id,
+                username: validated.username,
+                role: validated.role,
+                action: 'CREATE_USER',
+                module: 'admin',
+                details: `Created user ${validated.name} with role ${validated.role}`,
+                organizationId,
+            },
+        });
+
+        return { success: true, data: user };
+    } catch (error: any) {
+        console.error('addUser error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Update staff member details
+export async function updateUser(userId: string, data: {
+    name?: string;
+    role?: string;
+    specialty?: string;
+    email?: string;
+    phone?: string;
+    is_active?: boolean;
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        // Validate input with Zod (partial validation for update)
+        const validated = updateUserSchema.parse(data);
+
+        const updateData: any = {};
+        if (validated.name !== undefined) updateData.name = validated.name;
+        if (validated.role !== undefined) updateData.role = validated.role;
+        if (validated.specialty !== undefined) updateData.specialty = validated.specialty;
+        if (validated.email !== undefined) updateData.email = validated.email;
+        if (validated.phone !== undefined) updateData.phone = validated.phone;
+        if (data.is_active !== undefined) updateData.is_active = data.is_active;
+
+        // Clear specialty if role is not doctor
+        if (validated.role && validated.role !== 'doctor') {
+            updateData.specialty = null;
+        }
+
+        const user = await db.user.update({
+            where: { id: userId },
+            data: updateData,
+            select: {
+                id: true,
+                username: true,
+                name: true,
+                role: true,
+                specialty: true,
+                email: true,
+                phone: true,
+                is_active: true,
+            },
+        });
+
+        await db.system_audit_logs.create({
+            data: {
+                user_id: userId,
+                username: user.username,
+                role: user.role,
+                action: 'UPDATE_USER',
+                module: 'admin',
+                details: `Updated user ${user.name}: ${JSON.stringify(data)}`,
+                organizationId,
+            },
+        });
+
+        return { success: true, data: user };
+    } catch (error: any) {
+        console.error('updateUser error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Reset a staff member's password
+export async function resetUserPassword(userId: string, newPassword: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        if (!newPassword || newPassword.length < 6) {
+            return { success: false, error: 'Password must be at least 6 characters' };
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        const user = await db.user.update({
+            where: { id: userId },
+            data: { password: hashedPassword },
+            select: { id: true, username: true, name: true, role: true },
+        });
+
+        await db.system_audit_logs.create({
+            data: {
+                user_id: userId,
+                username: user.username,
+                role: user.role,
+                action: 'RESET_PASSWORD',
+                module: 'admin',
+                details: `Password reset for user ${user.name}`,
+                organizationId,
+            },
+        });
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('resetUserPassword error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Toggle user active status
+export async function toggleUserActive(userId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const user = await db.user.findUnique({
+            where: { id: userId },
+            select: { id: true, username: true, name: true, role: true, is_active: true },
+        });
+
+        if (!user) {
+            return { success: false, error: 'User not found' };
+        }
+
+        const updated = await db.user.update({
+            where: { id: userId },
+            data: { is_active: !user.is_active },
+            select: {
+                id: true,
+                username: true,
+                name: true,
+                role: true,
+                is_active: true,
+            },
+        });
+
+        await db.system_audit_logs.create({
+            data: {
+                user_id: userId,
+                username: user.username,
+                role: user.role,
+                action: updated.is_active ? 'ACTIVATE_USER' : 'DEACTIVATE_USER',
+                module: 'admin',
+                details: `${updated.is_active ? 'Activated' : 'Deactivated'} user ${user.name}`,
+                organizationId,
+            },
+        });
+
+        return { success: true, data: updated };
+    } catch (error: any) {
+        console.error('toggleUserActive error:', error);
         return { success: false, error: error.message };
     }
 }

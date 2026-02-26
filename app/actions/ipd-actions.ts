@@ -1,6 +1,6 @@
 'use server';
 
-import { prisma } from '@/app/lib/db';
+import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
@@ -19,25 +19,26 @@ function serialize<T>(data: T): T {
 // Get all wards with bed counts
 export async function getWardsWithBeds() {
     try {
-        const wards = await prisma.wards.findMany({
+        const { db } = await requireTenantContext();
+        const wards = await db.wards.findMany({
             include: {
                 beds: true,
             },
             orderBy: { ward_name: 'asc' },
         });
 
-        const wardData = wards.map(ward => ({
+        const wardData = wards.map((ward: any) => ({
             ...ward,
             cost_per_day: Number(ward.cost_per_day || 0),
             nursing_charge: Number(ward.nursing_charge || 0),
             totalBeds: ward.beds.length,
-            available: ward.beds.filter(b => b.status === 'Available').length,
-            occupied: ward.beds.filter(b => b.status === 'Occupied').length,
-            maintenance: ward.beds.filter(b => b.status === 'Maintenance').length,
-            reserved: ward.beds.filter(b => b.status === 'Reserved').length,
-            cleaning: ward.beds.filter(b => b.status === 'Cleaning').length,
-            isolation: ward.beds.filter(b => b.status === 'Isolation').length,
-            blocked: ward.beds.filter(b => b.status === 'Blocked').length,
+            available: ward.beds.filter((b: any) => b.status === 'Available').length,
+            occupied: ward.beds.filter((b: any) => b.status === 'Occupied').length,
+            maintenance: ward.beds.filter((b: any) => b.status === 'Maintenance').length,
+            reserved: ward.beds.filter((b: any) => b.status === 'Reserved').length,
+            cleaning: ward.beds.filter((b: any) => b.status === 'Cleaning').length,
+            isolation: ward.beds.filter((b: any) => b.status === 'Isolation').length,
+            blocked: ward.beds.filter((b: any) => b.status === 'Blocked').length,
         }));
 
         return { success: true, data: serialize(wardData) };
@@ -50,7 +51,8 @@ export async function getWardsWithBeds() {
 // Get all beds with ward info and admission info
 export async function getAllBeds() {
     try {
-        const beds = await prisma.beds.findMany({
+        const { db } = await requireTenantContext();
+        const beds = await db.beds.findMany({
             include: {
                 wards: true,
                 admissions: {
@@ -73,17 +75,18 @@ export async function getAllBeds() {
 // Update bed status
 export async function updateBedStatus(bedId: string, newStatus: string) {
     try {
+        const { db } = await requireTenantContext();
         const validStatuses = ['Available', 'Occupied', 'Maintenance', 'Reserved', 'Cleaning', 'Isolation', 'Blocked'];
         if (!validStatuses.includes(newStatus)) {
             return { success: false, error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` };
         }
 
-        const bed = await prisma.beds.update({
+        const bed = await db.beds.update({
             where: { bed_id: bedId },
             data: { status: newStatus },
         });
 
-        await prisma.system_audit_logs.create({
+        await db.system_audit_logs.create({
             data: {
                 action: 'UPDATE_BED_STATUS',
                 module: 'ipd',
@@ -113,14 +116,15 @@ export async function admitPatientIPD(data: {
     doctor_name: string;
 }) {
     try {
+        const { db } = await requireTenantContext();
         // Check if bed is available
-        const bed = await prisma.beds.findUnique({ where: { bed_id: data.bed_id } });
+        const bed = await db.beds.findUnique({ where: { bed_id: data.bed_id } });
         if (!bed || bed.status !== 'Available') {
             return { success: false, error: 'Bed is not available for admission' };
         }
 
         // Create admission
-        const admission = await prisma.admissions.create({
+        const admission = await db.admissions.create({
             data: {
                 patient_id: data.patient_id,
                 bed_id: data.bed_id,
@@ -132,7 +136,7 @@ export async function admitPatientIPD(data: {
         });
 
         // Mark bed as occupied
-        await prisma.beds.update({
+        await db.beds.update({
             where: { bed_id: data.bed_id },
             data: { status: 'Occupied' },
         });
@@ -141,7 +145,7 @@ export async function admitPatientIPD(data: {
         const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
         const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
 
-        await prisma.invoices.create({
+        await db.invoices.create({
             data: {
                 invoice_number: `INV-${dateStr}-${seq}`,
                 patient_id: data.patient_id,
@@ -151,7 +155,7 @@ export async function admitPatientIPD(data: {
             },
         });
 
-        await prisma.system_audit_logs.create({
+        await db.system_audit_logs.create({
             data: {
                 action: 'ADMIT_PATIENT_IPD',
                 module: 'ipd',
@@ -175,10 +179,11 @@ export async function admitPatientIPD(data: {
 // Get all current admissions (IPD Dashboard)
 export async function getIPDAdmissions(statusFilter?: string) {
     try {
+        const { db } = await requireTenantContext();
         const where: any = {};
         if (statusFilter) where.status = statusFilter;
 
-        const admissions = await prisma.admissions.findMany({
+        const admissions = await db.admissions.findMany({
             where,
             include: {
                 patient: { select: { full_name: true, patient_id: true, age: true, gender: true, phone: true } },
@@ -189,7 +194,7 @@ export async function getIPDAdmissions(statusFilter?: string) {
             orderBy: { admission_date: 'desc' },
         });
 
-        const enriched = admissions.map(a => {
+        const enriched = admissions.map((a: any) => {
             const daysAdmitted = Math.ceil(
                 (new Date().getTime() - new Date(a.admission_date).getTime()) / (1000 * 60 * 60 * 24)
             );
@@ -213,7 +218,8 @@ export async function getIPDAdmissions(statusFilter?: string) {
 // Get single admission detail
 export async function getAdmissionDetail(admissionId: string) {
     try {
-        const admission = await prisma.admissions.findUnique({
+        const { db } = await requireTenantContext();
+        const admission = await db.admissions.findUnique({
             where: { admission_id: admissionId },
             include: {
                 patient: true,
@@ -239,7 +245,8 @@ export async function getAdmissionDetail(admissionId: string) {
 // Add daily charges (room + nursing) to an admission's invoice
 export async function accrueIPDDailyCharges(admissionId: string) {
     try {
-        const admission = await prisma.admissions.findUnique({
+        const { db } = await requireTenantContext();
+        const admission = await db.admissions.findUnique({
             where: { admission_id: admissionId },
             include: { ward: true, bed: { include: { wards: true } } },
         });
@@ -250,14 +257,14 @@ export async function accrueIPDDailyCharges(admissionId: string) {
         if (!ward) return { success: false, error: 'Ward info not found' };
 
         // Find the IPD invoice
-        let invoice = await prisma.invoices.findFirst({
+        let invoice = await db.invoices.findFirst({
             where: { admission_id: admissionId, status: { not: 'Cancelled' } },
         });
 
         if (!invoice) {
             const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
             const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
-            invoice = await prisma.invoices.create({
+            invoice = await db.invoices.create({
                 data: {
                     invoice_number: `INV-${dateStr}-${seq}`,
                     patient_id: admission.patient_id,
@@ -274,7 +281,7 @@ export async function accrueIPDDailyCharges(admissionId: string) {
 
         // Add room charge
         if (roomRate > 0) {
-            await prisma.invoice_items.create({
+            await db.invoice_items.create({
                 data: {
                     invoice_id: invoice.id,
                     department: 'Room',
@@ -290,7 +297,7 @@ export async function accrueIPDDailyCharges(admissionId: string) {
 
         // Add nursing charge
         if (nursingRate > 0) {
-            await prisma.invoice_items.create({
+            await db.invoice_items.create({
                 data: {
                     invoice_id: invoice.id,
                     department: 'Nursing',
@@ -305,11 +312,11 @@ export async function accrueIPDDailyCharges(admissionId: string) {
         }
 
         // Recalculate totals
-        const items = await prisma.invoice_items.findMany({ where: { invoice_id: invoice.id } });
-        const total = items.reduce((sum, item) => sum + Number(item.net_price), 0);
+        const items = await db.invoice_items.findMany({ where: { invoice_id: invoice.id } });
+        const total = items.reduce((sum: any, item: any) => sum + Number(item.net_price), 0);
         const paid = Number(invoice.paid_amount || 0);
 
-        await prisma.invoices.update({
+        await db.invoices.update({
             where: { id: invoice.id },
             data: {
                 total_amount: total,
@@ -336,7 +343,8 @@ export async function accrueIPDDailyCharges(admissionId: string) {
 // Discharge a patient from IPD
 export async function dischargePatientIPD(admissionId: string, notes?: string) {
     try {
-        const admission = await prisma.admissions.findUnique({
+        const { db } = await requireTenantContext();
+        const admission = await db.admissions.findUnique({
             where: { admission_id: admissionId },
             include: { patient: true, ward: true, bed: { include: { wards: true } } },
         });
@@ -350,7 +358,7 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
         ));
 
         // Update admission status
-        await prisma.admissions.update({
+        await db.admissions.update({
             where: { admission_id: admissionId },
             data: {
                 status: 'Discharged',
@@ -360,19 +368,19 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
 
         // Free the bed (set to Cleaning first)
         if (admission.bed_id) {
-            await prisma.beds.update({
+            await db.beds.update({
                 where: { bed_id: admission.bed_id },
                 data: { status: 'Cleaning' },
             });
         }
 
         // Finalize invoice
-        const invoice = await prisma.invoices.findFirst({
+        const invoice = await db.invoices.findFirst({
             where: { admission_id: admissionId, status: { not: 'Cancelled' } },
         });
 
         if (invoice) {
-            await prisma.invoices.update({
+            await db.invoices.update({
                 where: { id: invoice.id },
                 data: {
                     status: Number(invoice.balance_due) <= 0 ? 'Paid' : 'Final',
@@ -382,7 +390,7 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
         }
 
         // Create discharge summary
-        await prisma.discharge_summaries.create({
+        await db.discharge_summaries.create({
             data: {
                 admission_id: admissionId,
                 patient_name: admission.patient?.full_name,
@@ -396,7 +404,7 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
             },
         });
 
-        await prisma.system_audit_logs.create({
+        await db.system_audit_logs.create({
             data: {
                 action: 'DISCHARGE_IPD',
                 module: 'ipd',
@@ -420,7 +428,8 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
 // Add medical note during admission
 export async function addMedicalNote(admissionId: string, noteType: string, details: string) {
     try {
-        const note = await prisma.medical_notes.create({
+        const { db } = await requireTenantContext();
+        const note = await db.medical_notes.create({
             data: {
                 admission_id: admissionId,
                 note_type: noteType,
@@ -446,6 +455,7 @@ export async function addMedicalNote(admissionId: string, noteType: string, deta
 // Get IPD Stats
 export async function getIPDStats() {
     try {
+        const { db } = await requireTenantContext();
         const [
             totalAdmitted,
             totalDischarged,
@@ -453,11 +463,11 @@ export async function getIPDStats() {
             availableBeds,
             occupiedBeds,
         ] = await Promise.all([
-            prisma.admissions.count({ where: { status: 'Admitted' } }),
-            prisma.admissions.count({ where: { status: 'Discharged' } }),
-            prisma.beds.count(),
-            prisma.beds.count({ where: { status: 'Available' } }),
-            prisma.beds.count({ where: { status: 'Occupied' } }),
+            db.admissions.count({ where: { status: 'Admitted' } }),
+            db.admissions.count({ where: { status: 'Discharged' } }),
+            db.beds.count(),
+            db.beds.count({ where: { status: 'Available' } }),
+            db.beds.count({ where: { status: 'Occupied' } }),
         ]);
 
         return {
@@ -480,11 +490,12 @@ export async function getIPDStats() {
 // Search patients for admission
 export async function searchPatientsForAdmission(query: string) {
     try {
-        const patients = await prisma.oPD_REG.findMany({
+        const { db } = await requireTenantContext();
+        const patients = await db.oPD_REG.findMany({
             where: {
                 OR: [
-                    { full_name: { contains: query, mode: 'insensitive' } },
-                    { patient_id: { contains: query, mode: 'insensitive' } },
+                    { full_name: { contains: query } },
+                    { patient_id: { contains: query } },
                     { phone: { contains: query } },
                 ],
             },

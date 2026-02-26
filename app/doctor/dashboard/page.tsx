@@ -17,6 +17,7 @@ import { dischargePatient } from '@/app/actions/discharge-actions';
 import { registerPatient } from '@/app/actions/register-patient';
 import { getPatientTriageData } from '@/app/actions/triage-actions';
 import { Sidebar } from '@/app/components/layout/Sidebar';
+import SOAPAssistant from '@/app/doctor/components/SOAPAssistant';
 
 export default function DoctorDashboard() {
     // ─── SESSION STATE ───
@@ -34,7 +35,14 @@ export default function DoctorDashboard() {
     const [triageData, setTriageData] = useState<any>(null);
     const [loadingTriage, setLoadingTriage] = useState(false);
     const [diagnosis, setDiagnosis] = useState('');
-    const [notes, setNotes] = useState('');
+    const [notes, setNotes] = useState(''); // Legacy fallback
+
+    // ─── SOAP NOTES STATE ───
+    const [soapS, setSoapS] = useState(''); // Subjective
+    const [soapO, setSoapO] = useState(''); // Objective
+    const [soapA, setSoapA] = useState(''); // Assessment
+    const [soapP, setSoapP] = useState(''); // Plan
+
     const [selectedTest, setSelectedTest] = useState('');
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -148,7 +156,15 @@ export default function DoctorDashboard() {
             await saveMedicalNote({ admission_id: 'LOOKUP_BY_PATIENT:' + activePatient.patient_id, note_type: medicalNoteType, details: medicalNoteDetails });
             alert('Medical Note Saved'); setMedicalNoteDetails('');
         } else {
-            await saveClinicalNotes({ patient_id: activePatient.patient_id, appointment_id: activePatient.appointment_id, diagnosis, notes, doctor: doctorName });
+            // Compile SOAP notes into a structured payload
+            const compiledNotes = `[SUBJECTIVE]\n${soapS || 'N/A'}\n\n[OBJECTIVE]\n${soapO || 'N/A'}\n\n[ASSESSMENT]\n${soapA || 'N/A'}\n\n[PLAN]\n${soapP || 'N/A'}`;
+            // Append legacy notes if they exist (graceful fallback)
+            const finalNotes = notes ? `${compiledNotes}\n\n[GENERAL_NOTES]\n${notes}` : compiledNotes;
+
+            await saveClinicalNotes({ patient_id: activePatient.patient_id, appointment_id: activePatient.appointment_id, diagnosis, notes: finalNotes, doctor: doctorName });
+
+            // Clear the form after successful save
+            setSoapS(''); setSoapO(''); setSoapA(''); setSoapP(''); setNotes(''); setDiagnosis('');
             alert('Clinical Notes Saved');
         }
     });
@@ -193,7 +209,7 @@ export default function DoctorDashboard() {
     const handlePlaceOrder = () => withSubmission(async () => {
         if (!activePatient || pharmacyCart.length === 0) return;
         const res = await createPharmacyOrder(activePatient.patient_id, doctorName, pharmacyCart);
-        if (res.success) { setPharmacyOrderResult(res.agentResponse); setPharmacyCart([]); alert('Order Sent to Pharmacy!'); } else { alert('Order Failed'); }
+        if (res.success) { setPharmacyOrderResult(true); setPharmacyCart([]); alert('Order Sent to Pharmacy!'); } else { alert('Order Failed'); }
     });
 
     const handlePrintPrescription = () => { if (pharmacyCart.length === 0) return alert("Add medicines first!"); setShowPrescriptionModal(true); };
@@ -216,12 +232,10 @@ export default function DoctorDashboard() {
         setIsDischarging(true);
         try {
             const res = await dischargePatient(activePatient.patient_id);
-            if (res.success && res.pdfBase64) {
-                const byteCharacters = atob(res.pdfBase64); const byteNumbers = new Array(byteCharacters.length);
-                for (let i = 0; i < byteCharacters.length; i++) { byteNumbers[i] = byteCharacters.charCodeAt(i); }
-                const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/pdf' });
-                setDischargePdfUrl(URL.createObjectURL(blob)); setShowDischargeModal(true); handleStatusUpdate('Completed');
-            } else { alert('Failed: ' + res.error); }
+            if (res.success) {
+                alert('Patient discharged successfully.');
+                handleStatusUpdate('Completed');
+            } else { alert('Failed to discharge'); }
         } catch (e) { console.error(e); alert('Error during discharge.'); } finally { setIsDischarging(false); }
     };
 
@@ -356,24 +370,48 @@ export default function DoctorDashboard() {
                     {loading ? <div className="text-center p-8 text-gray-400 animate-pulse font-bold">Loading queue...</div> : (
                         filteredQueue.length === 0 ? (
                             <div className="text-center p-12 text-gray-400 text-sm flex flex-col items-center gap-2"><Users className="h-8 w-8 text-gray-200" />No patients found</div>
-                        ) : filteredQueue.map((p) => (
-                            <div key={p.patient_id} onClick={isSubmitting ? undefined : () => setActivePatient(p)}
-                                className={`p-4 rounded-xl cursor-pointer transition-all border group ${activePatient?.patient_id === p.patient_id ? 'bg-teal-500/10 border-teal-500/30 ring-1 ring-teal-500/30' : 'bg-gray-50 hover:bg-gray-100 border-gray-200 hover:border-teal-500/20'} ${isSubmitting ? 'opacity-50 pointer-events-none' : ''}`}>
-                                <div className="flex justify-between items-start mb-1">
-                                    <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${getStatusStyle(p.status)}`}>{p.status || 'Pending'}</span>
-                                    <span className="text-[10px] text-gray-300 font-mono">#{p.digital_id ? p.digital_id : p.patient_id.slice(0, 4)}</span>
+                        ) : filteredQueue.map((p) => {
+                            let parsedSymptoms = p.reason_for_visit;
+                            let triageLevel = null;
+                            if (p.reason_for_visit?.includes('AI Triage:')) {
+                                const parts = p.reason_for_visit.split('| Level: ');
+                                if (parts.length === 2) {
+                                    parsedSymptoms = parts[0].replace('AI Triage: ', '').trim();
+                                    triageLevel = parts[1].trim();
+                                }
+                            }
+
+                            return (
+                                <div key={p.patient_id} onClick={isSubmitting ? undefined : () => setActivePatient(p)}
+                                    className={`p-4 rounded-xl cursor-pointer transition-all border group relative overflow-hidden ${activePatient?.patient_id === p.patient_id ? 'bg-teal-500/10 border-teal-500/30 shadow-inner' : 'bg-white hover:bg-gray-50 border-gray-200 hover:border-teal-500/20'} ${isSubmitting ? 'opacity-50 pointer-events-none' : ''}`}>
+                                    {triageLevel === 'Emergency' && <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500 rounded-l-xl"></div>}
+                                    {triageLevel === 'Urgent' && <div className="absolute left-0 top-0 bottom-0 w-1 bg-amber-500 rounded-l-xl"></div>}
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className="flex gap-2 items-center">
+                                            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${getStatusStyle(p.status)}`}>{p.status || 'Pending'}</span>
+                                            {triageLevel && (
+                                                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${triageLevel === 'Emergency' ? 'bg-red-500/10 text-red-500 border-red-500/20' : triageLevel === 'Urgent' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'}`}>
+                                                    {triageLevel}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <span className="text-[10px] text-gray-300 font-mono">#{p.digital_id ? p.digital_id.split('-').pop() : p.patient_id.slice(0, 4)}</span>
+                                    </div>
+                                    <h4 className="font-bold text-sm truncate text-gray-800 group-hover:text-teal-600 transition-colors">{p.full_name}</h4>
+                                    <div className="flex gap-2 mt-1 items-center">
+                                        <span className="text-[10px] text-gray-500 font-semibold">{p.age ? `${p.age}y` : ''}{p.gender ? ` / ${p.gender}` : ''}</span>
+                                        <span className="text-[10px] text-gray-300">&bull;</span>
+                                        <span className="text-[10px] text-gray-500 font-semibold">{p.department || 'General'}</span>
+                                    </div>
+                                    {parsedSymptoms && (
+                                        <p className="text-[10px] text-gray-400 mt-2 truncate flex items-center gap-1.5 bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                                            <Brain className="h-3 w-3 shrink-0 text-teal-400" />
+                                            {parsedSymptoms}
+                                        </p>
+                                    )}
                                 </div>
-                                <h4 className="font-bold text-sm truncate text-gray-700 group-hover:text-teal-400 transition-colors">{p.full_name}</h4>
-                                <div className="flex gap-2 mt-1 items-center">
-                                    <span className="text-[10px] text-gray-400">{p.age ? `${p.age}y` : ''}{p.gender ? ` / ${p.gender}` : ''}</span>
-                                    <span className="text-[10px] text-gray-200">&bull;</span>
-                                    <span className="text-[10px] text-gray-400">{p.department || 'General'}</span>
-                                </div>
-                                {p.reason_for_visit && (
-                                    <p className="text-[10px] text-teal-400/50 mt-1.5 truncate flex items-center gap-1"><Brain className="h-3 w-3 shrink-0" />{p.reason_for_visit}</p>
-                                )}
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
                 <div className="p-4 border-t border-gray-200">
@@ -637,8 +675,50 @@ export default function DoctorDashboard() {
                                             <div><label className={labelCls}>Note Type</label><select value={medicalNoteType} onChange={e => setMedicalNoteType(e.target.value)} className={inputCls}><option className="bg-white text-gray-900">Routine Check</option><option className="bg-white text-gray-900">Admission Note</option><option className="bg-white text-gray-900">Nursing</option><option className="bg-white text-gray-900">Discharge Advice</option></select></div>
                                             <div><label className={labelCls}>Details</label><textarea value={medicalNoteDetails} onChange={e => setMedicalNoteDetails(e.target.value)} className={inputCls} placeholder="Enter routine check details..." rows={8} /></div>
                                         </>) : (<>
-                                            <div><label className={labelCls}>Diagnosis</label><input value={diagnosis} onChange={e => setDiagnosis(e.target.value)} className={inputCls} placeholder="Primary Diagnosis..." /></div>
-                                            <div><label className={labelCls}>Doctor Notes & Observations</label><textarea value={notes} onChange={e => setNotes(e.target.value)} className={inputCls} placeholder="Enter clinical observations..." rows={8} /></div>
+                                            <div className="bg-teal-500/5 border border-teal-500/10 p-4 rounded-xl flex items-center gap-3 mb-6">
+                                                <div className="bg-teal-500/10 p-2 rounded-lg"><Stethoscope className="h-5 w-5 text-teal-400" /></div>
+                                                <div><span className="text-teal-700 text-sm font-bold block">Clinical SOAP Notes</span><span className="text-teal-600/60 text-xs">Standardized documentation format for patient encounters.</span></div>
+                                            </div>
+
+                                            {/* AI SOAP Assistant — voice, auto-format, ICD-10, pre-brief */}
+                                            <SOAPAssistant
+                                                patientId={activePatient.patient_id}
+                                                soapS={soapS} soapO={soapO} soapA={soapA} soapP={soapP}
+                                                diagnosis={diagnosis}
+                                                onUpdate={(field, value) => {
+                                                    if (field === 'soapS') setSoapS(value);
+                                                    else if (field === 'soapO') setSoapO(value);
+                                                    else if (field === 'soapA') setSoapA(value);
+                                                    else if (field === 'soapP') setSoapP(value);
+                                                    else if (field === 'diagnosis') setDiagnosis(value);
+                                                }}
+                                                disabled={isSubmitting}
+                                            />
+
+                                            <div><label className={labelCls}>Primary Diagnosis</label><input value={diagnosis} onChange={e => setDiagnosis(e.target.value)} className={`${inputCls} border-teal-200 outline-none focus:border-teal-400 focus:ring-teal-400`} placeholder="E.g., Acute Bronchitis" /></div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                                                <div className="space-y-6">
+                                                    <div>
+                                                        <label className={labelCls}><span className="text-teal-500 mr-1 opacity-70">S</span>Subjective</label>
+                                                        <textarea value={soapS} onChange={e => setSoapS(e.target.value)} className={`${inputCls} resize-none`} placeholder="Patient's reported symptoms, complaints..." rows={4} />
+                                                    </div>
+                                                    <div>
+                                                        <label className={labelCls}><span className="text-cyan-500 mr-1 opacity-70">O</span>Objective</label>
+                                                        <textarea value={soapO} onChange={e => setSoapO(e.target.value)} className={`${inputCls} resize-none`} placeholder="Vitals, lab results, physical exam findings..." rows={4} />
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-6">
+                                                    <div>
+                                                        <label className={labelCls}><span className="text-violet-500 mr-1 opacity-70">A</span>Assessment</label>
+                                                        <textarea value={soapA} onChange={e => setSoapA(e.target.value)} className={`${inputCls} resize-none`} placeholder="Medical diagnosis, differential diagnosis..." rows={4} />
+                                                    </div>
+                                                    <div>
+                                                        <label className={labelCls}><span className="text-amber-500 mr-1 opacity-70">P</span>Plan</label>
+                                                        <textarea value={soapP} onChange={e => setSoapP(e.target.value)} className={`${inputCls} resize-none`} placeholder="Treatment plan, prescriptions, follow-up..." rows={4} />
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </>)}
                                         <div className="flex justify-end pt-4">
                                             <button onClick={handleSaveNotes} disabled={isSubmitting} className="px-8 py-3 bg-gradient-to-r from-teal-500 to-emerald-600 text-white font-bold rounded-xl hover:from-teal-400 hover:to-emerald-500 flex items-center gap-2 shadow-lg shadow-teal-500/20 disabled:opacity-50">
@@ -653,15 +733,36 @@ export default function DoctorDashboard() {
                                         <h3 className="font-black text-gray-700 mb-4 flex items-center gap-2 text-lg"><History className="h-5 w-5 text-violet-400" /> Patient History</h3>
                                         {loadingHistory ? <div className="text-center py-12 text-gray-400 font-bold">Loading history...</div> : history.length === 0 ? (
                                             <div className="bg-gray-100 border border-dashed border-gray-300 rounded-xl p-8 text-center text-gray-400 text-sm font-bold">No previous records found.</div>
-                                        ) : (<div className="space-y-4">{history.map((record, i) => (
-                                            <div key={i} className="bg-gray-50 border border-gray-200 p-5 rounded-xl hover:border-teal-500/20 transition-all">
-                                                <div className="flex justify-between items-start mb-3">
-                                                    <div><p className="font-bold text-teal-400 text-base">{record.diagnosis || 'No Diagnosis'}</p><p className="text-xs text-gray-400 mt-1">{new Date(record.created_at).toLocaleDateString()} &bull; {record.doctor_name || 'Dr. Unknown'}</p></div>
-                                                    <div className="bg-gray-100 text-gray-400 text-[10px] uppercase font-black px-2 py-1 rounded-lg border border-gray-200">#{record.appointment_id}</div>
+                                        ) : (<div className="space-y-4">{history.map((record, i) => {
+                                            const noteText = record.doctor_notes || '';
+                                            const isSoap = noteText.includes('[SUBJECTIVE]');
+
+                                            // Quick and dirty regex to extract sections if it's SOAP
+                                            const s = isSoap ? noteText.split('[SUBJECTIVE]')[1]?.split('[OBJECTIVE]')[0]?.trim() : '';
+                                            const o = isSoap ? noteText.split('[OBJECTIVE]')[1]?.split('[ASSESSMENT]')[0]?.trim() : '';
+                                            const a = isSoap ? noteText.split('[ASSESSMENT]')[1]?.split('[PLAN]')[0]?.trim() : '';
+                                            const p = isSoap ? noteText.split('[PLAN]')[1]?.split('[GENERAL_NOTES]')[0]?.trim() : '';
+
+                                            return (
+                                                <div key={i} className="bg-gray-50 border border-gray-200 p-5 rounded-xl hover:border-teal-500/20 transition-all">
+                                                    <div className="flex justify-between items-start mb-4">
+                                                        <div><p className="font-bold text-teal-600 text-lg flex items-center gap-2">{record.diagnosis || 'No Diagnosis'} {isSoap && <span className="text-[10px] bg-teal-500/10 text-teal-500 px-2 py-0.5 rounded uppercase font-black tracking-wider">SOAP Note</span>}</p><p className="text-sm text-gray-400 mt-1 font-medium">{new Date(record.created_at).toLocaleDateString()} &bull; {record.doctor_name || 'Dr. Unknown'}</p></div>
+                                                        <div className="bg-white border border-gray-200 shadow-sm text-gray-400 text-[10px] font-mono px-3 py-1.5 rounded-lg">#{record.appointment_id}</div>
+                                                    </div>
+
+                                                    {isSoap ? (
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                                                            {s && s !== 'N/A' && <div className="bg-white p-3 rounded-lg border border-gray-100"><span className="text-[10px] font-black text-teal-400 uppercase block mb-1">Subjective</span><p className="text-sm text-gray-600">{s}</p></div>}
+                                                            {o && o !== 'N/A' && <div className="bg-white p-3 rounded-lg border border-gray-100"><span className="text-[10px] font-black text-cyan-400 uppercase block mb-1">Objective</span><p className="text-sm text-gray-600">{o}</p></div>}
+                                                            {a && a !== 'N/A' && <div className="bg-white p-3 rounded-lg border border-gray-100"><span className="text-[10px] font-black text-violet-400 uppercase block mb-1">Assessment</span><p className="text-sm text-gray-600">{a}</p></div>}
+                                                            {p && p !== 'N/A' && <div className="bg-white p-3 rounded-lg border border-gray-100"><span className="text-[10px] font-black text-amber-400 uppercase block mb-1">Plan</span><p className="text-sm text-gray-600">{p}</p></div>}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed bg-white p-4 rounded-xl border border-gray-100 mt-2">{noteText}</p>
+                                                    )}
                                                 </div>
-                                                <p className="text-sm text-gray-500 whitespace-pre-wrap leading-relaxed">{record.doctor_notes}</p>
-                                            </div>
-                                        ))}</div>)}
+                                            );
+                                        })}</div>)}
                                     </div>
                                 )}
                                 {/* LAB TAB */}
@@ -710,6 +811,7 @@ export default function DoctorDashboard() {
                                                         <h3 className="font-black text-gray-700 flex items-center gap-2"><Pill className="h-5 w-5 text-teal-400" /> Prescribe Medicine</h3>
                                                         {pharmacyCart.length > 0 && <button onClick={handlePrintPrescription} className="text-xs font-bold text-gray-400 flex items-center gap-1 hover:text-gray-600"><Printer className="h-3 w-3" /> Preview Rx</button>}
                                                     </div>
+
                                                     <div className="flex gap-3 mb-4">
                                                         <select value={selectedMedicine} onChange={e => setSelectedMedicine(e.target.value)} className={`flex-[2] ${inputCls}`}>
                                                             <option value="" className="bg-white text-gray-900">Select Medicine...</option>{medicines.map((m: any) => <option key={m.id} value={m.brand_name} className="bg-white text-gray-900">{m.brand_name} ({'\u20B9'}{m.price_per_unit})</option>)}
@@ -717,6 +819,28 @@ export default function DoctorDashboard() {
                                                         <input type="number" min="1" value={medicineQty} onChange={e => setMedicineQty(parseInt(e.target.value) || 1)} className={`w-20 text-center ${inputCls}`} />
                                                         <button onClick={addToCart} disabled={!selectedMedicine} className="bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white p-3 rounded-xl shadow-md active:scale-95 transition-transform"><Plus className="h-5 w-5" /></button>
                                                     </div>
+
+                                                    {/* Quick Prescribe Chips */}
+                                                    {medicines.length > 0 && (
+                                                        <div className="mb-6">
+                                                            <span className="text-[10px] font-black tracking-wider uppercase text-gray-400 block mb-2">⚡ Quick Add Common Rx</span>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {medicines.slice(0, 4).map((m: any) => (
+                                                                    <button key={m.id} onClick={() => {
+                                                                        const existing = pharmacyCart.find(i => i.name === m.brand_name);
+                                                                        if (existing) {
+                                                                            setPharmacyCart(prev => prev.map(i => i.name === m.brand_name ? { ...i, qty: i.qty + 1 } : i));
+                                                                        } else {
+                                                                            setPharmacyCart(prev => [...prev, { name: m.brand_name, qty: 1, price: m.price_per_unit }]);
+                                                                        }
+                                                                    }} className="text-xs font-bold px-3 py-1.5 bg-gray-100 hover:bg-teal-50 border border-gray-200 hover:border-teal-500/30 text-gray-600 hover:text-teal-600 rounded-lg transition-all flex items-center gap-1 shadow-sm">
+                                                                        <Plus className="h-3 w-3" /> {m.brand_name}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
                                                     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                                                         <div className="bg-gray-100 px-4 py-3 text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] flex justify-between border-b border-gray-200"><span>Current Rx Cart</span><span>{pharmacyCart.length} Items</span></div>
                                                         {pharmacyCart.length === 0 ? <div className="p-8 text-center text-gray-300 text-sm font-bold">Add medicines to create prescription</div> : (
@@ -741,15 +865,11 @@ export default function DoctorDashboard() {
                                                 <div className="flex-1 bg-white border border-gray-200 shadow-sm rounded-2xl p-6 h-fit">
                                                     <div className="flex items-center gap-3 mb-6 text-emerald-400 font-bold border-b border-gray-200 pb-4">
                                                         <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center"><CheckCircle2 className="h-6 w-6" /></div>
-                                                        <div><span className="block text-lg">Order Processed</span><span className="text-xs text-emerald-400/60 font-normal">Sent to Pharmacy Queue</span></div>
+                                                        <div><span className="block text-lg">Order Sent</span><span className="text-xs text-emerald-400/60 font-normal">Pending Pharmacist Review</span></div>
                                                     </div>
                                                     <div className="space-y-4 text-sm">
-                                                        <div className="flex justify-between py-2 border-b border-gray-200"><span className="text-gray-500 font-medium">Total Requested</span><span className="font-bold bg-gray-100 px-2 py-0.5 rounded-lg text-gray-500 border border-gray-200">{pharmacyOrderResult.bill_summary?.total_items_requested}</span></div>
-                                                        <div className="flex justify-between py-2 border-b border-gray-200"><span className="text-gray-500 font-medium">Items Dispensed</span><span className="font-bold text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded-lg">{pharmacyOrderResult.bill_summary?.items_dispensed}</span></div>
-                                                        <div className="flex justify-between py-2 border-b border-gray-200"><span className="text-gray-500 font-medium">Unavailable</span><span className="font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-lg">{pharmacyOrderResult.bill_summary?.items_missing}</span></div>
-                                                        <div className="pt-6 flex justify-between items-end"><span className="font-bold text-gray-300 uppercase text-[10px] tracking-[0.15em] block">Total Bill</span><span className="text-3xl font-black text-gray-900 tracking-tight">{'\u20B9'}{pharmacyOrderResult.bill_summary?.total_amount_to_collect}</span></div>
-                                                        <button onClick={handlePrintPrescription} className="w-full mt-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 border border-gray-200 flex items-center justify-center gap-2"><Printer className="h-4 w-4" /> Print Receipt</button>
-                                                        <button onClick={() => setPharmacyOrderResult(null)} className="w-full py-3 text-gray-400 hover:text-gray-600 text-xs font-bold">New Order</button>
+                                                        <p className="text-gray-500 text-sm">The prescription has been forwarded to the pharmacy department for processing.</p>
+                                                        <button onClick={() => setPharmacyOrderResult(null)} className="w-full py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 border border-gray-200">New Order</button>
                                                     </div>
                                                 </div>
                                             )}

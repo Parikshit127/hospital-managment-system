@@ -1,37 +1,39 @@
 'use server';
 
-import { prisma } from '@/app/lib/db';
+import { requireTenantContext } from '@/backend/tenant';
 
 export async function getOPDDashboardStats() {
     try {
+        const { db } = await requireTenantContext();
+
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
         const todayEnd = new Date();
         todayEnd.setHours(23, 59, 59, 999);
 
         const [totalToday, pending, inProgress, completed, byDepartment] = await Promise.all([
-            prisma.appointments.count({
+            db.appointments.count({
                 where: { appointment_date: { gte: todayStart, lte: todayEnd } },
             }),
-            prisma.appointments.count({
+            db.appointments.count({
                 where: {
                     status: { in: ['Pending', 'Scheduled', 'Checked In'] },
                     appointment_date: { gte: todayStart, lte: todayEnd },
                 },
             }),
-            prisma.appointments.count({
+            db.appointments.count({
                 where: {
                     status: 'In Progress',
                     appointment_date: { gte: todayStart, lte: todayEnd },
                 },
             }),
-            prisma.appointments.count({
+            db.appointments.count({
                 where: {
                     status: 'Completed',
                     appointment_date: { gte: todayStart, lte: todayEnd },
                 },
             }),
-            prisma.appointments.groupBy({
+            db.appointments.groupBy({
                 by: ['department'],
                 where: { appointment_date: { gte: todayStart, lte: todayEnd } },
                 _count: { id: true },
@@ -45,7 +47,7 @@ export async function getOPDDashboardStats() {
                 pending,
                 inProgress,
                 completed,
-                byDepartment: byDepartment.map(d => ({
+                byDepartment: byDepartment.map((d: any) => ({
                     department: d.department || 'General',
                     count: d._count.id,
                 })),
@@ -59,6 +61,8 @@ export async function getOPDDashboardStats() {
 
 export async function getTodaysAppointments(options?: { department?: string; status?: string }) {
     try {
+        const { db } = await requireTenantContext();
+
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
         const todayEnd = new Date();
@@ -70,7 +74,7 @@ export async function getTodaysAppointments(options?: { department?: string; sta
         if (options?.department) where.department = options.department;
         if (options?.status) where.status = options.status;
 
-        const appointments = await prisma.appointments.findMany({
+        const appointments = await db.appointments.findMany({
             where,
             include: { patient: true },
             orderBy: { appointment_date: 'asc' },
@@ -78,7 +82,7 @@ export async function getTodaysAppointments(options?: { department?: string; sta
 
         return {
             success: true,
-            data: appointments.map(a => ({
+            data: appointments.map((a: any) => ({
                 id: a.id,
                 appointment_id: a.appointment_id,
                 patient_id: a.patient_id,

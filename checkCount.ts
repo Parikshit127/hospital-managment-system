@@ -1,0 +1,1 @@
+import { getTenantPrisma } from './backend/db'; (async () => { try { const db = getTenantPrisma('123'); await db.oPD_REG.count(); console.log('Success'); } catch (e: any) { console.error('Error:', e.message); } })();

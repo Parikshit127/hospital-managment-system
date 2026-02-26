@@ -3,61 +3,167 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 // ========================================
-// MODULE — Multi-Tenant (Hospital)
+// MODULE — Multi-Tenant (Organization)
 // ========================================
 
-model Hospital {
-  id          String   @id @default(uuid())
-  name        String
-  code        String   @unique
-  address     String?
-  phone       String?
-  license_no  String?
-  logo_url    String?
-  is_active   Boolean  @default(true)
-  created_at  DateTime @default(now())
+model Organization {
+  id         String   @id @default(uuid())
+  name       String
+  slug       String   @unique
+  code       String   @unique
+  address    String?
+  phone      String?
+  email      String?
+  license_no String?
+  logo_url   String?
+  is_active  Boolean  @default(true)
+  plan       String   @default("free") // free, starter, pro, enterprise
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
-  @@map("hospitals")
+  config   OrganizationConfig?
+  branding OrganizationBranding?
+
+  users                    User[]
+  patients                 OPD_REG[]
+  appointments             appointments[]
+  clinical_ehrs            Clinical_EHR[]
+  vital_signs              vital_signs[]
+  triage_results           triage_results[]
+  lab_orders               lab_orders[]
+  lab_test_inventory       lab_test_inventory[]
+  lab_staff                lab_staff[]
+  lab_audit_logs           lab_audit_logs[]
+  pharmacy_medicine_master pharmacy_medicine_master[]
+  pharmacy_orders          pharmacy_orders[]
+  pharmacy_sales_audit     pharmacy_sales_audit[]
+  admissions               admissions[]
+  medical_notes            medical_notes[]
+  discharge_summaries      discharge_summaries[]
+  beds                     beds[]
+  wards                    wards[]
+  invoices                 invoices[]
+  billing_records          billing_records[]
+  charge_catalog           charge_catalog[]
+  insurance_providers      insurance_providers[]
+  insurance_policies       insurance_policies[]
+  insurance_claims         insurance_claims[]
+  system_audit_logs        system_audit_logs[]
+  ai_health_assessments    AiHealthAssessment[]
+  appointment_slots        AppointmentSlot[]
+
+  @@map("organizations")
 }
+
+model OrganizationConfig {
+  id               String  @id @default(uuid())
+  organizationId   String  @unique
+  uhid_prefix      String  @default("AVN")
+  timezone         String  @default("Asia/Kolkata")
+  currency         String  @default("INR")
+  date_format      String  @default("DD/MM/YYYY")
+  session_timeout  Int     @default(15)
+  enable_whatsapp  Boolean @default(false)
+  enable_razorpay  Boolean @default(false)
+  enable_ai_triage Boolean @default(true)
+  razorpay_key_id     String?
+  razorpay_key_secret String?
+  smtp_host        String?
+  smtp_user        String?
+  smtp_pass        String?
+  whatsapp_api_token  String?
+  whatsapp_phone_id   String?
+  openai_key       String?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("organization_configs")
+}
+
+model OrganizationBranding {
+  id              String  @id @default(uuid())
+  organizationId  String  @unique
+  primary_color   String  @default("#10b981")
+  secondary_color String  @default("#0f172a")
+  logo_url        String?
+  portal_title    String  @default("Hospital OS")
+  portal_subtitle String  @default("Management System")
+  footer_text     String?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("organization_brandings")
+}
+
+// ========================================
+// MODULE — Super Admin (Platform Owner)
+// ========================================
+
+model SuperAdmin {
+  id         String   @id @default(uuid())
+  email      String   @unique
+  password   String
+  name       String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+
+  @@map("super_admins")
+}
+
+// ========================================
+// MODULE — Users & Staff
+// ========================================
 
 model User {
-  id          String   @id @default(uuid())
-  username    String   @unique
-  password    String
-  role        String   // admin, doctor, receptionist, lab_technician, pharmacist, finance, ipd_manager
-  name        String?
-  specialty   String?  // Doctor specialty: General Medicine, Cardiology, Orthopedics, Pediatrics, Neurology, ENT, Dermatology, Pulmonology
-  hospital_id String?
-  createdAt   DateTime @default(now())
+  id             String   @id @default(uuid())
+  username       String   @unique
+  password       String
+  role           String // admin, doctor, receptionist, lab_technician, pharmacist, finance, ipd_manager
+  name           String?
+  specialty      String?
+  email          String?
+  phone          String?
+  organizationId String
+  is_active      Boolean  @default(true)
+  createdAt      DateTime @default(now())
 
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@map("users")
 }
 
-// 1. Registration & OPD Module
-model OPD_REG {
-  id           Int      @id @default(autoincrement())
-  patient_id   String   @unique
-  full_name    String
-  age          String?
-  gender       String?
-  phone        String?
-  email        String?
-  address      String?
-  department   String?
-  aadhar_card  String?
-  hospital_id  String?
-  created_at   DateTime @default(now())
+// ========================================
+// MODULE — Registration & OPD
+// ========================================
 
-  appointments appointments[]
-  admissions   admissions[]
-  invoices     invoices[]
+model OPD_REG {
+  id             Int      @id @default(autoincrement())
+  patient_id     String   @unique
+  full_name      String
+  age            String?
+  gender         String?
+  phone          String?
+  email          String?
+  address        String?
+  department     String?
+  aadhar_card    String?
+  organizationId String
+  password       String?
+  created_at     DateTime @default(now())
+
+  organization       Organization          @relation(fields: [organizationId], references: [id])
+  appointments       appointments[]
+  admissions         admissions[]
+  invoices           invoices[]
   insurance_policies insurance_policies[]
+
+  @@index([organizationId])
 }
 
 model appointments {
@@ -65,32 +171,47 @@ model appointments {
   appointment_id   String   @unique
   patient_id       String
   doctor_name      String?
-  doctor_id        String?  // User.id of assigned doctor
+  doctor_id        String?
   department       String?
   status           String   @default("Pending")
   reason_for_visit String?
-  hospital_id      String?
+  organizationId   String
+  queue_token      Int?
+  checked_in_at    DateTime?
   appointment_date DateTime @default(now())
 
-  patient          OPD_REG  @relation(fields: [patient_id], references: [patient_id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+  patient      OPD_REG      @relation(fields: [patient_id], references: [patient_id])
 
+  @@index([organizationId])
   @@index([status])
   @@index([patient_id])
   @@index([appointment_date])
   @@index([doctor_id])
 }
 
-// 2. Clinical & Doctor Module
+// ========================================
+// MODULE — Clinical & Doctor
+// ========================================
+
 model Clinical_EHR {
   appointment_id String   @id
   patient_id     String
   doctor_name    String?
   diagnosis      String?
   doctor_notes   String?
+  organizationId String
   created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }
 
-// 3. Laboratory Module
+// ========================================
+// MODULE — Laboratory
+// ========================================
+
 model lab_orders {
   id                     Int      @id @default(autoincrement())
   barcode                String   @unique
@@ -101,45 +222,70 @@ model lab_orders {
   result_value           String?
   report_url             String?
   assigned_technician_id String?
-  hospital_id            String?
+  organizationId         String
   created_at             DateTime @default(now())
 
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@index([status])
   @@index([patient_id])
   @@index([created_at])
 }
 
 model lab_test_inventory {
-  id           Int     @id @default(autoincrement())
-  test_name    String  @unique
-  price        Float
-  is_available Boolean @default(true)
+  id             Int     @id @default(autoincrement())
+  test_name      String  @unique
+  price          Float
+  is_available   Boolean @default(true)
+  organizationId String
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }
 
 model lab_staff {
-  id          Int     @id @default(autoincrement())
-  name        String
-  role        String
-  is_on_shift Boolean @default(false)
+  id             Int     @id @default(autoincrement())
+  name           String
+  role           String
+  is_on_shift    Boolean @default(false)
+  organizationId String
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }
 
 model lab_audit_logs {
-  id          Int      @id @default(autoincrement())
-  action_type String
-  barcode     String
-  details     String?
-  created_at  DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  action_type    String
+  barcode        String
+  details        String?
+  organizationId String?
+  created_at     DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }
 
-// 4. Pharmacy Module
+// ========================================
+// MODULE — Pharmacy
+// ========================================
+
 model pharmacy_medicine_master {
   id             Int     @id @default(autoincrement())
   brand_name     String  @unique
   generic_name   String?
   price_per_unit Float
   min_threshold  Int     @default(10)
+  organizationId String
 
-  batches        pharmacy_batch_inventory[]
+  organization Organization             @relation(fields: [organizationId], references: [id])
+  batches      pharmacy_batch_inventory[]
+
+  @@index([organizationId])
 }
 
 model pharmacy_batch_inventory {
@@ -150,84 +296,99 @@ model pharmacy_batch_inventory {
   expiry_date   DateTime
   rack_location String?
 
-  medicine      pharmacy_medicine_master @relation(fields: [medicine_id], references: [id])
+  medicine pharmacy_medicine_master @relation(fields: [medicine_id], references: [id])
 }
 
 model pharmacy_sales_audit {
-  id            Int      @id @default(autoincrement())
-  action_type   String
-  medicine_name String?
-  batch_no      String?
-  quantity_sold Int
-  details       String?
-  created_at    DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  action_type    String
+  medicine_name  String?
+  batch_no       String?
+  quantity_sold  Int
+  details        String?
+  organizationId String?
+  created_at     DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }
 
 model pharmacy_orders {
-  id                    Int      @id @default(autoincrement())
-  patient_id            String
-  doctor_id             String
-  total_amount          Float    @default(0.0)
-  status                String   @default("Pending")
-
+  id                   Int      @id @default(autoincrement())
+  patient_id           String
+  doctor_id            String
+  total_amount         Float    @default(0.0)
+  status               String   @default("Pending")
   total_items_requested Int?
   items_dispensed       Int?
   items_missing         Int?
+  organizationId       String
+  created_at           DateTime @default(now())
 
-  hospital_id           String?
-  created_at            DateTime @default(now())
+  organization Organization           @relation(fields: [organizationId], references: [id])
+  items        pharmacy_order_items[]
 
-  items                 pharmacy_order_items[]
+  @@index([organizationId])
 }
 
 model pharmacy_order_items {
-  id                    Int      @id @default(autoincrement())
-  order_id              Int
-  medicine_name         String
-  quantity_requested    Int
-  quantity_dispensed    Int?
-  unit_price            Float?
-  total_price           Float?
-  batch_id              String?
-  status                String   @default("Pending")
+  id                 Int    @id @default(autoincrement())
+  order_id           Int
+  medicine_name      String
+  quantity_requested Int
+  quantity_dispensed  Int?
+  unit_price         Float?
+  total_price        Float?
+  batch_id           String?
+  status             String @default("Pending")
 
-  order                 pharmacy_orders @relation(fields: [order_id], references: [id])
+  order pharmacy_orders @relation(fields: [order_id], references: [id])
 }
 
-// 5. In-Patient & Discharge Module
+// ========================================
+// MODULE — In-Patient & Discharge
+// ========================================
+
 model admissions {
-  admission_id   String   @id @default(uuid())
+  admission_id   String    @id @default(uuid())
   patient_id     String
   bed_id         String?
   ward_id        Int?
-  status         String   // Admitted, Discharged
+  status         String // Admitted, Discharged
   diagnosis      String?
   doctor_name    String?
-  hospital_id    String?
-  admission_date DateTime @default(now())
+  organizationId String
+  admission_date DateTime  @default(now())
   discharge_date DateTime?
 
-  patient        OPD_REG @relation(fields: [patient_id], references: [patient_id])
-  bed            beds?   @relation(fields: [bed_id], references: [bed_id])
-  ward           wards?  @relation(fields: [ward_id], references: [ward_id])
-  medical_notes  medical_notes[]
-  summaries      discharge_summaries[]
-  invoices       invoices[]
+  organization     Organization          @relation(fields: [organizationId], references: [id])
+  patient          OPD_REG               @relation(fields: [patient_id], references: [patient_id])
+  bed              beds?                 @relation(fields: [bed_id], references: [bed_id])
+  ward             wards?                @relation(fields: [ward_id], references: [ward_id])
+  medical_notes    medical_notes[]
+  summaries        discharge_summaries[]
+  invoices         invoices[]
   insurance_claims insurance_claims[]
 
+  @@index([organizationId])
   @@index([status])
   @@index([patient_id])
   @@index([admission_date])
 }
 
 model medical_notes {
-  id           Int      @id @default(autoincrement())
-  admission_id String
-  note_type    String
-  details      String
-  created_at   DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  admission_id   String
+  note_type      String
+  details        String
+  organizationId String
+  created_at     DateTime @default(now())
 
-  admission    admissions @relation(fields: [admission_id], references: [admission_id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+  admission    admissions   @relation(fields: [admission_id], references: [admission_id])
+
+  @@index([organizationId])
 }
 
 model discharge_summaries {
@@ -235,127 +396,141 @@ model discharge_summaries {
   admission_id      String
   patient_name      String?
   generated_summary String
+  organizationId    String
   created_at        DateTime @default(now())
 
-  admission         admissions @relation(fields: [admission_id], references: [admission_id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+  admission    admissions   @relation(fields: [admission_id], references: [admission_id])
+
+  @@index([organizationId])
 }
 
 // ========================================
-// MODULE — Bed & Ward Management (Enhanced)
+// MODULE — Bed & Ward Management
 // ========================================
 
 model beds {
-  bed_id      String       @id
-  ward_id     Int?
-  status      String?      @default("Available") // Available, Occupied, Maintenance, Reserved, Cleaning, Isolation, Blocked
-  hospital_id String?
-  admissions  admissions[]
-  wards       wards?       @relation(fields: [ward_id], references: [ward_id], onDelete: NoAction, onUpdate: NoAction)
+  bed_id         String       @id
+  ward_id        Int?
+  status         String?      @default("Available")
+  organizationId String
+  admissions     admissions[]
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  wards        wards?       @relation(fields: [ward_id], references: [ward_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId])
 }
 
 model wards {
   ward_id        Int      @id @default(autoincrement())
   ward_name      String
-  ward_type      String   // General, ICU, Private, Maternity, Pediatric, Isolation
-  cost_per_day   Decimal? @default(0) @db.Decimal
-  nursing_charge Decimal? @default(0) @db.Decimal
-  hospital_id    String?
+  ward_type      String
+  cost_per_day   Decimal? @default(0)
+  nursing_charge Decimal? @default(0)
+  organizationId String
   beds           beds[]
   admissions     admissions[]
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }
 
 // ========================================
-// MODULE — Finance & Billing Engine (NEW)
+// MODULE — Finance & Billing Engine
 // ========================================
 
-// Parent invoice container — one per admission/visit
 model invoices {
-  id              Int      @id @default(autoincrement())
-  invoice_number  String   @unique // INV-YYYYMMDD-XXXX
-  patient_id      String
-  admission_id    String?
-  invoice_type    String   @default("OPD") // OPD, IPD
-  total_amount    Decimal  @default(0) @db.Decimal
-  total_discount  Decimal  @default(0) @db.Decimal
-  net_amount      Decimal  @default(0) @db.Decimal
-  paid_amount     Decimal  @default(0) @db.Decimal
-  balance_due     Decimal  @default(0) @db.Decimal
-  status          String   @default("Draft") // Draft, Proforma, Final, Paid, Partial, Cancelled
-  notes           String?
-  hospital_id     String?
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
-  finalized_at    DateTime?
+  id             Int       @id @default(autoincrement())
+  invoice_number String    @unique
+  patient_id     String
+  admission_id   String?
+  invoice_type   String    @default("OPD")
+  total_amount   Decimal   @default(0)
+  total_discount Decimal   @default(0)
+  net_amount     Decimal   @default(0)
+  paid_amount    Decimal   @default(0)
+  balance_due    Decimal   @default(0)
+  status         String    @default("Draft")
+  notes          String?
+  organizationId String
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+  finalized_at   DateTime?
 
-  patient         OPD_REG     @relation(fields: [patient_id], references: [patient_id])
-  admission       admissions? @relation(fields: [admission_id], references: [admission_id])
-  items           invoice_items[]
-  payments        payments[]
+  organization     Organization       @relation(fields: [organizationId], references: [id])
+  patient          OPD_REG            @relation(fields: [patient_id], references: [patient_id])
+  admission        admissions?        @relation(fields: [admission_id], references: [admission_id])
+  items            invoice_items[]
+  payments         payments[]
   insurance_claims insurance_claims[]
 
+  @@index([organizationId])
   @@index([status])
   @@index([patient_id])
   @@index([created_at])
 }
 
-// Line-by-line charges
 model invoice_items {
-  id            Int      @id @default(autoincrement())
-  invoice_id    Int
-  department    String   // Consultation, Lab, Pharmacy, Room, Procedure, Nursing, DoctorVisit, Consumables
-  description   String
-  quantity      Int      @default(1)
-  unit_price    Decimal  @db.Decimal
-  total_price   Decimal  @db.Decimal
-  discount      Decimal  @default(0) @db.Decimal
-  net_price     Decimal  @db.Decimal
-  ref_id        String?  // Reference ID (lab_order id, pharmacy_order id, etc.)
-  created_at    DateTime @default(now())
+  id          Int      @id @default(autoincrement())
+  invoice_id  Int
+  department  String
+  description String
+  quantity    Int      @default(1)
+  unit_price  Decimal
+  total_price Decimal
+  discount    Decimal  @default(0)
+  net_price   Decimal
+  ref_id      String?
+  created_at  DateTime @default(now())
 
-  invoice       invoices @relation(fields: [invoice_id], references: [id])
+  invoice invoices @relation(fields: [invoice_id], references: [id])
 
   @@index([invoice_id])
   @@index([department])
 }
 
-// Payment transactions
 model payments {
-  id               Int      @id @default(autoincrement())
-  receipt_number   String   @unique // RCP-YYYYMMDD-XXXX
-  invoice_id       Int
-  amount           Decimal  @db.Decimal
-  payment_method   String   // Cash, UPI, Card, Razorpay, BankTransfer
-  payment_type     String   // Advance, Settlement, Refund, PartialPayment
-  razorpay_order_id String?
+  id                  Int      @id @default(autoincrement())
+  receipt_number      String   @unique
+  invoice_id          Int
+  amount              Decimal
+  payment_method      String
+  payment_type        String
+  razorpay_order_id   String?
   razorpay_payment_id String?
-  status           String   @default("Completed") // Completed, Pending, Failed, Reversed
-  notes            String?
-  created_at       DateTime @default(now())
+  status              String   @default("Completed")
+  notes               String?
+  created_at          DateTime @default(now())
 
-  invoice          invoices @relation(fields: [invoice_id], references: [id])
+  invoice invoices @relation(fields: [invoice_id], references: [id])
 
   @@index([invoice_id])
   @@index([status])
 }
 
-// Extensible rate catalog for hospital services
 model charge_catalog {
-  id            Int      @id @default(autoincrement())
-  category      String   // RoomCharge, ProcedureCharge, DoctorVisitCharge, ConsultationCharge, NursingCharge, Consumables
-  item_code     String   @unique
-  item_name     String
-  default_price Decimal  @db.Decimal
-  department    String?
-  is_active     Boolean  @default(true)
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
+  id             Int      @id @default(autoincrement())
+  category       String
+  item_code      String   @unique
+  item_name      String
+  default_price  Decimal
+  department     String?
+  is_active      Boolean  @default(true)
+  organizationId String
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }
 
 // ========================================
-// MODULE — Insurance & TPA Layer (NEW)
+// MODULE — Insurance & TPA
 // ========================================
 
-// Master list of insurance providers / TPAs
 model insurance_providers {
   id             Int      @id @default(autoincrement())
   provider_name  String   @unique
@@ -364,92 +539,110 @@ model insurance_providers {
   contact_phone  String?
   address        String?
   is_active      Boolean  @default(true)
+  organizationId String
   created_at     DateTime @default(now())
 
-  policies       insurance_policies[]
+  organization Organization         @relation(fields: [organizationId], references: [id])
+  policies     insurance_policies[]
+
+  @@index([organizationId])
 }
 
-// Patient-associated insurance policy
 model insurance_policies {
-  id              Int      @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   patient_id      String
   provider_id     Int
-  policy_number   String   @unique
-  policy_holder   String?  // Name of the policy holder if different from patient
+  policy_number   String    @unique
+  policy_holder   String?
   plan_name       String?
-  coverage_limit  Decimal? @db.Decimal
-  remaining_limit Decimal? @db.Decimal
+  coverage_limit  Decimal?
+  remaining_limit Decimal?
   valid_from      DateTime?
   valid_until     DateTime?
-  status          String   @default("Active") // Active, Expired, Cancelled
-  created_at      DateTime @default(now())
+  status          String    @default("Active")
+  organizationId  String
+  created_at      DateTime  @default(now())
 
-  patient         OPD_REG             @relation(fields: [patient_id], references: [patient_id])
-  provider        insurance_providers @relation(fields: [provider_id], references: [id])
-  claims          insurance_claims[]
+  organization Organization        @relation(fields: [organizationId], references: [id])
+  patient      OPD_REG              @relation(fields: [patient_id], references: [patient_id])
+  provider     insurance_providers  @relation(fields: [provider_id], references: [id])
+  claims       insurance_claims[]
+
+  @@index([organizationId])
 }
 
-// Insurance claim linking an invoice to a claim lifecycle
 model insurance_claims {
-  id               Int      @id @default(autoincrement())
-  claim_number     String   @unique // CLM-YYYYMMDD-XXXX
+  id               Int       @id @default(autoincrement())
+  claim_number     String    @unique
   policy_id        Int
   invoice_id       Int
   admission_id     String?
-  claimed_amount   Decimal  @db.Decimal
-  approved_amount  Decimal? @db.Decimal
-  rejected_amount  Decimal? @db.Decimal
-  status           String   @default("Submitted") // Submitted, UnderReview, Approved, Rejected, PartiallyApproved, Settled
+  claimed_amount   Decimal
+  approved_amount  Decimal?
+  rejected_amount  Decimal?
+  status           String    @default("Submitted")
   rejection_reason String?
-  submitted_at     DateTime @default(now())
+  organizationId   String
+  submitted_at     DateTime  @default(now())
   reviewed_at      DateTime?
   settled_at       DateTime?
 
-  policy           insurance_policies @relation(fields: [policy_id], references: [id])
-  invoice          invoices           @relation(fields: [invoice_id], references: [id])
-  admission        admissions?        @relation(fields: [admission_id], references: [admission_id])
+  organization Organization        @relation(fields: [organizationId], references: [id])
+  policy       insurance_policies  @relation(fields: [policy_id], references: [id])
+  invoice      invoices            @relation(fields: [invoice_id], references: [id])
+  admission    admissions?         @relation(fields: [admission_id], references: [admission_id])
+
+  @@index([organizationId])
 }
 
 // ========================================
-// MODULE — Legacy Billing (kept for backward compatibility)
+// MODULE — Legacy Billing
 // ========================================
 
 model billing_records {
-  id             Int      @id @default(autoincrement())
-  patient_id     String
-  patient_name   String?
-  bill_type      String
-  department     String?
-  description    String?
-  amount         Float
-  discount       Float    @default(0)
-  net_amount     Float
-  payment_status String   @default("Pending")
-  payment_method String?
+  id                 Int      @id @default(autoincrement())
+  patient_id         String
+  patient_name       String?
+  bill_type          String
+  department         String?
+  description        String?
+  amount             Float
+  discount           Float    @default(0)
+  net_amount         Float
+  payment_status     String   @default("Pending")
+  payment_method     String?
   insurance_claim_id String?
-  created_at     DateTime @default(now())
+  organizationId     String
+  created_at         DateTime @default(now())
 
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@index([payment_status])
   @@index([created_at])
 }
 
 // ========================================
-// MODULE — System Audit Trail (Compliance)
+// MODULE — System Audit Trail
 // ========================================
 
 model system_audit_logs {
-  id          Int      @id @default(autoincrement())
-  user_id     String?
-  username    String?
-  role        String?
-  action      String
-  module      String
-  entity_type String?
-  entity_id   String?
-  details     String?
-  ip_address  String?
-  created_at  DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  user_id        String?
+  username       String?
+  role           String?
+  action         String
+  module         String
+  entity_type    String?
+  entity_id      String?
+  details        String?
+  ip_address     String?
+  organizationId String?
+  created_at     DateTime @default(now())
 
+  organization Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@index([action])
   @@index([module])
   @@index([created_at])
@@ -460,50 +653,110 @@ model system_audit_logs {
 // ========================================
 
 model triage_results {
-  id                    Int      @id @default(autoincrement())
-  patient_id            String?
-  patient_name          String?
-  symptoms              String
-  duration              String?
-  severity              String?
-  past_medical_history  String?
-  current_medications   String?
-  allergies             String?
-  triage_level          String
+  id                     Int      @id @default(autoincrement())
+  patient_id             String?
+  patient_name           String?
+  symptoms               String
+  duration               String?
+  severity               String?
+  past_medical_history   String?
+  current_medications    String?
+  allergies              String?
+  triage_level           String
   recommended_department String?
-  possible_conditions   String?
-  recommended_tests     String?
-  risk_alerts           String?
-  clinical_summary      String?
-  created_at            DateTime @default(now())
+  possible_conditions    String?
+  recommended_tests      String?
+  risk_alerts            String?
+  clinical_summary       String?
+  organizationId         String
+  created_at             DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }
 
 // ========================================
-// MODULE — MFA (Multi-Factor Authentication)
+// MODULE — MFA
 // ========================================
 
 model user_mfa {
   user_id      String   @id
-  secret       String   // TOTP secret (base32 encoded)
+  secret       String
   enabled      Boolean  @default(false)
-  backup_codes String?  // JSON array of single-use backup codes
+  backup_codes String?
   created_at   DateTime @default(now())
   updated_at   DateTime @updatedAt
 
   @@map("user_mfa")
 }
 
+// ========================================
+// MODULE — Vitals
+// ========================================
+
 model vital_signs {
-  id              Int      @id @default(autoincrement())
-  patient_id      String
-  appointment_id  String?
-  blood_pressure  String?
-  heart_rate      Int?
-  temperature     Float?
-  oxygen_sat      Int?
+  id               Int      @id @default(autoincrement())
+  patient_id       String
+  appointment_id   String?
+  blood_pressure   String?
+  heart_rate       Int?
+  temperature      Float?
+  oxygen_sat       Int?
   respiratory_rate Int?
-  weight          Float?
-  height          Float?
-  recorded_by     String?
-  created_at      DateTime @default(now())
+  weight           Float?
+  height           Float?
+  recorded_by      String?
+  organizationId   String
+  created_at       DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+}
+
+// ========================================
+// MODULE — AI Health Assessment
+// ========================================
+
+model AiHealthAssessment {
+  id                      String   @id @default(uuid())
+  organizationId          String
+  patient_id              String?
+  session_token           String   @unique
+  responses               String?  // JSON string of Q&A
+  ai_summary              String?
+  risk_level              String?  // LOW, MODERATE, HIGH, CRITICAL
+  recommended_tests       String?  // JSON string
+  recommended_specialties String?  // JSON string
+  status                  String   @default("in_progress") // in_progress, completed
+  created_at              DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@map("ai_health_assessments")
+}
+
+// ========================================
+// MODULE — Appointment Slots
+// ========================================
+
+model AppointmentSlot {
+  id             String   @id @default(uuid())
+  organizationId String
+  doctor_id      String
+  date           DateTime
+  start_time     String // "09:00"
+  end_time       String // "09:30"
+  is_available   Boolean  @default(true)
+  is_booked      Boolean  @default(false)
+  booked_by      String? // patient_id
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([doctor_id, date])
+  @@map("appointment_slots")
 }

@@ -4,42 +4,116 @@ const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
 
+const DEFAULT_ORG_ID = 'org-avani-default';
+
 async function main() {
     console.log('Start seeding ...');
 
     const password = await bcrypt.hash('password123', 10);
 
-    // 1. Users (including new roles)
+    // =============================================
+    // 0. DEFAULT ORGANIZATION + CONFIG + BRANDING
+    // =============================================
+    const org = await prisma.organization.upsert({
+        where: { id: DEFAULT_ORG_ID },
+        update: { name: 'Avani Hospital', slug: 'avani', code: 'AVN' },
+        create: {
+            id: DEFAULT_ORG_ID,
+            name: 'Avani Hospital',
+            slug: 'avani',
+            code: 'AVN',
+            address: '123 Health Avenue, Medical District',
+            phone: '+91 80000 00000',
+            email: 'admin@avanihospital.com',
+            license_no: 'MH-MED-2024-001',
+            plan: 'enterprise',
+            is_active: true,
+        },
+    });
+    console.log(`Organization: ${org.name} (${org.id})`);
+
+    await prisma.organizationConfig.upsert({
+        where: { organizationId: DEFAULT_ORG_ID },
+        update: {},
+        create: {
+            organizationId: DEFAULT_ORG_ID,
+            uhid_prefix: 'AVN',
+            enable_ai_triage: true,
+        },
+    });
+    console.log('Organization config created');
+
+    await prisma.organizationBranding.upsert({
+        where: { organizationId: DEFAULT_ORG_ID },
+        update: {},
+        create: {
+            organizationId: DEFAULT_ORG_ID,
+            portal_title: 'Avani Hospital',
+            portal_subtitle: 'Intelligence Platform',
+            primary_color: '#10b981',
+            secondary_color: '#0f172a',
+        },
+    });
+    console.log('Organization branding created');
+
+    // =============================================
+    // 0.1 SUPER ADMIN
+    // =============================================
+    const saPassword = await bcrypt.hash('superadmin123', 10);
+    await prisma.superAdmin.upsert({
+        where: { email: 'superadmin@hospitalos.com' },
+        update: {},
+        create: {
+            email: 'superadmin@hospitalos.com',
+            password: saPassword,
+            name: 'Platform Admin',
+            is_active: true,
+        },
+    });
+    console.log('Super Admin created (email: superadmin@hospitalos.com, password: superadmin123)');
+
+    // =============================================
+    // 1. USERS (with organizationId)
+    // =============================================
     const users = [
-        { username: 'admin', role: 'admin', name: 'Super Admin', specialty: null },
-        { username: 'doc1', role: 'doctor', name: 'Dr. Sarah Smith', specialty: 'General Medicine' },
-        { username: 'doc2', role: 'doctor', name: 'Dr. Rajesh Kumar', specialty: 'Cardiology' },
-        { username: 'doc3', role: 'doctor', name: 'Dr. Priya Sharma', specialty: 'Orthopedics' },
-        { username: 'doc4', role: 'doctor', name: 'Dr. Anil Gupta', specialty: 'Pediatrics' },
-        { username: 'doc5', role: 'doctor', name: 'Dr. Meena Patel', specialty: 'Neurology' },
-        { username: 'recep1', role: 'receptionist', name: 'Ravi Receptionist', specialty: null },
-        { username: 'lab1', role: 'lab_technician', name: 'Amit Lab Tech', specialty: null },
-        { username: 'pharm1', role: 'pharmacist', name: 'Priya Pharmacist', specialty: null },
-        { username: 'finance1', role: 'finance', name: 'Ankit Finance', specialty: null },
-        { username: 'ipd1', role: 'ipd_manager', name: 'Neha IPD Manager', specialty: null },
+        { username: 'admin', role: 'admin', name: 'Super Admin', specialty: null, email: 'admin@avanihospital.com', phone: '+91 98000 00001' },
+        { username: 'doc1', role: 'doctor', name: 'Dr. Sarah Smith', specialty: 'General Medicine', email: 'sarah.smith@avanihospital.com', phone: '+91 98000 10001' },
+        { username: 'doc2', role: 'doctor', name: 'Dr. Rajesh Kumar', specialty: 'Cardiology', email: 'rajesh.kumar@avanihospital.com', phone: '+91 98000 10002' },
+        { username: 'doc3', role: 'doctor', name: 'Dr. Priya Sharma', specialty: 'Orthopedics', email: 'priya.sharma@avanihospital.com', phone: '+91 98000 10003' },
+        { username: 'doc4', role: 'doctor', name: 'Dr. Anil Gupta', specialty: 'Pediatrics', email: 'anil.gupta@avanihospital.com', phone: '+91 98000 10004' },
+        { username: 'doc5', role: 'doctor', name: 'Dr. Meena Patel', specialty: 'Neurology', email: 'meena.patel@avanihospital.com', phone: '+91 98000 10005' },
+        { username: 'doc6', role: 'doctor', name: 'Dr. Vikram Rao', specialty: 'ENT', email: 'vikram.rao@avanihospital.com', phone: '+91 98000 10006' },
+        { username: 'doc7', role: 'doctor', name: 'Dr. Sunita Joshi', specialty: 'Dermatology', email: 'sunita.joshi@avanihospital.com', phone: '+91 98000 10007' },
+        { username: 'doc8', role: 'doctor', name: 'Dr. Arjun Nair', specialty: 'Pulmonology', email: 'arjun.nair@avanihospital.com', phone: '+91 98000 10008' },
+        { username: 'recep1', role: 'receptionist', name: 'Ravi Receptionist', specialty: null, email: 'ravi@avanihospital.com', phone: '+91 98000 20001' },
+        { username: 'lab1', role: 'lab_technician', name: 'Amit Lab Tech', specialty: null, email: 'amit.lab@avanihospital.com', phone: '+91 98000 30001' },
+        { username: 'pharm1', role: 'pharmacist', name: 'Priya Pharmacist', specialty: null, email: 'priya.pharm@avanihospital.com', phone: '+91 98000 40001' },
+        { username: 'finance1', role: 'finance', name: 'Ankit Finance', specialty: null, email: 'ankit.finance@avanihospital.com', phone: '+91 98000 50001' },
+        { username: 'ipd1', role: 'ipd_manager', name: 'Neha IPD Manager', specialty: null, email: 'neha.ipd@avanihospital.com', phone: '+91 98000 60001' },
     ];
 
     for (const u of users) {
         const user = await prisma.user.upsert({
             where: { username: u.username },
-            update: { specialty: u.specialty },
+            update: { specialty: u.specialty, email: u.email, phone: u.phone, is_active: true, organizationId: DEFAULT_ORG_ID },
             create: {
                 username: u.username,
                 password,
                 role: u.role,
                 name: u.name,
                 specialty: u.specialty,
+                email: u.email,
+                phone: u.phone,
+                is_active: true,
+                organizationId: DEFAULT_ORG_ID,
             },
         });
         console.log(`Created user: ${user.username} (${u.role}${u.specialty ? ' - ' + u.specialty : ''})`);
     }
 
-    // 2. Lab Inventory
+    // =============================================
+    // 2. LAB INVENTORY (with organizationId)
+    // =============================================
     const tests = [
         { test_name: 'Lipid Profile', price: 500, is_available: true },
         { test_name: 'Complete Blood Count (CBC)', price: 300, is_available: true },
@@ -54,19 +128,21 @@ async function main() {
     for (const t of tests) {
         await prisma.lab_test_inventory.upsert({
             where: { test_name: t.test_name },
-            update: {},
-            create: t,
+            update: { organizationId: DEFAULT_ORG_ID },
+            create: { ...t, organizationId: DEFAULT_ORG_ID },
         });
     }
     console.log('Seeded Lab Tests');
 
-    // 3. Lab Staff
+    // =============================================
+    // 3. LAB STAFF (with organizationId)
+    // =============================================
     try {
         const existingStaff = await prisma.lab_staff.count();
         if (existingStaff === 0) {
             const staff = [
-                { name: 'Amit Singh', role: 'technician', is_on_shift: true },
-                { name: 'Rahul Verma', role: 'technician', is_on_shift: true },
+                { name: 'Amit Singh', role: 'technician', is_on_shift: true, organizationId: DEFAULT_ORG_ID },
+                { name: 'Rahul Verma', role: 'technician', is_on_shift: true, organizationId: DEFAULT_ORG_ID },
             ];
             for (const s of staff) {
                 await prisma.lab_staff.create({ data: s });
@@ -77,7 +153,9 @@ async function main() {
         console.log('Lab staff might already exist, skipping...');
     }
 
-    // 4. Pharmacy Master
+    // =============================================
+    // 4. PHARMACY MASTER (with organizationId)
+    // =============================================
     const medicines = [
         { brand_name: 'Dolo 650', generic_name: 'Paracetamol', price_per_unit: 2.0, min_threshold: 50 },
         { brand_name: 'Augmentin 625', generic_name: 'Amoxicillin + Clavulanate', price_per_unit: 15.0, min_threshold: 20 },
@@ -90,8 +168,8 @@ async function main() {
     for (const m of medicines) {
         const med = await prisma.pharmacy_medicine_master.upsert({
             where: { brand_name: m.brand_name },
-            update: {},
-            create: m,
+            update: { organizationId: DEFAULT_ORG_ID },
+            create: { ...m, organizationId: DEFAULT_ORG_ID },
         });
 
         await prisma.pharmacy_batch_inventory.upsert({
@@ -109,7 +187,7 @@ async function main() {
     console.log('Seeded Medicines & Inventory');
 
     // =============================================
-    // 5. WARDS & BEDS (IPD Infrastructure)
+    // 5. WARDS & BEDS (with organizationId)
     // =============================================
     const wardsData = [
         { ward_name: 'General Ward', ward_type: 'General', cost_per_day: 500, nursing_charge: 200 },
@@ -123,7 +201,7 @@ async function main() {
     for (const w of wardsData) {
         const existingWard = await prisma.wards.findFirst({ where: { ward_name: w.ward_name } });
         if (!existingWard) {
-            const ward = await prisma.wards.create({ data: w });
+            const ward = await prisma.wards.create({ data: { ...w, organizationId: DEFAULT_ORG_ID } });
 
             const bedCount = w.ward_type === 'ICU' ? 6 :
                              w.ward_type === 'Private' ? 8 :
@@ -140,6 +218,7 @@ async function main() {
                         bed_id: bedId,
                         ward_id: ward.ward_id,
                         status: 'Available',
+                        organizationId: DEFAULT_ORG_ID,
                     },
                 });
             }
@@ -151,7 +230,7 @@ async function main() {
     }
 
     // =============================================
-    // 6. CHARGE CATALOG (Service Rates)
+    // 6. CHARGE CATALOG (with organizationId)
     // =============================================
     const catalogItems = [
         { category: 'ConsultationCharge', item_code: 'CON-GEN', item_name: 'General Consultation', default_price: 500, department: 'General' },
@@ -181,14 +260,14 @@ async function main() {
     for (const item of catalogItems) {
         await prisma.charge_catalog.upsert({
             where: { item_code: item.item_code },
-            update: { default_price: item.default_price },
-            create: item,
+            update: { default_price: item.default_price, organizationId: DEFAULT_ORG_ID },
+            create: { ...item, organizationId: DEFAULT_ORG_ID },
         });
     }
     console.log('Seeded Charge Catalog (' + catalogItems.length + ' items)');
 
     // =============================================
-    // 7. INSURANCE PROVIDERS (TPAs)
+    // 7. INSURANCE PROVIDERS (with organizationId)
     // =============================================
     const insuranceProviders = [
         { provider_name: 'Star Health Insurance', provider_code: 'STAR', contact_email: 'claims@starhealth.in', contact_phone: '1800-425-2255' },
@@ -203,14 +282,16 @@ async function main() {
     for (const p of insuranceProviders) {
         await prisma.insurance_providers.upsert({
             where: { provider_code: p.provider_code },
-            update: {},
-            create: p,
+            update: { organizationId: DEFAULT_ORG_ID },
+            create: { ...p, organizationId: DEFAULT_ORG_ID },
         });
     }
     console.log('Seeded Insurance Providers (' + insuranceProviders.length + ' providers)');
 
     console.log('\n=== Seeding Complete ===');
-    console.log('New users: finance1 (Finance), ipd1 (IPD Manager) - password: password123');
+    console.log('Organization: Avani Hospital (org-avani-default)');
+    console.log('Super Admin: superadmin@hospitalos.com / superadmin123');
+    console.log('Staff users: password123 for all');
     console.log('Wards: 6 wards with 48 beds total');
     console.log('Charge Catalog: ' + catalogItems.length + ' service rate items');
     console.log('Insurance: ' + insuranceProviders.length + ' TPA providers');

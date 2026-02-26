@@ -1,7 +1,9 @@
 'use server';
 
-import { prisma } from '@/app/lib/db';
+import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
+import * as bcrypt from 'bcryptjs';
+import { sendWelcomeEmail } from '@/backend/email';
 
 // Generate unique IDs
 function generatePatientId(): string {
@@ -30,6 +32,7 @@ type TriageInput = {
     patientName: string;
     patientId?: string;
     phone?: string;
+    email?: string;
     symptoms: string[];
     duration: string;
     severity: string; // Mild, Moderate, Severe
@@ -426,6 +429,7 @@ async function runTriageEngine(input: TriageInput): Promise<TriageOutput> {
 
 export async function performTriage(input: TriageInput) {
     try {
+        const { db } = await requireTenantContext();
         const result = await runTriageEngine(input);
 
         // 1. Generate Patient ID & Appointment ID
@@ -435,39 +439,63 @@ export async function performTriage(input: TriageInput) {
         // 2. Register Patient in OPD_REG (if not already existing)
         let existingPatient = null;
         if (input.patientId) {
-            existingPatient = await prisma.oPD_REG.findUnique({
+            existingPatient = await db.oPD_REG.findUnique({
                 where: { patient_id: input.patientId }
             });
         }
 
+        let newPatientPassword = null;
         if (!existingPatient) {
-            await prisma.oPD_REG.create({
+            // Generate secure password for the portal
+            const tempPassword = Math.random().toString(36).slice(-8); // 8-char password
+            newPatientPassword = tempPassword;
+            const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+            await db.oPD_REG.create({
                 data: {
                     patient_id: patientId,
                     full_name: input.patientName,
                     age: input.age ? String(input.age) : null,
                     gender: input.gender || null,
                     phone: input.phone || null,
+                    email: input.email || null, // Allow email tracking from triage if extended later
                     department: result.recommendedDepartment,
                     address: 'Not provided',
+                    password: hashedPassword,
                 },
             });
+
+            // Send Welcome Email if patient provided one implicitly (or via Reception flow passing down)
+            if (input.email) {
+                await sendWelcomeEmail(input.email, input.patientName, patientId, tempPassword);
+            }
         }
 
-        // 3. Create Appointment (Patient shows in Doctor's Queue)
-        await prisma.appointments.create({
+        // 3. Auto-Assign Doctor based on Department
+        const matchingDoctor = await db.user.findFirst({
+            where: {
+                role: 'doctor',
+                specialty: result.recommendedDepartment,
+                is_active: true
+            }
+        });
+
+        // 4. Create Appointment (Patient shows in Doctor's Queue)
+        await db.appointments.create({
             data: {
                 appointment_id: appointmentId,
                 patient_id: patientId,
                 status: 'Pending',
                 department: result.recommendedDepartment,
+                doctor_id: matchingDoctor ? matchingDoctor.id : null,
+                doctor_name: matchingDoctor ? matchingDoctor.name || matchingDoctor.username : null,
                 reason_for_visit: `AI Triage: ${input.symptoms.slice(0, 3).join(', ')}${input.symptoms.length > 3 ? '...' : ''} | Level: ${result.triageLevel}`,
             }
         });
 
         // 4. Save Vitals (if provided)
         if (input.vitals && (input.vitals.bloodPressure || input.vitals.heartRate || input.vitals.temperature || input.vitals.oxygenSat)) {
-            await prisma.vital_signs.create({
+            await db.vital_signs.create({
                 data: {
                     patient_id: patientId,
                     appointment_id: appointmentId,
@@ -481,7 +509,7 @@ export async function performTriage(input: TriageInput) {
         }
 
         // 5. Save Triage Results
-        await prisma.triage_results.create({
+        await db.triage_results.create({
             data: {
                 patient_id: patientId,
                 patient_name: input.patientName,
@@ -501,7 +529,7 @@ export async function performTriage(input: TriageInput) {
         });
 
         // 6. Log audit
-        await prisma.system_audit_logs.create({
+        await db.system_audit_logs.create({
             data: {
                 action: 'AI_TRIAGE',
                 module: 'reception',
@@ -528,6 +556,7 @@ export async function performTriage(input: TriageInput) {
                 ...result,
                 patientId,
                 appointmentId,
+                generatedPassword: newPatientPassword,
             },
         };
     } catch (error: any) {
@@ -542,14 +571,15 @@ export async function performTriage(input: TriageInput) {
 
 export async function getPatientTriageData(patientId: string) {
     try {
+        const { db } = await requireTenantContext();
         // Fetch latest triage result for this patient
-        const triageResult = await prisma.triage_results.findFirst({
+        const triageResult = await db.triage_results.findFirst({
             where: { patient_id: patientId },
             orderBy: { created_at: 'desc' },
         });
 
         // Fetch latest vitals
-        const vitals = await prisma.vital_signs.findFirst({
+        const vitals = await db.vital_signs.findFirst({
             where: { patient_id: patientId },
             orderBy: { created_at: 'desc' },
         });
@@ -600,7 +630,8 @@ function safeJsonParse(val: string | null, fallback: any) {
 // Get triage history
 export async function getTriageHistory(limit: number = 20) {
     try {
-        const results = await prisma.triage_results.findMany({
+        const { db } = await requireTenantContext();
+        const results = await db.triage_results.findMany({
             orderBy: { created_at: 'desc' },
             take: limit,
         });

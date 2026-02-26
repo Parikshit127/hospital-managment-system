@@ -1,5 +1,5 @@
-import { prisma } from '@/app/lib/db'
-import { cookies } from 'next/headers'
+import { prisma } from '@/backend/db'
+import { getSession } from '@/app/lib/session'
 
 export async function logAudit({
     action,
@@ -15,9 +15,7 @@ export async function logAudit({
     details?: string
 }) {
     try {
-        const cookieStore = await cookies()
-        const sessionCookie = cookieStore.get('session')
-        const session = sessionCookie ? JSON.parse(sessionCookie.value) : null
+        const session = await getSession()
 
         await prisma.system_audit_logs.create({
             data: {
@@ -29,6 +27,7 @@ export async function logAudit({
                 entity_type: entity_type ?? null,
                 entity_id: entity_id ?? null,
                 details: details ?? null,
+                organizationId: session?.organization_id ?? null,
             }
         })
     } catch (err) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { prisma } from '@/app/lib/db';
+import { prisma } from '@/backend/db';
 
 function generateReceiptNumber() {
     const now = new Date();

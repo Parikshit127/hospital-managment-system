@@ -25,6 +25,7 @@ export default function TriagePage() {
     const [age, setAge] = useState('');
     const [gender, setGender] = useState('');
     const [phone, setPhone] = useState('');
+    const [email, setEmail] = useState('');
 
     // Symptoms
     const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
@@ -73,6 +74,7 @@ export default function TriagePage() {
             const result = await performTriage({
                 patientName,
                 phone,
+                email,
                 symptoms: selectedSymptoms,
                 duration,
                 severity,
@@ -108,7 +110,7 @@ export default function TriagePage() {
     };
 
     const resetForm = () => {
-        setPatientName(''); setAge(''); setGender(''); setPhone('');
+        setPatientName(''); setAge(''); setGender(''); setPhone(''); setEmail('');
         setSelectedSymptoms([]); setDuration(''); setSeverity('Moderate');
         setPmh(''); setCurrentMeds(''); setAllergies('');
         setBp(''); setHr(''); setTemp(''); setSpo2('');
@@ -174,6 +176,12 @@ export default function TriagePage() {
                                         <div className="px-4 py-2 bg-violet-500/10 border border-violet-500/20 rounded-xl">
                                             <span className="text-[10px] font-black text-violet-400/60 uppercase tracking-wider block">Appointment</span>
                                             <span className="text-sm font-black text-violet-400 font-mono">{triageResult.appointmentId}</span>
+                                        </div>
+                                    )}
+                                    {triageResult.generatedPassword && (
+                                        <div className="px-4 py-2 bg-pink-500/10 border border-pink-500/20 rounded-xl">
+                                            <span className="text-[10px] font-black text-pink-500/80 uppercase tracking-wider block">Portal Password (Give to Patient)</span>
+                                            <span className="text-sm font-black text-pink-600 font-mono">{triageResult.generatedPassword}</span>
                                         </div>
                                     )}
                                     <div className="px-4 py-2 bg-gray-100 border border-gray-200 rounded-xl">
@@ -335,12 +343,20 @@ export default function TriagePage() {
                                             <option value="Other" className="bg-white text-gray-900">Other</option>
                                         </select>
                                     </div>
-                                    <div className="col-span-2 space-y-1.5">
+                                    <div className="space-y-1.5">
                                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Phone</label>
                                         <input
                                             value={phone} onChange={e => setPhone(e.target.value)}
                                             className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-violet-500/50 outline-none transition-all"
                                             placeholder="+91 XXXXX XXXXX"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Email (For Portal & Reminders)</label>
+                                        <input
+                                            type="email" value={email} onChange={e => setEmail(e.target.value)}
+                                            className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-violet-500/50 outline-none transition-all"
+                                            placeholder="patient@example.com"
                                         />
                                     </div>
                                 </div>

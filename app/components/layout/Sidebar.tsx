@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     LayoutDashboard, Users, Shield, KeyRound, Stethoscope, UserPlus, Brain,
     FlaskConical, Pill, Bed, DollarSign, FileText, Activity, Menu, X,
-    LogOut, HeartPulse, ClipboardList, ShieldCheck, ChevronLeft
+    LogOut, HeartPulse, ClipboardList, ShieldCheck, ChevronLeft, Building2
 } from 'lucide-react';
 
 interface NavItem {
@@ -18,6 +18,7 @@ interface NavItem {
 const NAV_BY_ROLE: Record<string, NavItem[]> = {
     admin: [
         { label: 'Dashboard', href: '/admin/dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
+        { label: 'Staff Management', href: '/admin/staff', icon: <Users className="h-4 w-4" /> },
         { label: 'OPD Overview', href: '/opd', icon: <ClipboardList className="h-4 w-4" /> },
         { label: 'Reception', href: '/reception', icon: <UserPlus className="h-4 w-4" /> },
         { label: 'Doctor Console', href: '/doctor/dashboard', icon: <Stethoscope className="h-4 w-4" /> },
@@ -57,7 +58,15 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
 };
 
 interface SidebarProps {
-    session: { id: string; username: string; role: string; name?: string; specialty?: string } | null;
+    session: {
+        id: string;
+        username: string;
+        role: string;
+        name?: string;
+        specialty?: string;
+        organization_name?: string;
+        organization_slug?: string;
+    } | null;
 }
 
 export function Sidebar({ session }: SidebarProps) {
@@ -76,6 +85,8 @@ export function Sidebar({ session }: SidebarProps) {
         finance: 'Finance',
         ipd_manager: 'IPD Manager',
     };
+
+    const orgName = session?.organization_name || 'Hospital OS';
 
     return (
         <>
@@ -97,15 +108,18 @@ export function Sidebar({ session }: SidebarProps) {
                 className={`fixed top-0 left-0 h-screen bg-[var(--ink)] text-white z-50 flex flex-col transition-all duration-300 ${collapsed ? 'w-16' : 'w-60'
                     } ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
             >
-                {/* Header */}
+                {/* Header — shows organization name */}
                 <div className={`flex items-center gap-3 px-4 py-4 border-b border-white/10 ${collapsed ? 'justify-center' : ''}`}>
                     <div className="bg-gradient-to-br from-teal-500 to-emerald-600 p-2 rounded-xl shrink-0">
                         <HeartPulse className="h-5 w-5 text-white" />
                     </div>
                     {!collapsed && (
                         <div className="min-w-0">
-                            <h1 className="text-sm font-black tracking-tight truncate">Hospital OS</h1>
-                            <p className="text-[10px] text-teal-400/80">Management System</p>
+                            <h1 className="text-sm font-black tracking-tight truncate">{orgName}</h1>
+                            <p className="text-[10px] text-teal-400/80 flex items-center gap-1">
+                                <Building2 className="h-2.5 w-2.5" />
+                                Management System
+                            </p>
                         </div>
                     )}
                     <button

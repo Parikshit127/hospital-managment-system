@@ -1,14 +1,15 @@
 'use server';
 
-import { prisma } from '@/app/lib/db';
+import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { sendAppointmentReminder } from '@/app/lib/whatsapp';
-const WEBHOOK_OPD_REG = 'https://n8n.srv1336142.hstgr.cloud/webhook/hospital-reg';
+import * as bcrypt from 'bcryptjs';
+import { sendWelcomeEmail } from '@/backend/email';
 
 // Generate standardized UHID: AVN-YYYY-XXXXX
-async function generateUHID(): Promise<string> {
+async function generateUHID(db: any): Promise<string> {
     const year = new Date().getFullYear();
-    const count = await prisma.oPD_REG.count();
+    const count = await db.oPD_REG.count();
     const seq = String(count + 1).padStart(5, '0');
     return `AVN-${year}-${seq}`;
 }
@@ -33,43 +34,25 @@ export async function registerPatient(formData: FormData) {
     };
 
     try {
+        const { db, organizationId } = await requireTenantContext();
+
         let agentPatientId = null;
         let appointmentId = null;
 
-        // 1. Send to Webhook to get the official ID (falls back to local UHID if webhook fails)
-        try {
-            const webhookRes = await fetch(WEBHOOK_OPD_REG, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...rawData }),
-            });
-
-            if (webhookRes.ok) {
-                const result = await webhookRes.json();
-                if (result.patient_id || result.id || result.digital_id) {
-                    agentPatientId = result.patient_id || result.id || result.digital_id;
-                    appointmentId = result.appointment_id;
-                }
-            }
-        } catch (webhookErr) {
-            console.warn('Webhook unavailable, using local UHID:', webhookErr);
-        }
-
-        // Fallback: generate UHID locally if webhook didn't provide IDs
-        if (!agentPatientId) {
-            agentPatientId = await generateUHID();
-        }
-        if (!appointmentId) {
-            appointmentId = generateAppointmentId();
-        }
+        agentPatientId = await generateUHID(db);
+        appointmentId = generateAppointmentId();
 
         // 2. Create/Update Patient in DB
-        const existingPatient = await prisma.oPD_REG.findUnique({
+        const existingPatient = await db.oPD_REG.findUnique({
             where: { patient_id: agentPatientId }
         });
 
+        // 3a. Generate Password
+        const tempPassword = Math.random().toString(36).slice(-8); // Generate 8 char password
+        const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
         if (!existingPatient) {
-            await prisma.oPD_REG.create({
+            await db.oPD_REG.create({
                 data: {
                     patient_id: agentPatientId,
                     full_name: rawData.full_name,
@@ -80,23 +63,42 @@ export async function registerPatient(formData: FormData) {
                     // @ts-ignore
                     address: rawData.address,
                     aadhar_card: rawData.aadhar,
+                    password: hashedPassword,
+                    organizationId,
                 },
             });
+
+            // 3b. Send email with credentials
+            if (rawData.email && rawData.email !== "not given") {
+                await sendWelcomeEmail(rawData.email, rawData.full_name, agentPatientId, tempPassword);
+            }
         }
 
         // 3. Create Appointment (If not exists)
-        const existingAppt = await prisma.appointments.findUnique({
+        const existingAppt = await db.appointments.findUnique({
             where: { appointment_id: appointmentId }
         });
 
         if (!existingAppt) {
-            await prisma.appointments.create({
+            // Find a doctor in that department
+            const matchingDoctor = await db.user.findFirst({
+                where: {
+                    role: 'doctor',
+                    specialty: rawData.department,
+                    is_active: true
+                }
+            });
+
+            await db.appointments.create({
                 data: {
                     appointment_id: appointmentId,
                     patient_id: agentPatientId, // FK to OPD_REG
                     status: 'Pending',
                     department: rawData.department,
-                    reason_for_visit: 'Initial Consultation'
+                    doctor_id: matchingDoctor ? matchingDoctor.id : null,
+                    doctor_name: matchingDoctor ? matchingDoctor.name || matchingDoctor.username : null,
+                    reason_for_visit: 'Initial Consultation',
+                    organizationId,
                 }
             });
         }
@@ -104,13 +106,14 @@ export async function registerPatient(formData: FormData) {
         revalidatePath('/doctor/dashboard');
 
         // Audit log
-        await prisma.system_audit_logs.create({
+        await db.system_audit_logs.create({
             data: {
                 action: 'CREATE_PATIENT',
                 module: 'reception',
                 entity_type: 'patient',
                 entity_id: agentPatientId,
                 details: JSON.stringify({ full_name: rawData.full_name, department: rawData.department, appointment_id: appointmentId }),
+                organizationId,
             }
         });
         // Send WhatsApp appointment reminder (non-blocking)
@@ -124,7 +127,8 @@ export async function registerPatient(formData: FormData) {
             success: true,
             patient_id: agentPatientId,
             appointment_id: appointmentId,
-            user_type: 'OPD'
+            user_type: 'OPD',
+            generatedPassword: tempPassword
         };
 
     } catch (error) {
@@ -136,4 +140,3 @@ export async function registerPatient(formData: FormData) {
         return { success: false, error: errorMessage };
     }
 }
-

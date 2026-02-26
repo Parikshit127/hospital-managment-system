@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Outfit, Playfair_Display } from "next/font/google";
 import Script from "next/script";
+import { ToastProvider } from "@/app/components/ui/Toast";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -29,7 +30,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${outfit.variable} ${playfair.variable} font-sans antialiased`}>
+        <ToastProvider>
         {children}
+        </ToastProvider>
         <Script
           src="https://checkout.razorpay.com/v1/checkout.js"
           strategy="lazyOnload"

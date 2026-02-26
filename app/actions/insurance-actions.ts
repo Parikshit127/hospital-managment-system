@@ -1,6 +1,6 @@
 'use server';
 
-import { prisma } from '@/app/lib/db';
+import { requireTenantContext } from '@/backend/tenant';
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
 function serialize<T>(data: T): T {
@@ -24,7 +24,8 @@ function generateClaimNumber() {
 
 export async function getInsuranceProviders() {
     try {
-        const providers = await prisma.insurance_providers.findMany({
+        const { db } = await requireTenantContext();
+        const providers = await db.insurance_providers.findMany({
             where: { is_active: true },
             orderBy: { provider_name: 'asc' },
         });
@@ -44,7 +45,8 @@ export async function addInsuranceProvider(data: {
     address?: string;
 }) {
     try {
-        const provider = await prisma.insurance_providers.create({
+        const { db } = await requireTenantContext();
+        const provider = await db.insurance_providers.create({
             data: {
                 provider_name: data.provider_name,
                 provider_code: data.provider_code,
@@ -67,7 +69,8 @@ export async function addInsuranceProvider(data: {
 
 export async function getPatientPolicies(patientId: string) {
     try {
-        const policies = await prisma.insurance_policies.findMany({
+        const { db } = await requireTenantContext();
+        const policies = await db.insurance_policies.findMany({
             where: { patient_id: patientId },
             include: {
                 provider: { select: { provider_name: true, provider_code: true } },
@@ -94,7 +97,8 @@ export async function addPatientPolicy(data: {
     valid_until: string;
 }) {
     try {
-        const policy = await prisma.insurance_policies.create({
+        const { db } = await requireTenantContext();
+        const policy = await db.insurance_policies.create({
             data: {
                 patient_id: data.patient_id,
                 provider_id: data.provider_id,
@@ -109,7 +113,7 @@ export async function addPatientPolicy(data: {
             },
         });
 
-        await prisma.system_audit_logs.create({
+        await db.system_audit_logs.create({
             data: {
                 action: 'ADD_INSURANCE_POLICY',
                 module: 'insurance',
@@ -137,8 +141,9 @@ export async function submitInsuranceClaim(data: {
     claimed_amount: number;
 }) {
     try {
+        const { db } = await requireTenantContext();
         // Validate policy
-        const policy = await prisma.insurance_policies.findUnique({
+        const policy = await db.insurance_policies.findUnique({
             where: { id: data.policy_id },
         });
 
@@ -155,7 +160,7 @@ export async function submitInsuranceClaim(data: {
             return { success: false, error: `Claimed amount exceeds remaining coverage limit of ${remainingLimit}` };
         }
 
-        const claim = await prisma.insurance_claims.create({
+        const claim = await db.insurance_claims.create({
             data: {
                 claim_number: generateClaimNumber(),
                 policy_id: data.policy_id,
@@ -166,7 +171,7 @@ export async function submitInsuranceClaim(data: {
             },
         });
 
-        await prisma.system_audit_logs.create({
+        await db.system_audit_logs.create({
             data: {
                 action: 'SUBMIT_INSURANCE_CLAIM',
                 module: 'insurance',
@@ -194,6 +199,7 @@ export async function updateClaimStatus(claimId: number, data: {
     rejection_reason?: string;
 }) {
     try {
+        const { db } = await requireTenantContext();
         const validStatuses = ['Submitted', 'UnderReview', 'Approved', 'Rejected', 'PartiallyApproved', 'Settled'];
         if (!validStatuses.includes(data.status)) {
             return { success: false, error: 'Invalid claim status' };
@@ -209,20 +215,20 @@ export async function updateClaimStatus(claimId: number, data: {
         if (data.rejected_amount !== undefined) updateData.rejected_amount = data.rejected_amount;
         if (data.rejection_reason) updateData.rejection_reason = data.rejection_reason;
 
-        const claim = await prisma.insurance_claims.update({
+        const claim = await db.insurance_claims.update({
             where: { id: claimId },
             data: updateData,
         });
 
         // If approved/settled, reduce remaining coverage limit
         if (['Approved', 'PartiallyApproved', 'Settled'].includes(data.status) && data.approved_amount) {
-            const policy = await prisma.insurance_policies.findUnique({
+            const policy = await db.insurance_policies.findUnique({
                 where: { id: claim.policy_id },
             });
 
             if (policy) {
                 const newRemaining = Number(policy.remaining_limit || 0) - data.approved_amount;
-                await prisma.insurance_policies.update({
+                await db.insurance_policies.update({
                     where: { id: policy.id },
                     data: { remaining_limit: newRemaining > 0 ? newRemaining : 0 },
                 });
@@ -232,7 +238,7 @@ export async function updateClaimStatus(claimId: number, data: {
             const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
             const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
 
-            await prisma.payments.create({
+            await db.payments.create({
                 data: {
                     receipt_number: `RCP-${dateStr}-${seq}`,
                     invoice_id: claim.invoice_id,
@@ -245,15 +251,15 @@ export async function updateClaimStatus(claimId: number, data: {
             });
 
             // Update invoice paid amount
-            const allPayments = await prisma.payments.findMany({
+            const allPayments = await db.payments.findMany({
                 where: { invoice_id: claim.invoice_id, status: 'Completed' },
             });
-            const totalPaid = allPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-            const invoice = await prisma.invoices.findUnique({ where: { id: claim.invoice_id } });
+            const totalPaid = allPayments.reduce((sum: any, p: any) => sum + Number(p.amount), 0);
+            const invoice = await db.invoices.findUnique({ where: { id: claim.invoice_id } });
             const netAmount = Number(invoice?.net_amount || 0);
             const balance = netAmount - totalPaid;
 
-            await prisma.invoices.update({
+            await db.invoices.update({
                 where: { id: claim.invoice_id },
                 data: {
                     paid_amount: totalPaid,
@@ -263,7 +269,7 @@ export async function updateClaimStatus(claimId: number, data: {
             });
         }
 
-        await prisma.system_audit_logs.create({
+        await db.system_audit_logs.create({
             data: {
                 action: 'UPDATE_CLAIM_STATUS',
                 module: 'insurance',
@@ -287,11 +293,12 @@ export async function getInsuranceClaims(filters?: {
     limit?: number;
 }) {
     try {
+        const { db } = await requireTenantContext();
         const where: any = {};
         if (filters?.status) where.status = filters.status;
         if (filters?.policy_id) where.policy_id = filters.policy_id;
 
-        const claims = await prisma.insurance_claims.findMany({
+        const claims = await db.insurance_claims.findMany({
             where,
             include: {
                 policy: {
@@ -316,6 +323,7 @@ export async function getInsuranceClaims(filters?: {
 // Get insurance dashboard stats
 export async function getInsuranceStats() {
     try {
+        const { db } = await requireTenantContext();
         const [
             totalProviders,
             activePolicies,
@@ -324,15 +332,15 @@ export async function getInsuranceStats() {
             approvedTotal,
             claimedTotal,
         ] = await Promise.all([
-            prisma.insurance_providers.count({ where: { is_active: true } }),
-            prisma.insurance_policies.count({ where: { status: 'Active' } }),
-            prisma.insurance_claims.count(),
-            prisma.insurance_claims.count({ where: { status: { in: ['Submitted', 'UnderReview'] } } }),
-            prisma.insurance_claims.aggregate({
+            db.insurance_providers.count({ where: { is_active: true } }),
+            db.insurance_policies.count({ where: { status: 'Active' } }),
+            db.insurance_claims.count(),
+            db.insurance_claims.count({ where: { status: { in: ['Submitted', 'UnderReview'] } } }),
+            db.insurance_claims.aggregate({
                 _sum: { approved_amount: true },
                 where: { status: { in: ['Approved', 'PartiallyApproved', 'Settled'] } },
             }),
-            prisma.insurance_claims.aggregate({
+            db.insurance_claims.aggregate({
                 _sum: { claimed_amount: true },
             }),
         ]);
@@ -357,21 +365,22 @@ export async function getInsuranceStats() {
 // Revenue Leakage: invoices where patient has insurance but no claim was filed
 export async function getRevenueLeakage() {
     try {
-        const insuredPatientIds = (await prisma.insurance_policies.findMany({
+        const { db } = await requireTenantContext();
+        const insuredPatientIds = (await db.insurance_policies.findMany({
             where: { status: 'Active' },
             select: { patient_id: true },
-        })).map(p => p.patient_id);
+        })).map((p: any) => p.patient_id);
 
         if (insuredPatientIds.length === 0) {
             return { success: true, data: [] };
         }
 
         // Find finalized invoices for insured patients that have no insurance claim
-        const claimedInvoiceIds = (await prisma.insurance_claims.findMany({
+        const claimedInvoiceIds = (await db.insurance_claims.findMany({
             select: { invoice_id: true },
-        })).map(c => c.invoice_id);
+        })).map((c: any) => c.invoice_id);
 
-        const leakedInvoices = await prisma.invoices.findMany({
+        const leakedInvoices = await db.invoices.findMany({
             where: {
                 patient_id: { in: insuredPatientIds },
                 status: { in: ['Final', 'Paid', 'Partial'] },
@@ -394,12 +403,13 @@ export async function getRevenueLeakage() {
 // Get invoices available for claim submission (finalized invoices for a given patient)
 export async function getClaimableInvoices(patientId: string) {
     try {
-        const claimedInvoiceIds = (await prisma.insurance_claims.findMany({
+        const { db } = await requireTenantContext();
+        const claimedInvoiceIds = (await db.insurance_claims.findMany({
             where: { policy: { patient_id: patientId } },
             select: { invoice_id: true },
-        })).map(c => c.invoice_id);
+        })).map((c: any) => c.invoice_id);
 
-        const invoices = await prisma.invoices.findMany({
+        const invoices = await db.invoices.findMany({
             where: {
                 patient_id: patientId,
                 status: { in: ['Final', 'Paid', 'Partial'] },
@@ -418,10 +428,11 @@ export async function getClaimableInvoices(patientId: string) {
 // Get all policies for the insurance management page
 export async function getAllPolicies(filters?: { status?: string; limit?: number }) {
     try {
+        const { db } = await requireTenantContext();
         const where: any = {};
         if (filters?.status) where.status = filters.status;
 
-        const policies = await prisma.insurance_policies.findMany({
+        const policies = await db.insurance_policies.findMany({
             where,
             include: {
                 patient: { select: { full_name: true, patient_id: true, phone: true } },

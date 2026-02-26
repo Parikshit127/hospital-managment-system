@@ -1,18 +1,25 @@
 'use server';
 
-import { prisma } from '@/app/lib/db';
+import { prisma } from '@/backend/db';
 import * as bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { isMfaRequiredRole } from '@/app/actions/mfa-actions';
+import { createSession, createMfaPendingSession, getMfaPendingSession } from '@/app/lib/session';
+import { loginSchema } from '@/app/lib/validations';
 
 export async function login(prevState: any, formData: FormData) {
-    const username = formData.get('username') as string;
-    const password = formData.get('password') as string;
+    const raw = {
+        username: formData.get('username') as string,
+        password: formData.get('password') as string,
+    };
 
-    if (!username || !password) {
-        return { success: false, error: 'Username and password are required' };
+    const parsed = loginSchema.safeParse(raw);
+    if (!parsed.success) {
+        return { success: false, error: parsed.error.issues[0]?.message || 'Invalid input' };
     }
+
+    const { username, password } = parsed.data;
 
     try {
         const user = await prisma.user.findUnique({
@@ -23,57 +30,43 @@ export async function login(prevState: any, formData: FormData) {
             return { success: false, error: 'Invalid credentials' };
         }
 
-        // Set Session Cookie (Next.js 15+ needs await)
-        const cookieStore = await cookies();
-        cookieStore.set('session', JSON.stringify({
+        if (user.is_active === false) {
+            return { success: false, error: 'Account is disabled. Contact your administrator.' };
+        }
+
+        // Fetch user's organization
+        const org = await prisma.organization.findUnique({
+            where: { id: user.organizationId },
+        });
+
+        if (!org || !org.is_active) {
+            return { success: false, error: 'Organization is inactive. Contact platform admin.' };
+        }
+
+        const sessionData = {
             id: user.id,
             username: user.username,
             role: user.role,
-            name: user.name,
+            name: user.name || '',
             specialty: user.specialty || null,
-            hospital_id: user.hospital_id || 'avani-default',
-        }), {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            maxAge: 60 * 60 * 8, // 8 hours max session life
-            path: '/'
-        });
-
-        // Set last_activity cookie for session timeout middleware
-        cookieStore.set('last_activity', Date.now().toString(), {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            path: '/'
-        });
+            organization_id: org.id,
+            organization_slug: org.slug,
+            organization_name: org.name,
+        };
 
         // Check if MFA is required and enabled
         if (await isMfaRequiredRole(user.role)) {
             const mfaRecord = await prisma.user_mfa.findUnique({ where: { user_id: user.id } });
             if (mfaRecord?.enabled) {
-                // Store a pending MFA session (not fully authenticated yet)
-                cookieStore.set('mfa_pending', JSON.stringify({
-                    id: user.id,
-                    username: user.username,
-                    role: user.role,
-                    name: user.name,
-                    specialty: user.specialty || null,
-                    hospital_id: user.hospital_id || 'avani-default',
-                }), {
-                    httpOnly: true,
-                    secure: process.env.NODE_ENV === 'production',
-                    sameSite: 'lax',
-                    maxAge: 60 * 5, // 5 minutes to complete MFA
-                    path: '/'
-                });
-                // Don't set the main session cookie yet
-                cookieStore.delete('session');
+                await createMfaPendingSession(sessionData);
                 return { success: true, mfa_required: true };
             }
         }
 
-        // Log successful login audit event
+        // Set the real session
+        await createSession(sessionData);
+
+        // Log successful login
         await prisma.system_audit_logs.create({
             data: {
                 user_id: String(user.id),
@@ -81,17 +74,17 @@ export async function login(prevState: any, formData: FormData) {
                 role: user.role,
                 action: 'LOGIN',
                 module: 'auth',
-            }
+                organizationId: org.id,
+            },
         });
-
     } catch (error) {
         console.error('Login error:', error);
         return { success: false, error: 'Internal server error' };
     }
 
-    // Redirect based on role (must be outside try/catch because redirects throw errors)
+    // Redirect based on role
     const user = await prisma.user.findUnique({ where: { username } });
-    if (!user) return { success: false, error: 'User not found' }; // Should not happen
+    if (!user) return { success: false, error: 'User not found' };
 
     switch (user.role) {
         case 'receptionist': redirect('/reception');
@@ -105,18 +98,13 @@ export async function login(prevState: any, formData: FormData) {
     }
 }
 
-// Complete login after MFA verification
 export async function completeMfaLogin(token: string) {
-    const cookieStore = await cookies();
-    const mfaPendingCookie = cookieStore.get('mfa_pending');
+    const pendingSession = await getMfaPendingSession();
 
-    if (!mfaPendingCookie) {
+    if (!pendingSession) {
         return { success: false, error: 'MFA session expired. Please login again.' };
     }
 
-    const pendingSession = JSON.parse(mfaPendingCookie.value);
-
-    // Dynamically import to avoid circular deps
     const { verifyMFA } = await import('@/app/actions/mfa-actions');
     const result = await verifyMFA(pendingSession.id, token);
 
@@ -124,22 +112,10 @@ export async function completeMfaLogin(token: string) {
         return { success: false, error: result.error || 'Invalid MFA code' };
     }
 
-    // MFA verified — set the real session cookie
-    cookieStore.set('session', JSON.stringify(pendingSession), {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 8,
-        path: '/'
-    });
+    // MFA verified — set the real session
+    await createSession(pendingSession);
 
-    cookieStore.set('last_activity', Date.now().toString(), {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/'
-    });
-
+    const cookieStore = await cookies();
     cookieStore.delete('mfa_pending');
 
     await prisma.system_audit_logs.create({
@@ -149,10 +125,10 @@ export async function completeMfaLogin(token: string) {
             role: pendingSession.role,
             action: 'LOGIN_MFA',
             module: 'auth',
-        }
+            organizationId: pendingSession.organization_id,
+        },
     });
 
-    // Return role so the client can redirect
     return { success: true, role: pendingSession.role };
 }
 

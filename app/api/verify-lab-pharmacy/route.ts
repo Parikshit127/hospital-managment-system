@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getLabOrders, uploadResult } from '@/app/actions/lab-actions';
 import { addInventoryBatch, getInventory, generateInvoice } from '@/app/actions/pharmacy-actions';
-import { prisma } from '@/app/lib/db';
+import { prisma } from '@/backend/db';
+
+const DEFAULT_ORG = 'org-avani-default';
 
 export async function GET() {
     const results = {
@@ -23,9 +25,6 @@ export async function GET() {
 
     try {
         // --- STEP 1: Create Dummy Patient (OPD_REG) ---
-        console.log('--- STEP 1: Creating Dummy Patient ---');
-
-        // Check if patient exists first (though we use random ID)
         const patient = await prisma.oPD_REG.create({
             data: {
                 patient_id: PATIENT_ID,
@@ -34,48 +33,45 @@ export async function GET() {
                 gender: 'Male',
                 phone: '9999999999',
                 address: 'Test Address',
-                email: 'test@example.com'
+                email: 'test@example.com',
+                organizationId: DEFAULT_ORG,
             }
         });
         results.step1_create_patient = 'SUCCESS';
 
-        // --- STEP 2: Create Lab Order (Direct DB Create to simulate Doctor Action) ---
-        console.log('--- STEP 2: Creating Lab Order ---');
+        // --- STEP 2: Create Lab Order ---
         const labOrder = await prisma.lab_orders.create({
             data: {
                 barcode: BARCODE,
                 patient_id: PATIENT_ID,
                 doctor_id: 'Test Doctor',
                 test_type: 'Complete Blood Count',
-                status: 'Pending'
+                status: 'Pending',
+                organizationId: DEFAULT_ORG,
             }
         });
         results.step2_create_lab_order = 'SUCCESS';
 
         // --- STEP 3: Lab Technician View Orders ---
-        console.log('--- STEP 3: Lab Technician View ---');
         const labOrders = await getLabOrders('Pending');
         if (!labOrders.success) throw new Error('Failed to fetch lab orders: ' + JSON.stringify(labOrders));
 
-        const foundOrder = (labOrders.data as any[]).find(o => o.order_id === BARCODE);
+        const foundOrder = (labOrders.data as any[]).find((o: any) => o.order_id === BARCODE);
         if (!foundOrder) throw new Error('Created lab order not found in pending list');
         results.step3_lab_technician_view = 'SUCCESS';
 
         // --- STEP 4: Lab Technician Upload Result ---
-        console.log('--- STEP 4: Lab Technician Upload ---');
         const uploadRes = await uploadResult(BARCODE, 'Haemoglobin: 14.5', 'Normal');
         if (!uploadRes.success) throw new Error('Failed to upload result: ' + uploadRes.error);
         results.step4_lab_technician_upload = 'SUCCESS';
 
         // --- STEP 5: Pharmacy Add Inventory ---
-        console.log('--- STEP 5: Add Inventory ---');
-
-        // Create Master Medicine Record first
         const medicine = await prisma.pharmacy_medicine_master.create({
             data: {
                 brand_name: MEDICINE_NAME,
                 generic_name: 'Test Generic',
-                price_per_unit: 10
+                price_per_unit: 10,
+                organizationId: DEFAULT_ORG,
             }
         });
 
@@ -84,7 +80,7 @@ export async function GET() {
             brand_name: MEDICINE_NAME,
             batch_no: BATCH_NO,
             stock: 100,
-            price: 15, // Selling price reported in batch (UI input)
+            price: 15,
             expiry: new Date('2025-12-31'),
             rack: 'A1'
         });
@@ -93,15 +89,13 @@ export async function GET() {
         results.step5_pharmacy_add_inventory = 'SUCCESS';
 
         // --- STEP 6: View Inventory ---
-        console.log('--- STEP 6: View Inventory ---');
         const inventoryRes = await getInventory();
         if (!inventoryRes.success) throw new Error('Failed to fetch inventory');
-        const foundBatch = (inventoryRes.data as any[]).find(i => i.batch_no === BATCH_NO);
+        const foundBatch = (inventoryRes.data as any[]).find((i: any) => i.batch_no === BATCH_NO);
         if (!foundBatch) throw new Error('Added batch not found in inventory');
         results.step6_pharmacy_view_inventory = 'SUCCESS';
 
         // --- STEP 7: Pharmacy Billing ---
-        console.log('--- STEP 7: Billing ---');
         const invoicePayload = [{
             batch_no: BATCH_NO,
             medicine_id: medicine.id,
