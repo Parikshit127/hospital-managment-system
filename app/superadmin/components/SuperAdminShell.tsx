@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { superAdminLogout } from '@/app/actions/superadmin-actions';
 import {
-    LayoutDashboard, Building2, LogOut, ShieldCheck, Plus
+    LayoutDashboard, Building2, LogOut, ShieldCheck, Plus, LineChart, Users
 } from 'lucide-react';
 
 interface ShellProps {
@@ -15,6 +15,8 @@ interface ShellProps {
 const NAV_ITEMS = [
     { label: 'Dashboard', href: '/superadmin', icon: LayoutDashboard },
     { label: 'Organizations', href: '/superadmin/organizations', icon: Building2 },
+    { label: 'Analytics', href: '/superadmin/analytics', icon: LineChart },
+    { label: 'Global Users', href: '/superadmin/users', icon: Users },
 ];
 
 export default function SuperAdminShell({ session, children }: ShellProps) {
@@ -41,11 +43,10 @@ export default function SuperAdminShell({ session, children }: ShellProps) {
                                     <Link
                                         key={item.href}
                                         href={item.href}
-                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${
-                                            isActive
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${isActive
                                                 ? 'bg-violet-500/15 text-violet-400'
                                                 : 'text-gray-400 hover:text-white hover:bg-white/5'
-                                        }`}
+                                            }`}
                                     >
                                         <Icon className="h-4 w-4" />
                                         <span className="hidden sm:block">{item.label}</span>

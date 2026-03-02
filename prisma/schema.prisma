@@ -56,6 +56,32 @@ model Organization {
   system_audit_logs        system_audit_logs[]
   ai_health_assessments    AiHealthAssessment[]
   appointment_slots        AppointmentSlot[]
+  departments              Department[]
+  prescription_templates   PrescriptionTemplate[]
+  follow_ups               FollowUp[]
+  lab_sample_tracking      LabSampleTracking[]
+  lab_reagent_inventory    LabReagentInventory[]
+  pharmacy_suppliers       PharmacySupplier[]
+  purchase_orders          PurchaseOrder[]
+  pharmacy_returns         PharmacyReturn[]
+  bed_transfers            BedTransfer[]
+  diet_plans               DietPlan[]
+  ward_rounds              WardRound[]
+  nursing_tasks            NursingTask[]
+  patient_feedbacks        PatientFeedback[]
+  cash_closures            CashClosure[]
+  refunds                  Refund[]
+  // Phase 3 models
+  nursing_notes            NursingNote[]
+  medication_administrations MedicationAdministration[]
+  shift_handovers          ShiftHandover[]
+  opd_configs              OPDConfig[]
+  employees                Employee[]
+  attendances              Attendance[]
+  leave_types              LeaveType[]
+  leave_requests           LeaveRequest[]
+  shift_patterns           ShiftPattern[]
+  shift_assignments        ShiftAssignment[]
 
   @@map("organizations")
 }
@@ -123,14 +149,15 @@ model User {
   id             String   @id @default(uuid())
   username       String   @unique
   password       String
-  role           String // admin, doctor, receptionist, lab_technician, pharmacist, finance, ipd_manager
-  name           String?
-  specialty      String?
-  email          String?
-  phone          String?
-  organizationId String
-  is_active      Boolean  @default(true)
-  createdAt      DateTime @default(now())
+  role             String // admin, doctor, receptionist, lab_technician, pharmacist, finance, ipd_manager, nurse, opd_manager, hr
+  name             String?
+  specialty        String?
+  email            String?
+  phone            String?
+  assigned_ward_id Int?
+  organizationId   String
+  is_active        Boolean  @default(true)
+  createdAt        DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -152,16 +179,21 @@ model OPD_REG {
   email          String?
   address        String?
   department     String?
-  aadhar_card    String?
-  organizationId String
-  password       String?
-  created_at     DateTime @default(now())
+  aadhar_card              String?
+  emergency_contact_name   String?
+  emergency_contact_phone  String?
+  blood_group              String?
+  date_of_birth            String?
+  organizationId           String
+  password                 String?
+  created_at               DateTime @default(now())
 
   organization       Organization          @relation(fields: [organizationId], references: [id])
   appointments       appointments[]
   admissions         admissions[]
   invoices           invoices[]
   insurance_policies insurance_policies[]
+  feedbacks          PatientFeedback[]
 
   @@index([organizationId])
 }
@@ -170,15 +202,17 @@ model appointments {
   id               Int      @id @default(autoincrement())
   appointment_id   String   @unique
   patient_id       String
-  doctor_name      String?
-  doctor_id        String?
-  department       String?
-  status           String   @default("Pending")
-  reason_for_visit String?
-  organizationId   String
-  queue_token      Int?
-  checked_in_at    DateTime?
-  appointment_date DateTime @default(now())
+  doctor_name          String?
+  doctor_id            String?
+  department           String?
+  status               String   @default("Pending")
+  reason_for_visit     String?
+  cancellation_reason  String?
+  follow_up_date       DateTime?
+  organizationId       String
+  queue_token          Int?
+  checked_in_at        DateTime?
+  appointment_date     DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
   patient      OPD_REG      @relation(fields: [patient_id], references: [patient_id])
@@ -222,6 +256,8 @@ model lab_orders {
   result_value           String?
   report_url             String?
   assigned_technician_id String?
+  is_critical            Boolean  @default(false)
+  critical_notified_at   DateTime?
   organizationId         String
   created_at             DateTime @default(now())
 
@@ -234,11 +270,16 @@ model lab_orders {
 }
 
 model lab_test_inventory {
-  id             Int     @id @default(autoincrement())
-  test_name      String  @unique
-  price          Float
-  is_available   Boolean @default(true)
-  organizationId String
+  id               Int     @id @default(autoincrement())
+  test_name        String  @unique
+  price            Float
+  is_available     Boolean @default(true)
+  normal_range_min Float?
+  normal_range_max Float?
+  unit             String?
+  category         String?
+  sample_type      String?
+  organizationId   String
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -278,6 +319,8 @@ model pharmacy_medicine_master {
   id             Int     @id @default(autoincrement())
   brand_name     String  @unique
   generic_name   String?
+  category       String?
+  manufacturer   String?
   price_per_unit Float
   min_threshold  Int     @default(10)
   organizationId String
@@ -370,6 +413,10 @@ model admissions {
   summaries        discharge_summaries[]
   invoices         invoices[]
   insurance_claims insurance_claims[]
+  bed_transfers    BedTransfer[]
+  diet_plans       DietPlan[]
+  ward_rounds      WardRound[]
+  nursing_tasks    NursingTask[]
 
   @@index([organizationId])
   @@index([status])
@@ -749,6 +796,7 @@ model AppointmentSlot {
   date           DateTime
   start_time     String // "09:00"
   end_time       String // "09:30"
+  slot_type      String   @default("walkin") // walkin, scheduled, blocked
   is_available   Boolean  @default(true)
   is_booked      Boolean  @default(false)
   booked_by      String? // patient_id
@@ -759,4 +807,533 @@ model AppointmentSlot {
   @@index([organizationId])
   @@index([doctor_id, date])
   @@map("appointment_slots")
+}
+
+// ========================================
+// MODULE — Departments
+// ========================================
+
+model Department {
+  id              String   @id @default(uuid())
+  name            String
+  slug            String
+  head_doctor_id  String?
+  is_active       Boolean  @default(true)
+  organizationId  String
+  created_at      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([slug, organizationId])
+  @@index([organizationId])
+  @@map("departments")
+}
+
+// ========================================
+// MODULE — Prescription Templates
+// ========================================
+
+model PrescriptionTemplate {
+  id             String   @id @default(uuid())
+  doctor_id      String
+  name           String
+  type           String   @default("prescription") // prescription, soap_note
+  content        String   // JSON string
+  organizationId String
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([doctor_id])
+  @@map("prescription_templates")
+}
+
+// ========================================
+// MODULE — Follow-Ups
+// ========================================
+
+model FollowUp {
+  id             String   @id @default(uuid())
+  patient_id     String
+  doctor_id      String
+  scheduled_date DateTime
+  status         String   @default("Pending") // Pending, Completed, Missed, Cancelled
+  notes          String?
+  organizationId String
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([doctor_id])
+  @@index([scheduled_date])
+  @@map("follow_ups")
+}
+
+// ========================================
+// MODULE — Lab Sample Tracking
+// ========================================
+
+model LabSampleTracking {
+  id             Int       @id @default(autoincrement())
+  barcode        String    @unique
+  status         String    @default("Collected") // Collected, Received, Processing, Completed, Rejected
+  collected_at   DateTime?
+  received_at    DateTime?
+  processed_at   DateTime?
+  completed_at   DateTime?
+  notes          String?
+  organizationId String
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("lab_sample_tracking")
+}
+
+// ========================================
+// MODULE — Lab Reagent Inventory
+// ========================================
+
+model LabReagentInventory {
+  id             Int       @id @default(autoincrement())
+  reagent_name   String
+  current_stock  Int       @default(0)
+  unit           String    @default("units")
+  min_threshold  Int       @default(10)
+  expiry_date    DateTime?
+  organizationId String
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@map("lab_reagent_inventory")
+}
+
+// ========================================
+// MODULE — Pharmacy Suppliers
+// ========================================
+
+model PharmacySupplier {
+  id              Int      @id @default(autoincrement())
+  name            String
+  contact_person  String?
+  phone           String?
+  email           String?
+  gst_no          String?
+  is_active       Boolean  @default(true)
+  organizationId  String
+  created_at      DateTime @default(now())
+
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  purchase_orders PurchaseOrder[]
+
+  @@index([organizationId])
+  @@map("pharmacy_suppliers")
+}
+
+// ========================================
+// MODULE — Purchase Orders
+// ========================================
+
+model PurchaseOrder {
+  id             Int       @id @default(autoincrement())
+  po_number      String    @unique
+  supplier_id    Int
+  status         String    @default("Draft") // Draft, Ordered, Partially Received, Received, Cancelled
+  total_amount   Float     @default(0)
+  ordered_at     DateTime?
+  received_at    DateTime?
+  organizationId String
+  created_at     DateTime  @default(now())
+
+  organization Organization       @relation(fields: [organizationId], references: [id])
+  supplier     PharmacySupplier    @relation(fields: [supplier_id], references: [id])
+  items        PurchaseOrderItem[]
+
+  @@index([organizationId])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id                Int   @id @default(autoincrement())
+  po_id             Int
+  medicine_id       Int
+  quantity_ordered  Int
+  quantity_received Int   @default(0)
+  unit_price        Float
+
+  purchase_order PurchaseOrder @relation(fields: [po_id], references: [id])
+
+  @@index([po_id])
+  @@map("purchase_order_items")
+}
+
+// ========================================
+// MODULE — Pharmacy Returns
+// ========================================
+
+model PharmacyReturn {
+  id             Int      @id @default(autoincrement())
+  return_type    String   // patient_return, expired_stock
+  medicine_id    Int
+  batch_id       String?
+  quantity       Int
+  reason         String?
+  processed_by   String?
+  organizationId String
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@map("pharmacy_returns")
+}
+
+// ========================================
+// MODULE — Bed Transfers
+// ========================================
+
+model BedTransfer {
+  id              Int      @id @default(autoincrement())
+  admission_id    String
+  from_bed_id     String?
+  to_bed_id       String
+  reason          String?
+  transferred_by  String?
+  organizationId  String
+  created_at      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  admission    admissions   @relation(fields: [admission_id], references: [admission_id])
+
+  @@index([organizationId])
+  @@map("bed_transfers")
+}
+
+// ========================================
+// MODULE — Diet Plans
+// ========================================
+
+model DietPlan {
+  id             Int      @id @default(autoincrement())
+  admission_id   String
+  diet_type      String   // Normal, Soft, Liquid, NPO, Diabetic, Renal, Cardiac
+  instructions   String?
+  is_active      Boolean  @default(true)
+  created_by     String?
+  organizationId String
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  admission    admissions   @relation(fields: [admission_id], references: [admission_id])
+
+  @@index([organizationId])
+  @@map("diet_plans")
+}
+
+// ========================================
+// MODULE — Ward Rounds
+// ========================================
+
+model WardRound {
+  id             Int      @id @default(autoincrement())
+  admission_id   String
+  doctor_id      String
+  observations   String?
+  plan_changes   String?
+  organizationId String
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  admission    admissions   @relation(fields: [admission_id], references: [admission_id])
+
+  @@index([organizationId])
+  @@map("ward_rounds")
+}
+
+// ========================================
+// MODULE — Nursing Tasks
+// ========================================
+
+model NursingTask {
+  id             Int       @id @default(autoincrement())
+  admission_id   String
+  task_type      String    // vitals, medication, procedure, observation
+  description    String
+  scheduled_at   DateTime
+  completed_at   DateTime?
+  assigned_to    String?
+  status         String    @default("Pending") // Pending, In Progress, Completed, Missed
+  organizationId String
+  created_at     DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  admission    admissions   @relation(fields: [admission_id], references: [admission_id])
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([scheduled_at])
+  @@map("nursing_tasks")
+}
+
+// ========================================
+// MODULE — Patient Feedback
+// ========================================
+
+model PatientFeedback {
+  id             Int      @id @default(autoincrement())
+  patient_id     String
+  appointment_id String?
+  rating         Int      // 1-5
+  comments       String?
+  organizationId String
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  patient      OPD_REG      @relation(fields: [patient_id], references: [patient_id])
+
+  @@index([organizationId])
+  @@map("patient_feedbacks")
+}
+
+// ========================================
+// MODULE — Phase 2 Finance
+// ========================================
+
+model CashClosure {
+  id             Int      @id @default(autoincrement())
+  closure_date   DateTime @default(now())
+  cash_total     Float    @default(0.0)
+  card_total     Float    @default(0.0)
+  online_total   Float    @default(0.0)
+  notes          String?
+  closed_by      String
+  organizationId String
+  created_at     DateTime @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@map("cash_closures")
+}
+
+model Refund {
+  id             Int      @id @default(autoincrement())
+  payment_id     String?
+  invoice_id     String
+  amount         Float
+  reason         String
+  status         String   @default("Pending") // Pending, Approved, Processed, Rejected
+  processed_by   String?
+  organizationId String
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@map("refunds")
+}
+
+// ========================================
+// MODULE — Phase 3: Nurse Portal
+// ========================================
+
+model NursingNote {
+  id             Int      @id @default(autoincrement())
+  admission_id   String
+  nurse_id       String
+  note_type      String   // assessment, observation, intervention, evaluation
+  details        String
+  organizationId String
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([admission_id])
+  @@index([nurse_id])
+  @@map("nursing_notes")
+}
+
+model MedicationAdministration {
+  id               Int       @id @default(autoincrement())
+  admission_id     String
+  medication_name  String
+  dose             String
+  route            String    // oral, iv, im, sc, topical
+  scheduled_time   DateTime
+  administered_at  DateTime?
+  status           String    @default("Scheduled") // Scheduled, Administered, Missed, Held, Refused
+  administered_by  String?
+  notes            String?
+  organizationId   String
+  created_at       DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([admission_id])
+  @@index([scheduled_time])
+  @@index([status])
+  @@map("medication_administrations")
+}
+
+model ShiftHandover {
+  id             Int      @id @default(autoincrement())
+  ward_id        Int
+  from_nurse_id  String
+  to_nurse_id    String
+  shift_date     DateTime
+  summary        String   // JSON string with patient summaries
+  organizationId String
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([ward_id])
+  @@map("shift_handovers")
+}
+
+// ========================================
+// MODULE — Phase 3: OPD Manager
+// ========================================
+
+model OPDConfig {
+  id                      Int     @id @default(autoincrement())
+  max_wait_minutes        Int     @default(30)
+  escalation_threshold    Int     @default(45)
+  max_patients_per_doctor Int     @default(30)
+  organizationId          String
+  created_at              DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@map("opd_configs")
+}
+
+// ========================================
+// MODULE — Phase 3: HR Management
+// ========================================
+
+model Employee {
+  id               Int       @id @default(autoincrement())
+  user_id          String?
+  employee_code    String    @unique
+  name             String
+  designation      String
+  department_id    String?
+  date_of_joining  DateTime
+  salary_basic     Float     @default(0)
+  is_active        Boolean   @default(true)
+  phone            String?
+  email            String?
+  organizationId   String
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  attendances      Attendance[]
+  leave_requests   LeaveRequest[]
+  shift_assignments ShiftAssignment[]
+
+  @@index([organizationId])
+  @@map("employees")
+}
+
+model Attendance {
+  id             Int       @id @default(autoincrement())
+  employee_id    Int
+  date           DateTime
+  check_in       DateTime?
+  check_out      DateTime?
+  total_hours    Float?
+  status         String    @default("Present") // Present, Absent, Half-Day, Leave, Holiday
+  organizationId String
+  created_at     DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  employee     Employee     @relation(fields: [employee_id], references: [id])
+
+  @@index([organizationId])
+  @@index([employee_id])
+  @@index([date])
+  @@map("attendances")
+}
+
+model LeaveType {
+  id              Int      @id @default(autoincrement())
+  name            String
+  days_per_year   Int      @default(12)
+  carry_forward   Boolean  @default(false)
+  organizationId  String
+  created_at      DateTime @default(now())
+
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  leave_requests LeaveRequest[]
+
+  @@index([organizationId])
+  @@map("leave_types")
+}
+
+model LeaveRequest {
+  id              Int       @id @default(autoincrement())
+  employee_id     Int
+  leave_type_id   Int
+  from_date       DateTime
+  to_date         DateTime
+  reason          String?
+  status          String    @default("Pending") // Pending, Approved, Rejected, Cancelled
+  approved_by     String?
+  organizationId  String
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  employee     Employee     @relation(fields: [employee_id], references: [id])
+  leave_type   LeaveType    @relation(fields: [leave_type_id], references: [id])
+
+  @@index([organizationId])
+  @@index([employee_id])
+  @@index([status])
+  @@map("leave_requests")
+}
+
+model ShiftPattern {
+  id             Int      @id @default(autoincrement())
+  name           String
+  start_time     String   // "08:00"
+  end_time       String   // "16:00"
+  organizationId String
+  created_at     DateTime @default(now())
+
+  organization    Organization      @relation(fields: [organizationId], references: [id])
+  assignments     ShiftAssignment[]
+
+  @@index([organizationId])
+  @@map("shift_patterns")
+}
+
+model ShiftAssignment {
+  id               Int      @id @default(autoincrement())
+  employee_id      Int
+  shift_pattern_id Int
+  date             DateTime
+  organizationId   String
+  created_at       DateTime @default(now())
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  employee      Employee     @relation(fields: [employee_id], references: [id])
+  shift_pattern ShiftPattern @relation(fields: [shift_pattern_id], references: [id])
+
+  @@index([organizationId])
+  @@index([employee_id])
+  @@index([date])
+  @@map("shift_assignments")
 }

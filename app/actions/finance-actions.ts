@@ -639,3 +639,135 @@ export async function getProvisionalBill(admissionId: string) {
         return { success: false, error: error.message };
     }
 }
+
+// ============================================
+// PHASE 2.2: ADVANCED FINANCE
+// ============================================
+
+export async function getPaymentLedger(filters?: { method?: string; limit?: number }) {
+    try {
+        const { db } = await requireTenantContext();
+        const payments = await db.payments.findMany({
+            where: filters?.method ? { payment_method: filters.method } : {},
+            include: {
+                invoice: { select: { invoice_number: true, patient: { select: { full_name: true } } } }
+            },
+            orderBy: { created_at: 'desc' },
+            take: filters?.limit || 200
+        });
+        return { success: true, data: serialize(payments) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function performCashClosure(data: { notes?: string }) {
+    try {
+        const { db, session, organizationId } = await requireTenantContext();
+
+        // Find last closure date to calculate running totals
+        const lastClosure = await db.cashClosure.findFirst({
+            where: { organizationId },
+            orderBy: { closure_date: 'desc' }
+        });
+        const since = lastClosure ? lastClosure.closure_date : new Date(0);
+
+        // Calculate totals since last closure
+        const payments = await db.payments.findMany({
+            where: {
+                status: 'Completed',
+                created_at: { gt: since }
+            }
+        });
+
+        let cash_total = 0; let card_total = 0; let online_total = 0;
+        payments.forEach((p: any) => {
+            const amt = Number(p.amount);
+            if (p.payment_method === 'Cash') cash_total += amt;
+            else if (p.payment_method === 'Card') card_total += amt;
+            else online_total += amt;
+        });
+
+        const closure = await db.cashClosure.create({
+            data: {
+                cash_total,
+                card_total,
+                online_total,
+                notes: data.notes,
+                closed_by: session.username,
+                organizationId
+            }
+        });
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'CASH_CLOSURE',
+                module: 'finance',
+                details: `Drawer closed by ${session.username}. Cash: ${cash_total}`,
+                organizationId
+            }
+        });
+
+        return { success: true, data: closure };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function getCashClosures() {
+    try {
+        const { db } = await requireTenantContext();
+        const closures = await db.cashClosure.findMany({
+            orderBy: { closure_date: 'desc' },
+            take: 50
+        });
+        return { success: true, data: closures };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function requestRefund(data: { invoice_id: string; payment_id?: string; amount: number; reason: string; }) {
+    try {
+        const { db, organizationId, session } = await requireTenantContext();
+        const refund = await db.refund.create({
+            data: {
+                invoice_id: data.invoice_id,
+                payment_id: data.payment_id,
+                amount: data.amount,
+                reason: data.reason,
+                processed_by: session.username,
+                organizationId
+            }
+        });
+        return { success: true, data: serialize(refund) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function getRefunds() {
+    try {
+        const { db } = await requireTenantContext();
+        const refunds = await db.refund.findMany({
+            orderBy: { created_at: 'desc' },
+            take: 100
+        });
+        return { success: true, data: serialize(refunds) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function updateRefundStatus(id: number, status: string) {
+    try {
+        const { db } = await requireTenantContext();
+        const refund = await db.refund.update({
+            where: { id },
+            data: { status }
+        });
+        return { success: true, data: serialize(refund) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}

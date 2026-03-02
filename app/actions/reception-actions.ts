@@ -448,3 +448,348 @@ export async function getWaitingRoomDisplay() {
         return { success: false, data: [] };
     }
 }
+
+// ========================================
+// APPOINTMENT CALENDAR & SCHEDULING
+// ========================================
+
+export async function getDepartmentList() {
+    try {
+        const { db } = await requireTenantContext();
+        const departments = await db.department.findMany({
+            where: { is_active: true },
+            orderBy: { name: 'asc' },
+        });
+        return { success: true, data: departments };
+    } catch (error) {
+        console.error('Get Departments Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+export async function getDoctorList(department?: string) {
+    try {
+        const { db } = await requireTenantContext();
+        const where: any = { role: 'doctor', is_active: true };
+        if (department) where.specialty = department;
+        const doctors = await db.user.findMany({
+            where,
+            select: { id: true, name: true, specialty: true },
+            orderBy: { name: 'asc' },
+        });
+        return { success: true, data: doctors };
+    } catch (error) {
+        console.error('Get Doctors Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+export async function getAppointmentCalendar(date: string, doctorId?: string) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const dayStart = new Date(date);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(date);
+        dayEnd.setHours(23, 59, 59, 999);
+
+        const where: any = {
+            appointment_date: { gte: dayStart, lte: dayEnd },
+        };
+        if (doctorId) where.doctor_id = doctorId;
+
+        const [appointments, slots] = await Promise.all([
+            db.appointments.findMany({
+                where,
+                include: { patient: true },
+                orderBy: { appointment_date: 'asc' },
+            }),
+            db.appointmentSlot.findMany({
+                where: {
+                    date: { gte: dayStart, lte: dayEnd },
+                    ...(doctorId ? { doctor_id: doctorId } : {}),
+                },
+                orderBy: { start_time: 'asc' },
+            }),
+        ]);
+
+        return { success: true, data: { appointments, slots } };
+    } catch (error) {
+        console.error('Appointment Calendar Error:', error);
+        return { success: false, data: { appointments: [], slots: [] } };
+    }
+}
+
+export async function bookAppointment(data: {
+    patientId: string;
+    doctorId: string;
+    doctorName: string;
+    department: string;
+    date: string;
+    slotId?: string;
+    reasonForVisit?: string;
+}) {
+    try {
+        const { db } = await requireTenantContext();
+
+        // Generate appointment ID
+        const count = await db.appointments.count();
+        const appointmentId = `APT-${String(count + 1).padStart(6, '0')}`;
+
+        const appointment = await db.appointments.create({
+            data: {
+                appointment_id: appointmentId,
+                patient_id: data.patientId,
+                doctor_id: data.doctorId,
+                doctor_name: data.doctorName,
+                department: data.department,
+                reason_for_visit: data.reasonForVisit,
+                status: 'Scheduled',
+                appointment_date: new Date(data.date),
+            },
+        });
+
+        // Mark slot as booked if slotId provided
+        if (data.slotId) {
+            await db.appointmentSlot.update({
+                where: { id: data.slotId },
+                data: { is_booked: true, is_available: false, booked_by: data.patientId },
+            });
+        }
+
+        revalidatePath('/reception/appointments');
+        revalidatePath('/reception');
+        return { success: true, data: appointment };
+    } catch (error) {
+        console.error('Book Appointment Error:', error);
+        return { success: false, error: 'Failed to book appointment' };
+    }
+}
+
+export async function rescheduleAppointment(appointmentId: string, newDate: string, newSlotId?: string) {
+    try {
+        const { db } = await requireTenantContext();
+
+        await db.appointments.update({
+            where: { appointment_id: appointmentId },
+            data: {
+                appointment_date: new Date(newDate),
+                status: 'Scheduled',
+            },
+        });
+
+        if (newSlotId) {
+            await db.appointmentSlot.update({
+                where: { id: newSlotId },
+                data: { is_booked: true, is_available: false },
+            });
+        }
+
+        revalidatePath('/reception/appointments');
+        return { success: true };
+    } catch (error) {
+        console.error('Reschedule Error:', error);
+        return { success: false, error: 'Failed to reschedule' };
+    }
+}
+
+export async function cancelAppointment(appointmentId: string, reason: string) {
+    try {
+        const { db } = await requireTenantContext();
+
+        await db.appointments.update({
+            where: { appointment_id: appointmentId },
+            data: {
+                status: 'Cancelled',
+                cancellation_reason: reason,
+            },
+        });
+
+        revalidatePath('/reception/appointments');
+        revalidatePath('/reception');
+        return { success: true };
+    } catch (error) {
+        console.error('Cancel Appointment Error:', error);
+        return { success: false, error: 'Failed to cancel appointment' };
+    }
+}
+
+export async function createBulkSlots(data: {
+    doctorId: string;
+    startDate: string;
+    endDate: string;
+    startTime: string;
+    endTime: string;
+    slotDuration: number;
+    slotType?: string;
+}) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const slots: any[] = [];
+        const start = new Date(data.startDate);
+        const end = new Date(data.endDate);
+
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            // Skip weekends
+            if (d.getDay() === 0) continue;
+
+            const [startH, startM] = data.startTime.split(':').map(Number);
+            const [endH, endM] = data.endTime.split(':').map(Number);
+            const dayStartMin = startH * 60 + startM;
+            const dayEndMin = endH * 60 + endM;
+
+            for (let min = dayStartMin; min + data.slotDuration <= dayEndMin; min += data.slotDuration) {
+                const slotStart = `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+                const slotEndMin = min + data.slotDuration;
+                const slotEnd = `${String(Math.floor(slotEndMin / 60)).padStart(2, '0')}:${String(slotEndMin % 60).padStart(2, '0')}`;
+
+                slots.push({
+                    doctor_id: data.doctorId,
+                    date: new Date(d),
+                    start_time: slotStart,
+                    end_time: slotEnd,
+                    slot_type: data.slotType || 'scheduled',
+                    is_available: true,
+                    is_booked: false,
+                });
+            }
+        }
+
+        if (slots.length > 0) {
+            await db.appointmentSlot.createMany({ data: slots });
+        }
+
+        revalidatePath('/reception/appointments');
+        return { success: true, count: slots.length };
+    } catch (error) {
+        console.error('Bulk Slots Error:', error);
+        return { success: false, error: 'Failed to create slots' };
+    }
+}
+
+// ========================================
+// QUEUE MANAGEMENT (ENHANCED)
+// ========================================
+
+export async function getAllDoctorQueues() {
+    try {
+        const { db } = await requireTenantContext();
+
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        const appointments = await db.appointments.findMany({
+            where: {
+                appointment_date: { gte: todayStart },
+                status: { in: ['Checked In', 'In Progress', 'Scheduled'] },
+            },
+            include: { patient: true },
+            orderBy: { queue_token: 'asc' },
+        });
+
+        // Group by doctor
+        const queues: Record<string, {
+            doctorId: string;
+            doctorName: string;
+            department: string;
+            current: any | null;
+            waiting: any[];
+            scheduled: any[];
+        }> = {};
+
+        for (const appt of appointments) {
+            const key = appt.doctor_id || 'unknown';
+            if (!queues[key]) {
+                queues[key] = {
+                    doctorId: key,
+                    doctorName: appt.doctor_name || 'Doctor',
+                    department: appt.department || '',
+                    current: null,
+                    waiting: [],
+                    scheduled: [],
+                };
+            }
+
+            const item = {
+                appointmentId: appt.appointment_id,
+                patientName: appt.patient?.full_name || 'Unknown',
+                patientId: appt.patient_id,
+                token: appt.queue_token,
+                status: appt.status,
+                checkedInAt: appt.checked_in_at,
+                reason: appt.reason_for_visit,
+            };
+
+            if (appt.status === 'In Progress') {
+                queues[key].current = item;
+            } else if (appt.status === 'Checked In') {
+                queues[key].waiting.push(item);
+            } else {
+                queues[key].scheduled.push(item);
+            }
+        }
+
+        return { success: true, data: Object.values(queues) };
+    } catch (error) {
+        console.error('All Doctor Queues Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+export async function reorderQueue(appointmentId: string, newToken: number) {
+    try {
+        const { db } = await requireTenantContext();
+
+        await db.appointments.update({
+            where: { appointment_id: appointmentId },
+            data: { queue_token: newToken },
+        });
+
+        revalidatePath('/reception/queue');
+        revalidatePath('/opd/display');
+        return { success: true };
+    } catch (error) {
+        console.error('Reorder Queue Error:', error);
+        return { success: false, error: 'Failed to reorder' };
+    }
+}
+
+export async function skipPatient(appointmentId: string) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const appointment = await db.appointments.findUnique({
+            where: { appointment_id: appointmentId },
+        });
+
+        if (!appointment) return { success: false, error: 'Not found' };
+
+        // Get the highest token for this doctor today
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        const lastToken = await db.appointments.findFirst({
+            where: {
+                doctor_id: appointment.doctor_id,
+                appointment_date: { gte: todayStart },
+                queue_token: { not: null },
+            },
+            orderBy: { queue_token: 'desc' },
+        });
+
+        const newToken = (lastToken?.queue_token || 0) + 1;
+
+        await db.appointments.update({
+            where: { appointment_id: appointmentId },
+            data: { queue_token: newToken, status: 'Checked In' },
+        });
+
+        revalidatePath('/reception/queue');
+        revalidatePath('/opd/display');
+        return { success: true };
+    } catch (error) {
+        console.error('Skip Patient Error:', error);
+        return { success: false, error: 'Failed to skip' };
+    }
+}

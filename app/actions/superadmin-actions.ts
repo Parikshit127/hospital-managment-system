@@ -335,3 +335,77 @@ export async function updateOrganizationPlan(id: string, plan: string) {
         return { success: false, error: 'Failed to update organization plan' };
     }
 }
+
+// ========================================
+// PLATFORM ANALYTICS
+// ========================================
+
+export async function getPlatformAnalytics() {
+    await requireSuperAdmin();
+    try {
+        const orgStats = await prisma.organization.findMany({
+            include: { _count: { select: { patients: true, users: true, invoices: true, admissions: true } } },
+            orderBy: { patients: { _count: 'desc' } },
+            take: 20
+        });
+
+        const allInvoices = await prisma.invoices.aggregate({
+            _sum: { net_amount: true },
+            where: { status: { not: 'Cancelled' } }
+        });
+        const platformRevenue = Number(allInvoices._sum.net_amount || 0);
+
+        // Count totals over time or other metrics as needed
+        const totalPayments = await prisma.payments.aggregate({
+            _sum: { amount: true },
+            where: { status: 'Completed' }
+        });
+
+        return {
+            success: true,
+            data: {
+                orgStats,
+                platformRevenue,
+                totalCollected: Number(totalPayments._sum.amount || 0)
+            }
+        };
+    } catch (err: any) {
+        return { success: false, error: err.message };
+    }
+}
+
+// ========================================
+// CROSS-TENANT USERS
+// ========================================
+
+export async function getOrganizationUsers(orgId?: string, search?: string) {
+    await requireSuperAdmin();
+    try {
+        const users = await prisma.user.findMany({
+            where: {
+                ...(orgId ? { organizationId: orgId } : {}),
+                ...(search ? {
+                    OR: [
+                        { name: { contains: search } },
+                        { username: { contains: search } },
+                        { email: { contains: search } }
+                    ]
+                } : {}),
+            },
+            include: { organization: { select: { name: true, code: true } } },
+            take: 200,
+            orderBy: { createdAt: 'desc' },
+        });
+
+        // Strip passwords before returning
+        const safeUsers = users.map(u => {
+            const { password, ...rest } = u;
+            return rest;
+        });
+
+        return { success: true, data: JSON.parse(JSON.stringify(safeUsers)) };
+    } catch (err: any) {
+        return { success: false, error: err.message };
+    }
+}
+

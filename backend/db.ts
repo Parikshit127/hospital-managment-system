@@ -15,6 +15,18 @@ const TENANT_SCOPED_MODELS = new Set([
     'beds', 'wards', 'invoices', 'billing_records', 'charge_catalog',
     'insurance_providers', 'insurance_policies', 'insurance_claims',
     'AiHealthAssessment', 'AppointmentSlot',
+    // Phase 1 models
+    'Department', 'PrescriptionTemplate', 'FollowUp',
+    'LabSampleTracking', 'LabReagentInventory',
+    'PharmacySupplier', 'PurchaseOrder', 'PharmacyReturn',
+    'BedTransfer', 'DietPlan', 'WardRound', 'NursingTask',
+    'PatientFeedback',
+    // Phase 2 models
+    'CashClosure', 'Refund',
+    // Phase 3 models
+    'NursingNote', 'MedicationAdministration', 'ShiftHandover',
+    'OPDConfig', 'Employee', 'Attendance',
+    'LeaveType', 'LeaveRequest', 'ShiftPattern', 'ShiftAssignment',
 ]);
 
 // Models where organizationId is nullable (audit logs, etc.)

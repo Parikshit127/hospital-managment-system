@@ -461,3 +461,310 @@ export async function transcribeVoiceNote(formData: FormData) {
         return { success: false, error: error.message || 'Transcription failed' };
     }
 }
+
+// ========================================
+// DOCTOR SCHEDULE MANAGEMENT
+// ========================================
+
+export async function getDoctorSchedule(doctorId: string, startDate: string, endDate: string) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const slots = await db.appointmentSlot.findMany({
+            where: {
+                doctor_id: doctorId,
+                date: {
+                    gte: new Date(startDate),
+                    lte: new Date(endDate),
+                },
+            },
+            orderBy: [{ date: 'asc' }, { start_time: 'asc' }],
+        });
+
+        return { success: true, data: slots };
+    } catch (error) {
+        console.error('Get Doctor Schedule Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+export async function updateDoctorAvailability(data: {
+    doctorId: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    slotDuration: number;
+    isAvailable: boolean;
+}) {
+    try {
+        const { db } = await requireTenantContext();
+
+        if (!data.isAvailable) {
+            // Block time: mark existing slots as blocked
+            const dayStart = new Date(data.date);
+            dayStart.setHours(0, 0, 0, 0);
+            const dayEnd = new Date(data.date);
+            dayEnd.setHours(23, 59, 59, 999);
+
+            await db.appointmentSlot.updateMany({
+                where: {
+                    doctor_id: data.doctorId,
+                    date: { gte: dayStart, lte: dayEnd },
+                    is_booked: false,
+                },
+                data: { is_available: false, slot_type: 'blocked' },
+            });
+        } else {
+            // Create available slots
+            const slots: any[] = [];
+            const [startH, startM] = data.startTime.split(':').map(Number);
+            const [endH, endM] = data.endTime.split(':').map(Number);
+            const dayStartMin = startH * 60 + startM;
+            const dayEndMin = endH * 60 + endM;
+
+            for (let min = dayStartMin; min + data.slotDuration <= dayEndMin; min += data.slotDuration) {
+                const slotStart = `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+                const slotEndMin = min + data.slotDuration;
+                const slotEnd = `${String(Math.floor(slotEndMin / 60)).padStart(2, '0')}:${String(slotEndMin % 60).padStart(2, '0')}`;
+
+                slots.push({
+                    doctor_id: data.doctorId,
+                    date: new Date(data.date),
+                    start_time: slotStart,
+                    end_time: slotEnd,
+                    slot_type: 'scheduled',
+                    is_available: true,
+                    is_booked: false,
+                });
+            }
+
+            if (slots.length > 0) {
+                await db.appointmentSlot.createMany({ data: slots });
+            }
+        }
+
+        revalidatePath('/doctor/schedule');
+        return { success: true };
+    } catch (error) {
+        console.error('Update Availability Error:', error);
+        return { success: false, error: 'Failed to update availability' };
+    }
+}
+
+// ========================================
+// PATIENT TIMELINE
+// ========================================
+
+export async function getPatientTimeline(patientId: string) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const [patient, appointments, clinicalNotes, labOrders, admissions, vitals, pharmacyOrders] = await Promise.all([
+            db.oPD_REG.findUnique({ where: { patient_id: patientId } }),
+            db.appointments.findMany({ where: { patient_id: patientId }, orderBy: { appointment_date: 'desc' } }),
+            db.clinical_EHR.findMany({ where: { patient_id: patientId }, orderBy: { created_at: 'desc' } }),
+            db.lab_orders.findMany({ where: { patient_id: patientId }, orderBy: { created_at: 'desc' } }),
+            db.admissions.findMany({ where: { patient_id: patientId }, orderBy: { admission_date: 'desc' }, include: { medical_notes: true } }),
+            db.vital_signs.findMany({ where: { patient_id: patientId }, orderBy: { created_at: 'desc' }, take: 20 }),
+            db.pharmacy_orders.findMany({ where: { patient_id: patientId }, orderBy: { created_at: 'desc' }, include: { items: true } }),
+        ]);
+
+        // Build timeline entries
+        const timeline: any[] = [];
+
+        appointments.forEach((a: any) => timeline.push({
+            type: 'appointment', date: a.appointment_date,
+            data: { id: a.appointment_id, doctor: a.doctor_name, dept: a.department, status: a.status, reason: a.reason_for_visit },
+        }));
+
+        clinicalNotes.forEach((n: any) => timeline.push({
+            type: 'clinical_note', date: n.created_at,
+            data: { id: n.appointment_id, diagnosis: n.diagnosis, notes: n.doctor_notes, doctor: n.doctor_name },
+        }));
+
+        labOrders.forEach((l: any) => timeline.push({
+            type: 'lab_order', date: l.created_at,
+            data: { barcode: l.barcode, test: l.test_type, status: l.status, result: l.result_value },
+        }));
+
+        admissions.forEach((a: any) => timeline.push({
+            type: 'admission', date: a.admission_date,
+            data: { id: a.admission_id, diagnosis: a.diagnosis, doctor: a.doctor_name, status: a.status, discharge: a.discharge_date },
+        }));
+
+        pharmacyOrders.forEach((p: any) => timeline.push({
+            type: 'prescription', date: p.created_at,
+            data: { id: p.id, status: p.status, items: p.items?.map((i: any) => i.medicine_name).join(', ') },
+        }));
+
+        // Sort by date desc
+        timeline.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        return { success: true, data: { patient, timeline, vitals } };
+    } catch (error) {
+        console.error('Patient Timeline Error:', error);
+        return { success: false, data: null };
+    }
+}
+
+// ========================================
+// PRESCRIPTION TEMPLATES
+// ========================================
+
+export async function getTemplates(doctorId: string, type?: string) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const where: any = { doctor_id: doctorId };
+        if (type) where.type = type;
+
+        const templates = await db.prescriptionTemplate.findMany({
+            where,
+            orderBy: { updated_at: 'desc' },
+        });
+
+        return { success: true, data: templates };
+    } catch (error) {
+        console.error('Get Templates Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+export async function saveTemplate(data: {
+    id?: string;
+    doctorId: string;
+    name: string;
+    type: string;
+    content: string;
+}) {
+    try {
+        const { db } = await requireTenantContext();
+
+        if (data.id) {
+            await db.prescriptionTemplate.update({
+                where: { id: data.id },
+                data: { name: data.name, type: data.type, content: data.content },
+            });
+        } else {
+            await db.prescriptionTemplate.create({
+                data: {
+                    doctor_id: data.doctorId,
+                    name: data.name,
+                    type: data.type,
+                    content: data.content,
+                },
+            });
+        }
+
+        revalidatePath('/doctor/templates');
+        return { success: true };
+    } catch (error) {
+        console.error('Save Template Error:', error);
+        return { success: false, error: 'Failed to save template' };
+    }
+}
+
+export async function deleteTemplate(id: string) {
+    try {
+        const { db } = await requireTenantContext();
+        await db.prescriptionTemplate.delete({ where: { id } });
+        revalidatePath('/doctor/templates');
+        return { success: true };
+    } catch (error) {
+        console.error('Delete Template Error:', error);
+        return { success: false, error: 'Failed to delete template' };
+    }
+}
+
+// ========================================
+// FOLLOW-UPS
+// ========================================
+
+export async function scheduleFollowUp(data: {
+    patientId: string;
+    doctorId: string;
+    scheduledDate: string;
+    notes?: string;
+}) {
+    try {
+        const { db } = await requireTenantContext();
+
+        await db.followUp.create({
+            data: {
+                patient_id: data.patientId,
+                doctor_id: data.doctorId,
+                scheduled_date: new Date(data.scheduledDate),
+                notes: data.notes,
+                status: 'Pending',
+            },
+        });
+
+        revalidatePath('/doctor/follow-ups');
+        return { success: true };
+    } catch (error) {
+        console.error('Schedule Follow-Up Error:', error);
+        return { success: false, error: 'Failed to schedule follow-up' };
+    }
+}
+
+export async function getFollowUpsDue(doctorId: string, filter?: 'today' | 'week' | 'overdue' | 'all') {
+    try {
+        const { db } = await requireTenantContext();
+
+        const now = new Date();
+        const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
+        const weekEnd = new Date(now); weekEnd.setDate(weekEnd.getDate() + 7);
+
+        const where: any = { doctor_id: doctorId };
+
+        if (filter === 'today') {
+            where.scheduled_date = { gte: todayStart, lte: todayEnd };
+            where.status = 'Pending';
+        } else if (filter === 'week') {
+            where.scheduled_date = { gte: todayStart, lte: weekEnd };
+            where.status = 'Pending';
+        } else if (filter === 'overdue') {
+            where.scheduled_date = { lt: todayStart };
+            where.status = 'Pending';
+        } else {
+            // all
+        }
+
+        const followUps = await db.followUp.findMany({
+            where,
+            orderBy: { scheduled_date: 'asc' },
+        });
+
+        // Enrich with patient names
+        const patientIds = [...new Set(followUps.map((f: any) => f.patient_id))];
+        const patients = await db.oPD_REG.findMany({
+            where: { patient_id: { in: patientIds } },
+            select: { patient_id: true, full_name: true, phone: true },
+        });
+        const patientMap = Object.fromEntries(patients.map((p: any) => [p.patient_id, p]));
+
+        const enriched = followUps.map((f: any) => ({
+            ...f,
+            patientName: patientMap[f.patient_id]?.full_name || 'Unknown',
+            patientPhone: patientMap[f.patient_id]?.phone || null,
+        }));
+
+        return { success: true, data: enriched };
+    } catch (error) {
+        console.error('Get Follow-Ups Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+export async function updateFollowUpStatus(id: string, status: string) {
+    try {
+        const { db } = await requireTenantContext();
+        await db.followUp.update({ where: { id }, data: { status } });
+        revalidatePath('/doctor/follow-ups');
+        return { success: true };
+    } catch (error) {
+        console.error('Update Follow-Up Error:', error);
+        return { success: false, error: 'Failed to update' };
+    }
+}

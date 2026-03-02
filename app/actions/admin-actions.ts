@@ -563,3 +563,149 @@ export async function toggleUserActive(userId: string) {
         return { success: false, error: error.message };
     }
 }
+
+// ============================================
+// PHASE 2.1: Admin Settings / Departments / Reports
+// ============================================
+
+export async function getDepartments() {
+    try {
+        const { db } = await requireTenantContext();
+        const depts = await db.department.findMany({
+            orderBy: { name: 'asc' }
+        });
+        return { success: true, data: depts };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function createDepartment(data: { name: string; description?: string; head_doctor_id?: string; base_consultation_fee: number; is_active?: boolean }) {
+    try {
+        const { db, organizationId, session } = await requireTenantContext();
+        const dept = await db.department.create({
+            data: {
+                ...data,
+                organizationId
+            }
+        });
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'CREATE_DEPARTMENT',
+                module: 'admin',
+                details: `Created department: ${data.name}`,
+                organizationId,
+                user_id: session.id,
+                username: session.username,
+                role: session.role
+            }
+        });
+        return { success: true, data: dept };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function updateDepartment(id: number, data: any) {
+    try {
+        const { db } = await requireTenantContext();
+        const dept = await db.department.update({
+            where: { id },
+            data
+        });
+        return { success: true, data: dept };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function getOrganizationSettings() {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const config = await db.organizationConfig.upsert({
+            where: { organizationId },
+            update: {},
+            create: { organizationId }
+        });
+        return { success: true, data: config };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function updateOrganizationSettings(data: any) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const config = await db.organizationConfig.update({
+            where: { organizationId },
+            data
+        });
+        return { success: true, data: config };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function getOrganizationBranding() {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const branding = await db.organizationBranding.upsert({
+            where: { organizationId },
+            update: {},
+            create: { organizationId }
+        });
+        return { success: true, data: branding };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function updateOrganizationBranding(data: any) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const brand = await db.organizationBranding.update({
+            where: { organizationId },
+            data
+        });
+        return { success: true, data: brand };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function generateAdminReport(type: string, dateRange: { start: string, end: string }) {
+    try {
+        const { db } = await requireTenantContext();
+        const startDate = new Date(dateRange.start);
+        let endDate = new Date(dateRange.end);
+        endDate.setHours(23, 59, 59, 999);
+
+        let data: any = {};
+
+        if (type === 'revenue') {
+            const invoices = await db.invoices.findMany({
+                where: { created_at: { gte: startDate, lte: endDate }, status: 'Paid' },
+                select: { net_amount: true, invoice_type: true, created_at: true }
+            });
+            // Basic aggregation logic here to pass back chart-ready data.
+            data = invoices;
+        } else if (type === 'footfall') {
+            const appointments = await db.appointments.findMany({
+                where: { appointment_date: { gte: startDate, lte: endDate } },
+                select: { department: true, appointment_date: true }
+            });
+            data = appointments;
+        } else if (type === 'staff_activity') {
+            const logs = await db.system_audit_logs.findMany({
+                where: { created_at: { gte: startDate, lte: endDate } },
+                select: { username: true, action: true, created_at: true }
+            });
+            data = logs;
+        }
+
+        return { success: true, data };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}

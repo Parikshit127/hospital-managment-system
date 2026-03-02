@@ -49,7 +49,7 @@ hospital-os-main/
 The system is heavily relational and revolves around these interwoven modules:
 1. **Users (`User`)**: Unifies all staff roles (`admin`, `doctor`, `receptionist`, `lab_technician`, `pharmacist`, `finance`, `ipd_manager`). Tracks sub-specialties.
 2. **Registration & Appointments (`OPD_REG`, `appointments`)**: Tracks patient profiles and their queue status across departments.
-3. **Clinical / EHR (`Clinical_EHR`, `triage_results`)**: AI triage summaries, vitals, and Doctor doctor diagnosis notes.
+3. **Clinical / EHR (`Clinical_EHR`, `triage_results`)**: AI triage summaries, vitals, and doctor diagnosis notes.
 4. **IPD & Wards (`ipd_wards`, `ipd_beds`, `admissions`)**: Physical hospital spatial mapping and active patient admissions.
 5. **Laboratory (`lab_orders`, `lab_test_inventory`)**: Pathology test queues and pricing.
 6. **Pharmacy (`pharmacy_medicine_master`, `pharmacy_batch_inventory`, `pharmacy_orders`)**: Drug tracking, batch expiry, and patient prescription fulfillment queues.

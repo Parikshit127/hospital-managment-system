@@ -18,8 +18,12 @@ const ROLE_ROUTES: Record<string, string[]> = {
     '/finance': ['admin', 'finance'],
     '/ipd': ['admin', 'ipd_manager'],
     '/discharge': ['admin', 'ipd_manager', 'doctor'],
-    '/opd': ['admin', 'receptionist', 'doctor'],
+    '/opd': ['admin', 'receptionist', 'doctor', 'opd_manager'],
     '/insurance': ['admin', 'finance'],
+    // Phase 3 roles
+    '/nurse': ['admin', 'nurse'],
+    '/opd-manager': ['admin', 'opd_manager'],
+    '/hr': ['admin', 'hr'],
 };
 
 export async function middleware(request: NextRequest) {
@@ -106,6 +110,9 @@ export async function middleware(request: NextRequest) {
                 admin: '/admin/dashboard',
                 finance: '/finance/dashboard',
                 ipd_manager: '/ipd',
+                nurse: '/nurse/dashboard',
+                opd_manager: '/opd-manager/dashboard',
+                hr: '/hr/dashboard',
             };
             return NextResponse.redirect(new URL(redirectMap[role] || '/', request.url));
         }

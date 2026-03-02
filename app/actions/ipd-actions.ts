@@ -2,6 +2,7 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
+import { revalidatePath } from 'next/cache';
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
 function serialize<T>(data: T): T {
@@ -506,5 +507,239 @@ export async function searchPatientsForAdmission(query: string) {
     } catch (error: any) {
         console.error('searchPatientsForAdmission error:', error);
         return { success: false, error: error.message };
+    }
+}
+
+// ============================================
+// PHASE 1.5 NEW IPD ACTIONS
+// ============================================
+
+export async function transferPatient(data: { admission_id: string, to_bed_id: string, reason: string }) {
+    try {
+        const { db, session, organizationId } = await requireTenantContext();
+
+        await db.$transaction(async (tx: any) => {
+            const admission = await tx.admissions.findUnique({
+                where: { admission_id: data.admission_id }
+            });
+
+            if (!admission || admission.status !== 'Admitted') {
+                throw new Error('Valid active admission not found');
+            }
+
+            const fromBedId = admission.bed_id;
+
+            // Mark old bed cleaning
+            if (fromBedId) {
+                await tx.beds.update({
+                    where: { bed_id: fromBedId },
+                    data: { status: 'Cleaning' }
+                });
+            }
+
+            // Check new bed
+            const toBed = await tx.beds.findUnique({ where: { bed_id: data.to_bed_id } });
+            if (!toBed || toBed.status !== 'Available') {
+                throw new Error('Destination bed is not available');
+            }
+
+            // Update new bed
+            await tx.beds.update({
+                where: { bed_id: data.to_bed_id },
+                data: { status: 'Occupied' }
+            });
+
+            // Update admission
+            await tx.admissions.update({
+                where: { admission_id: data.admission_id },
+                data: { bed_id: data.to_bed_id, ward_id: toBed.ward_id }
+            });
+
+            // Create Transfer Record
+            await tx.bedTransfer.create({
+                data: {
+                    admission_id: data.admission_id,
+                    from_bed_id: fromBedId || '',
+                    to_bed_id: data.to_bed_id,
+                    reason: data.reason,
+                    transferred_by: session.id, // Ensure your schema uses string or Int
+                    organizationId
+                }
+            });
+        });
+
+        revalidatePath('/ipd');
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function assignDietPlan(data: { admission_id: string, diet_type: string, instructions: string }) {
+    try {
+        const { db, session, organizationId } = await requireTenantContext();
+
+        // Deactivate previous
+        await db.dietPlan.updateMany({
+            where: { admission_id: data.admission_id, is_active: true },
+            data: { is_active: false }
+        });
+
+        await db.dietPlan.create({
+            data: {
+                admission_id: data.admission_id,
+                diet_type: data.diet_type,
+                instructions: data.instructions,
+                is_active: true,
+                created_by: session.id,
+                organizationId
+            }
+        });
+
+        revalidatePath(`/ipd/admission/${data.admission_id}`);
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function recordWardRound(data: { admission_id: string, observations: string, plan_changes: string }) {
+    try {
+        const { db, session, organizationId } = await requireTenantContext();
+
+        await db.wardRound.create({
+            data: {
+                admission_id: data.admission_id,
+                doctor_id: session.id,
+                observations: data.observations,
+                plan_changes: data.plan_changes,
+                organizationId
+            }
+        });
+
+        revalidatePath(`/ipd/admission/${data.admission_id}`);
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function getNursingTasks(wardId?: number) {
+    try {
+        const { db } = await requireTenantContext();
+
+        let whereClause: any = { status: 'Pending' };
+
+        if (wardId) {
+            // Need to join via admissions
+            const admissions = await db.admissions.findMany({
+                where: { ward_id: wardId, status: 'Admitted' },
+                select: { admission_id: true }
+            });
+            const adIds = admissions.map((a: any) => a.admission_id);
+            whereClause.admission_id = { in: adIds };
+        }
+
+        const tasks = await db.nursingTask.findMany({
+            where: whereClause,
+            include: {
+                admission: { select: { patient_id: true, bed_id: true, patient: { select: { full_name: true } } } }
+            },
+            orderBy: { scheduled_at: 'asc' }
+        });
+
+        return { success: true, data: serialize(tasks) };
+    } catch (error: any) {
+        return { success: false, data: [] };
+    }
+}
+
+export async function completeNursingTask(taskId: number, notes?: string) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const updateData: any = { status: 'Completed', completed_at: new Date() };
+        if (notes) updateData.description = notes;
+
+        await db.nursingTask.update({
+            where: { id: taskId },
+            data: updateData
+        });
+
+        revalidatePath('/ipd/nursing-station');
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: 'Failed to complete task' };
+    }
+}
+
+export async function getIPDCensus() {
+    try {
+        const { db } = await requireTenantContext();
+
+        const wards = await db.wards.findMany({
+            include: { beds: true }
+        });
+
+        const census = wards.map((w: any) => {
+            const total = w.beds.length;
+            const occupied = w.beds.filter((b: any) => b.status === 'Occupied').length;
+            const available = w.beds.filter((b: any) => b.status === 'Available').length;
+            return {
+                ward_name: w.ward_name,
+                total,
+                occupied,
+                available,
+                occupancy_rate: total > 0 ? Math.round((occupied / total) * 100) : 0
+            };
+        });
+
+        return { success: true, data: serialize(census) };
+    } catch (error) {
+        return { success: false, data: [] };
+    }
+}
+
+export async function getAdmissionFullDetails(admissionId: string) {
+    try {
+        const { db } = await requireTenantContext();
+        const admission = await db.admissions.findUnique({
+            where: { admission_id: admissionId },
+            include: {
+                patient: true,
+                bed: { include: { wards: true } },
+                medical_notes: { orderBy: { created_at: 'desc' } },
+                diet_plans: { orderBy: { created_at: 'desc' } },
+                ward_rounds: { orderBy: { created_at: 'desc' } },
+                bed_transfers: { orderBy: { created_at: 'desc' } },
+                nursing_tasks: { orderBy: { scheduled_at: 'asc' } }
+            }
+        });
+
+        if (!admission) return { success: false, error: 'Not found' };
+
+        return { success: true, data: serialize(admission) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function createNursingTask(data: { admission_id: string, task_type: string, description: string, scheduled_at: string }) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        await db.nursingTask.create({
+            data: {
+                admission_id: data.admission_id,
+                task_type: data.task_type,
+                description: data.description,
+                scheduled_at: new Date(data.scheduled_at),
+                status: 'Pending',
+                organizationId
+            }
+        });
+        revalidatePath(`/ipd/admission/${data.admission_id}`);
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: 'Failed' };
     }
 }
