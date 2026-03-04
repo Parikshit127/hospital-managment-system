@@ -1,6 +1,10 @@
-import { Activity, Calendar, FlaskConical, CreditCard, Home, LogOut } from 'lucide-react';
+import {
+    Activity, Calendar, FlaskConical, CreditCard, LogOut,
+    Pill, Heart, FileText, User, MessageSquare, MoreHorizontal, Home
+} from 'lucide-react';
 import { getPatientSession, patientLogout } from './login/actions';
 import Link from 'next/link';
+import { PatientBottomNav } from './PatientBottomNav';
 
 export default async function PatientLayout({
     children,
@@ -9,16 +13,23 @@ export default async function PatientLayout({
 }) {
     const session = await getPatientSession();
 
-    // No session — render children raw (login page handles its own UI)
     if (!session) {
         return <>{children}</>;
     }
 
-    const navItems = [
+    const primaryNav = [
         { label: 'Dashboard', href: '/patient/dashboard', icon: Home },
         { label: 'Appointments', href: '/patient/appointments', icon: Calendar },
         { label: 'Lab Results', href: '/patient/labs', icon: FlaskConical },
+        { label: 'Prescriptions', href: '/patient/prescriptions', icon: Pill },
         { label: 'Payments', href: '/patient/payments', icon: CreditCard },
+    ];
+
+    const moreNav = [
+        { label: 'My Vitals', href: '/patient/vitals', icon: Heart },
+        { label: 'Medical Records', href: '/patient/records', icon: FileText },
+        { label: 'My Profile', href: '/patient/profile', icon: User },
+        { label: 'Feedback', href: '/patient/feedback', icon: MessageSquare },
     ];
 
     return (
@@ -42,8 +53,9 @@ export default async function PatientLayout({
                                 </div>
                             </Link>
 
-                            <nav className="hidden md:flex items-center gap-1">
-                                {navItems.map((item) => {
+                            {/* Desktop Nav */}
+                            <nav className="hidden lg:flex items-center gap-1">
+                                {primaryNav.map((item) => {
                                     const Icon = item.icon;
                                     return (
                                         <Link
@@ -56,6 +68,28 @@ export default async function PatientLayout({
                                         </Link>
                                     );
                                 })}
+                                {/* More dropdown */}
+                                <div className="relative group">
+                                    <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition">
+                                        <MoreHorizontal className="h-4 w-4" />
+                                        More
+                                    </button>
+                                    <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl py-2 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                                        {moreNav.map((item) => {
+                                            const Icon = item.icon;
+                                            return (
+                                                <Link
+                                                    key={item.href}
+                                                    href={item.href}
+                                                    className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 transition"
+                                                >
+                                                    <Icon className="h-4 w-4" />
+                                                    {item.label}
+                                                </Link>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
                             </nav>
                         </div>
 
@@ -77,26 +111,12 @@ export default async function PatientLayout({
                 </div>
             </header>
 
-            {/* Mobile Nav */}
-            <nav className="md:hidden bg-white border-b border-gray-100 px-4 py-2 flex gap-1 overflow-x-auto">
-                {navItems.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition whitespace-nowrap"
-                        >
-                            <Icon className="h-3.5 w-3.5" />
-                            {item.label}
-                        </Link>
-                    );
-                })}
-            </nav>
-
-            <main className="py-8">
+            <main className="py-8 pb-24 lg:pb-8">
                 {children}
             </main>
+
+            {/* Mobile bottom tab bar */}
+            <PatientBottomNav />
         </div>
     );
 }

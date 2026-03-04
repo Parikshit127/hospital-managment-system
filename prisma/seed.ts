@@ -7,9 +7,18 @@ const prisma = new PrismaClient();
 const DEFAULT_ORG_ID = 'org-avani-default';
 
 async function main() {
+    if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_SEED) {
+        console.error('Refusing to seed in production. Set ALLOW_SEED=1 to override.');
+        process.exit(1);
+    }
+
     console.log('Start seeding ...');
 
-    const password = await bcrypt.hash('password123', 10);
+    const seedPassword = process.env.SEED_ADMIN_PASSWORD || 'password123';
+    if (seedPassword === 'password123') {
+        console.warn('WARNING: Using default seed password. Set SEED_ADMIN_PASSWORD env var for production.');
+    }
+    const password = await bcrypt.hash(seedPassword, 10);
 
     // =============================================
     // 0. DEFAULT ORGANIZATION + CONFIG + BRANDING
@@ -59,7 +68,7 @@ async function main() {
     // =============================================
     // 0.1 SUPER ADMIN
     // =============================================
-    const saPassword = await bcrypt.hash('superadmin123', 10);
+    const saPassword = await bcrypt.hash(process.env.SEED_SUPERADMIN_PASSWORD || 'superadmin123', 10);
     await prisma.superAdmin.upsert({
         where: { email: 'superadmin@hospitalos.com' },
         update: {},

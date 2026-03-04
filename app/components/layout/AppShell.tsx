@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { RefreshCw } from 'lucide-react';
+import { NotificationBell } from '@/app/components/NotificationBell';
 
 interface AppShellProps {
     children: React.ReactNode;
@@ -55,6 +56,7 @@ export function AppShell({ children, pageTitle, pageIcon, headerActions, onRefre
                                         <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
                                     </button>
                                 )}
+                                {session?.id && <NotificationBell userId={session.id} />}
                                 {headerActions}
                             </div>
                         </div>

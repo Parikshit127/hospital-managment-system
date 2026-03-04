@@ -3,9 +3,7 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const JWT_SECRET = new TextEncoder().encode(
-    process.env.JWT_SECRET || 'hospital-os-dev-secret-change-in-production'
-);
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET!);
 
 export interface SessionData {
     id: string;
@@ -138,6 +136,3 @@ export async function getMfaPendingSession(): Promise<SessionData | null> {
     }
 }
 
-export async function getDefaultOrganizationId(): Promise<string> {
-    return 'org-avani-default';
-}

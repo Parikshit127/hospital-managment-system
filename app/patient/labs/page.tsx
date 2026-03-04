@@ -1,6 +1,6 @@
 import { getTenantPrisma } from '@/backend/db';
 import { redirect } from 'next/navigation';
-import { FlaskConical, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { FlaskConical, Clock, CheckCircle2, AlertCircle, Download } from 'lucide-react';
 import { getPatientSession } from '../login/actions';
 
 export default async function PatientLabsPage() {
@@ -71,6 +71,7 @@ export default async function PatientLabsPage() {
                                     <th className="px-4 py-3">Barcode</th>
                                     <th className="px-4 py-3">Status</th>
                                     <th className="px-4 py-3 text-right">Result</th>
+                                    <th className="px-4 py-3 text-right">Report</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
@@ -100,6 +101,18 @@ export default async function PatientLabsPage() {
                                             ) : (
                                                 <span className="text-gray-300 text-xs italic">Awaiting</span>
                                             )}
+                                        </td>
+                                        <td className="px-4 py-4 text-right">
+                                            {lab.status === 'Completed' && lab.barcode ? (
+                                                <a
+                                                    href={`/api/reports/lab/pdf?barcode=${lab.barcode}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition"
+                                                >
+                                                    <Download className="h-3.5 w-3.5" /> Report
+                                                </a>
+                                            ) : null}
                                         </td>
                                     </tr>
                                 ))}

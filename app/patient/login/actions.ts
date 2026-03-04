@@ -6,9 +6,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { SignJWT, jwtVerify } from 'jose';
 
-const JWT_SECRET = new TextEncoder().encode(
-    process.env.JWT_SECRET || 'hospital-os-dev-secret-change-in-production'
-);
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET!);
 
 export interface PatientSessionData {
     id: string;

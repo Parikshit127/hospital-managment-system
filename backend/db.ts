@@ -27,6 +27,8 @@ const TENANT_SCOPED_MODELS = new Set([
     'NursingNote', 'MedicationAdministration', 'ShiftHandover',
     'OPDConfig', 'Employee', 'Attendance',
     'LeaveType', 'LeaveRequest', 'ShiftPattern', 'ShiftAssignment',
+    // Phase 4 models
+    'Notification',
 ]);
 
 // Models where organizationId is nullable (audit logs, etc.)

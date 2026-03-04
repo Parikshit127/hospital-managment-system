@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ========================================
@@ -82,6 +83,7 @@ model Organization {
   leave_requests           LeaveRequest[]
   shift_patterns           ShiftPattern[]
   shift_assignments        ShiftAssignment[]
+  notifications            Notification[]
 
   @@map("organizations")
 }
@@ -1336,4 +1338,27 @@ model ShiftAssignment {
   @@index([employee_id])
   @@index([date])
   @@map("shift_assignments")
+}
+
+// ========================================
+// PHASE 4 — NOTIFICATIONS
+// ========================================
+
+model Notification {
+  id             Int      @id @default(autoincrement())
+  user_id        String
+  title          String
+  body           String
+  type           String   @default("info") // info, success, warning, critical
+  is_read        Boolean  @default(false)
+  link           String?
+  organizationId String
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([user_id])
+  @@index([is_read])
+  @@map("notifications")
 }
