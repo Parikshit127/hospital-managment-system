@@ -35,6 +35,9 @@ A comprehensive Hospital Management System built with Next.js 15, TailwindCSS, a
     DIRECT_URL="postgresql://..."
     NEXT_PUBLIC_SUPABASE_URL="https://..."
     NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJ..."
+    JWT_SECRET="..."
+    APP_BASE_URL="https://your-domain.com"
+    INTERNAL_VERIFY_TOKEN="..."
     ```
 
 4.  **Database Setup:**

@@ -10,7 +10,13 @@ import { AppShell } from '@/app/components/layout/AppShell';
 
 export default function ReceptionPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [successData, setSuccessData] = useState<{ patient_id: string; appointment_id?: string; user_type?: string; generatedPassword?: string } | null>(null);
+    const [successData, setSuccessData] = useState<{
+        patient_id: string;
+        appointment_id?: string;
+        user_type?: string;
+        password_setup_required?: boolean;
+        manual_password_setup_link?: string | null;
+    } | null>(null);
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -23,7 +29,8 @@ export default function ReceptionPage() {
                 patient_id: result.patient_id!,
                 appointment_id: result.appointment_id,
                 user_type: result.user_type,
-                generatedPassword: result.generatedPassword
+                password_setup_required: result.password_setup_required,
+                manual_password_setup_link: result.manual_password_setup_link,
             });
             (event.target as HTMLFormElement).reset();
         } else {
@@ -139,10 +146,15 @@ export default function ReceptionPage() {
                                                 <p className="text-sm font-bold text-teal-400 font-mono">{successData.appointment_id}</p>
                                             </div>
                                         )}
-                                        {successData.generatedPassword && (
+                                        {successData.password_setup_required && (
                                             <div className="mt-4 pt-4 border-t border-gray-200">
-                                                <p className="text-[10px] font-black text-pink-400 uppercase tracking-[0.15em] mb-1">Portal Password (Give to Patient)</p>
-                                                <p className="text-sm font-bold text-pink-600 font-mono">{successData.generatedPassword}</p>
+                                                <p className="text-[10px] font-black text-pink-400 uppercase tracking-[0.15em] mb-1">Portal Access Setup</p>
+                                                <p className="text-xs font-bold text-pink-600">Password setup link has been issued</p>
+                                                {successData.manual_password_setup_link ? (
+                                                    <p className="text-[10px] mt-2 break-all text-gray-500 font-mono">{successData.manual_password_setup_link}</p>
+                                                ) : (
+                                                    <p className="text-[10px] mt-2 text-gray-500">Link sent to patient email</p>
+                                                )}
                                             </div>
                                         )}
                                     </div>

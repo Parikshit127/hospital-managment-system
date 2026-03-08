@@ -7,9 +7,12 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "lint:ci": "eslint --max-warnings=0 app/lib/env.ts app/lib/route-auth.ts app/lib/password-setup.ts app/lib/login-rate-limit.ts app/patient/setup-password",
+    "typecheck": "tsc --noEmit",
+    "check:prisma": "prisma validate",
     "postinstall": "prisma generate"
   },
   "prisma": {

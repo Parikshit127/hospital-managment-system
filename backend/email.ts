@@ -1,5 +1,9 @@
 import nodemailer from 'nodemailer';
 
+function getAppBaseUrl() {
+    return process.env.APP_BASE_URL || 'http://localhost:3000';
+}
+
 // Create a singleton transporter instance
 const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.ethereal.email',
@@ -47,7 +51,8 @@ export async function sendEmail({
 /**
  * Template: Patient Portal Welcome (with credentials)
  */
-export async function sendWelcomeEmail(to: string, patientName: string, patientId: string, tempPassword: string) {
+export async function sendWelcomeEmail(to: string, patientName: string, patientId: string, setupLink: string) {
+    const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
             <h2 style="color: #1aab74;">Welcome to Avani Hospital, ${patientName}!</h2>
@@ -56,10 +61,14 @@ export async function sendWelcomeEmail(to: string, patientName: string, patientI
             <div style="background: #f0faf6; padding: 15px; border-radius: 8px; margin: 20px 0;">
                 <p style="margin: 0; font-weight: bold; color: #0f8f5e;">Your Login Credentials:</p>
                 <p style="margin: 5px 0 0 0;"><strong>Patient ID:</strong> ${patientId}</p>
-                <p style="margin: 5px 0 0 0;"><strong>Password:</strong> ${tempPassword}</p>
+                <p style="margin: 8px 0 0 0;">Set your password securely using the link below:</p>
+                <p style="margin: 12px 0 0 0;">
+                    <a href="${setupLink}" style="display:inline-block;background:#10b981;color:#ffffff;padding:10px 14px;border-radius:8px;text-decoration:none;font-weight:600;">Set Portal Password</a>
+                </p>
+                <p style="margin: 8px 0 0 0; font-size: 12px; color: #6b7280;">This setup link is valid for 24 hours.</p>
             </div>
             
-            <p>Please log in at <a href="http://localhost:3000/patient/login" style="color: #1aab74;">Avani Patient Portal</a> to view your details.</p>
+            <p>Please log in at <a href="${appBaseUrl}/patient/login" style="color: #1aab74;">Avani Patient Portal</a> after setting your password.</p>
             <p style="color: #666; font-size: 12px; margin-top: 30px;">For security reasons, please do not share these credentials.</p>
         </div>
     `;
@@ -71,6 +80,7 @@ export async function sendWelcomeEmail(to: string, patientName: string, patientI
  * Template: AI Prescription & Clinical Summary
  */
 export async function sendPrescriptionEmail(to: string, patientName: string, doctorName: string, summaryHtml: string) {
+    const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
             <h2 style="color: #1aab74;">New Clinical Summary Added</h2>
@@ -81,7 +91,7 @@ export async function sendPrescriptionEmail(to: string, patientName: string, doc
                 ${summaryHtml}
             </div>
             
-            <p>You can view extreme details and lab attachments in your <a href="http://localhost:3000/patient/login" style="color: #1aab74;">Patient Portal</a>.</p>
+            <p>You can view extreme details and lab attachments in your <a href="${appBaseUrl}/patient/login" style="color: #1aab74;">Patient Portal</a>.</p>
         </div>
     `;
 
@@ -92,6 +102,7 @@ export async function sendPrescriptionEmail(to: string, patientName: string, doc
  * Template: Admission Notice
  */
 export async function sendAdmissionEmail(to: string, patientName: string, bedDetails: string, doctorName: string) {
+    const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
             <h2 style="color: #1aab74;">Admission Confirmation</h2>
@@ -103,7 +114,7 @@ export async function sendAdmissionEmail(to: string, patientName: string, bedDet
                 <p style="margin: 5px 0 0 0; font-size: 18px;">🛏️ <strong>${bedDetails}</strong></p>
             </div>
             
-            <p>Please log in to the <a href="http://localhost:3000/patient/login" style="color: #1aab74;">Patient Portal</a> to track your vital signs, nursing notes, and live billing status.</p>
+            <p>Please log in to the <a href="${appBaseUrl}/patient/login" style="color: #1aab74;">Patient Portal</a> to track your vital signs, nursing notes, and live billing status.</p>
         </div>
     `;
 

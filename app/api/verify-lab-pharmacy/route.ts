@@ -1,11 +1,20 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getLabOrders, uploadResult } from '@/app/actions/lab-actions';
 import { addInventoryBatch, getInventory, generateInvoice } from '@/app/actions/pharmacy-actions';
 import { prisma } from '@/backend/db';
 
 const DEFAULT_ORG = 'org-avani-default';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+    if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
+    }
+
+    const internalToken = request.headers.get('x-internal-token');
+    if (!process.env.INTERNAL_VERIFY_TOKEN || internalToken !== process.env.INTERNAL_VERIFY_TOKEN) {
+        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
     const results = {
         step1_create_patient: 'PENDING',
         step2_create_lab_order: 'PENDING',

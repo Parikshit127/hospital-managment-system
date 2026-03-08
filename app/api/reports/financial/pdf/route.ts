@@ -1,29 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
+import { resolveRouteAuth } from '@/app/lib/route-auth';
+
+const ALLOWED_STAFF_ROLES = ['admin', 'finance'];
 
 export async function GET(req: NextRequest) {
     try {
-        const orgId = req.nextUrl.searchParams.get('orgId');
-        const period = req.nextUrl.searchParams.get('period') || '30'; // days
+        const auth = await resolveRouteAuth({
+            allowPatient: false,
+            allowedStaffRoles: ALLOWED_STAFF_ROLES,
+        });
+        if (!auth.ok) return auth.response;
 
-        if (!orgId) {
-            return NextResponse.json({ error: 'Organization ID is required' }, { status: 400 });
-        }
+        const period = req.nextUrl.searchParams.get('period') || '30'; // days
+        const periodDays = Number.parseInt(period, 10);
+        const safePeriodDays = Number.isNaN(periodDays) ? 30 : Math.min(Math.max(periodDays, 1), 365);
 
         const startDate = new Date();
-        startDate.setDate(startDate.getDate() - parseInt(period));
+        startDate.setDate(startDate.getDate() - safePeriodDays);
         startDate.setHours(0, 0, 0, 0);
 
-        const [invoices, payments] = await Promise.all([
-            prisma.invoices.findMany({
-                where: { organizationId: orgId, created_at: { gte: startDate } },
-                orderBy: { created_at: 'desc' },
-                include: { patient: { select: { full_name: true } } },
-            }),
-            prisma.billing_records.findMany({
-                where: { organizationId: orgId, created_at: { gte: startDate } },
-            }),
-        ]);
+        const invoices = await prisma.invoices.findMany({
+            where: {
+                organizationId: auth.context.organizationId,
+                created_at: { gte: startDate },
+            },
+            orderBy: { created_at: 'desc' },
+            include: { patient: { select: { full_name: true } } },
+        });
 
         const totalRevenue = invoices.reduce((sum: number, inv: any) => sum + (Number(inv.total_amount) || 0), 0);
         const totalPaid = invoices.reduce((sum: number, inv: any) => sum + (Number(inv.amount_paid) || 0), 0);

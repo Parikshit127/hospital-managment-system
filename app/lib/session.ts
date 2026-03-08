@@ -2,8 +2,15 @@
 
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import { validateServerEnv } from '@/app/lib/env';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET!);
+validateServerEnv();
+
+if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET environment variable is required');
+}
+
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
 export interface SessionData {
     id: string;
@@ -21,6 +28,15 @@ export interface SuperAdminSessionData {
     email: string;
     name: string;
     role: 'superadmin';
+}
+
+export interface PatientSessionData {
+    id: string;
+    name: string;
+    phone: string | null;
+    role: 'patient';
+    organization_id: string;
+    organization_name: string;
 }
 
 export async function createSession(data: SessionData): Promise<void> {
@@ -136,3 +152,57 @@ export async function getMfaPendingSession(): Promise<SessionData | null> {
     }
 }
 
+export async function createPatientSession(data: PatientSessionData): Promise<void> {
+    const token = await new SignJWT(data as unknown as Record<string, unknown>)
+        .setProtectedHeader({ alg: 'HS256' })
+        .setExpirationTime('7d')
+        .setIssuedAt()
+        .sign(JWT_SECRET);
+
+    const cookieStore = await cookies();
+    cookieStore.set('patient_session', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 7,
+        path: '/',
+    });
+}
+
+export async function getPatientSession(): Promise<PatientSessionData | null> {
+    try {
+        const cookieStore = await cookies();
+        const token = cookieStore.get('patient_session')?.value;
+        if (!token) return null;
+
+        if (token.startsWith('{')) {
+            const data = JSON.parse(token) as {
+                id: string;
+                name: string;
+                organization_id?: string;
+                organization_name?: string;
+            };
+
+            return {
+                id: data.id,
+                name: data.name,
+                phone: null,
+                role: 'patient',
+                organization_id: data.organization_id || 'org-avani-default',
+                organization_name: data.organization_name || 'Hospital',
+            };
+        }
+
+        const { payload } = await jwtVerify(token, JWT_SECRET);
+        return {
+            id: (payload.id as string) || '',
+            name: (payload.name as string) || '',
+            phone: (payload.phone as string) || null,
+            role: 'patient',
+            organization_id: (payload.organization_id as string) || '',
+            organization_name: (payload.organization_name as string) || '',
+        };
+    } catch {
+        return null;
+    }
+}

@@ -1,15 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
+import { resolveRouteAuth } from '@/app/lib/route-auth';
+
+const ALLOWED_STAFF_ROLES = ['admin', 'doctor', 'pharmacist', 'receptionist', 'finance', 'ipd_manager', 'nurse'];
 
 export async function GET(req: NextRequest) {
     try {
+        const auth = await resolveRouteAuth({
+            allowPatient: true,
+            allowedStaffRoles: ALLOWED_STAFF_ROLES,
+        });
+        if (!auth.ok) return auth.response;
+
         const orderId = req.nextUrl.searchParams.get('orderId');
         if (!orderId) {
             return NextResponse.json({ error: 'Order ID is required' }, { status: 400 });
         }
 
-        const order = await prisma.pharmacy_orders.findUnique({
-            where: { id: parseInt(orderId) },
+        const parsedOrderId = parseInt(orderId);
+        if (Number.isNaN(parsedOrderId)) {
+            return NextResponse.json({ error: 'Invalid Order ID' }, { status: 400 });
+        }
+
+        const order = await prisma.pharmacy_orders.findFirst({
+            where: {
+                id: parsedOrderId,
+                organizationId: auth.context.organizationId,
+            },
             include: { items: true },
         });
 
@@ -17,8 +34,15 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: 'Pharmacy order not found' }, { status: 404 });
         }
 
-        const patient = await prisma.oPD_REG.findUnique({
-            where: { patient_id: order.patient_id },
+        if (auth.context.kind === 'patient' && order.patient_id !== auth.context.session.id) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        const patient = await prisma.oPD_REG.findFirst({
+            where: {
+                patient_id: order.patient_id,
+                organizationId: auth.context.organizationId,
+            },
             select: { full_name: true, patient_id: true, age: true, gender: true, phone: true },
         });
 

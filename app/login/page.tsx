@@ -21,8 +21,6 @@ function LoginForm() {
     return (
         <>
             <style>{`
-                @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=Outfit:wght@300;400;500;600&display=swap');
-
                 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
                 :root {

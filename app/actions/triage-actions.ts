@@ -2,8 +2,8 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
-import * as bcrypt from 'bcryptjs';
 import { sendWelcomeEmail } from '@/backend/email';
+import { createPatientPasswordSetupToken } from '@/app/lib/password-setup';
 
 // Generate unique IDs
 function generatePatientId(): string {
@@ -429,7 +429,7 @@ async function runTriageEngine(input: TriageInput): Promise<TriageOutput> {
 
 export async function performTriage(input: TriageInput) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
         const result = await runTriageEngine(input);
 
         // 1. Generate Patient ID & Appointment ID
@@ -444,13 +444,8 @@ export async function performTriage(input: TriageInput) {
             });
         }
 
-        let newPatientPassword = null;
+        let setupLink: string | null = null;
         if (!existingPatient) {
-            // Generate secure password for the portal
-            const tempPassword = Math.random().toString(36).slice(-8); // 8-char password
-            newPatientPassword = tempPassword;
-            const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
             await db.oPD_REG.create({
                 data: {
                     patient_id: patientId,
@@ -461,13 +456,19 @@ export async function performTriage(input: TriageInput) {
                     email: input.email || null, // Allow email tracking from triage if extended later
                     department: result.recommendedDepartment,
                     address: 'Not provided',
-                    password: hashedPassword,
+                    password: null,
                 },
             });
 
+            const tokenResult = await createPatientPasswordSetupToken({
+                patientId,
+                organizationId,
+            });
+            setupLink = tokenResult.setupLink;
+
             // Send Welcome Email if patient provided one implicitly (or via Reception flow passing down)
             if (input.email) {
-                await sendWelcomeEmail(input.email, input.patientName, patientId, tempPassword);
+                await sendWelcomeEmail(input.email, input.patientName, patientId, setupLink);
             }
         }
 
@@ -556,7 +557,8 @@ export async function performTriage(input: TriageInput) {
                 ...result,
                 patientId,
                 appointmentId,
-                generatedPassword: newPatientPassword,
+                passwordSetupRequired: !!setupLink,
+                manualPasswordSetupLink: input.email ? null : setupLink,
             },
         };
     } catch (error: any) {

@@ -3,8 +3,8 @@
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { sendAppointmentReminder } from '@/app/lib/whatsapp';
-import * as bcrypt from 'bcryptjs';
 import { sendWelcomeEmail } from '@/backend/email';
+import { createPatientPasswordSetupToken } from '@/app/lib/password-setup';
 
 // Generate standardized UHID: AVN-YYYY-XXXXX
 async function generateUHID(db: any): Promise<string> {
@@ -47,9 +47,7 @@ export async function registerPatient(formData: FormData) {
             where: { patient_id: agentPatientId }
         });
 
-        // 3a. Generate Password
-        const tempPassword = Math.random().toString(36).slice(-8); // Generate 8 char password
-        const hashedPassword = await bcrypt.hash(tempPassword, 10);
+        let setupLink: string | null = null;
 
         if (!existingPatient) {
             await db.oPD_REG.create({
@@ -63,14 +61,20 @@ export async function registerPatient(formData: FormData) {
                     // @ts-ignore
                     address: rawData.address,
                     aadhar_card: rawData.aadhar,
-                    password: hashedPassword,
+                    password: null,
                     organizationId,
                 },
             });
 
+            const tokenResult = await createPatientPasswordSetupToken({
+                patientId: agentPatientId,
+                organizationId,
+            });
+            setupLink = tokenResult.setupLink;
+
             // 3b. Send email with credentials
             if (rawData.email && rawData.email !== "not given") {
-                await sendWelcomeEmail(rawData.email, rawData.full_name, agentPatientId, tempPassword);
+                await sendWelcomeEmail(rawData.email, rawData.full_name, agentPatientId, setupLink);
             }
         }
 
@@ -128,7 +132,8 @@ export async function registerPatient(formData: FormData) {
             patient_id: agentPatientId,
             appointment_id: appointmentId,
             user_type: 'OPD',
-            generatedPassword: tempPassword
+            password_setup_required: !!setupLink,
+            manual_password_setup_link: rawData.email === 'not given' ? setupLink : null,
         };
 
     } catch (error) {

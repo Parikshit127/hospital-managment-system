@@ -49,12 +49,17 @@ model Organization {
   beds                     beds[]
   wards                    wards[]
   invoices                 invoices[]
+  invoice_items            invoice_items[]
+  payments                 payments[]
+  payment_order_intents    PaymentOrderIntent[]
   billing_records          billing_records[]
   charge_catalog           charge_catalog[]
   insurance_providers      insurance_providers[]
   insurance_policies       insurance_policies[]
   insurance_claims         insurance_claims[]
   system_audit_logs        system_audit_logs[]
+  user_mfa_records         user_mfa[]
+  patient_password_setup_tokens PatientPasswordSetupToken[]
   ai_health_assessments    AiHealthAssessment[]
   appointment_slots        AppointmentSlot[]
   departments              Department[]
@@ -196,6 +201,7 @@ model OPD_REG {
   invoices           invoices[]
   insurance_policies insurance_policies[]
   feedbacks          PatientFeedback[]
+  password_setup_tokens PatientPasswordSetupToken[]
 
   @@index([organizationId])
 }
@@ -513,6 +519,7 @@ model invoices {
   admission        admissions?        @relation(fields: [admission_id], references: [admission_id])
   items            invoice_items[]
   payments         payments[]
+  payment_order_intents PaymentOrderIntent[]
   insurance_claims insurance_claims[]
 
   @@index([organizationId])
@@ -522,21 +529,24 @@ model invoices {
 }
 
 model invoice_items {
-  id          Int      @id @default(autoincrement())
-  invoice_id  Int
-  department  String
-  description String
-  quantity    Int      @default(1)
-  unit_price  Decimal
-  total_price Decimal
-  discount    Decimal  @default(0)
-  net_price   Decimal
-  ref_id      String?
-  created_at  DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  invoice_id     Int
+  department     String
+  description    String
+  quantity       Int      @default(1)
+  unit_price     Decimal
+  total_price    Decimal
+  discount       Decimal  @default(0)
+  net_price      Decimal
+  ref_id         String?
+  organizationId String
+  created_at     DateTime @default(now())
 
-  invoice invoices @relation(fields: [invoice_id], references: [id])
+  invoice      invoices     @relation(fields: [invoice_id], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([invoice_id])
+  @@index([organizationId])
   @@index([department])
 }
 
@@ -551,12 +561,35 @@ model payments {
   razorpay_payment_id String?
   status              String   @default("Completed")
   notes               String?
+  organizationId      String
   created_at          DateTime @default(now())
 
-  invoice invoices @relation(fields: [invoice_id], references: [id])
+  invoice      invoices     @relation(fields: [invoice_id], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([invoice_id])
+  @@index([organizationId])
   @@index([status])
+}
+
+model PaymentOrderIntent {
+  id               String   @id @default(uuid())
+  razorpay_order_id String  @unique
+  invoice_id       Int
+  expected_amount  Decimal
+  status           String   @default("created") // created, verified, expired
+  organizationId   String
+  created_by       String?
+  created_at       DateTime @default(now())
+  expires_at       DateTime
+  verified_at      DateTime?
+
+  invoice      invoices     @relation(fields: [invoice_id], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, invoice_id])
+  @@index([status, expires_at])
+  @@map("payment_order_intents")
 }
 
 model charge_catalog {
@@ -730,14 +763,36 @@ model triage_results {
 // ========================================
 
 model user_mfa {
-  user_id      String   @id
-  secret       String
-  enabled      Boolean  @default(false)
-  backup_codes String?
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
+  user_id         String   @id
+  secret          String
+  enabled         Boolean  @default(false)
+  backup_codes    String?
+  organizationId  String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 
   @@map("user_mfa")
+}
+
+model PatientPasswordSetupToken {
+  id             String   @id @default(uuid())
+  token_hash     String   @unique
+  patient_id     String
+  organizationId String
+  expires_at     DateTime
+  used_at        DateTime?
+  created_at     DateTime @default(now())
+
+  patient      OPD_REG       @relation(fields: [patient_id], references: [patient_id])
+  organization Organization  @relation(fields: [organizationId], references: [id])
+
+  @@index([patient_id, organizationId])
+  @@index([expires_at])
+  @@map("patient_password_setup_tokens")
 }
 
 // ========================================

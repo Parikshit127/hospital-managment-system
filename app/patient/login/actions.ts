@@ -4,50 +4,14 @@ import { prisma } from '@/backend/db';
 import * as bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { SignJWT, jwtVerify } from 'jose';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET!);
-
-export interface PatientSessionData {
-    id: string;
-    name: string;
-    phone: string | null;
-    role: 'patient';
-    organization_id: string;
-    organization_name: string;
-}
+import {
+    createPatientSession,
+    getPatientSession as getPatientSessionFromCookie,
+    type PatientSessionData,
+} from '@/app/lib/session';
 
 export async function getPatientSession(): Promise<PatientSessionData | null> {
-    try {
-        const cookieStore = await cookies();
-        const token = cookieStore.get('patient_session')?.value;
-        if (!token) return null;
-
-        // Support legacy JSON cookies during migration
-        if (token.startsWith('{')) {
-            const data = JSON.parse(token);
-            return {
-                id: data.id,
-                name: data.name,
-                phone: null,
-                role: 'patient',
-                organization_id: data.organization_id || 'org-avani-default',
-                organization_name: data.organization_name || 'Hospital',
-            };
-        }
-
-        const { payload } = await jwtVerify(token, JWT_SECRET);
-        return {
-            id: (payload.id as string) || '',
-            name: (payload.name as string) || '',
-            phone: (payload.phone as string) || null,
-            role: 'patient',
-            organization_id: (payload.organization_id as string) || '',
-            organization_name: (payload.organization_name as string) || '',
-        };
-    } catch {
-        return null;
-    }
+    return getPatientSessionFromCookie();
 }
 
 export async function patientLogin(prevState: any, formData: FormData) {
@@ -84,20 +48,7 @@ export async function patientLogin(prevState: any, formData: FormData) {
             organization_name: patient.organization.name,
         };
 
-        const token = await new SignJWT(sessionData as unknown as Record<string, unknown>)
-            .setProtectedHeader({ alg: 'HS256' })
-            .setExpirationTime('7d')
-            .setIssuedAt()
-            .sign(JWT_SECRET);
-
-        const cookieStore = await cookies();
-        cookieStore.set('patient_session', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            maxAge: 60 * 60 * 24 * 7,
-            path: '/',
-        });
+        await createPatientSession(sessionData);
     } catch (error) {
         if (error instanceof Error && error.message === 'NEXT_REDIRECT') {
             throw error;

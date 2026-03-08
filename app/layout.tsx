@@ -1,20 +1,7 @@
 import type { Metadata } from "next";
-import { Outfit, Playfair_Display } from "next/font/google";
 import Script from "next/script";
 import { ToastProvider } from "@/app/components/ui/Toast";
 import "./globals.css";
-
-const outfit = Outfit({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  variable: "--font-outfit",
-});
-
-const playfair = Playfair_Display({
-  subsets: ["latin"],
-  weight: ["700", "800", "900"],
-  variable: "--font-playfair",
-});
 
 export const metadata: Metadata = {
   title: "Avani Hospital OS — Intelligence Platform",
@@ -29,7 +16,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${outfit.variable} ${playfair.variable} font-sans antialiased`}>
+      <body className="font-sans antialiased">
         <ToastProvider>
         {children}
         </ToastProvider>

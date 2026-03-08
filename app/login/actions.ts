@@ -2,11 +2,16 @@
 
 import { prisma } from '@/backend/db';
 import * as bcrypt from 'bcryptjs';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { isMfaRequiredRole } from '@/app/actions/mfa-actions';
 import { createSession, createMfaPendingSession, getMfaPendingSession } from '@/app/lib/session';
 import { loginSchema } from '@/app/lib/validations';
+import {
+    checkLoginAttempt,
+    clearLoginFailures,
+    recordLoginFailure,
+} from '@/app/lib/login-rate-limit';
 
 export async function login(prevState: any, formData: FormData) {
     const raw = {
@@ -20,6 +25,14 @@ export async function login(prevState: any, formData: FormData) {
     }
 
     const { username, password } = parsed.data;
+    const headerStore = await headers();
+    const ipAddress = headerStore.get('x-forwarded-for') || 'unknown';
+
+    const attemptStatus = checkLoginAttempt(username, ipAddress);
+    if (attemptStatus.blocked) {
+        const retryMinutes = Math.ceil(attemptStatus.retryAfterMs / (60 * 1000));
+        return { success: false, error: `Too many failed attempts. Retry in ${retryMinutes} minute(s).` };
+    }
 
     try {
         const user = await prisma.user.findUnique({
@@ -27,10 +40,12 @@ export async function login(prevState: any, formData: FormData) {
         });
 
         if (!user || !(await bcrypt.compare(password, user.password))) {
+            recordLoginFailure(username, ipAddress);
             return { success: false, error: 'Invalid credentials' };
         }
 
         if (user.is_active === false) {
+            recordLoginFailure(username, ipAddress);
             return { success: false, error: 'Account is disabled. Contact your administrator.' };
         }
 
@@ -40,6 +55,7 @@ export async function login(prevState: any, formData: FormData) {
         });
 
         if (!org || !org.is_active) {
+            recordLoginFailure(username, ipAddress);
             return { success: false, error: 'Organization is inactive. Contact platform admin.' };
         }
 
@@ -58,6 +74,7 @@ export async function login(prevState: any, formData: FormData) {
         if (await isMfaRequiredRole(user.role)) {
             const mfaRecord = await prisma.user_mfa.findUnique({ where: { user_id: user.id } });
             if (mfaRecord?.enabled) {
+                clearLoginFailures(username, ipAddress);
                 await createMfaPendingSession(sessionData);
                 return { success: true, mfa_required: true };
             }
@@ -65,6 +82,7 @@ export async function login(prevState: any, formData: FormData) {
 
         // Set the real session
         await createSession(sessionData);
+        clearLoginFailures(username, ipAddress);
 
         // Log successful login
         await prisma.system_audit_logs.create({
@@ -94,6 +112,9 @@ export async function login(prevState: any, formData: FormData) {
         case 'admin': redirect('/admin/dashboard');
         case 'finance': redirect('/finance/dashboard');
         case 'ipd_manager': redirect('/ipd');
+        case 'nurse': redirect('/nurse/dashboard');
+        case 'opd_manager': redirect('/opd-manager/dashboard');
+        case 'hr': redirect('/hr/dashboard');
         default: redirect('/');
     }
 }

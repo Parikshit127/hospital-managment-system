@@ -20,7 +20,7 @@ export default function PayButton({ invoiceId, amount }: PayButtonProps) {
             const res = await fetch('/api/razorpay/create-order', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ invoiceId, amount }),
+                body: JSON.stringify({ invoice_id: invoiceId }),
             });
 
             if (!res.ok) {
@@ -29,7 +29,11 @@ export default function PayButton({ invoiceId, amount }: PayButtonProps) {
             }
 
             const data = await res.json();
-            if (!data.orderId) {
+            const orderId = data?.data?.order_id || data?.orderId;
+            const keyId = data?.data?.key_id || data?.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+            const orderAmount = data?.data?.amount;
+
+            if (!orderId || !keyId || !orderAmount) {
                 alert(data.error || 'Failed to create payment order');
                 return;
             }
@@ -44,12 +48,12 @@ export default function PayButton({ invoiceId, amount }: PayButtonProps) {
             }
 
             const options = {
-                key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || data.keyId,
-                amount: amount * 100,
+                key: keyId,
+                amount: orderAmount,
                 currency: 'INR',
                 name: 'Hospital OS',
-                description: `Payment for ${invoiceId}`,
-                order_id: data.orderId,
+                description: `Payment for ${invoiceId} (₹${amount})`,
+                order_id: orderId,
                 handler: async function (response: any) {
                     // Verify payment
                     const verifyRes = await fetch('/api/razorpay/verify-payment', {
@@ -59,7 +63,7 @@ export default function PayButton({ invoiceId, amount }: PayButtonProps) {
                             razorpay_order_id: response.razorpay_order_id,
                             razorpay_payment_id: response.razorpay_payment_id,
                             razorpay_signature: response.razorpay_signature,
-                            invoiceId,
+                            invoice_id: invoiceId,
                         }),
                     });
 

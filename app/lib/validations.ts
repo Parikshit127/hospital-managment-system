@@ -1,5 +1,18 @@
 import { z } from 'zod';
 
+const staffRoles = [
+    'admin',
+    'doctor',
+    'receptionist',
+    'lab_technician',
+    'pharmacist',
+    'finance',
+    'ipd_manager',
+    'nurse',
+    'opd_manager',
+    'hr',
+] as const;
+
 // ========================================
 // Auth
 // ========================================
@@ -37,7 +50,7 @@ export const addUserSchema = z.object({
     username: z.string().min(3, 'Username must be at least 3 characters').max(50),
     password: z.string().min(6, 'Password must be at least 6 characters').max(100),
     name: z.string().min(2, 'Name is required').max(200),
-    role: z.enum(['admin', 'doctor', 'receptionist', 'lab_technician', 'pharmacist', 'finance', 'ipd_manager']),
+    role: z.enum(staffRoles),
     specialty: z.string().optional(),
     email: z.string().email().optional().or(z.literal('')),
     phone: z.string().optional(),
@@ -45,7 +58,7 @@ export const addUserSchema = z.object({
 
 export const updateUserSchema = z.object({
     name: z.string().min(2).max(200).optional(),
-    role: z.enum(['admin', 'doctor', 'receptionist', 'lab_technician', 'pharmacist', 'finance', 'ipd_manager']).optional(),
+    role: z.enum(staffRoles).optional(),
     specialty: z.string().optional(),
     email: z.string().email().optional().or(z.literal('')),
     phone: z.string().optional(),

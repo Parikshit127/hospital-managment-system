@@ -1,23 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
+import { resolveRouteAuth } from '@/app/lib/route-auth';
+
+const ALLOWED_STAFF_ROLES = ['admin', 'doctor', 'lab_technician', 'receptionist', 'finance', 'ipd_manager', 'nurse'];
 
 export async function GET(req: NextRequest) {
     try {
+        const auth = await resolveRouteAuth({
+            allowPatient: true,
+            allowedStaffRoles: ALLOWED_STAFF_ROLES,
+        });
+        if (!auth.ok) return auth.response;
+
         const barcode = req.nextUrl.searchParams.get('barcode');
         if (!barcode) {
             return NextResponse.json({ error: 'Barcode is required' }, { status: 400 });
         }
 
-        const order = await prisma.lab_orders.findUnique({
-            where: { barcode },
+        const order = await prisma.lab_orders.findFirst({
+            where: {
+                barcode,
+                organizationId: auth.context.organizationId,
+            },
         });
 
         if (!order) {
             return NextResponse.json({ error: 'Lab order not found' }, { status: 404 });
         }
 
-        const patient = await prisma.oPD_REG.findUnique({
-            where: { patient_id: order.patient_id },
+        if (auth.context.kind === 'patient' && order.patient_id !== auth.context.session.id) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        const patient = await prisma.oPD_REG.findFirst({
+            where: {
+                patient_id: order.patient_id,
+                organizationId: auth.context.organizationId,
+            },
             select: { full_name: true, patient_id: true, phone: true, age: true, gender: true },
         });
 

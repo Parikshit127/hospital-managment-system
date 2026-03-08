@@ -4,7 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     Users, UserPlus, Search, Filter, Shield, Stethoscope, Loader2,
     ChevronLeft, ChevronRight, Pencil, KeyRound, Power, X, Eye, EyeOff,
-    FlaskConical, Pill, DollarSign, Bed, UserCheck, UserX
+    FlaskConical, Pill, DollarSign, Bed, UserCheck, UserX,
+    HeartPulse, ClipboardList, Briefcase
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
@@ -20,6 +21,9 @@ const ROLES = [
     { value: 'pharmacist', label: 'Pharmacist', icon: Pill },
     { value: 'finance', label: 'Finance', icon: DollarSign },
     { value: 'ipd_manager', label: 'IPD Manager', icon: Bed },
+    { value: 'nurse', label: 'Nurse', icon: HeartPulse },
+    { value: 'opd_manager', label: 'OPD Manager', icon: ClipboardList },
+    { value: 'hr', label: 'HR Manager', icon: Briefcase },
 ];
 
 const SPECIALTIES = [
@@ -30,7 +34,8 @@ const SPECIALTIES = [
 const roleLabelMap: Record<string, string> = {
     admin: 'Administrator', doctor: 'Doctor', receptionist: 'Receptionist',
     lab_technician: 'Lab Technician', pharmacist: 'Pharmacist',
-    finance: 'Finance', ipd_manager: 'IPD Manager',
+    finance: 'Finance', ipd_manager: 'IPD Manager', nurse: 'Nurse',
+    opd_manager: 'OPD Manager', hr: 'HR Manager',
 };
 
 const roleColorMap: Record<string, string> = {
@@ -41,6 +46,9 @@ const roleColorMap: Record<string, string> = {
     pharmacist: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
     finance: 'bg-rose-50 text-rose-700 border border-rose-200',
     ipd_manager: 'bg-orange-50 text-orange-700 border border-orange-200',
+    nurse: 'bg-cyan-50 text-cyan-700 border border-cyan-200',
+    opd_manager: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+    hr: 'bg-purple-50 text-purple-700 border border-purple-200',
 };
 
 export default function StaffManagement() {

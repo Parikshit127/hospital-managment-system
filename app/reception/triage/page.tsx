@@ -178,10 +178,13 @@ export default function TriagePage() {
                                             <span className="text-sm font-black text-violet-400 font-mono">{triageResult.appointmentId}</span>
                                         </div>
                                     )}
-                                    {triageResult.generatedPassword && (
+                                    {triageResult.passwordSetupRequired && (
                                         <div className="px-4 py-2 bg-pink-500/10 border border-pink-500/20 rounded-xl">
-                                            <span className="text-[10px] font-black text-pink-500/80 uppercase tracking-wider block">Portal Password (Give to Patient)</span>
-                                            <span className="text-sm font-black text-pink-600 font-mono">{triageResult.generatedPassword}</span>
+                                            <span className="text-[10px] font-black text-pink-500/80 uppercase tracking-wider block">Portal Access Setup</span>
+                                            <span className="text-sm font-black text-pink-600">Setup link issued</span>
+                                            {triageResult.manualPasswordSetupLink && (
+                                                <span className="text-[10px] block mt-1 text-gray-500 font-mono break-all">{triageResult.manualPasswordSetupLink}</span>
+                                            )}
                                         </div>
                                     )}
                                     <div className="px-4 py-2 bg-gray-100 border border-gray-200 rounded-xl">

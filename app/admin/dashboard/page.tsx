@@ -6,14 +6,42 @@ import {
     TrendingUp, Clock, AlertTriangle, Shield,
     Loader2, ChevronRight,
     Stethoscope, FileText, Package, ArrowUpRight,
-    Zap
+    Zap, Settings, UserPlus, X, Power, Building2
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     getDashboardStats, getBedOccupancy, getRevenueBreakdown,
-    getRecentActivity, getPatientFlow, getInventoryAlerts
+    getRecentActivity, getPatientFlow, getInventoryAlerts,
+    getStaffStats, getUsersList, getOrganizationSettings,
+    updateOrganizationSettings, addUser
 } from '@/app/actions/admin-actions';
+
+const DOCTOR_SPECIALTIES = [
+    'General Medicine',
+    'Cardiology',
+    'Orthopedics',
+    'Pediatrics',
+    'Neurology',
+    'ENT',
+    'Dermatology',
+    'Pulmonology',
+] as const;
+
+type FeatureToggleKey = 'enable_ai_triage' | 'enable_whatsapp' | 'enable_razorpay';
+
+const roleLabelMap: Record<string, string> = {
+    admin: 'Administrator',
+    doctor: 'Doctor',
+    receptionist: 'Receptionist',
+    lab_technician: 'Lab Technician',
+    pharmacist: 'Pharmacist',
+    finance: 'Finance',
+    ipd_manager: 'IPD Manager',
+    nurse: 'Nurse',
+    opd_manager: 'OPD Manager',
+    hr: 'HR Manager',
+};
 
 export default function AdminDashboard() {
     const [stats, setStats] = useState<any>(null);
@@ -22,18 +50,36 @@ export default function AdminDashboard() {
     const [activity, setActivity] = useState<any[]>([]);
     const [patientFlow, setPatientFlow] = useState<any[]>([]);
     const [inventoryAlerts, setInventoryAlerts] = useState<any>(null);
+    const [staffStats, setStaffStats] = useState<any>(null);
+    const [doctorList, setDoctorList] = useState<any[]>([]);
+    const [orgSettings, setOrgSettings] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [featureSaving, setFeatureSaving] = useState<FeatureToggleKey | null>(null);
+    const [showAddDoctorModal, setShowAddDoctorModal] = useState(false);
+    const [doctorSubmitting, setDoctorSubmitting] = useState(false);
+    const [doctorError, setDoctorError] = useState('');
+    const [doctorForm, setDoctorForm] = useState({
+        name: '',
+        username: '',
+        password: '',
+        specialty: '',
+        email: '',
+        phone: '',
+    });
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const [s, b, r, a, pf, inv] = await Promise.all([
+            const [s, b, r, a, pf, inv, staff, doctors, settings] = await Promise.all([
                 getDashboardStats(),
                 getBedOccupancy(),
                 getRevenueBreakdown(),
                 getRecentActivity(15),
                 getPatientFlow(),
-                getInventoryAlerts()
+                getInventoryAlerts(),
+                getStaffStats(),
+                getUsersList({ role: 'doctor', is_active: true, page: 1, limit: 5 }),
+                getOrganizationSettings(),
             ]);
             if (s.success) setStats(s.data);
             if (b.success) setBedData(b.data);
@@ -41,6 +87,9 @@ export default function AdminDashboard() {
             if (a.success) setActivity(a.data || []);
             if (pf.success) setPatientFlow(pf.data || []);
             if (inv.success) setInventoryAlerts(inv.data);
+            if (staff.success) setStaffStats(staff.data);
+            if (doctors.success) setDoctorList(doctors.data?.users || []);
+            if (settings.success) setOrgSettings(settings.data);
         } catch (err) {
             console.error('Dashboard load error:', err);
         }
@@ -78,8 +127,87 @@ export default function AdminDashboard() {
         return <Icon className="h-3.5 w-3.5" />;
     };
 
+    const handleFeatureToggle = async (feature: FeatureToggleKey) => {
+        if (!orgSettings) return;
+        const nextValue = !orgSettings[feature];
+        setFeatureSaving(feature);
+        try {
+            const res = await updateOrganizationSettings({ [feature]: nextValue });
+            if (res.success) {
+                setOrgSettings((prev: any) => ({ ...prev, [feature]: nextValue }));
+            } else {
+                alert(res.error || 'Unable to update feature toggle');
+            }
+        } catch (error) {
+            console.error('Feature toggle update failed:', error);
+            alert('Unable to update feature toggle right now');
+        } finally {
+            setFeatureSaving(null);
+        }
+    };
+
+    const resetDoctorForm = () => {
+        setDoctorForm({
+            name: '',
+            username: '',
+            password: '',
+            specialty: '',
+            email: '',
+            phone: '',
+        });
+        setDoctorError('');
+    };
+
+    const handleAddDoctor = async () => {
+        setDoctorError('');
+
+        if (!doctorForm.name || !doctorForm.username || !doctorForm.password) {
+            setDoctorError('Name, username, and password are required');
+            return;
+        }
+
+        if (doctorForm.password.length < 6) {
+            setDoctorError('Password must be at least 6 characters');
+            return;
+        }
+
+        setDoctorSubmitting(true);
+        const result = await addUser({
+            ...doctorForm,
+            role: 'doctor',
+        });
+        setDoctorSubmitting(false);
+
+        if (!result.success) {
+            setDoctorError(result.error || 'Failed to add doctor');
+            return;
+        }
+
+        setShowAddDoctorModal(false);
+        resetDoctorForm();
+        await loadData();
+    };
+
+    const headerActions = (
+        <button
+            onClick={() => {
+                resetDoctorForm();
+                setShowAddDoctorModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md transition-all"
+        >
+            <UserPlus className="h-3.5 w-3.5" /> Add Doctor
+        </button>
+    );
+
     return (
-        <AppShell pageTitle="Admin Dashboard" pageIcon={<BarChart3 className="h-5 w-5" />} onRefresh={loadData} refreshing={loading}>
+        <AppShell
+            pageTitle="Admin Dashboard"
+            pageIcon={<BarChart3 className="h-5 w-5" />}
+            headerActions={headerActions}
+            onRefresh={loadData}
+            refreshing={loading}
+        >
             <div className="space-y-8">
                 {loading ? (
                     <div className="flex items-center justify-center py-32">
@@ -436,6 +564,169 @@ export default function AdminDashboard() {
                             </div>
                         </div>
 
+                        {/* ADMIN CONTROL CENTER */}
+                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+                            {/* FEATURE TOGGLES */}
+                            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                                <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+                                    <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
+                                        <Settings className="h-4 w-4 text-indigo-400" />
+                                        Feature Controls
+                                    </h3>
+                                    <Link href="/admin/settings" className="text-[10px] font-black text-teal-400 uppercase tracking-wider hover:text-teal-300 flex items-center gap-1">
+                                        Settings <ChevronRight className="h-3 w-3" />
+                                    </Link>
+                                </div>
+                                <div className="p-5 space-y-3">
+                                    {[
+                                        {
+                                            key: 'enable_ai_triage' as FeatureToggleKey,
+                                            label: 'AI Triage',
+                                            description: 'Smart intake and routing in reception flow',
+                                        },
+                                        {
+                                            key: 'enable_whatsapp' as FeatureToggleKey,
+                                            label: 'WhatsApp Alerts',
+                                            description: 'Send reminders and payment nudges to patients',
+                                        },
+                                        {
+                                            key: 'enable_razorpay' as FeatureToggleKey,
+                                            label: 'Online Payments',
+                                            description: 'Collect invoice payments using Razorpay',
+                                        },
+                                    ].map(toggle => {
+                                        const isEnabled = Boolean(orgSettings?.[toggle.key]);
+                                        const isSaving = featureSaving === toggle.key;
+
+                                        return (
+                                            <button
+                                                key={toggle.key}
+                                                onClick={() => handleFeatureToggle(toggle.key)}
+                                                disabled={isSaving}
+                                                className={`w-full p-3 rounded-xl border text-left transition-all ${isEnabled
+                                                    ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-300'
+                                                    : 'bg-gray-50 border-gray-200 hover:border-gray-300'} ${isSaving ? 'opacity-70' : ''}`}
+                                            >
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div>
+                                                        <p className="text-xs font-black text-gray-700">{toggle.label}</p>
+                                                        <p className="text-[10px] text-gray-500 font-medium mt-0.5">{toggle.description}</p>
+                                                    </div>
+                                                    <span className={`text-[10px] font-black uppercase tracking-wide px-2 py-1 rounded-md ${isEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>
+                                                        {isEnabled ? 'On' : 'Off'}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between mt-2">
+                                                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">
+                                                        {isSaving ? 'Updating...' : 'Click to toggle'}
+                                                    </span>
+                                                    {isSaving ? (
+                                                        <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-400" />
+                                                    ) : (
+                                                        <Power className={`h-3.5 w-3.5 ${isEnabled ? 'text-emerald-500' : 'text-gray-400'}`} />
+                                                    )}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* DOCTOR COMMAND */}
+                            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                                <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+                                    <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
+                                        <Stethoscope className="h-4 w-4 text-violet-400" />
+                                        Doctor Command
+                                    </h3>
+                                    <span className="text-xs font-black text-violet-500">
+                                        {staffStats?.doctors || 0} Doctors
+                                    </span>
+                                </div>
+                                <div className="p-5 space-y-3">
+                                    {doctorList.length > 0 ? (
+                                        doctorList.map((doctor: any) => (
+                                            <div key={doctor.id} className="p-3 rounded-xl border border-violet-100 bg-violet-50/40">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div>
+                                                        <p className="text-xs font-black text-gray-700">{doctor.name || doctor.username}</p>
+                                                        <p className="text-[10px] text-gray-500 font-medium">
+                                                            {doctor.specialty || 'General Practice'}
+                                                        </p>
+                                                    </div>
+                                                    <span className="text-[10px] font-mono text-gray-400">@{doctor.username}</span>
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="py-8 flex flex-col items-center text-gray-300">
+                                            <Stethoscope className="h-8 w-8 mb-2" />
+                                            <span className="text-xs font-bold">No doctors added yet</span>
+                                            <span className="text-[10px] text-gray-300 mt-1">Create your first doctor account from here</span>
+                                        </div>
+                                    )}
+                                    <div className="pt-3 border-t border-gray-200 flex gap-2">
+                                        <button
+                                            onClick={() => {
+                                                resetDoctorForm();
+                                                setShowAddDoctorModal(true);
+                                            }}
+                                            className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-gradient-to-r from-violet-500 to-indigo-600 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md transition-all"
+                                        >
+                                            <UserPlus className="h-3.5 w-3.5" /> Add Doctor
+                                        </button>
+                                        <Link href="/admin/staff" className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-white border border-gray-300 text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all">
+                                            Manage Staff
+                                        </Link>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* OPERATIONS HUB */}
+                            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                                <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+                                    <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
+                                        <Building2 className="h-4 w-4 text-teal-400" />
+                                        Operations Hub
+                                    </h3>
+                                    <span className="text-[10px] font-black text-gray-300 uppercase tracking-wider">Admin Command</span>
+                                </div>
+                                <div className="p-5 space-y-2.5">
+                                    {[
+                                        { href: '/admin/staff', title: 'Staff & Access', subtitle: 'Create users, assign roles, reset credentials' },
+                                        { href: '/admin/departments', title: 'Departments', subtitle: 'Manage departments and consultation masters' },
+                                        { href: '/admin/settings', title: 'Tenant Settings', subtitle: 'Configure integrations and hospital defaults' },
+                                        { href: '/admin/reports', title: 'Reports Hub', subtitle: 'Track finance, footfall, and operations' },
+                                        { href: '/admin/audit', title: 'Audit Trail', subtitle: 'Review activity logs and compliance events' },
+                                    ].map(item => (
+                                        <Link
+                                            key={item.href}
+                                            href={item.href}
+                                            className="block p-3 rounded-xl border border-gray-200 hover:border-teal-300 hover:bg-teal-50/30 transition-all"
+                                        >
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div>
+                                                    <p className="text-xs font-black text-gray-700">{item.title}</p>
+                                                    <p className="text-[10px] text-gray-500 font-medium mt-0.5">{item.subtitle}</p>
+                                                </div>
+                                                <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+                                            </div>
+                                        </Link>
+                                    ))}
+                                    {staffStats?.byRole?.length > 0 && (
+                                        <div className="pt-3 border-t border-gray-200 flex flex-wrap gap-2">
+                                            {staffStats.byRole.map((entry: any) => (
+                                                <span key={entry.role} className="text-[10px] font-black px-2 py-1 rounded-md bg-gray-100 text-gray-600">
+                                                    {roleLabelMap[entry.role] || entry.role}: {entry.count}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
                         {/* QUICK ACTIONS ROW */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <Link href="/reception/triage"
@@ -562,6 +853,118 @@ export default function AdminDashboard() {
                                 </div>
                             </Link>
                         </div>
+
+                        {showAddDoctorModal && (
+                            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                                <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setShowAddDoctorModal(false); resetDoctorForm(); }} />
+                                <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
+                                        <h2 className="text-base font-bold text-gray-900">Quick Add Doctor</h2>
+                                        <button
+                                            onClick={() => { setShowAddDoctorModal(false); resetDoctorForm(); }}
+                                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                    <div className="p-6 space-y-4">
+                                        {doctorError && (
+                                            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium">
+                                                {doctorError}
+                                            </div>
+                                        )}
+
+                                        <div>
+                                            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Doctor Name *</label>
+                                            <input
+                                                type="text"
+                                                value={doctorForm.name}
+                                                onChange={event => setDoctorForm({ ...doctorForm, name: event.target.value })}
+                                                placeholder="Dr. John Smith"
+                                                className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                                            />
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Username *</label>
+                                                <input
+                                                    type="text"
+                                                    value={doctorForm.username}
+                                                    onChange={event => setDoctorForm({ ...doctorForm, username: event.target.value })}
+                                                    placeholder="doc_new"
+                                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Temporary Password *</label>
+                                                <input
+                                                    type="password"
+                                                    value={doctorForm.password}
+                                                    onChange={event => setDoctorForm({ ...doctorForm, password: event.target.value })}
+                                                    placeholder="Min 6 characters"
+                                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Specialty</label>
+                                                <select
+                                                    value={doctorForm.specialty}
+                                                    onChange={event => setDoctorForm({ ...doctorForm, specialty: event.target.value })}
+                                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500"
+                                                >
+                                                    <option value="">Select Specialty</option>
+                                                    {DOCTOR_SPECIALTIES.map(specialty => (
+                                                        <option key={specialty} value={specialty}>{specialty}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Phone</label>
+                                                <input
+                                                    type="tel"
+                                                    value={doctorForm.phone}
+                                                    onChange={event => setDoctorForm({ ...doctorForm, phone: event.target.value })}
+                                                    placeholder="+91 98765 43210"
+                                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Email</label>
+                                            <input
+                                                type="email"
+                                                value={doctorForm.email}
+                                                onChange={event => setDoctorForm({ ...doctorForm, email: event.target.value })}
+                                                placeholder="doctor@hospital.com"
+                                                className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                                            />
+                                        </div>
+
+                                        <div className="flex justify-end gap-3 pt-2">
+                                            <button
+                                                onClick={() => { setShowAddDoctorModal(false); resetDoctorForm(); }}
+                                                className="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                onClick={handleAddDoctor}
+                                                disabled={doctorSubmitting}
+                                                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md disabled:opacity-50 transition-all"
+                                            >
+                                                {doctorSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
+                                                Add Doctor
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </>
                 )}
             </div>

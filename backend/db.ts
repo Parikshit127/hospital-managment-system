@@ -1,4 +1,7 @@
 import { PrismaClient } from '@prisma/client';
+import { validateServerEnv } from '@/app/lib/env';
+
+validateServerEnv();
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
@@ -12,7 +15,7 @@ const TENANT_SCOPED_MODELS = new Set([
     'triage_results', 'lab_orders', 'lab_test_inventory', 'lab_staff',
     'pharmacy_medicine_master', 'pharmacy_orders',
     'admissions', 'medical_notes', 'discharge_summaries',
-    'beds', 'wards', 'invoices', 'billing_records', 'charge_catalog',
+    'beds', 'wards', 'invoices', 'invoice_items', 'payments', 'PaymentOrderIntent', 'billing_records', 'charge_catalog',
     'insurance_providers', 'insurance_policies', 'insurance_claims',
     'AiHealthAssessment', 'AppointmentSlot',
     // Phase 1 models
@@ -29,6 +32,8 @@ const TENANT_SCOPED_MODELS = new Set([
     'LeaveType', 'LeaveRequest', 'ShiftPattern', 'ShiftAssignment',
     // Phase 4 models
     'Notification',
+    // Security hardening models
+    'user_mfa', 'PatientPasswordSetupToken',
 ]);
 
 // Models where organizationId is nullable (audit logs, etc.)

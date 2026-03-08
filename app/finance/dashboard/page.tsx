@@ -82,17 +82,12 @@ export default function FinanceDashboard() {
         setPaymentLoading(true);
 
         try {
-            const amount = parseFloat(paymentForm.amount);
-
             // Step 1: Create Razorpay Order
             const orderRes = await fetch('/api/razorpay/create-order', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    amount,
                     invoice_id: paymentModal.id,
-                    invoice_number: paymentModal.invoice_number,
-                    patient_name: paymentModal.patient?.full_name || '',
                 }),
             });
 
@@ -126,7 +121,6 @@ export default function FinanceDashboard() {
                                 razorpay_payment_id: response.razorpay_payment_id,
                                 razorpay_signature: response.razorpay_signature,
                                 invoice_id: paymentModal.id,
-                                amount,
                                 payment_type: paymentForm.type,
                                 notes: paymentForm.notes || 'Paid via Razorpay',
                             }),

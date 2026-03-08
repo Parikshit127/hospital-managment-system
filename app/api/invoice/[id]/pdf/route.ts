@@ -1,25 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
+import { resolveRouteAuth } from '@/app/lib/route-auth'
+
+const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager'];
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const auth = await resolveRouteAuth({
+            allowPatient: true,
+            allowedStaffRoles: ALLOWED_STAFF_ROLES,
+        });
+        if (!auth.ok) return auth.response;
+
         const { id } = await params;
         const invoiceId = parseInt(id)
         if (isNaN(invoiceId)) {
             return NextResponse.json({ error: 'Invalid invoice ID' }, { status: 400 })
         }
 
-        const invoice = await prisma.invoices.findUnique({
-            where: { id: invoiceId },
+        const invoice = await prisma.invoices.findFirst({
+            where: {
+                id: invoiceId,
+                organizationId: auth.context.organizationId,
+            },
             include: {
                 items: true,
                 patient: { select: { full_name: true, patient_id: true, phone: true, age: true, gender: true } },
-                payments: { where: { status: { not: 'Reversed' } }, orderBy: { created_at: 'desc' } },
+                payments: {
+                    where: {
+                        status: { not: 'Reversed' },
+                        organizationId: auth.context.organizationId,
+                    },
+                    orderBy: { created_at: 'desc' },
+                },
             }
         })
 
         if (!invoice) {
             return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+        }
+
+        if (auth.context.kind === 'patient' && invoice.patient_id !== auth.context.session.id) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
 
         // Compute GST breakdown

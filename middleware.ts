@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
+import { validateServerEnv } from '@/app/lib/env';
+
+validateServerEnv();
 
 if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET environment variable is required');
@@ -30,6 +33,18 @@ const ROLE_ROUTES: Record<string, string[]> = {
 
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
+
+    // Route handlers apply their own auth checks for these endpoints.
+    if (
+        pathname.startsWith('/api/reports/') ||
+        pathname.startsWith('/api/invoice/') ||
+        pathname.startsWith('/api/discharge/') ||
+        pathname.startsWith('/api/razorpay/create-order') ||
+        pathname.startsWith('/api/razorpay/verify-payment') ||
+        pathname.startsWith('/api/verify-lab-pharmacy')
+    ) {
+        return NextResponse.next();
+    }
 
     // 1. Super Admin routes — separate auth
     if (pathname.startsWith('/superadmin')) {
@@ -64,7 +79,8 @@ export async function middleware(request: NextRequest) {
 
     // 2. Patient portal — separate auth
     if (pathname.startsWith('/patient')) {
-        const isPatientAuthPage = pathname.startsWith('/patient/login');
+        const isPatientAuthPage =
+            pathname.startsWith('/patient/login') || pathname.startsWith('/patient/setup-password');
         // Allow public assessment pages without auth
         if (pathname.startsWith('/patient/assessment/')) {
             return NextResponse.next();

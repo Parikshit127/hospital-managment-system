@@ -2,12 +2,15 @@
 
 import { useActionState } from 'react';
 import { patientLogin } from './actions';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { Activity, KeyRound, UserCircle } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 
-export default function PatientLoginPage() {
+function PatientLoginForm() {
     const [state, loginAction, isPending] = useActionState(patientLogin, { success: false, error: '' });
     const [showPassword, setShowPassword] = useState(false);
+    const searchParams = useSearchParams();
+    const setupSuccess = searchParams.get('setup') === 'success';
 
     return (
         <div className="min-h-screen bg-[#f8fbf9] font-sans flex items-center justify-center p-4">
@@ -26,6 +29,11 @@ export default function PatientLoginPage() {
 
                 {/* Form Section */}
                 <div className="p-8">
+                    {setupSuccess && (
+                        <div className="mb-6 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-xl p-4 text-sm">
+                            Password setup complete. You can now sign in.
+                        </div>
+                    )}
                     {state?.error && (
                         <div className="mb-6 bg-red-50 border border-red-100 text-red-600 rounded-xl p-4 text-sm flex items-start gap-3">
                             <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center shrink-0 mt-0.5">!</div>
@@ -51,7 +59,7 @@ export default function PatientLoginPage() {
                         </div>
 
                         <div className="space-y-1.5">
-                            <label className="text-sm font-semibold text-gray-700">Temporary Password</label>
+                            <label className="text-sm font-semibold text-gray-700">Portal Password</label>
                             <div className="relative">
                                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
                                     <KeyRound className="h-5 w-5" />
@@ -60,7 +68,7 @@ export default function PatientLoginPage() {
                                     name="password"
                                     type={showPassword ? 'text' : 'password'}
                                     required
-                                    placeholder="Enter password from email"
+                                    placeholder="Enter your portal password"
                                     className="w-full pl-11 pr-12 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/10 transition-all outline-none"
                                 />
                                 <button
@@ -83,10 +91,18 @@ export default function PatientLoginPage() {
                     </form>
 
                     <p className="mt-8 text-center text-sm text-gray-500">
-                        Check your welcome email from the hospital for your login credentials.
+                        Check your welcome email from the hospital for your setup link and login details.
                     </p>
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function PatientLoginPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-[#f8fbf9]" />}>
+            <PatientLoginForm />
+        </Suspense>
     );
 }
