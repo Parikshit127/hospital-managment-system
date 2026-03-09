@@ -18,30 +18,29 @@ export async function getPatientDashboardData() {
 
         if (!patient) return { success: false, error: 'Patient not found' };
 
-        const [upcomingAppointments, activePrescriptions, latestVitals, pendingLabCount, unpaidInvoiceCount] = await Promise.all([
-            db.appointments.findMany({
-                where: { patient_id: pid, appointment_date: { gte: new Date() }, status: { in: ['Scheduled', 'Checked In'] } },
-                orderBy: { appointment_date: 'asc' },
-                take: 5
-            }),
-            db.pharmacy_orders.findMany({
-                where: { patient_id: pid },
-                orderBy: { created_at: 'desc' },
-                include: { items: true },
-                take: 3
-            }),
-            db.vitals.findMany({
-                where: { appointment: { patient_id: pid } },
-                orderBy: { recorded_at: 'desc' },
-                take: 1
-            }),
-            db.lab_orders.count({
-                where: { patient_id: pid, status: { not: 'Completed' } }
-            }),
-            db.invoices.count({
-                where: { patient_id: pid, status: { not: 'Paid' } }
-            }),
-        ]);
+        const upcomingAppointments = await db.appointments.findMany({
+            where: { patient_id: pid, appointment_date: { gte: new Date() }, status: { in: ['Scheduled', 'Checked In'] } },
+            orderBy: { appointment_date: 'asc' },
+            take: 5
+        });
+        const activePrescriptions = await db.pharmacy_orders.findMany({
+            where: { patient_id: pid },
+            orderBy: { created_at: 'desc' },
+            include: { items: true },
+            take: 3
+        });
+        const latestVitalsArr = await db.vital_signs.findMany({
+            where: { patient_id: pid },
+            orderBy: { created_at: 'desc' },
+            take: 1
+        });
+        const pendingLabCount = await db.lab_orders.count({
+            where: { patient_id: pid, status: { not: 'Completed' } }
+        });
+        const unpaidInvoiceCount = await db.invoices.count({
+            where: { patient_id: pid, status: { not: 'Paid' } }
+        });
+        const latestVitals = latestVitalsArr;
 
         return {
             success: true,
@@ -49,7 +48,7 @@ export async function getPatientDashboardData() {
                 patient,
                 upcomingAppointments,
                 activePrescriptions,
-                latestVitals: latestVitals[0] || null,
+                latestVitals: latestVitals?.[0] || null,
                 pendingLabCount,
                 unpaidInvoiceCount,
             }
@@ -68,20 +67,18 @@ export async function getPatientRecords() {
         const db = getTenantPrisma(session.organization_id);
         const pid = session.id;
 
-        const [labs, diagnoses, vitals] = await Promise.all([
-            db.lab_orders.findMany({
-                where: { patient_id: pid },
-                orderBy: { created_at: 'desc' }
-            }),
-            db.clinical_EHR.findMany({
-                where: { patient_id: pid },
-                orderBy: { created_at: 'desc' }
-            }),
-            db.vitals.findMany({
-                where: { appointment: { patient_id: pid } },
-                orderBy: { recorded_at: 'desc' }
-            }),
-        ]);
+        const labs = await db.lab_orders.findMany({
+            where: { patient_id: pid },
+            orderBy: { created_at: 'desc' }
+        });
+        const diagnoses = await db.clinical_EHR.findMany({
+            where: { patient_id: pid },
+            orderBy: { created_at: 'desc' }
+        });
+        const vitals = await db.vital_signs.findMany({
+            where: { patient_id: pid },
+            orderBy: { created_at: 'desc' }
+        });
 
         return { success: true, data: { labs, diagnoses, vitals } };
     } catch (error: any) {

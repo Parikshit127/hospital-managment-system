@@ -22,11 +22,17 @@ function daysUntil(dateStr: string) {
 export default function PatientDashboard() {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     const loadData = async () => {
         setLoading(true);
+        setError(null);
         const res = await getPatientDashboardData();
-        if (res.success) setData(res.data);
+        if (res.success) {
+            setData(res.data);
+        } else {
+            setError(res.error || 'Unknown error');
+        }
         setLoading(false);
     };
 
@@ -49,7 +55,14 @@ export default function PatientDashboard() {
     if (!data?.patient) {
         return (
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="p-10 text-center text-red-500 font-bold">Failed to load patient data.</div>
+                <div className="p-10 text-center space-y-4">
+                    <p className="text-red-500 font-bold">Failed to load patient data.</p>
+                    {error && <p className="text-sm text-gray-500">{error}</p>}
+                    <a href="/patient/login" className="inline-block text-sm font-bold text-emerald-600 hover:underline"
+                       onClick={() => { document.cookie = 'patient_session=; Max-Age=0; path=/'; }}>
+                        Back to Login
+                    </a>
+                </div>
             </div>
         );
     }
