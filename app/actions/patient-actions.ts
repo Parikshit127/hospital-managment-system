@@ -19,7 +19,7 @@ export async function getPatientDashboardData() {
         if (!patient) return { success: false, error: 'Patient not found' };
 
         const upcomingAppointments = await db.appointments.findMany({
-            where: { patient_id: pid, appointment_date: { gte: new Date() }, status: { in: ['Scheduled', 'Checked In'] } },
+            where: { patient_id: pid, appointment_date: { gte: new Date() }, status: { in: ['Scheduled', 'Checked In', 'Pending'] } },
             orderBy: { appointment_date: 'asc' },
             take: 5
         });

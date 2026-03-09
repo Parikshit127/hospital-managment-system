@@ -3,6 +3,7 @@
 import { getTenantPrisma, prisma } from '@/backend/db';
 import { getPatientSession } from '../login/actions';
 import { revalidatePath } from 'next/cache';
+import { getOrCreateDailySlots } from '@/app/actions/doctor-actions';
 
 export async function getAvailableDoctors() {
     try {
@@ -35,68 +36,13 @@ export async function getAvailableSlots(doctorId: string, dateStr: string) {
         const session = await getPatientSession();
         if (!session) return { success: false, data: [] };
 
-        const db = getTenantPrisma(session.organization_id);
-        const date = new Date(dateStr);
-        date.setHours(0, 0, 0, 0);
-        const nextDay = new Date(date);
-        nextDay.setDate(nextDay.getDate() + 1);
-
-        const slots = await db.appointmentSlot.findMany({
-            where: {
-                doctor_id: doctorId,
-                date: { gte: date, lt: nextDay },
-            },
-            orderBy: { start_time: 'asc' },
-        });
-
-        // If no pre-created slots, generate default ones
-        if (slots.length === 0) {
-            const defaultSlots = [];
-            const hours = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '14:00', '14:30', '15:00', '15:30', '16:00'];
-            for (const time of hours) {
-                const [h, m] = time.split(':').map(Number);
-                const endM = m + 30;
-                const endTime = `${String(endM >= 60 ? h + 1 : h).padStart(2, '0')}:${String(endM % 60).padStart(2, '0')}`;
-                defaultSlots.push({
-                    id: `default-${time}`,
-                    start_time: time,
-                    end_time: endTime,
-                    is_available: true,
-                });
-            }
-
-            // Check which default slots are already booked via appointments
-            const todayStart = new Date(dateStr);
-            todayStart.setHours(0, 0, 0, 0);
-            const todayEnd = new Date(dateStr);
-            todayEnd.setHours(23, 59, 59, 999);
-
-            const existingAppts = await db.appointments.findMany({
-                where: {
-                    doctor_id: doctorId,
-                    appointment_date: { gte: todayStart, lte: todayEnd },
-                    status: { not: 'Cancelled' },
-                },
-                select: { appointment_date: true },
-            });
-
-            const bookedTimes = new Set(existingAppts.map((a: any) => {
-                const d = new Date(a.appointment_date);
-                return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-            }));
-
-            for (const slot of defaultSlots) {
-                if (bookedTimes.has(slot.start_time)) {
-                    slot.is_available = false;
-                }
-            }
-
-            return { success: true, data: defaultSlots };
-        }
+        // Use the centralized auto-slot generator (same as doctor panel & reception)
+        const result = await getOrCreateDailySlots(doctorId, dateStr);
+        if (!result.success) return { success: false, data: [] };
 
         return {
             success: true,
-            data: slots.map((s: any) => ({
+            data: (result.data as any[]).map((s: any) => ({
                 id: s.id,
                 start_time: s.start_time,
                 end_time: s.end_time,
@@ -122,8 +68,13 @@ export async function bookAppointment(slotId: string, doctorId: string, dateStr:
 
         const appointmentDate = new Date(dateStr);
 
-        // If it's a pre-created slot, mark it as booked
+        // If it's a real slot, fetch its start_time and set the correct appointment time
         if (!slotId.startsWith('default-')) {
+            const slot = await db.appointmentSlot.findUnique({ where: { id: slotId } });
+            if (slot?.start_time) {
+                const [h, m] = slot.start_time.split(':').map(Number);
+                appointmentDate.setHours(h, m, 0, 0);
+            }
             await db.appointmentSlot.update({
                 where: { id: slotId },
                 data: { is_booked: true, booked_by: session.id },

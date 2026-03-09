@@ -3,13 +3,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     CalendarDays, ChevronLeft, ChevronRight, Plus, Clock, User, Search,
-    Loader2, X, Check, AlertCircle
+    Loader2, X, Check, AlertCircle, Users
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     getAppointmentCalendar, getDoctorList, bookAppointment,
     cancelAppointment, createBulkSlots, getRegisteredPatients
 } from '@/app/actions/reception-actions';
+import { getOrCreateDailySlots } from '@/app/actions/doctor-actions';
 
 export default function AppointmentsPage() {
     const [selectedDate, setSelectedDate] = useState(() => {
@@ -31,6 +32,8 @@ export default function AppointmentsPage() {
     const [patientResults, setPatientResults] = useState<any[]>([]);
     const [searchingPatients, setSearchingPatients] = useState(false);
     const [booking, setBooking] = useState(false);
+    const [availableSlots, setAvailableSlots] = useState<any[]>([]);
+    const [loadingSlots, setLoadingSlots] = useState(false);
 
     // Bulk slots modal
     const [showBulkModal, setShowBulkModal] = useState(false);
@@ -53,7 +56,17 @@ export default function AppointmentsPage() {
         if (docRes.success) setDoctors(docRes.data);
         if (calRes.success) {
             setAppointments(calRes.data.appointments || []);
-            setSlots(calRes.data.slots || []);
+        }
+        // Auto-generate and fetch slots for selected doctor+date
+        if (selectedDoctor) {
+            const slotsRes = await getOrCreateDailySlots(selectedDoctor, selectedDate);
+            if (slotsRes.success) {
+                setSlots(slotsRes.data || []);
+            } else {
+                setSlots([]);
+            }
+        } else {
+            setSlots([]);
         }
         setLoading(false);
     }, [selectedDate, selectedDoctor]);
@@ -77,6 +90,26 @@ export default function AppointmentsPage() {
         }, 300);
         return () => clearTimeout(timer);
     }, [bookForm.patientSearch]);
+
+    // Fetch slots when doctor and date are selected in booking modal
+    useEffect(() => {
+        async function fetchSlots() {
+            if (bookForm.doctorId && bookForm.date) {
+                setLoadingSlots(true);
+                const res = await getOrCreateDailySlots(bookForm.doctorId, bookForm.date);
+                if (res.success && res.data) {
+                    setAvailableSlots((res.data as any[]).filter((s: any) => s.is_available && !s.is_booked));
+                } else {
+                    setAvailableSlots([]);
+                }
+                setLoadingSlots(false);
+            } else {
+                setAvailableSlots([]);
+                setBookForm(f => ({ ...f, slotId: '' }));
+            }
+        }
+        fetchSlots();
+    }, [bookForm.doctorId, bookForm.date]);
 
     const handleBook = async () => {
         if (!bookForm.patientId || !bookForm.doctorId) return;
@@ -251,25 +284,36 @@ export default function AppointmentsPage() {
                 </div>
 
                 {/* Slots Grid */}
-                {slots.length > 0 && (
-                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
-                        <h3 className="text-sm font-bold text-gray-900 mb-3">Available Slots</h3>
-                        <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-                            {slots.map((slot: any) => (
-                                <div key={slot.id}
-                                    className={`text-center px-2 py-2 rounded-xl text-xs font-medium border ${slot.is_booked
-                                        ? 'bg-gray-100 text-gray-400 border-gray-200'
-                                        : slot.slot_type === 'blocked'
-                                            ? 'bg-red-50 text-red-400 border-red-200'
-                                            : 'bg-teal-50 text-teal-700 border-teal-200 cursor-pointer hover:bg-teal-100'
-                                        }`}>
-                                    {slot.start_time} - {slot.end_time}
-                                    <span className="block text-[9px] mt-0.5 opacity-60">
-                                        {slot.is_booked ? 'Booked' : slot.slot_type === 'blocked' ? 'Blocked' : 'Open'}
-                                    </span>
-                                </div>
-                            ))}
+                {selectedDoctor ? (
+                    slots.length > 0 ? (
+                        <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
+                            <h3 className="text-sm font-bold text-gray-900 mb-3">Available Slots</h3>
+                            <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
+                                {slots.map((slot: any) => (
+                                    <div key={slot.id}
+                                        className={`text-center px-2 py-2 rounded-xl text-xs font-medium border ${slot.is_booked
+                                            ? 'bg-gray-100 text-gray-400 border-gray-200'
+                                            : slot.slot_type === 'blocked'
+                                                ? 'bg-red-50 text-red-400 border-red-200'
+                                                : 'bg-teal-50 text-teal-700 border-teal-200 cursor-pointer hover:bg-teal-100'
+                                            }`}>
+                                        {slot.start_time} - {slot.end_time}
+                                        <span className="block text-[9px] mt-0.5 opacity-60">
+                                            {slot.is_booked ? 'Booked' : slot.slot_type === 'blocked' ? 'Blocked' : 'Open'}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
+                    ) : (
+                        <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6 text-center text-gray-400 text-sm font-medium">
+                            No slots generated for this doctor on the selected date.
+                        </div>
+                    )
+                ) : (
+                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6 text-center text-gray-400 text-sm font-medium flex gap-2 items-center justify-center">
+                        <Users className="h-5 w-5 text-gray-300" />
+                        Please select a doctor to view their available slots.
                     </div>
                 )}
             </div>
@@ -335,9 +379,30 @@ export default function AppointmentsPage() {
                             <div>
                                 <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Date</label>
                                 <input type="date" value={bookForm.date || selectedDate}
-                                    onChange={e => setBookForm(f => ({ ...f, date: e.target.value }))}
+                                    onChange={e => setBookForm(f => ({ ...f, date: e.target.value, slotId: '' }))}
                                     className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500" />
                             </div>
+
+                            {/* Slot Selection */}
+                            {(bookForm.doctorId && bookForm.date) && (
+                                <div>
+                                    <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Time Slot (Optional)</label>
+                                    {loadingSlots ? (
+                                        <div className="text-xs text-gray-500 flex items-center gap-2 py-2"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading available slots...</div>
+                                    ) : availableSlots.length === 0 ? (
+                                        <div className="text-xs text-amber-700 bg-amber-50 p-2.5 rounded-xl border border-amber-200">No pre-defined slots available. Will book as a Walk-in appointment.</div>
+                                    ) : (
+                                        <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto p-1">
+                                            {availableSlots.map(slot => (
+                                                <button key={slot.id} onClick={() => setBookForm(f => ({ ...f, slotId: slot.id }))}
+                                                    className={`py-2 text-xs font-bold rounded-xl border transition-all ${bookForm.slotId === slot.id ? 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white border-transparent shadow-md' : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-teal-400 hover:text-teal-600 hover:bg-white'}`}>
+                                                    {slot.start_time}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                             {/* Reason */}
                             <div>
                                 <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Reason for Visit</label>

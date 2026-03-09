@@ -1,12 +1,30 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from '@/app/components/layout/Sidebar';
-import { FileText, Plus, Search, Edit3, Trash2, CheckCircle2, Copy } from 'lucide-react';
+import { FileText, Plus, Search, Edit3, Trash2, CheckCircle2, Copy, X, Loader2 } from 'lucide-react';
+import { getTemplates, saveTemplate, deleteTemplate } from '@/app/actions/doctor-actions';
+
+interface Template {
+    id: number;
+    title: string;
+    type: string;
+    contentPreview: string;
+    used: number;
+    lastUpdated: string;
+}
 
 export default function DoctorTemplates() {
     const [session, setSession] = useState<{ id: string; username: string; role: string; name?: string; specialty?: string } | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [templates, setTemplates] = useState<Template[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    // Modal state
+    const [showModal, setShowModal] = useState(false);
+    const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
+    const [formData, setFormData] = useState({ title: '', type: 'Clinical Note', content: '' });
+    const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         async function fetchSession() {
@@ -23,19 +41,141 @@ export default function DoctorTemplates() {
         fetchSession();
     }, []);
 
-    // Mock data for templates
-    const templates = [
-        { id: 1, title: 'Standard General Checkup', type: 'Clinical Note', used: 142, lastUpdated: '2 Days Ago', contentPreview: 'Patient presents with [SYMPTOM]. Vitals stable. Plan: [MEDICATION].' },
-        { id: 2, title: 'Viral Fever Protocol', type: 'Prescription/Plan', used: 84, lastUpdated: '1 Week Ago', contentPreview: 'Rx Paracetamol 500mg SOS. Advised rest and hydration.' },
-        { id: 3, title: 'Hypertension Follow-up', type: 'Clinical Note', used: 156, lastUpdated: '3 Weeks Ago', contentPreview: 'BP checked [VALUE]. Current medication: [MEDS]. No side effects reported.' },
-        { id: 4, title: 'Routine Blood Panel Referral', type: 'Lab Order', used: 210, lastUpdated: '1 Month Ago', contentPreview: 'CBC, Lipid Profile, LFT, KFT required for routine screening.' }
-    ];
+    const fetchTemplates = useCallback(async () => {
+        if (!session?.id) return;
+        setLoading(true);
+        try {
+            const res = await getTemplates(session.id);
+            if (res.success && res.data) {
+                setTemplates(res.data as Template[]);
+            }
+        } catch (error) {
+            console.error('Failed to fetch templates', error);
+        } finally {
+            setLoading(false);
+        }
+    }, [session?.id]);
 
-    const inputCls = "w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400 transition-all shadow-sm";
+    useEffect(() => {
+        if (session?.id) {
+            fetchTemplates();
+        }
+    }, [session?.id, fetchTemplates]);
+
+    const handleOpenModal = (t?: Template) => {
+        if (t) {
+            setEditingTemplate(t);
+            setFormData({ title: t.title, type: t.type, content: t.contentPreview });
+        } else {
+            setEditingTemplate(null);
+            setFormData({ title: '', type: 'Clinical Note', content: '' });
+        }
+        setShowModal(true);
+    };
+
+    const handleCloseModal = () => {
+        setShowModal(false);
+        setEditingTemplate(null);
+        setFormData({ title: '', type: 'Clinical Note', content: '' });
+    };
+
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!session?.id) return;
+
+        setIsSaving(true);
+        try {
+            const res = await saveTemplate({
+                id: editingTemplate?.id,
+                doctorId: session.id,
+                title: formData.title,
+                type: formData.type,
+                content: formData.content,
+            });
+
+            if (res.success) {
+                await fetchTemplates();
+                handleCloseModal();
+            } else {
+                alert('Failed to save template');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Error saving template');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDelete = async (id: number) => {
+        if (!confirm('Are you sure you want to delete this template?')) return;
+
+        try {
+            const res = await deleteTemplate(id);
+            if (res.success) {
+                await fetchTemplates();
+            } else {
+                alert('Failed to delete template');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Error deleting template');
+        }
+    };
+
+    const filteredTemplates = templates.filter(t => t.title.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    // Stats calc
+    const totalUses = templates.reduce((acc, curr) => acc + curr.used, 0);
+
+    const inputCls = "w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400 transition-all shadow-sm";
+    const modalInputCls = "w-full p-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400 transition-all shadow-sm";
 
     return (
         <div className="flex h-[calc(100vh-52px)] bg-gray-50 font-sans text-gray-900 overflow-hidden relative lg:pl-60">
             <Sidebar session={session} />
+
+            {/* Modal */}
+            {showModal && (
+                <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl border border-gray-200 overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50/50">
+                            <h3 className="font-black text-lg text-gray-800 flex items-center gap-2">
+                                <FileText className="h-5 w-5 text-violet-500" />
+                                {editingTemplate ? 'Edit Template' : 'Create Template'}
+                            </h3>
+                            <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-200 transition-colors">
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleSave} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Template Title</label>
+                                <input required placeholder="e.g. Standard General Checkup" className={modalInputCls} value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Template Type</label>
+                                <select className={modalInputCls} value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })}>
+                                    <option>Clinical Note</option>
+                                    <option>Prescription/Plan</option>
+                                    <option>Lab Order</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Content</label>
+                                <textarea required rows={6} placeholder="Type the template content here. Use placeholders like [SYMPTOM] if needed..." className={modalInputCls} value={formData.content} onChange={e => setFormData({ ...formData, content: e.target.value })} />
+                            </div>
+                            <div className="pt-2 flex justify-end gap-3">
+                                <button type="button" onClick={handleCloseModal} className="px-5 py-2.5 font-bold text-gray-500 hover:bg-gray-100 rounded-xl transition-colors">Cancel</button>
+                                <button type="submit" disabled={isSaving} className="px-6 py-2.5 bg-gradient-to-r from-violet-500 to-indigo-600 text-white font-bold rounded-xl hover:from-violet-400 hover:to-indigo-500 flex items-center gap-2 shadow-lg shadow-violet-500/20 disabled:opacity-50">
+                                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                    Save Template
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto w-full">
                 <div className="p-8 max-w-6xl mx-auto w-full space-y-8">
@@ -50,7 +190,7 @@ export default function DoctorTemplates() {
                             </div>
                             <p className="text-sm text-gray-500 font-medium">Manage your reusable clinical notes and prescription blocks.</p>
                         </div>
-                        <button className="px-5 py-2.5 bg-gradient-to-r from-violet-500 to-indigo-600 text-white font-bold rounded-xl hover:from-violet-400 hover:to-indigo-500 transition-all flex items-center gap-2 shadow-lg shadow-violet-500/20 text-sm whitespace-nowrap">
+                        <button onClick={() => handleOpenModal()} className="px-5 py-2.5 bg-gradient-to-r from-violet-500 to-indigo-600 text-white font-bold rounded-xl hover:from-violet-400 hover:to-indigo-500 transition-all flex items-center gap-2 shadow-lg shadow-violet-500/20 text-sm whitespace-nowrap">
                             <Plus className="h-4 w-4" /> Create Template
                         </button>
                     </div>
@@ -71,8 +211,8 @@ export default function DoctorTemplates() {
                                 <CheckCircle2 className="h-6 w-6" />
                             </div>
                             <div>
-                                <p className="text-xs font-bold uppercase tracking-wider text-violet-100 mb-1">Time Saved</p>
-                                <h3 className="text-3xl font-black flex items-center gap-2">~14 Hours <span className="text-xs font-medium text-violet-200 bg-white/20 px-2 py-0.5 rounded-lg">This Month</span></h3>
+                                <p className="text-xs font-bold uppercase tracking-wider text-violet-100 mb-1">Status</p>
+                                <h3 className="text-xl font-bold">{loading ? 'Loading...' : 'Ready'}</h3>
                             </div>
                         </div>
                         <div className="bg-white border border-gray-200 p-6 rounded-2xl shadow-sm flex items-center gap-4">
@@ -81,7 +221,7 @@ export default function DoctorTemplates() {
                             </div>
                             <div>
                                 <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Total Uses</p>
-                                <h3 className="text-3xl font-black text-gray-800">{templates.reduce((acc, curr) => acc + curr.used, 0)}</h3>
+                                <h3 className="text-3xl font-black text-gray-800">{totalUses}</h3>
                             </div>
                         </div>
                     </div>
@@ -90,7 +230,7 @@ export default function DoctorTemplates() {
                     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col mt-6">
                         <div className="p-5 border-b border-gray-200 flex flex-col sm:flex-row justify-between gap-4 items-center bg-gray-50/50">
                             <div className="flex items-center gap-3">
-                                <h2 className="font-black text-gray-800 flex items-center gap-2 block"><FileText className="h-4 w-4 text-violet-400" /> Template Library</h2>
+                                <h2 className="font-black text-gray-800 flex items-center gap-2"><FileText className="h-4 w-4 text-violet-400" /> Template Library</h2>
                             </div>
                             <div className="relative w-full sm:w-80 group">
                                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-violet-400 transition-colors" />
@@ -99,39 +239,52 @@ export default function DoctorTemplates() {
                                     placeholder="Search templates..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className={`${inputCls} focus:ring-violet-500/20 focus:border-violet-500/30`}
+                                    className={inputCls}
                                 />
                             </div>
                         </div>
 
-                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50/30">
-                            {templates.filter(t => t.title.toLowerCase().includes(searchTerm.toLowerCase())).map((template) => (
-                                <div key={template.id} className="bg-white border border-gray-200 p-5 rounded-2xl hover:border-violet-500/30 transition-all shadow-sm group">
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div>
-                                            <h3 className="font-bold text-gray-900 group-hover:text-violet-600 transition-colors text-lg">{template.title}</h3>
-                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md mt-1.5 inline-block ${template.type === 'Clinical Note' ? 'bg-teal-500/10 text-teal-600 border border-teal-500/20' :
+                        {loading ? (
+                            <div className="p-16 flex flex-col items-center justify-center text-gray-400">
+                                <Loader2 className="h-8 w-8 animate-spin text-violet-500 mb-4" />
+                                <p className="font-medium text-sm">Loading your templates...</p>
+                            </div>
+                        ) : filteredTemplates.length === 0 ? (
+                            <div className="p-16 flex flex-col items-center justify-center text-gray-400 text-center">
+                                <FileText className="h-12 w-12 text-gray-300 mb-4" />
+                                <p className="text-lg font-bold text-gray-600 mb-1">No templates found</p>
+                                <p className="text-sm">Click 'Create Template' to get started.</p>
+                            </div>
+                        ) : (
+                            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50/30">
+                                {filteredTemplates.map((template) => (
+                                    <div key={template.id} className="bg-white border border-gray-200 p-5 rounded-2xl hover:border-violet-500/30 transition-all shadow-sm group">
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div>
+                                                <h3 className="font-bold text-gray-900 group-hover:text-violet-600 transition-colors text-lg">{template.title}</h3>
+                                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md mt-1.5 inline-block ${template.type === 'Clinical Note' ? 'bg-teal-500/10 text-teal-600 border border-teal-500/20' :
                                                     template.type === 'Lab Order' ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20' :
                                                         'bg-violet-500/10 text-violet-600 border border-violet-500/20'
-                                                }`}>
-                                                {template.type}
-                                            </span>
+                                                    }`}>
+                                                    {template.type}
+                                                </span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => handleOpenModal(template)} className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all"><Edit3 className="h-4 w-4" /></button>
+                                                <button onClick={() => handleDelete(template.id)} className="p-2 text-gray-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all"><Trash2 className="h-4 w-4" /></button>
+                                            </div>
                                         </div>
-                                        <div className="flex gap-2">
-                                            <button className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all"><Edit3 className="h-4 w-4" /></button>
-                                            <button className="p-2 text-gray-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all"><Trash2 className="h-4 w-4" /></button>
+                                        <pre className="text-sm text-gray-500 font-sans mt-3 bg-gray-50 p-3 rounded-xl border border-gray-100 whitespace-pre-wrap leading-relaxed truncate group-hover:bg-violet-50/50 group-hover:border-violet-500/10 transition-colors cursor-text">
+                                            {template.contentPreview}
+                                        </pre>
+                                        <div className="flex justify-between items-center mt-5 pt-4 border-t border-gray-100 text-xs text-gray-400 font-medium">
+                                            <span>Used {template.used} times</span>
+                                            <span>Updated {template.lastUpdated}</span>
                                         </div>
                                     </div>
-                                    <pre className="text-sm text-gray-500 font-sans mt-3 bg-gray-50 p-3 rounded-xl border border-gray-100 whitespace-pre-wrap leading-relaxed truncate group-hover:bg-violet-50/50 group-hover:border-violet-500/10 transition-colors cursor-text">
-                                        {template.contentPreview}
-                                    </pre>
-                                    <div className="flex justify-between items-center mt-5 pt-4 border-t border-gray-100 text-xs text-gray-400 font-medium">
-                                        <span>Used {template.used} times</span>
-                                        <span>Updated {template.lastUpdated}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             </main>

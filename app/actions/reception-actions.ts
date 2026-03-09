@@ -536,6 +536,20 @@ export async function bookAppointment(data: {
         const count = await db.appointments.count();
         const appointmentId = `APT-${String(count + 1).padStart(6, '0')}`;
 
+        let appointmentDate = new Date(data.date);
+
+        if (data.slotId) {
+            const slot = await db.appointmentSlot.findUnique({
+                where: { id: data.slotId }
+            });
+            if (slot) {
+                // Parse slot start time assuming format HH:MM
+                const [hours, minutes] = slot.start_time.split(':').map(Number);
+                appointmentDate = new Date(data.date);
+                appointmentDate.setHours(hours, minutes, 0, 0);
+            }
+        }
+
         const appointment = await db.appointments.create({
             data: {
                 appointment_id: appointmentId,
@@ -545,7 +559,7 @@ export async function bookAppointment(data: {
                 department: data.department,
                 reason_for_visit: data.reasonForVisit,
                 status: 'Scheduled',
-                appointment_date: new Date(data.date),
+                appointment_date: appointmentDate,
             },
         });
 

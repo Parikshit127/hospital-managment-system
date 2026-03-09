@@ -16,6 +16,7 @@ import {
     getStaffStats, getUsersList, getOrganizationSettings,
     updateOrganizationSettings, addUser
 } from '@/app/actions/admin-actions';
+import { getPatientQueue } from '@/app/actions/doctor-actions';
 
 const DOCTOR_SPECIALTIES = [
     'General Medicine',
@@ -56,6 +57,9 @@ export default function AdminDashboard() {
     const [loading, setLoading] = useState(true);
     const [featureSaving, setFeatureSaving] = useState<FeatureToggleKey | null>(null);
     const [showAddDoctorModal, setShowAddDoctorModal] = useState(false);
+    const [selectedDoctor, setSelectedDoctor] = useState<any>(null);
+    const [doctorQueue, setDoctorQueue] = useState<any[]>([]);
+    const [loadingQueue, setLoadingQueue] = useState(false);
     const [doctorSubmitting, setDoctorSubmitting] = useState(false);
     const [doctorError, setDoctorError] = useState('');
     const [doctorForm, setDoctorForm] = useState({
@@ -66,6 +70,18 @@ export default function AdminDashboard() {
         email: '',
         phone: '',
     });
+
+    const handleDoctorClick = async (doctor: any) => {
+        setSelectedDoctor(doctor);
+        setLoadingQueue(true);
+        const res = await getPatientQueue({ view: 'my', doctor_id: doctor.id });
+        if (res.success) {
+            setDoctorQueue(res.data);
+        } else {
+            setDoctorQueue([]);
+        }
+        setLoadingQueue(false);
+    };
 
     const loadData = async () => {
         setLoading(true);
@@ -634,7 +650,7 @@ export default function AdminDashboard() {
                             </div>
 
                             {/* DOCTOR COMMAND */}
-                            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                            <div id="doctor-command" className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
                                 <div className="p-5 border-b border-gray-200 flex items-center justify-between">
                                     <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
                                         <Stethoscope className="h-4 w-4 text-violet-400" />
@@ -647,7 +663,7 @@ export default function AdminDashboard() {
                                 <div className="p-5 space-y-3">
                                     {doctorList.length > 0 ? (
                                         doctorList.map((doctor: any) => (
-                                            <div key={doctor.id} className="p-3 rounded-xl border border-violet-100 bg-violet-50/40">
+                                            <button key={doctor.id} onClick={() => handleDoctorClick(doctor)} className="w-full text-left p-3 rounded-xl border border-violet-100 bg-violet-50/40 hover:bg-violet-100 transition-colors">
                                                 <div className="flex items-center justify-between gap-3">
                                                     <div>
                                                         <p className="text-xs font-black text-gray-700">{doctor.name || doctor.username}</p>
@@ -657,7 +673,7 @@ export default function AdminDashboard() {
                                                     </div>
                                                     <span className="text-[10px] font-mono text-gray-400">@{doctor.username}</span>
                                                 </div>
-                                            </div>
+                                            </button>
                                         ))
                                     ) : (
                                         <div className="py-8 flex flex-col items-center text-gray-300">
@@ -740,17 +756,18 @@ export default function AdminDashboard() {
                                     <p className="text-[10px] text-gray-400 font-medium mt-0.5">Smart patient intake & routing</p>
                                 </div>
                             </Link>
-                            <Link href="/doctor/dashboard"
-                                className="group bg-gradient-to-br from-violet-500/10 to-violet-600/5 border border-violet-500/20 rounded-2xl p-5 hover:border-violet-400/40 transition-all flex flex-col gap-3"
+                            <button
+                                onClick={() => document.getElementById('doctor-command')?.scrollIntoView({ behavior: 'smooth' })}
+                                className="group bg-gradient-to-br from-violet-500/10 to-violet-600/5 border border-violet-500/20 rounded-2xl p-5 hover:border-violet-400/40 transition-all flex flex-col gap-3 text-left"
                             >
                                 <div className="p-2 bg-violet-500/10 rounded-xl w-fit group-hover:bg-violet-500/20 transition-all">
                                     <Stethoscope className="h-5 w-5 text-violet-400" />
                                 </div>
                                 <div>
                                     <h4 className="text-sm font-black text-gray-700">Doctor Console</h4>
-                                    <p className="text-[10px] text-gray-400 font-medium mt-0.5">Patient queue & AI co-pilot</p>
+                                    <p className="text-[10px] text-gray-400 font-medium mt-0.5">View doctors &amp; patient queues</p>
                                 </div>
-                            </Link>
+                            </button>
                             <Link href="/ipd"
                                 className="group bg-gradient-to-br from-indigo-500/10 to-indigo-600/5 border border-indigo-500/20 rounded-2xl p-5 hover:border-indigo-400/40 transition-all flex flex-col gap-3"
                             >
@@ -961,6 +978,60 @@ export default function AdminDashboard() {
                                                 Add Doctor
                                             </button>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        {selectedDoctor && (
+                            <div className="fixed inset-0 z-[100] flex justify-end">
+                                <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSelectedDoctor(null)} />
+                                <div className="relative bg-white w-full max-w-md h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+                                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-violet-50 text-violet-900">
+                                        <div>
+                                            <h2 className="text-base font-bold">Active Station: {selectedDoctor.name || selectedDoctor.username}</h2>
+                                            <p className="text-[10px] font-medium opacity-80">{selectedDoctor.specialty || 'General Practice'}</p>
+                                        </div>
+                                        <button
+                                            onClick={() => setSelectedDoctor(null)}
+                                            className="p-1.5 rounded-lg hover:bg-violet-200 text-violet-600 transition-colors"
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    </div>
+
+                                    <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+                                        <h3 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4">Current Patient Queue</h3>
+                                        {loadingQueue ? (
+                                            <div className="flex items-center justify-center py-12">
+                                                <Loader2 className="h-6 w-6 animate-spin text-violet-400" />
+                                            </div>
+                                        ) : doctorQueue.length > 0 ? (
+                                            <div className="space-y-3">
+                                                {doctorQueue.map((patient: any) => (
+                                                    <div key={patient.internal_id} className="p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
+                                                        <div className="flex justify-between items-start mb-2">
+                                                            <div>
+                                                                <h4 className="text-sm font-bold text-gray-900">{patient.full_name || 'Unknown Patient'}</h4>
+                                                                <p className="text-[10px] font-mono text-gray-400">{patient.digital_id}</p>
+                                                            </div>
+                                                            <span className="text-[10px] font-black px-2 py-1 bg-amber-100 text-amber-700 rounded-md">
+                                                                {patient.status}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex gap-4 text-[10px] text-gray-500 font-medium">
+                                                            <span>{new Date(patient.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                            {patient.age && <span>Age: {patient.age}</span>}
+                                                            {patient.gender && <span>{patient.gender}</span>}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-12 text-gray-400">
+                                                <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                                <p className="text-xs font-bold">No patients in queue</p>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>

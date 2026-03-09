@@ -488,6 +488,73 @@ export async function getDoctorSchedule(doctorId: string, startDate: string, end
     }
 }
 
+// Auto-generate 30-min slots for a doctor on a given date if none exist
+export async function getOrCreateDailySlots(doctorId: string, dateStr: string) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const dayStart = new Date(dateStr);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(dateStr);
+        dayEnd.setHours(23, 59, 59, 999);
+
+        // Check if slots already exist for this doctor+date
+        const existingSlots = await db.appointmentSlot.findMany({
+            where: {
+                doctor_id: doctorId,
+                date: { gte: dayStart, lte: dayEnd },
+            },
+            orderBy: { start_time: 'asc' },
+        });
+
+        if (existingSlots.length > 0) {
+            return { success: true, data: existingSlots };
+        }
+
+        // Auto-generate 20-min slots from 09:00 to 17:00
+        const SLOT_DURATION = 20;
+        const START_HOUR = 9;
+        const END_HOUR = 17;
+        const slots: any[] = [];
+        const startMin = START_HOUR * 60;
+        const endMin = END_HOUR * 60;
+
+        for (let min = startMin; min + SLOT_DURATION <= endMin; min += SLOT_DURATION) {
+            const slotStart = `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+            const slotEndMin = min + SLOT_DURATION;
+            const slotEnd = `${String(Math.floor(slotEndMin / 60)).padStart(2, '0')}:${String(slotEndMin % 60).padStart(2, '0')}`;
+
+            slots.push({
+                doctor_id: doctorId,
+                date: new Date(dateStr),
+                start_time: slotStart,
+                end_time: slotEnd,
+                slot_type: 'scheduled',
+                is_available: true,
+                is_booked: false,
+            });
+        }
+
+        if (slots.length > 0) {
+            await db.appointmentSlot.createMany({ data: slots });
+        }
+
+        // Fetch and return the newly created slots
+        const newSlots = await db.appointmentSlot.findMany({
+            where: {
+                doctor_id: doctorId,
+                date: { gte: dayStart, lte: dayEnd },
+            },
+            orderBy: { start_time: 'asc' },
+        });
+
+        return { success: true, data: newSlots };
+    } catch (error) {
+        console.error('getOrCreateDailySlots Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
 export async function updateDoctorAvailability(data: {
     doctorId: string;
     date: string;
@@ -515,6 +582,20 @@ export async function updateDoctorAvailability(data: {
                 data: { is_available: false, slot_type: 'blocked' },
             });
         } else {
+            // Delete any existing unbooked slots for this date to prevent duplicates
+            const dayStart = new Date(data.date);
+            dayStart.setHours(0, 0, 0, 0);
+            const dayEnd = new Date(data.date);
+            dayEnd.setHours(23, 59, 59, 999);
+
+            await db.appointmentSlot.deleteMany({
+                where: {
+                    doctor_id: data.doctorId,
+                    date: { gte: dayStart, lte: dayEnd },
+                    is_booked: false,
+                }
+            });
+
             // Create available slots
             const slots: any[] = [];
             const [startH, startM] = data.startTime.split(':').map(Number);
@@ -548,6 +629,20 @@ export async function updateDoctorAvailability(data: {
     } catch (error) {
         console.error('Update Availability Error:', error);
         return { success: false, error: 'Failed to update availability' };
+    }
+}
+
+export async function toggleSlotAvailability(slotId: string, isAvailable: boolean) {
+    try {
+        const { db } = await requireTenantContext();
+        await db.appointmentSlot.update({
+            where: { id: slotId },
+            data: { is_available: isAvailable, slot_type: isAvailable ? 'scheduled' : 'blocked' }
+        });
+        return { success: true };
+    } catch (err) {
+        console.error('Toggle slot error:', err);
+        return { success: false };
     }
 }
 
@@ -623,7 +718,16 @@ export async function getTemplates(doctorId: string, type?: string) {
             orderBy: { updated_at: 'desc' },
         });
 
-        return { success: true, data: templates };
+        return {
+            success: true, data: templates.map((t: any) => ({
+                id: t.id,
+                title: t.title,
+                type: t.type,
+                contentPreview: t.content,
+                used: t.used_count,
+                lastUpdated: t.updated_at.toLocaleDateString()
+            }))
+        };
     } catch (error) {
         console.error('Get Templates Error:', error);
         return { success: false, data: [] };
@@ -631,9 +735,9 @@ export async function getTemplates(doctorId: string, type?: string) {
 }
 
 export async function saveTemplate(data: {
-    id?: string;
+    id?: number;
     doctorId: string;
-    name: string;
+    title: string;
     type: string;
     content: string;
 }) {
@@ -643,13 +747,13 @@ export async function saveTemplate(data: {
         if (data.id) {
             await db.prescriptionTemplate.update({
                 where: { id: data.id },
-                data: { name: data.name, type: data.type, content: data.content },
+                data: { title: data.title, type: data.type, content: data.content },
             });
         } else {
             await db.prescriptionTemplate.create({
                 data: {
                     doctor_id: data.doctorId,
-                    name: data.name,
+                    title: data.title,
                     type: data.type,
                     content: data.content,
                 },
@@ -664,7 +768,7 @@ export async function saveTemplate(data: {
     }
 }
 
-export async function deleteTemplate(id: string) {
+export async function deleteTemplate(id: number) {
     try {
         const { db } = await requireTenantContext();
         await db.prescriptionTemplate.delete({ where: { id } });

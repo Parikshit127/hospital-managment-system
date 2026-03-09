@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import {
     ClipboardList, UserPlus, CheckCircle, Phone, Activity,
-    User, MapPin, Shield, Calendar, Hash, Loader2
+    User, MapPin, Shield, Calendar, Hash, Loader2, Mail
 } from 'lucide-react';
 import { registerPatient } from '@/app/actions/register-patient';
 import { AppShell } from '@/app/components/layout/AppShell';
@@ -249,7 +249,7 @@ export default function ReceptionPage() {
                                         </div>
 
                                         {/* Aadhaar */}
-                                        <div className="md:col-span-2 space-y-1.5">
+                                        <div className="space-y-1.5 md:col-span-2">
                                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Aadhaar (Optional)</label>
                                             <div className="relative">
                                                 <Shield className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
@@ -266,8 +266,22 @@ export default function ReceptionPage() {
                                             </div>
                                         </div>
 
+                                        {/* Email */}
+                                        <div className="space-y-1.5 md:col-span-2">
+                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Email (Optional)</label>
+                                            <div className="relative">
+                                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+                                                <input
+                                                    name="email"
+                                                    type="email"
+                                                    className="w-full bg-white border border-gray-300 rounded-xl pl-11 pr-4 py-3.5 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/10 outline-none transition-all"
+                                                    placeholder="patient@example.com"
+                                                />
+                                            </div>
+                                        </div>
+
                                         {/* Address */}
-                                        <div className="md:col-span-4 space-y-1.5">
+                                        <div className="md:col-span-2 space-y-1.5">
                                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Address</label>
                                             <div className="relative">
                                                 <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />

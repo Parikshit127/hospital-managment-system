@@ -395,7 +395,9 @@ export default function DoctorDashboard() {
                                                 </span>
                                             )}
                                         </div>
-                                        <span className="text-[10px] text-gray-300 font-mono">#{p.digital_id ? p.digital_id.split('-').pop() : p.patient_id.slice(0, 4)}</span>
+                                        <span className="text-[10px] text-gray-400 font-bold bg-gray-100 px-1.5 py-0.5 rounded">
+                                            {p.appointment_date ? new Date(p.appointment_date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Time N/A'}
+                                        </span>
                                     </div>
                                     <h4 className="font-bold text-sm truncate text-gray-800 group-hover:text-teal-600 transition-colors">{p.full_name}</h4>
                                     <div className="flex gap-2 mt-1 items-center">

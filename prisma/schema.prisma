@@ -164,9 +164,12 @@ model User {
   assigned_ward_id Int?
   organizationId   String
   is_active        Boolean  @default(true)
+  working_hours    String   @default("09:00-17:00")
+  slot_duration    Int      @default(20)
   createdAt        DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
+  appointment_slots AppointmentSlot[]
 
   @@index([organizationId])
   @@map("users")
@@ -860,6 +863,7 @@ model AppointmentSlot {
   created_at     DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
+  doctor       User         @relation(fields: [doctor_id], references: [id])
 
   @@index([organizationId])
   @@index([doctor_id, date])
