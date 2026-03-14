@@ -1,6 +1,7 @@
 "use server";
 
 import { requireTenantContext } from "@/backend/tenant";
+import { getTenantPrisma } from "@/backend/db";
 import { revalidatePath } from "next/cache";
 import { searchICD10 } from "@/app/lib/icd10";
 import { sendPrescriptionEmail, sendAdmissionEmail } from "@/backend/email";
@@ -585,9 +586,15 @@ export async function getDoctorSchedule(
 }
 
 // Auto-generate 30-min slots for a doctor on a given date if none exist
-export async function getOrCreateDailySlots(doctorId: string, dateStr: string) {
+export async function getOrCreateDailySlots(
+  doctorId: string,
+  dateStr: string,
+  options?: { organizationId?: string },
+) {
   try {
-    const { db } = await requireTenantContext();
+    const db = options?.organizationId
+      ? getTenantPrisma(options.organizationId)
+      : (await requireTenantContext()).db;
 
     const dayStart = new Date(dateStr);
     dayStart.setHours(0, 0, 0, 0);
