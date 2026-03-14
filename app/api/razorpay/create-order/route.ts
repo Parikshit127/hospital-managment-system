@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import razorpay from "@/app/lib/razorpay";
+import { getRazorpayClient } from "@/app/lib/razorpay";
 import { prisma } from "@/backend/db";
 import { resolveRouteAuth } from "@/app/lib/route-auth";
 
@@ -7,6 +7,8 @@ const ALLOWED_STAFF_ROLES = ["admin", "finance", "receptionist"];
 
 export async function POST(req: NextRequest) {
   try {
+    const razorpay = getRazorpayClient();
+
     const auth = await resolveRouteAuth({
       allowPatient: true,
       allowedStaffRoles: ALLOWED_STAFF_ROLES,

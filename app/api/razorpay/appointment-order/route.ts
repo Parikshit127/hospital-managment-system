@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import razorpay from "@/app/lib/razorpay";
+import { getRazorpayClient } from "@/app/lib/razorpay";
 import { getPatientSession } from "@/app/patient/login/actions";
 import { getTenantPrisma } from "@/backend/db";
 
@@ -11,6 +11,8 @@ function toNumber(value: unknown): number {
 
 export async function POST(req: NextRequest) {
   try {
+    const razorpay = getRazorpayClient();
+
     const session = await getPatientSession();
     if (!session) {
       return NextResponse.json(

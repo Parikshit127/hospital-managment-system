@@ -1,11 +1,28 @@
 import Razorpay from "razorpay";
-import { validateServerEnv } from "@/app/lib/env";
 
-validateServerEnv();
+let razorpayInstance: Razorpay | null = null;
 
-const razorpayInstance = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || "",
-  key_secret: process.env.RAZORPAY_KEY_SECRET || "",
-});
+function getRazorpayConfig() {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
-export default razorpayInstance;
+  if (!keyId || !keySecret) {
+    throw new Error(
+      "Razorpay is not configured. Missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET.",
+    );
+  }
+
+  return { keyId, keySecret };
+}
+
+export function getRazorpayClient() {
+  if (razorpayInstance) return razorpayInstance;
+
+  const { keyId, keySecret } = getRazorpayConfig();
+  razorpayInstance = new Razorpay({
+    key_id: keyId,
+    key_secret: keySecret,
+  });
+
+  return razorpayInstance;
+}

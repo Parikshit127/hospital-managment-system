@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import razorpay from "@/app/lib/razorpay";
+import { getRazorpayClient } from "@/app/lib/razorpay";
 import { getPatientSession } from "@/app/patient/login/actions";
 import { getTenantPrisma } from "@/backend/db";
 
 export async function POST(req: NextRequest) {
   try {
+    const razorpay = getRazorpayClient();
+
     const session = await getPatientSession();
     if (!session) {
       return NextResponse.json(
