@@ -336,9 +336,9 @@ export async function findAssignedDoctorByPatientPhone(phoneQuery: string) {
 
         return { a, score };
       })
-      .filter((x) => x.score >= 0)
+      .filter((x: any) => x.score >= 0)
       .sort(
-        (x, y) =>
+        (x: any, y: any) =>
           y.score - x.score ||
           new Date(y.a.admission_date).getTime() -
             new Date(x.a.admission_date).getTime(),
