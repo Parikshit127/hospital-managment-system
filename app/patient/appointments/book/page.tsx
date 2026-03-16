@@ -14,6 +14,7 @@ import {
   Pencil,
   ArrowLeft,
   CreditCard,
+  CreditCard,
 } from "lucide-react";
 import {
   getAvailableDoctors,
@@ -25,6 +26,7 @@ interface Doctor {
   id: string;
   name: string;
   specialty: string;
+  fee?: number;
 }
 
 interface Slot {
@@ -163,7 +165,7 @@ export default function BookAppointmentPage() {
         try {
           const err = await orderResponse.json();
           msg = err?.error || err?.message || msg;
-        } catch {}
+        } catch { }
         throw new Error(msg);
       }
 
@@ -228,7 +230,7 @@ export default function BookAppointmentPage() {
                 try {
                   const err = await verifyRes.json();
                   msg = err?.error || err?.message || msg;
-                } catch {}
+                } catch { }
                 throw new Error(msg);
               }
 
@@ -238,7 +240,7 @@ export default function BookAppointmentPage() {
             } catch (error: any) {
               setPaymentError(
                 error?.message ||
-                  "Payment verification failed. Please contact support.",
+                "Payment verification failed. Please contact support.",
               );
               console.error(error);
             } finally {
@@ -307,13 +309,12 @@ export default function BookAppointmentPage() {
               <div key={s.num} className="flex items-center flex-1">
                 <div className="flex flex-col items-center flex-1">
                   <div
-                    className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                      isComplete
+                    className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${isComplete
                         ? "bg-emerald-500 text-white"
                         : isActive
                           ? "bg-emerald-500 text-white ring-4 ring-emerald-100"
                           : "bg-gray-100 text-gray-400"
-                    }`}
+                      }`}
                   >
                     {isComplete ? (
                       <CheckCircle2 className="h-5 w-5" />
@@ -322,20 +323,18 @@ export default function BookAppointmentPage() {
                     )}
                   </div>
                   <span
-                    className={`text-xs font-bold mt-1.5 ${
-                      isActive || isComplete
+                    className={`text-xs font-bold mt-1.5 ${isActive || isComplete
                         ? "text-emerald-700"
                         : "text-gray-400"
-                    }`}
+                      }`}
                   >
                     {s.label}
                   </span>
                 </div>
                 {idx < STEPS.length - 1 && (
                   <div
-                    className={`h-0.5 flex-1 mx-2 rounded-full -mt-5 ${
-                      step > s.num ? "bg-emerald-400" : "bg-gray-200"
-                    }`}
+                    className={`h-0.5 flex-1 mx-2 rounded-full -mt-5 ${step > s.num ? "bg-emerald-400" : "bg-gray-200"
+                      }`}
                   />
                 )}
               </div>
@@ -392,19 +391,17 @@ export default function BookAppointmentPage() {
                   <button
                     key={doc.id}
                     onClick={() => setSelectedDoctor(doc)}
-                    className={`bg-white border-2 rounded-2xl p-5 text-left transition-all hover:shadow-md ${
-                      isSelected
+                    className={`bg-white border-2 rounded-2xl p-5 text-left transition-all hover:shadow-md ${isSelected
                         ? "border-emerald-500 ring-4 ring-emerald-100 shadow-md"
                         : "border-gray-100 hover:border-gray-200"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <div
-                        className={`h-12 w-12 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0 ${
-                          isSelected
+                        className={`h-12 w-12 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0 ${isSelected
                             ? "bg-gradient-to-br from-emerald-400 to-teal-500"
                             : "bg-gradient-to-br from-gray-300 to-gray-400"
-                        }`}
+                          }`}
                       >
                         {getInitials(doc.name)}
                       </div>
@@ -513,13 +510,12 @@ export default function BookAppointmentPage() {
                           slot.is_available && setSelectedSlot(slot)
                         }
                         disabled={!slot.is_available}
-                        className={`py-3 px-3 rounded-xl text-sm font-bold border-2 transition-all ${
-                          isSelected
+                        className={`py-3 px-3 rounded-xl text-sm font-bold border-2 transition-all ${isSelected
                             ? "bg-emerald-500 text-white border-emerald-500 shadow-md"
                             : slot.is_available
                               ? "bg-white border-emerald-200 text-emerald-700 hover:border-emerald-400 hover:bg-emerald-50"
                               : "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
-                        }`}
+                          }`}
                       >
                         {slot.start_time}
                       </button>
@@ -605,14 +601,14 @@ export default function BookAppointmentPage() {
                   <p className="font-bold text-gray-900 mt-0.5">
                     {selectedDate
                       ? new Date(selectedDate + "T00:00:00").toLocaleDateString(
-                          undefined,
-                          {
-                            weekday: "long",
-                            month: "long",
-                            day: "numeric",
-                            year: "numeric",
-                          },
-                        )
+                        undefined,
+                        {
+                          weekday: "long",
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        },
+                      )
                       : ""}
                   </p>
                 </div>
@@ -737,9 +733,9 @@ export default function BookAppointmentPage() {
                 <span className="font-bold text-gray-900">
                   {selectedDate
                     ? new Date(selectedDate + "T00:00:00").toLocaleDateString(
-                        undefined,
-                        { month: "short", day: "numeric", year: "numeric" },
-                      )
+                      undefined,
+                      { month: "short", day: "numeric", year: "numeric" },
+                    )
                     : ""}
                 </span>
               </div>
@@ -821,14 +817,14 @@ export default function BookAppointmentPage() {
               <p className="font-bold text-gray-900">
                 {selectedDate
                   ? new Date(selectedDate + "T00:00:00").toLocaleDateString(
-                      undefined,
-                      {
-                        weekday: "long",
-                        month: "long",
-                        day: "numeric",
-                        year: "numeric",
-                      },
-                    )
+                    undefined,
+                    {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    },
+                  )
                   : ""}
               </p>
             </div>

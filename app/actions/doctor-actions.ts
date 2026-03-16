@@ -639,6 +639,7 @@ export async function getOrCreateDailySlots(
         slot_type: "scheduled",
         is_available: true,
         is_booked: false,
+        organizationId: organizationId,
       });
     }
 
