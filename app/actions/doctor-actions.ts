@@ -592,9 +592,15 @@ export async function getOrCreateDailySlots(
   options?: { organizationId?: string },
 ) {
   try {
-    const db = options?.organizationId
-      ? getTenantPrisma(options.organizationId)
-      : (await requireTenantContext()).db;
+    let orgId = options?.organizationId;
+    let db;
+    if (orgId) {
+      db = getTenantPrisma(orgId);
+    } else {
+      const ctx = await requireTenantContext();
+      db = ctx.db;
+      orgId = ctx.session.organization_id;
+    }
 
     const dayStart = new Date(dateStr);
     dayStart.setHours(0, 0, 0, 0);
@@ -639,7 +645,7 @@ export async function getOrCreateDailySlots(
         slot_type: "scheduled",
         is_available: true,
         is_booked: false,
-        organizationId: organizationId,
+        organizationId: orgId,
       });
     }
 

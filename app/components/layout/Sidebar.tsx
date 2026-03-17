@@ -37,6 +37,8 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
         { label: 'Reports Hub', href: '/admin/reports', icon: <BarChart3 className="h-4 w-4" /> },
         { label: 'Org Settings', href: '/admin/settings', icon: <Settings className="h-4 w-4" /> },
         { label: 'Branding', href: '/admin/settings/branding', icon: <Building2 className="h-4 w-4" /> },
+        { label: 'IPD Inventory', href: '/admin/ipd-setup', icon: <BedDouble className="h-4 w-4" /> },
+        { label: 'Admissions Hub', href: '/ipd/admissions-hub', icon: <Activity className="h-4 w-4" /> },
         { label: 'Audit Log', href: '/admin/audit', icon: <Activity className="h-4 w-4" /> },
     ],
     doctor: [
@@ -82,6 +84,7 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
     ],
     ipd_manager: [
         { label: 'IPD Dashboard', href: '/ipd', icon: <Bed className="h-4 w-4" /> },
+        { label: 'Admissions Hub', href: '/ipd/admissions-hub', icon: <Activity className="h-4 w-4" /> },
         { label: 'Bed Matrix', href: '/ipd/bed-matrix', icon: <BedDouble className="h-4 w-4" /> },
         { label: 'Transfer', href: '/ipd/transfer', icon: <RotateCcw className="h-4 w-4" /> },
         { label: 'Nursing Station', href: '/ipd/nursing-station', icon: <Syringe className="h-4 w-4" /> },
@@ -101,6 +104,7 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
     ],
     nurse: [
         { label: 'Dashboard', href: '/nurse/dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
+        { label: 'Admissions Hub', href: '/ipd/admissions-hub', icon: <Activity className="h-4 w-4" /> },
         { label: 'My Patients', href: '/nurse/patients', icon: <Users className="h-4 w-4" /> },
         { label: 'Vitals', href: '/nurse/vitals', icon: <Activity className="h-4 w-4" /> },
         { label: 'Medications', href: '/nurse/medications', icon: <Syringe className="h-4 w-4" /> },

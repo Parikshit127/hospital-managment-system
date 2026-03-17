@@ -14,7 +14,6 @@ import {
   Pencil,
   ArrowLeft,
   CreditCard,
-  CreditCard,
 } from "lucide-react";
 import {
   getAvailableDoctors,

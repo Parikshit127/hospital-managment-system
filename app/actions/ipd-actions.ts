@@ -135,57 +135,69 @@ export async function admitPatientIPD(data: {
   doctor_name: string;
 }) {
   try {
-    const { db } = await requireTenantContext();
-    // Check if bed is available
-    const bed = await db.beds.findUnique({ where: { bed_id: data.bed_id } });
-    if (!bed || bed.status !== "Available") {
-      return { success: false, error: "Bed is not available for admission" };
-    }
+    const { db, organizationId } = await requireTenantContext();
+    
+    // Use transaction for atomic bed locking and admission creation
+    const admission = await db.$transaction(async (tx: any) => {
+        // Atomic update: only update if it is 'Available'
+        const updatedBed = await tx.beds.updateMany({
+            where: { bed_id: data.bed_id, status: "Available", organizationId },
+            data: { status: "Occupied" }
+        });
 
-    // Create admission
-    const admission = await db.admissions.create({
-      data: {
-        patient_id: data.patient_id,
-        bed_id: data.bed_id,
-        ward_id: data.ward_id,
-        status: "Admitted",
-        diagnosis: data.diagnosis,
-        doctor_name: data.doctor_name,
-      },
-    });
+        if (updatedBed.count === 0) {
+            throw new Error("Bed is no longer available or does not exist for admission");
+        }
 
-    // Mark bed as occupied
-    await db.beds.update({
-      where: { bed_id: data.bed_id },
-      data: { status: "Occupied" },
-    });
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+        const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0");
+        const ipdId = `IPD-${dateStr}-${seq}`;
 
-    // Create IPD invoice
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0");
+        // Create admission
+        const newAdmission = await tx.admissions.create({
+            data: {
+                admission_id: ipdId,
+                patient_id: data.patient_id,
+                bed_id: data.bed_id,
+                ward_id: data.ward_id,
+                status: "Admitted",
+                diagnosis: data.diagnosis,
+                doctor_name: data.doctor_name,
+                organizationId
+            },
+        });
 
-    await db.invoices.create({
-      data: {
-        invoice_number: `INV-${dateStr}-${seq}`,
-        patient_id: data.patient_id,
-        admission_id: admission.admission_id,
-        invoice_type: "IPD",
-        status: "Draft",
-      },
-    });
+        // Create IPD invoice
+        // Re-use dateStr and seq or generate new ones for invoice if preferred, but generating new seq:
+        const invoiceSeq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0");
 
-    await db.system_audit_logs.create({
-      data: {
-        action: "ADMIT_PATIENT_IPD",
-        module: "ipd",
-        entity_type: "admission",
-        entity_id: admission.admission_id,
-        details: JSON.stringify({
-          patient_id: data.patient_id,
-          bed_id: data.bed_id,
-          doctor: data.doctor_name,
-        }),
-      },
+        await tx.invoices.create({
+            data: {
+                invoice_number: `INV-${dateStr}-${invoiceSeq}`,
+                patient_id: data.patient_id,
+                admission_id: newAdmission.admission_id,
+                invoice_type: "IPD",
+                status: "Draft",
+                organizationId
+            },
+        });
+
+        await tx.system_audit_logs.create({
+            data: {
+                action: "ADMIT_PATIENT_IPD",
+                module: "ipd",
+                entity_type: "admission",
+                entity_id: newAdmission.admission_id,
+                details: JSON.stringify({
+                    patient_id: data.patient_id,
+                    bed_id: data.bed_id,
+                    doctor: data.doctor_name,
+                }),
+                organizationId
+            },
+        });
+
+        return newAdmission;
     });
 
     return { success: true, data: admission };
@@ -459,8 +471,16 @@ export async function accrueIPDDailyCharges(admissionId: string) {
       });
     }
 
-    const roomRate = Number(ward.cost_per_day || 0);
-    const nursingRate = Number(ward.nursing_charge || 0);
+    const bedPricingTier = admission.bed?.pricing_tier || 'Base';
+    let multiplier = 1;
+    if (bedPricingTier === 'Premium') multiplier = 1.5;
+    if (bedPricingTier === 'Critical') multiplier = 2.0;
+
+    const baseRoomRate = Number(ward.cost_per_day || 0);
+    const roomRate = baseRoomRate * multiplier;
+    
+    // Nursing rate is also scaled or remains flat based on hospital policy. Let's scale it.
+    const nursingRate = Number(ward.nursing_charge || 0) * multiplier;
     const today = new Date().toLocaleDateString("en-IN");
 
     // Add room charge
@@ -655,7 +675,7 @@ export async function addMedicalNote(
 // Get IPD Stats
 export async function getIPDStats() {
   try {
-    const { db } = await requireTenantContext();
+    const { db, session } = await requireTenantContext();
     const [
       totalAdmitted,
       totalDischarged,
@@ -680,6 +700,7 @@ export async function getIPDStats() {
         occupiedBeds,
         occupancyRate:
           totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0,
+        role: session.role,
       },
     };
   } catch (error: any) {

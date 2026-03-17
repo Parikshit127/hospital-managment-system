@@ -48,6 +48,7 @@ export default function IPDDashboard() {
   const [wards, setWards] = useState<any[]>([]);
   const [beds, setBeds] = useState<any[]>([]);
   const [admissions, setAdmissions] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
   const [admissionFilter, setAdmissionFilter] = useState("Admitted");
@@ -95,7 +96,7 @@ export default function IPDDashboard() {
         getIPDStats(),
         getWardsWithBeds(),
         getAllBeds(),
-        getIPDAdmissions(admissionFilter),
+        getIPDAdmissions(admissionFilter)
       ]);
       if (s.success) setStats(s.data);
       if (w.success) setWards(w.data || []);
@@ -282,12 +283,24 @@ export default function IPDDashboard() {
       onRefresh={loadData}
       refreshing={loading}
       headerActions={
-        <button
-          onClick={() => setAdmitModal(true)}
-          className="px-4 py-2 bg-gradient-to-r from-violet-500 to-indigo-500 rounded-xl text-xs font-bold text-white shadow-lg shadow-violet-500/20 flex items-center gap-2"
-        >
-          <UserPlus className="h-3.5 w-3.5" /> Admit Patient
-        </button>
+        <div className="flex items-center gap-2">
+            {stats?.role !== 'admin' && (
+                <Link href="/ipd/admissions-hub" className="px-4 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl text-xs font-bold transition-all shadow-sm hidden sm:flex items-center gap-1.5">
+                    Admissions Hub
+                </Link>
+            )}
+            {stats?.role === 'admin' && (
+                <Link href="/admin/ipd-setup" className="px-4 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl text-xs font-bold transition-all shadow-sm hidden sm:flex items-center gap-1.5">
+                    IPD Inventory
+                </Link>
+            )}
+            <button
+              onClick={() => setAdmitModal(true)}
+              className="px-4 py-2 bg-gradient-to-r from-violet-500 to-indigo-500 rounded-xl text-xs font-bold text-white shadow-lg shadow-violet-500/20 flex items-center gap-2"
+            >
+              <UserPlus className="h-3.5 w-3.5" /> Admit Patient
+            </button>
+        </div>
       }
     >
       <div className="space-y-8">
@@ -883,6 +896,7 @@ export default function IPDDashboard() {
                 </div>
               </div>
             )}
+
           </>
         )}
       </div>

@@ -472,6 +472,8 @@ model beds {
   bed_id         String       @id
   ward_id        Int?
   status         String?      @default("Available")
+  bed_category   String?
+  pricing_tier   String?
   organizationId String
   admissions     admissions[]
 
@@ -487,11 +489,15 @@ model wards {
   ward_type      String
   cost_per_day   Decimal? @default(0)
   nursing_charge Decimal? @default(0)
+  department_id  String?
+  floor_number   String?
+  is_active      Boolean  @default(true)
   organizationId String
   beds           beds[]
   admissions     admissions[]
 
   organization Organization @relation(fields: [organizationId], references: [id])
+  department   Department?  @relation(fields: [department_id], references: [id])
 
   @@index([organizationId])
 }
@@ -886,6 +892,7 @@ model Department {
   created_at            DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
+  wards        wards[]
 
   @@unique([slug, organizationId])
   @@index([organizationId])
