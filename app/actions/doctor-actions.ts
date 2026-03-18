@@ -45,38 +45,34 @@ export async function getPatientQueue(options?: {
       };
     }
 
-    // Filter by doctor if "My Patients" view
+    // Filter by doctor if "My Patients" view.
+    // Use strict doctor_id matching when available to avoid leaking other doctors' patients.
     if (options?.view === "my") {
-      const myDoctorFilters: any[] = [];
-
       if (options?.doctor_id) {
-        myDoctorFilters.push({ doctor_id: options.doctor_id });
-      }
-      if (options?.doctor_name) {
-        myDoctorFilters.push({
-          doctor_name: { equals: options.doctor_name, mode: "insensitive" },
-        });
-        myDoctorFilters.push({
-          doctor_name: { contains: options.doctor_name, mode: "insensitive" },
-        });
-      }
-      if (options?.doctor_username) {
-        myDoctorFilters.push({
-          doctor_name: { equals: options.doctor_username, mode: "insensitive" },
-        });
-        myDoctorFilters.push({
-          doctor_name: {
-            contains: options.doctor_username,
-            mode: "insensitive",
-          },
-        });
-      }
-
-      if (myDoctorFilters.length > 0) {
-        where.AND = [...(where.AND || []), { OR: myDoctorFilters }];
+        where.AND = [...(where.AND || []), { doctor_id: options.doctor_id }];
       } else {
-        // Safety: never return unscoped data for "my" view.
-        return { success: true, data: [] };
+        const fallbackFilters: any[] = [];
+
+        if (options?.doctor_name) {
+          fallbackFilters.push({
+            doctor_name: { equals: options.doctor_name, mode: "insensitive" },
+          });
+        }
+        if (options?.doctor_username) {
+          fallbackFilters.push({
+            doctor_name: {
+              equals: options.doctor_username,
+              mode: "insensitive",
+            },
+          });
+        }
+
+        if (fallbackFilters.length > 0) {
+          where.AND = [...(where.AND || []), { OR: fallbackFilters }];
+        } else {
+          // Safety: never return unscoped data for "my" view.
+          return { success: true, data: [] };
+        }
       }
     }
 
@@ -786,6 +782,7 @@ export async function getPatientTimeline(patientId: string) {
       admissions,
       vitals,
       pharmacyOrders,
+      followUps,
     ] = await Promise.all([
       db.oPD_REG.findUnique({ where: { patient_id: patientId } }),
       db.appointments.findMany({
@@ -814,6 +811,10 @@ export async function getPatientTimeline(patientId: string) {
         where: { patient_id: patientId },
         orderBy: { created_at: "desc" },
         include: { items: true },
+      }),
+      db.followUp.findMany({
+        where: { patient_id: patientId },
+        orderBy: { scheduled_date: "desc" },
       }),
     ]);
 
@@ -886,6 +887,20 @@ export async function getPatientTimeline(patientId: string) {
       }),
     );
 
+    followUps.forEach((f: any) =>
+      timeline.push({
+        type: "follow_up",
+        date: f.scheduled_date,
+        data: {
+          id: f.id,
+          doctor_id: f.doctor_id,
+          status: f.status,
+          notes: f.notes,
+          created_at: f.created_at,
+        },
+      }),
+    );
+
     // Sort by date desc
     timeline.sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
@@ -918,10 +933,10 @@ export async function getTemplates(doctorId: string, type?: string) {
       success: true,
       data: templates.map((t: any) => ({
         id: t.id,
-        title: t.title,
+        title: t.name,
         type: t.type,
         contentPreview: t.content,
-        used: t.used_count,
+        used: 0,
         lastUpdated: t.updated_at.toLocaleDateString(),
       })),
     };
@@ -932,7 +947,7 @@ export async function getTemplates(doctorId: string, type?: string) {
 }
 
 export async function saveTemplate(data: {
-  id?: number;
+  id?: string;
   doctorId: string;
   title: string;
   type: string;
@@ -944,13 +959,13 @@ export async function saveTemplate(data: {
     if (data.id) {
       await db.prescriptionTemplate.update({
         where: { id: data.id },
-        data: { title: data.title, type: data.type, content: data.content },
+        data: { name: data.title, type: data.type, content: data.content },
       });
     } else {
       await db.prescriptionTemplate.create({
         data: {
           doctor_id: data.doctorId,
-          title: data.title,
+          name: data.title,
           type: data.type,
           content: data.content,
         },
@@ -965,7 +980,7 @@ export async function saveTemplate(data: {
   }
 }
 
-export async function deleteTemplate(id: number) {
+export async function deleteTemplate(id: string) {
   try {
     const { db } = await requireTenantContext();
     await db.prescriptionTemplate.delete({ where: { id } });
@@ -1075,5 +1090,33 @@ export async function updateFollowUpStatus(id: string, status: string) {
   } catch (error) {
     console.error("Update Follow-Up Error:", error);
     return { success: false, error: "Failed to update" };
+  }
+}
+
+export async function getPatientFollowUps(
+  patientId: string,
+  doctorId?: string,
+) {
+  try {
+    const { db } = await requireTenantContext();
+    const where: any = { patient_id: patientId };
+
+    if (doctorId) {
+      where.doctor_id = doctorId;
+    }
+
+    const followUps = await db.followUp.findMany({
+      where,
+      orderBy: { scheduled_date: "desc" },
+    });
+
+    return { success: true, data: followUps };
+  } catch (error) {
+    console.error("Get Patient Follow-Ups Error:", error);
+    return {
+      success: false,
+      data: [],
+      error: "Failed to fetch patient follow-ups",
+    };
   }
 }

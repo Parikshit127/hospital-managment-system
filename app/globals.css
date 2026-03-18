@@ -19,11 +19,12 @@
   --color-emerald-500: #1aab74;
   --color-emerald-600: #0f8f5e;
 
-  --font-sans: 'Outfit', system-ui, sans-serif;
-  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-sans: "Outfit", system-ui, sans-serif;
+  --font-serif: "Playfair Display", Georgia, serif;
 }
 
 :root {
+  --sidebar-offset: 15rem;
   --background: #f8fbf9;
   --foreground: #0e2018;
   --card-bg: #ffffff;
@@ -117,7 +118,6 @@ body {
 }
 
 @keyframes pulse-glow {
-
   0%,
   100% {
     box-shadow: 0 0 0 0 rgba(26, 171, 116, 0.3);

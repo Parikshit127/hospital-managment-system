@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import {
   Users,
   Search,
@@ -40,6 +41,8 @@ import {
   getMedicineList,
   createPharmacyOrder,
   saveMedicalNote,
+  scheduleFollowUp,
+  getPatientFollowUps,
 } from "@/app/actions/doctor-actions";
 import { dischargePatient } from "@/app/actions/discharge-actions";
 import { registerPatient } from "@/app/actions/register-patient";
@@ -62,12 +65,15 @@ export default function DoctorDashboard() {
   const [sessionResolved, setSessionResolved] = useState(false);
 
   // ─── VIEW MODE ───
-  const [viewMode, setViewMode] = useState<"my" | "all">("my");
+  const viewMode: "my" = "my";
+  const [queueDateRange, setQueueDateRange] = useState<"upcoming" | "all">(
+    "upcoming",
+  );
 
   const [queue, setQueue] = useState<any[]>([]);
   const [activePatient, setActivePatient] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<
-    "notes" | "history" | "lab" | "pharmacy" | "triage"
+    "notes" | "history" | "lab" | "pharmacy" | "triage" | "followup"
   >("triage");
   const [triageData, setTriageData] = useState<any>(null);
   const [loadingTriage, setLoadingTriage] = useState(false);
@@ -110,6 +116,10 @@ export default function DoctorDashboard() {
   const [showDischargeModal, setShowDischargeModal] = useState(false);
   const [dischargePdfUrl, setDischargePdfUrl] = useState("");
   const [isDischarging, setIsDischarging] = useState(false);
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [followUpNotes, setFollowUpNotes] = useState("");
+  const [patientFollowUps, setPatientFollowUps] = useState<any[]>([]);
+  const [loadingFollowUps, setLoadingFollowUps] = useState(false);
 
   // ─── FETCH SESSION ───
   useEffect(() => {
@@ -151,8 +161,8 @@ export default function DoctorDashboard() {
         doctor_name: session?.name,
         doctor_username: session?.username,
         view: viewMode,
-        specialty: viewMode === "all" ? doctorSpecialty : undefined,
-        dateRange: "upcoming",
+        specialty: undefined,
+        dateRange: queueDateRange,
         includeAllStatuses: true,
       });
       if (queueRes.success) {
@@ -163,8 +173,7 @@ export default function DoctorDashboard() {
     }
   }, [
     doctorId,
-    viewMode,
-    doctorSpecialty,
+    queueDateRange,
     session,
     sessionResolved,
     session?.name,
@@ -194,8 +203,8 @@ export default function DoctorDashboard() {
             doctor_name: session?.name,
             doctor_username: session?.username,
             view: viewMode,
-            specialty: viewMode === "all" ? doctorSpecialty : undefined,
-            dateRange: "upcoming",
+            specialty: undefined,
+            dateRange: queueDateRange,
             includeAllStatuses: true,
           }),
           getMedicineList(),
@@ -213,8 +222,7 @@ export default function DoctorDashboard() {
     init();
   }, [
     doctorId,
-    viewMode,
-    doctorSpecialty,
+    queueDateRange,
     session,
     sessionResolved,
     session?.name,
@@ -225,7 +233,7 @@ export default function DoctorDashboard() {
   useEffect(() => {
     const interval = setInterval(refreshQueue, 60000);
     return () => clearInterval(interval);
-  }, [viewMode, refreshQueue]);
+  }, [queueDateRange, refreshQueue]);
 
   useEffect(() => {
     if (activePatient && activeTab === "history") {
@@ -256,6 +264,38 @@ export default function DoctorDashboard() {
       fetchLabs(activePatient.patient_id);
     }
   }, [activePatient, activeTab]);
+
+  const fetchPatientFollowUps = useCallback(
+    async (patientId: string) => {
+      setLoadingFollowUps(true);
+      try {
+        const res = await getPatientFollowUps(
+          patientId,
+          doctorId || session?.id,
+        );
+        if (res.success) setPatientFollowUps(res.data as any[]);
+        else setPatientFollowUps([]);
+      } catch (e) {
+        console.error("Failed to fetch patient follow-ups", e);
+        setPatientFollowUps([]);
+      } finally {
+        setLoadingFollowUps(false);
+      }
+    },
+    [doctorId, session?.id],
+  );
+
+  useEffect(() => {
+    if (activePatient && activeTab === "followup") {
+      fetchPatientFollowUps(activePatient.patient_id);
+      if (!followUpDate) {
+        const nextDay = new Date();
+        nextDay.setDate(nextDay.getDate() + 1);
+        nextDay.setHours(10, 0, 0, 0);
+        setFollowUpDate(nextDay.toISOString().slice(0, 16));
+      }
+    }
+  }, [activePatient, activeTab, followUpDate, fetchPatientFollowUps]);
 
   async function fetchLabs(patientId: string) {
     setLoadingLabs(true);
@@ -353,8 +393,8 @@ export default function DoctorDashboard() {
           doctor_name: session?.name,
           doctor_username: session?.username,
           view: viewMode,
-          specialty: viewMode === "all" ? doctorSpecialty : undefined,
-          dateRange: "upcoming",
+          specialty: undefined,
+          dateRange: queueDateRange,
           includeAllStatuses: true,
         });
         if (q.success) setQueue(q.data as any);
@@ -425,6 +465,30 @@ export default function DoctorDashboard() {
     setShowPrescriptionModal(true);
   };
 
+  const handleScheduleFollowUp = () =>
+    withSubmission(async () => {
+      if (!activePatient?.patient_id) return alert("Select a patient first.");
+      if (!followUpDate) return alert("Please select follow-up date & time.");
+
+      const assignedDoctorId = doctorId || session?.id;
+      if (!assignedDoctorId) return alert("Unable to detect doctor session.");
+
+      const res = await scheduleFollowUp({
+        patientId: activePatient.patient_id,
+        doctorId: assignedDoctorId,
+        scheduledDate: followUpDate,
+        notes: followUpNotes.trim() || undefined,
+      });
+
+      if (res.success) {
+        alert("Follow-up scheduled successfully.");
+        setFollowUpNotes("");
+        await fetchPatientFollowUps(activePatient.patient_id);
+      } else {
+        alert(res.error || "Failed to schedule follow-up.");
+      }
+    });
+
   const filteredQueue = queue.filter(
     (p) =>
       p.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -474,7 +538,7 @@ export default function DoctorDashboard() {
     "text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1 block mb-1.5";
 
   return (
-    <div className="flex h-[calc(100vh-52px)] bg-gray-50 font-sans text-gray-900 overflow-hidden relative lg:pl-60">
+    <div className="flex h-[calc(100vh-52px)] bg-gray-50 font-sans text-gray-900 overflow-hidden relative lg:pl-(--sidebar-offset)">
       <style jsx global>{`
         @media print {
           body * {
@@ -799,17 +863,22 @@ export default function DoctorDashboard() {
           </div>
           {/* ── VIEW MODE TOGGLE ── */}
           <div className="flex mb-3 bg-gray-100 rounded-lg p-0.5">
-            <button
-              onClick={() => setViewMode("my")}
-              className={`flex-1 text-xs font-bold py-1.5 rounded-md transition-all ${viewMode === "my" ? "bg-white text-teal-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-            >
+            <button className="flex-1 text-xs font-bold py-1.5 rounded-md transition-all bg-white text-teal-600 shadow-sm">
               My Patients
             </button>
+          </div>
+          <div className="flex mb-3 bg-gray-100 rounded-lg p-0.5">
             <button
-              onClick={() => setViewMode("all")}
-              className={`flex-1 text-xs font-bold py-1.5 rounded-md transition-all ${viewMode === "all" ? "bg-white text-teal-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setQueueDateRange("upcoming")}
+              className={`flex-1 text-xs font-bold py-1.5 rounded-md transition-all ${queueDateRange === "upcoming" ? "bg-white text-teal-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
             >
-              All Patients
+              Upcoming
+            </button>
+            <button
+              onClick={() => setQueueDateRange("all")}
+              className={`flex-1 text-xs font-bold py-1.5 rounded-md transition-all ${queueDateRange === "all" ? "bg-white text-teal-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+            >
+              History + Upcoming
             </button>
           </div>
           <div className="relative group">
@@ -882,7 +951,13 @@ export default function DoctorDashboard() {
                     </span>
                   </div>
                   <h4 className="font-bold text-sm truncate text-gray-800 group-hover:text-teal-600 transition-colors">
-                    {p.full_name}
+                    <Link
+                      href={`/doctor/patient/${p.patient_id}?appointmentId=${encodeURIComponent(p.appointment_id || "")}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="hover:underline underline-offset-2"
+                    >
+                      {p.full_name}
+                    </Link>
                   </h4>
                   <div className="flex gap-2 mt-1 items-center">
                     <span className="text-[10px] text-gray-500 font-semibold">
@@ -929,7 +1004,12 @@ export default function DoctorDashboard() {
                 <div>
                   <div className="flex items-center gap-3">
                     <h1 className="text-2xl font-black text-gray-900 tracking-tight">
-                      {activePatient.full_name}
+                      <Link
+                        href={`/doctor/patient/${activePatient.patient_id}?appointmentId=${encodeURIComponent(activePatient.appointment_id || "")}`}
+                        className="hover:text-teal-600 hover:underline underline-offset-4 transition-colors"
+                      >
+                        {activePatient.full_name}
+                      </Link>
                     </h1>
                     <span className="bg-teal-500/10 text-teal-400 border border-teal-500/20 text-[10px] font-black px-2 py-1 rounded-lg">
                       ID: {activePatient.digital_id || activePatient.patient_id}
@@ -1013,20 +1093,28 @@ export default function DoctorDashboard() {
 
             {/* Tabs */}
             <div className="bg-white border border-gray-200 shadow-sm rounded-2xl min-h-[500px] flex flex-col overflow-hidden">
-              <div className="flex border-b border-gray-200 px-2 pt-2 overflow-x-auto">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 border-b border-gray-200 px-2 pt-2 gap-1">
                 {(
-                  ["triage", "notes", "history", "lab", "pharmacy"] as const
+                  [
+                    "triage",
+                    "notes",
+                    "history",
+                    "lab",
+                    "pharmacy",
+                    "followup",
+                  ] as const
                 ).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`px-6 py-4 text-sm font-bold border-b-2 flex items-center gap-2 transition-all outline-none whitespace-nowrap ${activeTab === tab ? "border-teal-400 text-teal-400 bg-teal-500/5 rounded-t-lg" : "border-transparent text-gray-400 hover:text-gray-600 rounded-t-lg"}`}
+                    className={`px-4 py-4 text-sm font-bold border-b-2 flex items-center justify-center gap-2 transition-all outline-none text-center ${activeTab === tab ? "border-teal-400 text-teal-400 bg-teal-500/5 rounded-t-lg" : "border-transparent text-gray-400 hover:text-gray-600 rounded-t-lg"}`}
                   >
                     {tab === "triage" && <Brain className="h-4 w-4" />}
                     {tab === "notes" && <FileText className="h-4 w-4" />}
                     {tab === "history" && <History className="h-4 w-4" />}
                     {tab === "lab" && <FlaskConical className="h-4 w-4" />}
                     {tab === "pharmacy" && <Pill className="h-4 w-4" />}
+                    {tab === "followup" && <Clock className="h-4 w-4" />}
                     {tab === "triage"
                       ? "AI Assessment"
                       : tab === "notes"
@@ -1037,15 +1125,17 @@ export default function DoctorDashboard() {
                           ? "History"
                           : tab === "lab"
                             ? "Labs"
-                            : "Pharmacy"}
+                            : tab === "pharmacy"
+                              ? "Pharmacy"
+                              : "Follow Up"}
                   </button>
                 ))}
               </div>
 
-              <div className="p-8 flex-1">
+              <div className="p-8 flex-1 flex justify-center">
                 {/* AI ASSESSMENT TAB */}
                 {activeTab === "triage" && (
-                  <div className="max-w-4xl space-y-6">
+                  <div className="w-full max-w-4xl space-y-6">
                     {loadingTriage ? (
                       <div className="text-center py-16 text-gray-400 font-bold flex flex-col items-center gap-3">
                         <Loader2 className="h-8 w-8 animate-spin text-teal-400" />
@@ -1059,7 +1149,7 @@ export default function DoctorDashboard() {
                         </h3>
                         <p className="text-gray-400 text-sm font-medium">
                           This patient was registered without AI triage. Proceed
-                          to Clinical Notes.
+                          to Clinical NotesClinical Notes.
                         </p>
                       </div>
                     ) : (
@@ -1428,7 +1518,7 @@ export default function DoctorDashboard() {
                 )}
                 {/* NOTES TAB */}
                 {activeTab === "notes" && (
-                  <div className="max-w-3xl space-y-6">
+                  <div className="w-full max-w-4xl space-y-6">
                     {activePatient.status === "Admitted" ? (
                       <>
                         <div className="bg-violet-500/5 border border-violet-500/10 p-4 rounded-xl flex items-center gap-3">
@@ -1610,7 +1700,7 @@ export default function DoctorDashboard() {
                 )}
                 {/* HISTORY TAB */}
                 {activeTab === "history" && (
-                  <div className="max-w-4xl space-y-6">
+                  <div className="w-full max-w-4xl space-y-6">
                     <h3 className="font-black text-gray-700 mb-4 flex items-center gap-2 text-lg">
                       <History className="h-5 w-5 text-violet-400" /> Patient
                       History
@@ -1739,7 +1829,7 @@ export default function DoctorDashboard() {
                 )}
                 {/* LAB TAB */}
                 {activeTab === "lab" && (
-                  <div className="max-w-3xl space-y-8">
+                  <div className="w-full max-w-4xl space-y-8">
                     <div className="bg-violet-500/5 p-6 rounded-2xl border border-violet-500/10">
                       <h3 className="font-black text-violet-300 mb-4 flex items-center gap-2">
                         <FlaskConical className="h-5 w-5 text-violet-400" />{" "}
@@ -1861,7 +1951,7 @@ export default function DoctorDashboard() {
                 )}
                 {/* PHARMACY TAB */}
                 {activeTab === "pharmacy" && (
-                  <div className="max-w-4xl space-y-6">
+                  <div className="w-full max-w-4xl space-y-6">
                     <div className="flex gap-8">
                       <div className="flex-1 space-y-6">
                         <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
@@ -2044,6 +2134,130 @@ export default function DoctorDashboard() {
                           </div>
                         </div>
                       )}
+                    </div>
+                  </div>
+                )}
+
+                {/* FOLLOW-UP TAB */}
+                {activeTab === "followup" && activePatient && (
+                  <div className="w-full max-w-4xl space-y-6">
+                    <div className="bg-amber-500/5 border border-amber-500/10 p-6 rounded-2xl">
+                      <h3 className="font-black text-amber-700 mb-4 flex items-center gap-2">
+                        <Clock className="h-5 w-5 text-amber-500" /> Schedule
+                        Follow-Up
+                      </h3>
+                      <p className="text-sm text-gray-500 mb-5">
+                        Assign next checkup date for
+                        <span className="font-bold text-gray-700">
+                          {" "}
+                          {activePatient.full_name}
+                        </span>
+                        . This entry will automatically appear in Follow-Ups
+                        Manager.
+                      </p>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className={labelCls}>
+                            Follow-Up Date & Time
+                          </label>
+                          <input
+                            type="datetime-local"
+                            value={followUpDate}
+                            onChange={(e) => setFollowUpDate(e.target.value)}
+                            className={inputCls}
+                          />
+                        </div>
+                        <div>
+                          <label className={labelCls}>Doctor</label>
+                          <input
+                            value={doctorName}
+                            disabled
+                            className={`${inputCls} bg-gray-100 text-gray-500`}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        <label className={labelCls}>Follow-Up Notes</label>
+                        <textarea
+                          value={followUpNotes}
+                          onChange={(e) => setFollowUpNotes(e.target.value)}
+                          className={inputCls}
+                          rows={4}
+                          placeholder="Reason for follow-up, instructions, warning signs to monitor..."
+                        />
+                      </div>
+
+                      <div className="flex justify-end mt-5">
+                        <button
+                          onClick={handleScheduleFollowUp}
+                          disabled={isSubmitting || !followUpDate}
+                          className="px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold rounded-xl hover:from-amber-400 hover:to-orange-500 flex items-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-50"
+                        >
+                          {isSubmitting ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Save className="h-4 w-4" /> Save Follow-Up
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                      <div className="px-5 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+                        <h4 className="font-black text-gray-700">
+                          Patient Follow-Up History
+                        </h4>
+                        <button
+                          onClick={() =>
+                            fetchPatientFollowUps(activePatient.patient_id)
+                          }
+                          className="text-teal-500 hover:bg-teal-500/10 p-2 rounded-lg transition-colors"
+                          title="Refresh follow-ups"
+                        >
+                          <RefreshCw
+                            className={`h-4 w-4 ${loadingFollowUps ? "animate-spin" : ""}`}
+                          />
+                        </button>
+                      </div>
+
+                      <div className="p-4 space-y-3">
+                        {loadingFollowUps ? (
+                          <div className="text-center py-8 text-gray-400 font-bold">
+                            Loading follow-ups...
+                          </div>
+                        ) : patientFollowUps.length === 0 ? (
+                          <div className="bg-gray-100 border border-dashed border-gray-300 rounded-xl p-8 text-center text-gray-400 text-sm font-bold">
+                            No follow-up records for this patient yet.
+                          </div>
+                        ) : (
+                          patientFollowUps.map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-gray-50 border border-gray-200 rounded-xl p-4"
+                            >
+                              <div>
+                                <p className="text-sm font-bold text-gray-700">
+                                  {new Date(
+                                    item.scheduled_date,
+                                  ).toLocaleString()}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {item.notes || "No notes added."}
+                                </p>
+                              </div>
+                              <span
+                                className={`text-[10px] font-black uppercase tracking-wide px-2.5 py-1 rounded-lg border ${item.status === "Completed" ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-amber-500/10 text-amber-500 border-amber-500/20"}`}
+                              >
+                                {item.status}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

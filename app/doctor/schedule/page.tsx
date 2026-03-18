@@ -248,7 +248,7 @@ export default function DoctorSchedule() {
     "w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400 transition-all shadow-sm";
 
   return (
-    <div className="flex h-[calc(100vh-52px)] bg-gray-50 font-sans text-gray-900 overflow-hidden relative lg:pl-60">
+    <div className="flex h-[calc(100vh-52px)] bg-gray-50 font-sans text-gray-900 overflow-hidden relative lg:pl-(--sidebar-offset)">
       <Sidebar session={session} />
 
       <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto w-full">
