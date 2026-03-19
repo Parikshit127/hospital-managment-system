@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HospitalOS — Production Architecture Flowchart</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2236;
+    --border: #2a3454;
+    --text: #e2e8f0;
+    --text-dim: #8892a8;
+    --accent: #3b82f6;
+    --accent-glow: rgba(59, 130, 246, 0.25);
+    --green: #10b981;
+    --green-glow: rgba(16, 185, 129, 0.2);
+    --orange: #f59e0b;
+    --orange-glow: rgba(245, 158, 11, 0.2);
+    --red: #ef4444;
+    --red-glow: rgba(239, 68, 68, 0.15);
+    --purple: #8b5cf6;
+    --purple-glow: rgba(139, 92, 246, 0.2);
+    --cyan: #06b6d4;
+    --cyan-glow: rgba(6, 182, 212, 0.2);
+    --pink: #ec4899;
+    --pink-glow: rgba(236, 72, 153, 0.2);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    overflow-x: hidden;
+  }
+
+  .header {
+    text-align: center;
+    padding: 32px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #0f1629 0%, var(--bg) 100%);
+  }
+  .header h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+  .header h1 span { color: var(--accent); }
+  .header p { color: var(--text-dim); font-size: 14px; margin-top: 6px; }
+  .header .tech-stack {
+    display: flex; gap: 8px; justify-content: center; margin-top: 12px; flex-wrap: wrap;
+  }
+  .header .tech-stack span {
+    background: var(--surface2); border: 1px solid var(--border);
+    padding: 3px 10px; border-radius: 12px; font-size: 11px; color: var(--text-dim);
+  }
+
+  .stats-bar {
+    display: flex; gap: 0; justify-content: center; border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .stat-item {
+    padding: 14px 28px; text-align: center; border-right: 1px solid var(--border);
+  }
+  .stat-item:last-child { border-right: none; }
+  .stat-item .num { font-size: 22px; font-weight: 700; color: var(--accent); }
+  .stat-item .label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+
+  .tabs {
+    display: flex; justify-content: center; gap: 4px;
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    background: var(--surface);
+  }
+  .tab {
+    padding: 8px 18px; border-radius: 8px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: 1px solid transparent;
+    background: transparent; color: var(--text-dim); transition: all 0.2s;
+  }
+  .tab:hover { background: var(--surface2); color: var(--text); }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .view { display: none; padding: 24px; }
+  .view.active { display: block; }
+
+  /* ---- OVERVIEW VIEW ---- */
+  .arch-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .layer {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .layer-header {
+    padding: 12px 18px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .layer-header .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+  .layer-body {
+    padding: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .module-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    min-width: 140px;
+    flex: 1;
+    cursor: pointer;
+    transition: all 0.25s;
+    background: var(--surface2);
+    position: relative;
+    overflow: hidden;
+  }
+  .module-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .module-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+    box-shadow: 0 4px 20px var(--accent-glow);
+  }
+  .module-card .icon { font-size: 20px; margin-bottom: 6px; }
+  .module-card .name { font-size: 12px; font-weight: 600; }
+  .module-card .desc { font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+  .module-card .count { font-size: 9px; color: var(--accent); margin-top: 6px; font-weight: 600; }
+
+  /* Colors per module type */
+  .mc-clinical::before { background: var(--green); }
+  .mc-clinical:hover { border-color: var(--green); box-shadow: 0 4px 20px var(--green-glow); }
+  .mc-ops::before { background: var(--orange); }
+  .mc-ops:hover { border-color: var(--orange); box-shadow: 0 4px 20px var(--orange-glow); }
+  .mc-finance::before { background: var(--purple); }
+  .mc-finance:hover { border-color: var(--purple); box-shadow: 0 4px 20px var(--purple-glow); }
+  .mc-infra::before { background: var(--cyan); }
+  .mc-infra:hover { border-color: var(--cyan); box-shadow: 0 4px 20px var(--cyan-glow); }
+  .mc-ext::before { background: var(--pink); }
+  .mc-ext:hover { border-color: var(--pink); box-shadow: 0 4px 20px var(--pink-glow); }
+
+  /* ---- FLOW VIEW (SVG) ---- */
+  .flow-container { max-width: 1200px; margin: 0 auto; }
+  .flow-container svg { width: 100%; height: auto; }
+
+  /* ---- MODULES DETAIL VIEW ---- */
+  .module-detail {
+    max-width: 1100px; margin: 0 auto;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  .md-card {
+    border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface); padding: 20px;
+    transition: all 0.2s;
+  }
+  .md-card:hover { border-color: var(--accent); }
+  .md-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .md-card .status-badge {
+    font-size: 9px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
+  }
+  .badge-live { background: var(--green-glow); color: var(--green); }
+  .badge-wip { background: var(--orange-glow); color: var(--orange); }
+  .md-card .pages { font-size: 11px; color: var(--text-dim); margin: 8px 0; }
+  .md-card .features { list-style: none; }
+  .md-card .features li {
+    font-size: 11px; padding: 3px 0; color: var(--text-dim);
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .md-card .features li::before { content: '→ '; color: var(--accent); }
+
+  /* ---- ROLES VIEW ---- */
+  .roles-grid {
+    max-width: 1100px; margin: 0 auto;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  }
+  .role-card {
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--surface); padding: 16px;
+  }
+  .role-card .role-icon { font-size: 28px; margin-bottom: 8px; }
+  .role-card h4 { font-size: 13px; font-weight: 700; text-transform: capitalize; }
+  .role-card .route { font-size: 10px; color: var(--accent); font-family: monospace; margin: 4px 0 8px; }
+  .role-card .perms { font-size: 10px; color: var(--text-dim); line-height: 1.6; }
+
+  /* ---- DATA FLOW VIEW ---- */
+  .data-flow { max-width: 1100px; margin: 0 auto; }
+  .flow-section { margin-bottom: 28px; }
+  .flow-section h3 {
+    font-size: 14px; font-weight: 700; margin-bottom: 12px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .flow-steps {
+    display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+  }
+  .flow-step {
+    padding: 10px 16px; border-radius: 8px;
+    font-size: 11px; font-weight: 600;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    white-space: nowrap;
+  }
+  .flow-arrow {
+    font-size: 16px; color: var(--accent); padding: 0 6px; font-weight: 700;
+  }
+  .flow-step.highlight {
+    border-color: var(--green);
+    background: var(--green-glow);
+    color: var(--green);
+  }
+  .flow-step.finance-hl {
+    border-color: var(--purple);
+    background: var(--purple-glow);
+    color: var(--purple);
+  }
+  .flow-step.danger-hl {
+    border-color: var(--red);
+    background: var(--red-glow);
+    color: var(--red);
+  }
+  .flow-step.ext-hl {
+    border-color: var(--pink);
+    background: var(--pink-glow);
+    color: var(--pink);
+  }
+  .flow-step.ai-hl {
+    border-color: var(--cyan);
+    background: var(--cyan-glow);
+    color: var(--cyan);
+  }
+
+  .sub-note {
+    font-size: 10px; color: var(--text-dim); margin-top: 6px; margin-left: 4px;
+  }
+
+  /* ---- INTEGRATIONS VIEW ---- */
+  .integ-grid {
+    max-width: 1100px; margin: 0 auto;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  .integ-card {
+    border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface); padding: 20px;
+  }
+  .integ-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .integ-card .provider { font-size: 11px; color: var(--accent); margin-bottom: 10px; }
+  .integ-card .int-desc { font-size: 11px; color: var(--text-dim); line-height: 1.7; }
+  .integ-card code {
+    background: var(--surface2); padding: 1px 5px; border-radius: 3px;
+    font-size: 10px; color: var(--cyan); border: 1px solid var(--border);
+  }
+
+  /* ---- PRODUCTION GAPS VIEW ---- */
+  .gaps-grid {
+    max-width: 1100px; margin: 0 auto;
+    display: grid; grid-template-columns: 1fr; gap: 12px;
+  }
+  .gap-card {
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--surface); padding: 16px 20px;
+    display: flex; align-items: flex-start; gap: 14px;
+  }
+  .gap-card .severity {
+    min-width: 64px; text-align: center;
+    padding: 4px 10px; border-radius: 6px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+  }
+  .sev-critical { background: var(--red-glow); color: var(--red); }
+  .sev-high { background: var(--orange-glow); color: var(--orange); }
+  .sev-medium { background: var(--purple-glow); color: var(--purple); }
+  .gap-card .gap-content h4 { font-size: 13px; font-weight: 700; }
+  .gap-card .gap-content p { font-size: 11px; color: var(--text-dim); margin-top: 3px; line-height: 1.5; }
+
+  /* DB SCHEMA VIEW */
+  .schema-grid {
+    max-width: 1100px; margin: 0 auto;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  }
+  .schema-group {
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--surface); padding: 14px;
+  }
+  .schema-group h4 { font-size: 12px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .schema-group .model-list { font-size: 10px; color: var(--text-dim); line-height: 1.8; }
+  .schema-group .model-list span {
+    display: inline-block; background: var(--surface2);
+    padding: 1px 7px; border-radius: 4px; margin: 2px 2px;
+    border: 1px solid var(--border); font-family: monospace;
+  }
+
+  @media (max-width: 768px) {
+    .module-detail, .integ-grid { grid-template-columns: 1fr; }
+    .roles-grid { grid-template-columns: 1fr 1fr; }
+    .schema-grid { grid-template-columns: 1fr 1fr; }
+    .stat-item { padding: 10px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span>HospitalOS</span> — Production Architecture</h1>
+  <p>Multi-Tenant Hospital Management System &bull; Full-Stack Next.js 16 + PostgreSQL + Prisma</p>
+  <div class="tech-stack">
+    <span>Next.js 16</span><span>React 19</span><span>TypeScript 5</span>
+    <span>Prisma 5</span><span>PostgreSQL</span><span>Tailwind 4</span>
+    <span>Razorpay</span><span>OpenAI GPT-4o</span><span>WhatsApp API</span>
+    <span>FDA API</span><span>Vercel (Mumbai)</span>
+  </div>
+</div>
+
+<div class="stats-bar">
+  <div class="stat-item"><div class="num">68</div><div class="label">DB Models</div></div>
+  <div class="stat-item"><div class="num">140+</div><div class="label">Server Actions</div></div>
+  <div class="stat-item"><div class="num">13</div><div class="label">API Routes</div></div>
+  <div class="stat-item"><div class="num">15</div><div class="label">Modules</div></div>
+  <div class="stat-item"><div class="num">11</div><div class="label">User Roles</div></div>
+  <div class="stat-item"><div class="num">5</div><div class="label">Integrations</div></div>
+</div>
+
+<div class="tabs" id="tabs">
+  <div class="tab active" data-view="overview">System Overview</div>
+  <div class="tab" data-view="patient-flow">Patient Journey</div>
+  <div class="tab" data-view="modules">All Modules</div>
+  <div class="tab" data-view="roles">Roles & RBAC</div>
+  <div class="tab" data-view="data-flows">Data Flows</div>
+  <div class="tab" data-view="integrations">Integrations</div>
+  <div class="tab" data-view="schema">DB Schema</div>
+  <div class="tab" data-view="gaps">Production Gaps</div>
+</div>
+
+<!-- ============ OVERVIEW ============ -->
+<div class="view active" id="overview">
+  <div class="arch-grid">
+    <!-- PRESENTATION LAYER -->
+    <div class="layer">
+      <div class="layer-header"><div class="dot" style="background:var(--accent)"></div>PRESENTATION LAYER — Next.js App Router (Role-based Dashboards)</div>
+      <div class="layer-body">
+        <div class="module-card mc-ops"><div class="icon">🏥</div><div class="name">SuperAdmin</div><div class="desc">Platform management, org onboarding</div><div class="count">5 pages &bull; 10 actions</div></div>
+        <div class="module-card mc-ops"><div class="icon">⚙️</div><div class="name">Admin</div><div class="desc">Org settings, staff, departments</div><div class="count">8 pages &bull; 15 actions</div></div>
+        <div class="module-card mc-ops"><div class="icon">🪪</div><div class="name">Reception</div><div class="desc">Registration, queue, appointments</div><div class="count">7 pages &bull; 12 actions</div></div>
+        <div class="module-card mc-clinical"><div class="icon">🩺</div><div class="name">Doctor</div><div class="desc">OPD consult, SOAP notes, orders</div><div class="count">7 pages &bull; 15 actions</div></div>
+        <div class="module-card mc-clinical"><div class="icon">💉</div><div class="name">Nurse</div><div class="desc">Vitals, meds, tasks, handover</div><div class="count">6 pages &bull; 14 actions</div></div>
+        <div class="module-card mc-clinical"><div class="icon">🏨</div><div class="name">IPD</div><div class="desc">Admissions, beds, ward rounds, diet</div><div class="count">10 pages &bull; 15 actions</div></div>
+        <div class="module-card mc-clinical"><div class="icon">🔬</div><div class="name">Laboratory</div><div class="desc">Worklist, samples, results, inventory</div><div class="count">6 pages &bull; 11 actions</div></div>
+        <div class="module-card mc-clinical"><div class="icon">💊</div><div class="name">Pharmacy</div><div class="desc">Dispensing, stock, POs, drug safety</div><div class="count">9 pages &bull; 15 actions</div></div>
+        <div class="module-card mc-finance"><div class="icon">💰</div><div class="name">Finance</div><div class="desc">Invoices, payments, refunds, reports</div><div class="count">6 pages &bull; 15 actions</div></div>
+        <div class="module-card mc-finance"><div class="icon">🛡️</div><div class="name">Insurance</div><div class="desc">Providers, policies, claims</div><div class="count">1 page &bull; 11 actions</div></div>
+        <div class="module-card mc-ops"><div class="icon">📋</div><div class="name">OPD Manager</div><div class="desc">Queue oversight, doctor utilization</div><div class="count">5 pages &bull; 6 actions</div></div>
+        <div class="module-card mc-ops"><div class="icon">👥</div><div class="name">HR</div><div class="desc">Employees, attendance, leave, shifts</div><div class="count">7 pages &bull; 15 actions</div></div>
+        <div class="module-card mc-ops"><div class="icon">🚪</div><div class="name">Discharge</div><div class="desc">Discharge workflow, AI summary</div><div class="count">1 page &bull; 4 actions</div></div>
+        <div class="module-card mc-clinical"><div class="icon">📱</div><div class="name">Patient Portal</div><div class="desc">Appointments, records, payments</div><div class="count">12 pages &bull; 3 actions</div></div>
+        <div class="module-card mc-ops"><div class="icon">🔔</div><div class="name">Notifications</div><div class="desc">In-app alerts, role broadcasts</div><div class="count">1 page &bull; 7 actions</div></div>
+      </div>
+    </div>
+
+    <!-- MIDDLEWARE LAYER -->
+    <div class="layer">
+      <div class="layer-header"><div class="dot" style="background:var(--orange)"></div>MIDDLEWARE & SECURITY LAYER</div>
+      <div class="layer-body">
+        <div class="module-card mc-infra"><div class="icon">🔐</div><div class="name">Auth Middleware</div><div class="desc">JWT verification, role routing, session timeout (15min)</div></div>
+        <div class="module-card mc-infra"><div class="icon">🏢</div><div class="name">Tenant Isolation</div><div class="desc">Prisma $extends auto-injects org_id into all queries</div></div>
+        <div class="module-card mc-infra"><div class="icon">🔑</div><div class="name">MFA (TOTP)</div><div class="desc">Required for admin, doctor, finance, ipd_manager</div></div>
+        <div class="module-card mc-infra"><div class="icon">📝</div><div class="name">Audit Logger</div><div class="desc">All mutations logged: who, what, when, which entity</div></div>
+        <div class="module-card mc-infra"><div class="icon">🚦</div><div class="name">Rate Limiter</div><div class="desc">Login rate limiting, brute-force protection</div></div>
+        <div class="module-card mc-infra"><div class="icon">✅</div><div class="name">Zod Validation</div><div class="desc">Schema validation on all inputs</div></div>
+      </div>
+    </div>
+
+    <!-- API & SERVICES LAYER -->
+    <div class="layer">
+      <div class="layer-header"><div class="dot" style="background:var(--green)"></div>SERVER ACTIONS & API ROUTES (20 Action Files + 13 API Routes)</div>
+      <div class="layer-body">
+        <div class="module-card mc-ext"><div class="icon">💳</div><div class="name">Razorpay</div><div class="desc">Payment orders, verification, webhooks</div><div class="count">4 API routes</div></div>
+        <div class="module-card mc-ext"><div class="icon">📄</div><div class="name">PDF Generator</div><div class="desc">Invoices, discharge, lab, prescription PDFs</div><div class="count">5 API routes</div></div>
+        <div class="module-card mc-ext"><div class="icon">🤖</div><div class="name">OpenAI GPT-4o</div><div class="desc">SOAP notes, ICD-10 suggest, discharge summaries</div></div>
+        <div class="module-card mc-ext"><div class="icon">📲</div><div class="name">WhatsApp</div><div class="desc">Appointment, lab, discharge, queue notifications</div></div>
+        <div class="module-card mc-ext"><div class="icon">💊</div><div class="name">FDA OpenFDA</div><div class="desc">Drug interaction checking before dispensing</div></div>
+        <div class="module-card mc-ext"><div class="icon">📧</div><div class="name">SMTP / Email</div><div class="desc">Welcome, prescription, admission emails</div></div>
+      </div>
+    </div>
+
+    <!-- DATA LAYER -->
+    <div class="layer">
+      <div class="layer-header"><div class="dot" style="background:var(--purple)"></div>DATA LAYER — PostgreSQL + Prisma ORM (68 Models)</div>
+      <div class="layer-body">
+        <div class="module-card mc-finance"><div class="icon">🏛️</div><div class="name">Organization (3)</div><div class="desc">Org, Config, Branding</div></div>
+        <div class="module-card mc-finance"><div class="icon">👤</div><div class="name">Users & Patients (5)</div><div class="desc">User, OPD_REG, SuperAdmin, Tokens</div></div>
+        <div class="module-card mc-clinical"><div class="icon">📋</div><div class="name">Clinical (6)</div><div class="desc">EHR, Vitals, Triage, Lab Orders</div></div>
+        <div class="module-card mc-clinical"><div class="icon">🛏️</div><div class="name">IPD (9)</div><div class="desc">Admissions, Beds, Wards, Nursing, Meds</div></div>
+        <div class="module-card mc-clinical"><div class="icon">💊</div><div class="name">Pharmacy (9)</div><div class="desc">Medicines, Batches, Orders, Suppliers, POs</div></div>
+        <div class="module-card mc-finance"><div class="icon">💰</div><div class="name">Billing (9)</div><div class="desc">Invoices, Items, Payments, Refunds, Cash</div></div>
+        <div class="module-card mc-finance"><div class="icon">🛡️</div><div class="name">Insurance (3)</div><div class="desc">Providers, Policies, Claims</div></div>
+        <div class="module-card mc-ops"><div class="icon">👥</div><div class="name">HR (7)</div><div class="desc">Employee, Attendance, Leave, Shifts</div></div>
+        <div class="module-card mc-ops"><div class="icon">🔧</div><div class="name">System (8+)</div><div class="desc">Audit, MFA, Notifications, Templates, Feedback</div></div>
+      </div>
+    </div>
+
+    <!-- DEPLOYMENT -->
+    <div class="layer">
+      <div class="layer-header"><div class="dot" style="background:var(--cyan)"></div>DEPLOYMENT — Vercel (Mumbai bom1) + Supabase PostgreSQL</div>
+      <div class="layer-body">
+        <div class="module-card mc-infra"><div class="icon">▲</div><div class="name">Vercel Edge</div><div class="desc">Next.js 16, Webpack build, edge middleware</div></div>
+        <div class="module-card mc-infra"><div class="icon">🐘</div><div class="name">Supabase DB</div><div class="desc">PostgreSQL with connection pooling (direct + pooled URLs)</div></div>
+        <div class="module-card mc-infra"><div class="icon">🔒</div><div class="name">Env Secrets</div><div class="desc">JWT_SECRET, API keys, SMTP, Razorpay credentials</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PATIENT JOURNEY ============ -->
+<div class="view" id="patient-flow">
+  <div class="data-flow">
+    <div class="flow-section">
+      <h3>🟢 OPD Patient Journey (End-to-End)</h3>
+      <div class="flow-steps">
+        <div class="flow-step">Patient Arrives</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">Reception: Register<br><small style="color:var(--text-dim)">UHID: AVN-YYYY-XXXXX</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Book Appointment</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step ext-hl">WhatsApp Confirmation</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">Check-In at Queue</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Token Display Board</div>
+      </div>
+      <div class="flow-steps" style="margin-top:10px">
+        <div class="flow-step">Triage (Nurse)</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">Doctor Consult<br><small style="color:var(--text-dim)">SOAP Notes + AI Assist</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Record Vitals</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step ai-hl">AI: ICD-10 Suggest</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Save EHR</div>
+      </div>
+      <div class="flow-steps" style="margin-top:10px">
+        <div class="flow-step">Order Lab Tests</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Lab: Receive Sample</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Lab: Process & Upload</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step ext-hl">WhatsApp: Results Ready</div>
+      </div>
+      <div class="flow-steps" style="margin-top:10px">
+        <div class="flow-step">Prescribe Medicines</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step danger-hl">FDA: Drug Interaction Check</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Pharmacy: Dispense</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Deduct Batch Stock</div>
+      </div>
+      <div class="flow-steps" style="margin-top:10px">
+        <div class="flow-step finance-hl">Generate Invoice</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step finance-hl">Razorpay / Cash Payment</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step finance-hl">Invoice PDF</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Schedule Follow-Up</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">Complete ✓</div>
+      </div>
+    </div>
+
+    <div class="flow-section">
+      <h3>🔴 IPD Patient Journey (Admission → Discharge)</h3>
+      <div class="flow-steps">
+        <div class="flow-step">Doctor: Admit Patient</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">IPD: Assign Ward + Bed<br><small style="color:var(--text-dim)">Bed → Occupied</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step ext-hl">Email: Admission Confirmation</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Audit Log: ADMIT</div>
+      </div>
+      <div class="flow-steps" style="margin-top:10px">
+        <div class="flow-step">Daily Ward Rounds</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Medical Notes</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">Nursing Station<br><small style="color:var(--text-dim)">Vitals + Meds + Notes</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Diet Plan</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Shift Handover</div>
+      </div>
+      <div class="flow-steps" style="margin-top:10px">
+        <div class="flow-step finance-hl">Daily Charge Accrual<br><small style="color:var(--text-dim)">Ward + Nursing fees</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step finance-hl">Provisional Bill (Running)</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Bed Transfer (if needed)</div>
+      </div>
+      <div class="flow-steps" style="margin-top:10px">
+        <div class="flow-step">Initiate Discharge</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step ai-hl">AI: Discharge Summary</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step finance-hl">Final Invoice + Payment</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">Bed → Cleaning → Available</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step ext-hl">WhatsApp: Discharged</div>
+      </div>
+    </div>
+
+    <div class="flow-section">
+      <h3>💳 Payment Flow</h3>
+      <div class="flow-steps">
+        <div class="flow-step">Create Invoice (Draft)</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Add Line Items</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step finance-hl">Finalize Invoice</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step ext-hl">Razorpay: Create Order</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step ext-hl">Razorpay: HMAC Verify</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">Status: Paid ✓</div>
+      </div>
+      <sub class="sub-note">Methods: Cash | Card | UPI | Insurance &bull; Supports: Refunds, Reversals, Cash Closure</sub>
+    </div>
+
+    <div class="flow-section">
+      <h3>🔐 Authentication Flow</h3>
+      <div class="flow-steps">
+        <div class="flow-step">Login (username + password)</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">bcrypt Verify</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step danger-hl">MFA Check?<br><small style="color:var(--text-dim)">Admin/Doctor/Finance</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">TOTP Verify</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">JWT Session (8h)</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Role → Dashboard Redirect</div>
+      </div>
+      <sub class="sub-note">3 session types: Staff (8h) | SuperAdmin (2h) | Patient (7d) &bull; 15-min inactivity timeout</sub>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ALL MODULES ============ -->
+<div class="view" id="modules">
+  <div class="module-detail">
+    <div class="md-card">
+      <h3>🏥 SuperAdmin <span class="status-badge badge-live">LIVE</span></h3>
+      <div class="pages">/superadmin &bull; 5 pages &bull; Separate JWT session (2h)</div>
+      <ul class="features">
+        <li>Organization CRUD (create, activate/deactivate, plan upgrade)</li>
+        <li>Onboarding Wizard for new hospitals</li>
+        <li>Cross-org platform analytics</li>
+        <li>User management across all tenants</li>
+        <li>System-wide stats (orgs, users, admissions)</li>
+      </ul>
+    </div>
+    <div class="md-card">
+      <h3>⚙️ Admin <span class="status-badge badge-live">LIVE</span></h3>
+      <div class="pages">/admin &bull; 8 pages &bull; MFA required</div>
+      <ul class="features">
+        <li>Dashboard: OPD count, revenue, pending labs, bed occupancy</li>
+        <li>Staff management (add/edit/deactivate users)</li>
+        <li>Department management</li>
+        <li>IPD setup (wards, beds configuration)</li>
+        <li>Audit log viewer</li>
+        <li>Organization branding & settings</li>
+        <li>Reports (financial, clinical, operational)</li>
+      </ul>
+    </div>
+    <div class="md-card">
+      <h3>🪪 Reception <span class="status-badge badge-live">LIVE</span></h3>
+      <div class="pages">/reception &bull; 7 pages &bull; Role: receptionist</div>
+      <ul class="features">
+        <li>Patient registration → UHID generation (AVN-YYYY-XXXXX)</li>
+        <li>Appointment booking (doctor, department, slot selection)</li>
+        <li>Check-in workflow → token assignment</li>
+        <li>Real-time queue management + token display</li>
+        <li>Triage assessment (nurse triage at reception)</li>
+        <li>Patient search, profile view, appointment calendar</li>
+        <li>Bulk slot creation for doctors</li>
+      </ul>
+    </div>
+    <div class="md-card">
+      <h3>🩺 Doctor <span class="status-badge badge-live">LIVE</span></h3>
+      <div class="pages">/doctor &bull; 7 pages + 9 components &bull; MFA required</div>
+      <ul class="features">
+        <li>Patient queue (my patients / all, filterable)</li>
+        <li>SOAP notes with AI assistant (GPT-4o formatting)</li>
+        <li>Clinical EHR documentation</li>
+        <li>Lab order creation with barcode</li>
+        <li>Pharmacy order (prescribe medicines)</li>
+        <li>ICD-10 lookup + AI auto-suggest</li>
+        <li>IPD admission from OPD</li>
+        <li>Follow-up scheduling</li>
+        <li>Prescription templates, voice recorder</li>
+        <li>AI pre-consult health brief</li>
+      </ul>
+    </div>
+    <div class="md-card">
+      <h3>💉 Nurse <span class="status-badge badge-live">LIVE</span></h3>
+      <div class="pages">/nurse &bull; 6 pages &bull; Role: nurse</div>
+      <ul class="features">
+        <li>Ward patient list with bed assignments</li>
+        <li>Vitals recording (BP, HR, temp, SpO2, weight)</li>
+        <li>Medication schedule + administration tracking</li>
+        <li>Nursing notes (free text + structured)</li>
+        <li>Task management (assigned tasks, completion)</li>
+        <li>Shift handover report generation</li>
+      </ul>
+    </div>
+    <div class="md-card">
+      <h3>🏨 IPD <span class="status-badge badge-live">LIVE</span></h3>
+      <div class="pages">/ipd &bull; 10 pages + 7 components &bull; Role: ipd_manager</div>
+      <ul class="features">
+        <li>Admissions hub (admit, search, assign bed)</li>
+        <li>Bed matrix (visual occupancy grid)</li>
+        <li>Nursing station (per-admission care dashboard)</li>
+        <li>Ward rounds documentation</li>
+        <li>Bed transfers between wards</li>
+        <li>Diet plan management</li>
+        <li>Census reporting (occupancy %, LOS, revenue)</li>
+        <li>Daily charge accrual (ward + nursing costs)</li>
+      </ul>
+    </div>
+    <div class="md-card">
+      <h3>🔬 Laboratory <span class="status-badge badge-live">LIVE</span></h3>
+      <div class="pages">/lab &bull; 6 pages &bull; Role: lab_technician</div>
+      <ul class="features">
+        <li>Worklist (pending orders, priority sorting)</li>
+        <li>Sample tracking (barcode-based lifecycle)</li>
+        <li>Result entry + critical value flagging</li>
+        <li>TAT (turnaround time) metrics</li>
+        <li>Reagent inventory management</li>
+        <li>Lab report PDF generation</li>
+      </ul>
+    </div>
+    <div class="md-card">
+      <h3>💊 Pharmacy <span class="status-badge badge-live">LIVE</span></h3>
+      <div class="pages">/pharmacy &bull; 9 pages &bull; Role: pharmacist</div>
+      <ul class="features">
+        <li>Prescription queue (pending doctor orders)</li>
+        <li>Dispensing workflow + batch stock deduction</li>
+        <li>FDA drug interaction check before dispensing</li>
+        <li>Inventory (medicine master + batch tracking)</li>
+        <li>Low stock / expiry alerts</li>
+        <li>Supplier management + Purchase Orders</li>
+        <li>Returns processing</li>
+        <li>Billing integration</li>
+      </ul>
+    </div>
+    <div class="md-card">
+      <h3>💰 Finance <span class="status-badge badge-live">LIVE</span></h3>
+      <div class="pages">/finance &bull; 6 pages &bull; MFA required</div>
+      <ul class="features">
+        <li>Invoice lifecycle (Draft → Finalize → Paid → Refunded)</li>
+        <li>Charge catalog (service pricing master data)</li>
+        <li>Payment ledger (Cash, Card, UPI, Insurance)</li>
+        <li>Razorpay integration (online payments)</li>
+        <li>Refund management</li>
+        <li>Cash closure (daily reconciliation)</li>
+        <li>Financial reports + PDF export</li>
+      </ul>
+    </div>
+    <div class="md-card">
+      <h3>🛡️ Insurance <span class="status-badge badge-live">LIVE</span></h3>
+      <div class="pages">/insurance &bull; 1 page &bull; Role: finance</div>
+      <ul class="features">
+        <li>Insurance provider management</li>
+        <li>Patient policy enrollment</li>
+        <li>Claim submission + status tracking</li>
+        <li>Revenue leakage detection (unclaimed billables)</li>
+        <li>Claimable invoice identification</li>
+      </ul>
+    </div>
+    <div class="md-card">
+      <h3>📋 OPD Manager <span class="status-badge badge-live">LIVE</span></h3>
+      <div class="pages">/opd-manager &bull; 5 pages &bull; Role: opd_manager</div>
+      <ul class="features">
+        <li>Queue overview across all doctors</li>
+        <li>Patient reassignment between doctors</li>
+        <li>Doctor utilization analytics</li>
+        <li>Wait time analysis</li>
+        <li>No-show tracking & reports</li>
+      </ul>
+    </div>
+    <div class="md-card">
+      <h3>👥 HR <span class="status-badge badge-live">LIVE</span></h3>
+      <div class="pages">/hr &bull; 7 pages &bull; Role: hr</div>
+      <ul class="features">
+        <li>Employee directory (CRUD)</li>
+        <li>Attendance tracking (daily mark)</li>
+        <li>Leave management (apply, approve, reject, balance)</li>
+        <li>Shift patterns + assignments</li>
+        <li>HR dashboard (headcount, attendance %, pending leaves)</li>
+      </ul>
+    </div>
+    <div class="md-card">
+      <h3>📱 Patient Portal <span class="status-badge badge-live">LIVE</span></h3>
+      <div class="pages">/patient &bull; 12 pages &bull; Separate session (7d)</div>
+      <ul class="features">
+        <li>Dashboard (appointments, prescriptions, vitals, pending labs)</li>
+        <li>Online appointment booking + Razorpay payment</li>
+        <li>Medical records (labs, diagnoses, vitals history)</li>
+        <li>Prescription viewer</li>
+        <li>Invoice & payment history</li>
+        <li>AI health assessment (public, no-auth)</li>
+        <li>Feedback submission</li>
+        <li>Password setup (one-time link, 24h validity)</li>
+      </ul>
+    </div>
+    <div class="md-card">
+      <h3>🚪 Discharge <span class="status-badge badge-live">LIVE</span></h3>
+      <div class="pages">/discharge &bull; 1 page &bull; Role: ipd_manager, doctor</div>
+      <ul class="features">
+        <li>Admitted patients list (discharge candidates)</li>
+        <li>Full discharge workflow processing</li>
+        <li>AI-generated discharge summary (OpenAI)</li>
+        <li>Discharge PDF generation</li>
+        <li>Bed cleanup → Available transition</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ROLES ============ -->
+<div class="view" id="roles">
+  <div class="roles-grid">
+    <div class="role-card">
+      <div class="role-icon">👑</div>
+      <h4>SuperAdmin</h4>
+      <div class="route">/superadmin</div>
+      <div class="perms">Platform-level management. Onboard/manage organizations. View cross-org analytics. Manage all users. Separate auth session (2h). Not tied to any org.</div>
+    </div>
+    <div class="role-card">
+      <div class="role-icon">⚙️</div>
+      <h4>Admin</h4>
+      <div class="route">/admin, /doctor, /reception, /lab, /pharmacy, /finance, /ipd, /discharge, /opd, /nurse, /opd-manager, /hr</div>
+      <div class="perms">Full org access. Manage staff, departments, settings, branding. View all dashboards. MFA required. Can access every module route.</div>
+    </div>
+    <div class="role-card">
+      <div class="role-icon">🩺</div>
+      <h4>Doctor</h4>
+      <div class="route">/doctor, /opd, /discharge</div>
+      <div class="perms">OPD patient queue & consults. SOAP notes + AI assist. Lab & pharmacy orders. IPD admission. Discharge. Follow-ups. MFA required.</div>
+    </div>
+    <div class="role-card">
+      <div class="role-icon">💉</div>
+      <h4>Nurse</h4>
+      <div class="route">/nurse</div>
+      <div class="perms">Ward patient care. Record vitals. Administer medications. Nursing notes & tasks. Shift handover reports.</div>
+    </div>
+    <div class="role-card">
+      <div class="role-icon">🏨</div>
+      <h4>IPD Manager</h4>
+      <div class="route">/ipd, /discharge</div>
+      <div class="perms">Admissions, bed management, ward rounds oversight, transfers, census. Discharge processing. MFA required for finance actions.</div>
+    </div>
+    <div class="role-card">
+      <div class="role-icon">🪪</div>
+      <h4>Receptionist</h4>
+      <div class="route">/reception, /opd</div>
+      <div class="perms">Patient registration. Appointment booking. Check-in & queue management. Token display. Triage intake.</div>
+    </div>
+    <div class="role-card">
+      <div class="role-icon">💊</div>
+      <h4>Pharmacist</h4>
+      <div class="route">/pharmacy</div>
+      <div class="perms">Dispense prescriptions. Inventory management. Drug interaction checks. Purchase orders & suppliers. Returns.</div>
+    </div>
+    <div class="role-card">
+      <div class="role-icon">🔬</div>
+      <h4>Lab Technician</h4>
+      <div class="route">/lab</div>
+      <div class="perms">Process lab orders. Sample tracking. Upload results. Flag critical values. Reagent inventory.</div>
+    </div>
+    <div class="role-card">
+      <div class="role-icon">💰</div>
+      <h4>Finance</h4>
+      <div class="route">/finance, /insurance</div>
+      <div class="perms">Invoice management. Payment processing. Refunds. Cash closure. Insurance claims. Financial reports. MFA required.</div>
+    </div>
+    <div class="role-card">
+      <div class="role-icon">📋</div>
+      <h4>OPD Manager</h4>
+      <div class="route">/opd-manager</div>
+      <div class="perms">Queue oversight across doctors. Patient reassignment. Utilization analytics. Wait time monitoring. No-show reports.</div>
+    </div>
+    <div class="role-card">
+      <div class="role-icon">👥</div>
+      <h4>HR</h4>
+      <div class="route">/hr</div>
+      <div class="perms">Employee management. Attendance tracking. Leave approvals. Shift scheduling. HR dashboard & reports.</div>
+    </div>
+    <div class="role-card">
+      <div class="role-icon">📱</div>
+      <h4>Patient</h4>
+      <div class="route">/patient</div>
+      <div class="perms">View own dashboard. Book appointments. View medical records, prescriptions, vitals. Make payments. Submit feedback. Separate auth (7d session).</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DATA FLOWS ============ -->
+<div class="view" id="data-flows">
+  <div class="data-flow">
+    <div class="flow-section">
+      <h3>🔄 Multi-Tenant Request Flow</h3>
+      <div class="flow-steps">
+        <div class="flow-step">Browser Request</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step danger-hl">Middleware<br><small style="color:var(--text-dim)">JWT Verify</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step danger-hl">Role Check<br><small style="color:var(--text-dim)">ROLE_ROUTES map</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Session Timeout<br><small style="color:var(--text-dim)">15-min check</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">Server Action</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step ai-hl">requireTenantContext()</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step ai-hl">getTenantPrisma(orgId)</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">Org-Scoped Query</div>
+      </div>
+      <sub class="sub-note">Every DB query auto-injects organizationId via Prisma $extends — zero risk of cross-tenant data leak</sub>
+    </div>
+
+    <div class="flow-section">
+      <h3>🔬 Lab Order Flow</h3>
+      <div class="flow-steps">
+        <div class="flow-step">Doctor: Order Lab Test</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">lab_orders (Pending)</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Lab: Receive Sample</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">LabSampleTracking (barcode)</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">Processing</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Upload Result</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step danger-hl">Critical? Flag!</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">Completed</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step ext-hl">WhatsApp Notify</div>
+      </div>
+    </div>
+
+    <div class="flow-section">
+      <h3>💊 Pharmacy Dispensing Flow</h3>
+      <div class="flow-steps">
+        <div class="flow-step">Doctor: Prescribe</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">pharmacy_orders (Pending)</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step danger-hl">FDA: Drug Interaction Check</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Pharmacist: Review</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">Dispense</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Batch Stock Deducted</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Sales Audit Log</div>
+      </div>
+    </div>
+
+    <div class="flow-section">
+      <h3>💰 Invoice Lifecycle</h3>
+      <div class="flow-steps">
+        <div class="flow-step finance-hl">Draft</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Add Line Items</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step finance-hl">Finalized</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step ext-hl">Razorpay Order</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step ext-hl">HMAC Verify</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">Paid ✓</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">PDF Receipt</div>
+      </div>
+      <div class="flow-steps" style="margin-top:8px">
+        <div class="flow-step finance-hl">Paid</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step danger-hl">Reverse Payment</div>
+        <div class="flow-arrow">or→</div>
+        <div class="flow-step danger-hl">Refund (partial/full)</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Refunded</div>
+      </div>
+    </div>
+
+    <div class="flow-section">
+      <h3>📊 Org Onboarding Flow (SuperAdmin)</h3>
+      <div class="flow-steps">
+        <div class="flow-step">SuperAdmin Login</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">Create Organization<br><small style="color:var(--text-dim)">Name, slug, code, plan</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Onboarding Wizard</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Create Admin User</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Configure Departments</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">Setup Wards & Beds</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step highlight">Org Live ✓</div>
+      </div>
+    </div>
+
+    <div class="flow-section">
+      <h3>🤖 AI Integration Points</h3>
+      <div class="flow-steps">
+        <div class="flow-step ai-hl">SOAP Note AI<br><small style="color:var(--text-dim)">Raw text → Structured S/O/A/P</small></div>
+        <div class="flow-arrow">&bull;</div>
+        <div class="flow-step ai-hl">ICD-10 Auto-Suggest<br><small style="color:var(--text-dim)">Diagnosis → Code lookup</small></div>
+        <div class="flow-arrow">&bull;</div>
+        <div class="flow-step ai-hl">Pre-Consult Brief<br><small style="color:var(--text-dim)">Patient history summary</small></div>
+        <div class="flow-arrow">&bull;</div>
+        <div class="flow-step ai-hl">Discharge Summary<br><small style="color:var(--text-dim)">Auto-generate from admission data</small></div>
+        <div class="flow-arrow">&bull;</div>
+        <div class="flow-step ai-hl">Health Assessment<br><small style="color:var(--text-dim)">Patient-facing, public</small></div>
+      </div>
+      <sub class="sub-note">Model: GPT-4o &bull; Temp: 0.3 &bull; Max tokens: 2000 &bull; Graceful fallback to templates if API fails</sub>
+    </div>
+  </div>
+</div>
+
+<!-- ============ INTEGRATIONS ============ -->
+<div class="view" id="integrations">
+  <div class="integ-grid">
+    <div class="integ-card">
+      <h3>💳 Razorpay</h3>
+      <div class="provider">Payment Gateway &bull; 4 API Routes</div>
+      <div class="int-desc">
+        Handles all online payments for invoices and appointment booking. Flow: <code>create-order</code> → widget opens → patient pays → <code>verify-payment</code> validates HMAC-SHA256 signature → payment recorded. Supports Card, UPI, Net Banking, Wallets. Idempotent (duplicate payment IDs rejected).
+        <br><br>
+        Env: <code>RAZORPAY_KEY_ID</code>, <code>RAZORPAY_KEY_SECRET</code>
+      </div>
+    </div>
+    <div class="integ-card">
+      <h3>🤖 OpenAI GPT-4o</h3>
+      <div class="provider">AI Service &bull; 5 Use Cases</div>
+      <div class="int-desc">
+        Powers clinical AI features: SOAP note formatting from doctor's raw text, ICD-10 code auto-suggestion from diagnosis text, pre-consult health brief from patient history, AI discharge summary generation, and patient health assessment (public). Temp: 0.3 for deterministic output. Graceful fallback to templates if API fails.
+        <br><br>
+        Env: <code>OPENAI_API_KEY</code>
+      </div>
+    </div>
+    <div class="integ-card">
+      <h3>📲 WhatsApp (Meta Graph API)</h3>
+      <div class="provider">Notifications &bull; 7 Message Types</div>
+      <div class="int-desc">
+        Sends automated notifications via Meta Graph API v18: appointment confirmation, lab results ready, discharge notification, queue token assignment, queue position updates, and "your turn" alerts. Non-blocking — logs warning if credentials missing but never crashes the main operation.
+        <br><br>
+        Env: <code>WHATSAPP_API_TOKEN</code>, <code>WHATSAPP_PHONE_NUMBER_ID</code>
+      </div>
+    </div>
+    <div class="integ-card">
+      <h3>💊 FDA OpenFDA API</h3>
+      <div class="provider">Drug Safety &bull; Drug Interaction Check</div>
+      <div class="int-desc">
+        Queries <code>api.fda.gov/drug/label.json</code> for drug interaction data before pharmacy dispensing. Called with array of drug names, returns interaction warnings. Results cached for 1 hour. Graceful degradation — returns empty result on API failure, never blocks dispensing.
+      </div>
+    </div>
+    <div class="integ-card">
+      <h3>📧 SMTP / Nodemailer</h3>
+      <div class="provider">Email Service &bull; 4+ Templates</div>
+      <div class="int-desc">
+        Sends templated emails: patient welcome (with portal setup link, 24h validity), prescription notification, admission confirmation, and other transactional emails. Supports custom SMTP or Ethereal (testing). Non-blocking delivery.
+        <br><br>
+        Env: <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code>
+      </div>
+    </div>
+    <div class="integ-card">
+      <h3>📄 PDF Generation (@react-pdf/renderer)</h3>
+      <div class="provider">Document Service &bull; 5 PDF Types</div>
+      <div class="int-desc">
+        Generates PDFs server-side using React-PDF: invoice PDFs, discharge summary PDFs, financial report PDFs, lab report PDFs, and prescription PDFs. Each served via dedicated API routes. Includes hospital branding, structured layout, and QR codes for verification.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DB SCHEMA ============ -->
+<div class="view" id="schema">
+  <div class="schema-grid">
+    <div class="schema-group">
+      <h4>🏛️ Organization (3)</h4>
+      <div class="model-list"><span>Organization</span> <span>OrganizationConfig</span> <span>OrganizationBranding</span></div>
+    </div>
+    <div class="schema-group">
+      <h4>👤 Users & Auth (4)</h4>
+      <div class="model-list"><span>User</span> <span>SuperAdmin</span> <span>user_mfa</span> <span>PatientPasswordSetupToken</span></div>
+    </div>
+    <div class="schema-group">
+      <h4>🏥 Patient (3)</h4>
+      <div class="model-list"><span>OPD_REG</span> <span>appointments</span> <span>AppointmentSlot</span></div>
+    </div>
+    <div class="schema-group">
+      <h4>📋 Clinical (7)</h4>
+      <div class="model-list"><span>Clinical_EHR</span> <span>vital_signs</span> <span>triage_results</span> <span>PrescriptionTemplate</span> <span>FollowUp</span> <span>AiHealthAssessment</span> <span>Department</span></div>
+    </div>
+    <div class="schema-group">
+      <h4>🔬 Laboratory (6)</h4>
+      <div class="model-list"><span>lab_orders</span> <span>lab_test_inventory</span> <span>lab_staff</span> <span>lab_audit_logs</span> <span>LabSampleTracking</span> <span>LabReagentInventory</span></div>
+    </div>
+    <div class="schema-group">
+      <h4>💊 Pharmacy (9)</h4>
+      <div class="model-list"><span>pharmacy_medicine_master</span> <span>pharmacy_batch_inventory</span> <span>pharmacy_orders</span> <span>pharmacy_order_items</span> <span>pharmacy_sales_audit</span> <span>PharmacySupplier</span> <span>PurchaseOrder</span> <span>PurchaseOrderItem</span> <span>PharmacyReturn</span></div>
+    </div>
+    <div class="schema-group">
+      <h4>🛏️ IPD (9)</h4>
+      <div class="model-list"><span>admissions</span> <span>beds</span> <span>wards</span> <span>BedTransfer</span> <span>medical_notes</span> <span>discharge_summaries</span> <span>NursingNote</span> <span>MedicationAdministration</span> <span>WardRound</span></div>
+    </div>
+    <div class="schema-group">
+      <h4>💰 Billing (9)</h4>
+      <div class="model-list"><span>invoices</span> <span>invoice_items</span> <span>payments</span> <span>PaymentOrderIntent</span> <span>charge_catalog</span> <span>billing_records</span> <span>Refund</span> <span>CashClosure</span> <span>OPDConfig</span></div>
+    </div>
+    <div class="schema-group">
+      <h4>🛡️ Insurance (3)</h4>
+      <div class="model-list"><span>insurance_providers</span> <span>insurance_policies</span> <span>insurance_claims</span></div>
+    </div>
+    <div class="schema-group">
+      <h4>👥 HR (7)</h4>
+      <div class="model-list"><span>Employee</span> <span>Attendance</span> <span>LeaveType</span> <span>LeaveRequest</span> <span>ShiftPattern</span> <span>ShiftAssignment</span> <span>NursingTask</span></div>
+    </div>
+    <div class="schema-group">
+      <h4>🔔 System (6)</h4>
+      <div class="model-list"><span>system_audit_logs</span> <span>Notification</span> <span>ShiftHandover</span> <span>DietPlan</span> <span>PatientFeedback</span></div>
+    </div>
+    <div class="schema-group">
+      <h4>📊 Totals</h4>
+      <div class="model-list" style="color:var(--accent); font-size:13px; font-weight:700;">
+        68 Models &bull; 35+ Tenant-Scoped &bull; PostgreSQL &bull; Prisma 5
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PRODUCTION GAPS ============ -->
+<div class="view" id="gaps">
+  <div style="max-width:1100px;margin:0 auto 20px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:12px;color:var(--text-dim);">
+    These are production readiness gaps identified from the codebase analysis. We'll tackle these module by module.
+  </div>
+  <div class="gaps-grid">
+    <div class="gap-card">
+      <div class="severity sev-critical">CRITICAL</div>
+      <div class="gap-content">
+        <h4>No Automated Tests</h4>
+        <p>Zero test files found. No unit tests, integration tests, or E2E tests. 140+ server actions with no test coverage. Production-grade requires at least action-level unit tests and critical flow E2E tests.</p>
+      </div>
+    </div>
+    <div class="gap-card">
+      <div class="severity sev-critical">CRITICAL</div>
+      <div class="gap-content">
+        <h4>No CI/CD Pipeline</h4>
+        <p>No GitHub Actions, no automated linting on PR, no type-checking in CI. Only a partial <code>lint:ci</code> script covering 4 files. Build can ship with type errors and linting violations.</p>
+      </div>
+    </div>
+    <div class="gap-card">
+      <div class="severity sev-critical">CRITICAL</div>
+      <div class="gap-content">
+        <h4>Debug / Fix Scripts in Root</h4>
+        <p>Multiple debug files in production root: <code>check.js</code>, <code>checkdb.ts</code>, <code>fix-doctor-fees.ts</code>, <code>fix-fees.ts</code>, <code>fix-org-scoping.ts</code>, <code>deep-inspect.ts</code>, <code>see_users.ts</code>, etc. These should be in a scripts/ folder or removed.</p>
+      </div>
+    </div>
+    <div class="gap-card">
+      <div class="severity sev-critical">CRITICAL</div>
+      <div class="gap-content">
+        <h4>No Error Monitoring / Observability</h4>
+        <p>No Sentry, no structured logging, no APM. Errors silently caught with empty <code>catch {}</code> blocks. No alerting for payment failures, API outages, or critical lab values.</p>
+      </div>
+    </div>
+    <div class="gap-card">
+      <div class="severity sev-high">HIGH</div>
+      <div class="gap-content">
+        <h4>No Database Migrations Strategy</h4>
+        <p>Single <code>migration.sql</code> file in root. No versioned migration history. Prisma migrations folder likely exists but schema changes aren't tracked properly for production rollbacks.</p>
+      </div>
+    </div>
+    <div class="gap-card">
+      <div class="severity sev-high">HIGH</div>
+      <div class="gap-content">
+        <h4>No Rate Limiting on API Routes</h4>
+        <p>Login rate limiting exists but API routes (Razorpay, PDF generation, lab verification) have no rate limiting. Vulnerable to abuse and DDoS on expensive endpoints.</p>
+      </div>
+    </div>
+    <div class="gap-card">
+      <div class="severity sev-high">HIGH</div>
+      <div class="gap-content">
+        <h4>No HIPAA / Data Compliance Layer</h4>
+        <p>Hospital software handling PHI (Protected Health Information) with no encryption at rest, no data retention policies, no consent management, no data export/deletion capabilities (GDPR/DPDPA).</p>
+      </div>
+    </div>
+    <div class="gap-card">
+      <div class="severity sev-high">HIGH</div>
+      <div class="gap-content">
+        <h4>No Caching Strategy</h4>
+        <p>Every page load hits the database directly. No Redis, no ISR, no React Query / SWR for client-side caching. Dashboard KPIs, charge catalogs, and department lists should be cached.</p>
+      </div>
+    </div>
+    <div class="gap-card">
+      <div class="severity sev-high">HIGH</div>
+      <div class="gap-content">
+        <h4>No Real-time Updates</h4>
+        <p>Queue display, bed matrix, and nursing station rely on page refreshes. No WebSocket / SSE / Supabase Realtime for live updates. Critical for OPD queue display and nursing station.</p>
+      </div>
+    </div>
+    <div class="gap-card">
+      <div class="severity sev-medium">MEDIUM</div>
+      <div class="gap-content">
+        <h4>No Background Job Processing</h4>
+        <p>Daily charge accrual, email sending, WhatsApp notifications all happen synchronously in request handlers. Need a job queue (BullMQ, Inngest, or Vercel Cron) for reliability.</p>
+      </div>
+    </div>
+    <div class="gap-card">
+      <div class="severity sev-medium">MEDIUM</div>
+      <div class="gap-content">
+        <h4>No Backup & Disaster Recovery</h4>
+        <p>No automated database backups documented. No point-in-time recovery setup. No disaster recovery plan. Critical for hospital data that cannot be lost.</p>
+      </div>
+    </div>
+    <div class="gap-card">
+      <div class="severity sev-medium">MEDIUM</div>
+      <div class="gap-content">
+        <h4>Missing Database Indexes</h4>
+        <p>No explicit composite indexes on high-query columns like (organizationId, status), (organizationId, created_at), (patient_id, date). Performance will degrade with data growth.</p>
+      </div>
+    </div>
+    <div class="gap-card">
+      <div class="severity sev-medium">MEDIUM</div>
+      <div class="gap-content">
+        <h4>No API Documentation</h4>
+        <p>13 API routes with no OpenAPI/Swagger documentation. No documented request/response schemas. Makes integration testing and third-party integration difficult.</p>
+      </div>
+    </div>
+    <div class="gap-card">
+      <div class="severity sev-medium">MEDIUM</div>
+      <div class="gap-content">
+        <h4>Patient Portal Security Gaps</h4>
+        <p>Legacy JSON session parsing in <code>getPatientSession()</code> (line 178). Hardcoded fallback org ID <code>'org-avani-default'</code>. Assessment pages are public with no rate limiting.</p>
+      </div>
+    </div>
+    <div class="gap-card">
+      <div class="severity sev-medium">MEDIUM</div>
+      <div class="gap-content">
+        <h4>No Payroll / Salary Module in HR</h4>
+        <p>Employee model has salary field but no payroll processing, tax calculations, payslip generation, or salary disbursement workflow. HR module incomplete for production.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Tab switching
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.view).classList.add('active');
+    });
+  });
+</script>
+
+</body>
+</html>

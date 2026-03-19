@@ -4,25 +4,14 @@ import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { sendWelcomeEmail } from '@/backend/email';
 import { createPatientPasswordSetupToken } from '@/app/lib/password-setup';
-
-// Generate unique IDs
-function generatePatientId(): string {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    const rand = Math.floor(1000 + Math.random() * 9000);
-    return `PAT-${y}${m}${d}-${rand}`;
-}
-
-function generateAppointmentId(): string {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    const rand = Math.floor(1000 + Math.random() * 9000);
-    return `APP-${y}${m}${d}-${rand}`;
-}
+import { generateUHID, generateAppointmentId } from '@/app/lib/uhid';
+import {
+    EMERGENCY_SYMPTOMS as EMERGENCY_SYMPTOMS_LIST,
+    URGENT_SYMPTOMS as URGENT_SYMPTOMS_LIST,
+    SYMPTOM_DEPARTMENT_MAP,
+    SYMPTOM_CONDITION_MAP,
+    SYMPTOM_TEST_MAP,
+} from '@/app/lib/constants/symptoms';
 
 // =========================================
 // Type Definitions
@@ -177,91 +166,12 @@ CLINICAL RULES (strictly follow):
 // Rule-Based Fallback Triage Engine
 // =========================================
 
-// Emergency symptoms red-flag database
-const EMERGENCY_SYMPTOMS = [
-    'chest pain', 'difficulty breathing', 'severe bleeding', 'unconscious',
-    'seizure', 'stroke symptoms', 'severe allergic reaction', 'anaphylaxis',
-    'cardiac arrest', 'severe burns', 'drowning', 'poisoning',
-    'head injury', 'spinal injury', 'severe trauma', 'choking',
-    'heart attack', 'shortness of breath', 'loss of consciousness',
-    'high fever above 104', 'severe abdominal pain'
-];
-
-const URGENT_SYMPTOMS = [
-    'high fever', 'persistent vomiting', 'dehydration', 'broken bone',
-    'deep cut', 'moderate bleeding', 'severe headache', 'eye injury',
-    'diabetic emergency', 'asthma attack', 'kidney stones',
-    'appendicitis', 'blood in urine', 'blood in stool',
-    'severe diarrhea', 'abdominal pain', 'back pain severe'
-];
-
-// Symptom → Department mapping
-const DEPARTMENT_MAP: Record<string, string> = {
-    'chest pain': 'Cardiology',
-    'heart palpitations': 'Cardiology',
-    'heart attack': 'Cardiology',
-    'difficulty breathing': 'Pulmonology',
-    'asthma attack': 'Pulmonology',
-    'shortness of breath': 'Pulmonology',
-    'cough': 'Pulmonology',
-    'headache': 'Neurology',
-    'seizure': 'Neurology',
-    'stroke symptoms': 'Neurology',
-    'dizziness': 'Neurology',
-    'skin rash': 'Dermatology',
-    'skin infection': 'Dermatology',
-    'joint pain': 'Orthopedics',
-    'broken bone': 'Orthopedics',
-    'back pain': 'Orthopedics',
-    'fracture': 'Orthopedics',
-    'abdominal pain': 'Gastroenterology',
-    'nausea': 'Gastroenterology',
-    'vomiting': 'Gastroenterology',
-    'diarrhea': 'Gastroenterology',
-    'eye pain': 'Ophthalmology',
-    'eye injury': 'Ophthalmology',
-    'blurred vision': 'Ophthalmology',
-    'ear pain': 'ENT',
-    'hearing loss': 'ENT',
-    'sore throat': 'ENT',
-    'fever': 'General Medicine',
-    'fatigue': 'General Medicine',
-    'weight loss': 'General Medicine',
-    'diabetes': 'Endocrinology',
-    'thyroid': 'Endocrinology',
-};
-
-// Symptom → Possible conditions
-const CONDITION_MAP: Record<string, string[]> = {
-    'chest pain': ['Angina', 'Myocardial Infarction', 'Costochondritis', 'GERD'],
-    'headache': ['Migraine', 'Tension Headache', 'Sinusitis', 'Cluster Headache'],
-    'fever': ['Viral Infection', 'Bacterial Infection', 'Dengue', 'Malaria', 'Typhoid'],
-    'abdominal pain': ['Gastritis', 'Appendicitis', 'Kidney Stones', 'IBS'],
-    'cough': ['Common Cold', 'Bronchitis', 'Pneumonia', 'Asthma', 'TB'],
-    'back pain': ['Muscle Strain', 'Disc Herniation', 'Sciatica', 'Spondylitis'],
-    'joint pain': ['Arthritis', 'Gout', 'Rheumatoid Arthritis', 'Lupus'],
-    'dizziness': ['Vertigo', 'Hypotension', 'Anemia', 'Inner Ear Infection'],
-    'nausea': ['Gastroenteritis', 'Food Poisoning', 'Pregnancy', 'Motion Sickness'],
-    'skin rash': ['Contact Dermatitis', 'Eczema', 'Psoriasis', 'Fungal Infection'],
-    'difficulty breathing': ['Asthma', 'COPD', 'Pneumonia', 'Pulmonary Embolism'],
-    'sore throat': ['Pharyngitis', 'Tonsillitis', 'Strep Throat', 'Mononucleosis'],
-};
-
-// Symptom → Recommended tests
-const TEST_MAP: Record<string, string[]> = {
-    'chest pain': ['ECG', 'Troponin', 'Chest X-Ray', 'CBC'],
-    'fever': ['CBC', 'Blood Culture', 'Widal Test', 'Dengue NS1'],
-    'abdominal pain': ['Ultrasound Abdomen', 'CBC', 'Liver Function Test', 'Amylase'],
-    'headache': ['CT Brain', 'CBC', 'ESR'],
-    'cough': ['Chest X-Ray', 'Sputum Culture', 'CBC'],
-    'dizziness': ['CBC', 'Blood Sugar', 'ECG', 'Blood Pressure'],
-    'joint pain': ['X-Ray', 'Uric Acid', 'RA Factor', 'ESR', 'CRP'],
-    'skin rash': ['Skin Scraping', 'CBC', 'IgE Levels'],
-    'difficulty breathing': ['Chest X-Ray', 'ABG', 'Spirometry', 'D-Dimer'],
-    'back pain': ['X-Ray Spine', 'MRI Spine', 'CBC', 'ESR'],
-    'nausea': ['CBC', 'LFT', 'Pregnancy Test', 'Electrolytes'],
-    'sore throat': ['Rapid Strep Test', 'Throat Culture', 'CBC'],
-};
+// Use consolidated symptom constants from shared module
+const EMERGENCY_SYMPTOMS = EMERGENCY_SYMPTOMS_LIST as readonly string[];
+const URGENT_SYMPTOMS = URGENT_SYMPTOMS_LIST as readonly string[];
+const DEPARTMENT_MAP = SYMPTOM_DEPARTMENT_MAP;
+const CONDITION_MAP = SYMPTOM_CONDITION_MAP;
+const TEST_MAP = SYMPTOM_TEST_MAP;
 
 function runRuleBasedTriage(input: TriageInput): TriageOutput {
     const lowerSymptoms = input.symptoms.map(s => s.toLowerCase().trim());
@@ -433,7 +343,7 @@ export async function performTriage(input: TriageInput) {
         const result = await runTriageEngine(input);
 
         // 1. Generate Patient ID & Appointment ID
-        const patientId = input.patientId || generatePatientId();
+        const patientId = input.patientId || await generateUHID(db);
         const appointmentId = generateAppointmentId();
 
         // 2. Register Patient in OPD_REG (if not already existing)
@@ -561,9 +471,9 @@ export async function performTriage(input: TriageInput) {
                 manualPasswordSetupLink: input.email ? null : setupLink,
             },
         };
-    } catch (error: any) {
+    } catch (error) {
         console.error('performTriage error:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: error instanceof Error ? error.message : 'Triage failed' };
     }
 }
 
@@ -618,13 +528,13 @@ export async function getPatientTriageData(patientId: string) {
                 } : null,
             },
         };
-    } catch (error: any) {
+    } catch (error) {
         console.error('getPatientTriageData error:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch triage data' };
     }
 }
 
-function safeJsonParse(val: string | null, fallback: any) {
+function safeJsonParse<T>(val: string | null, fallback: T): T {
     if (!val) return fallback;
     try { return JSON.parse(val); } catch { return fallback; }
 }
@@ -639,8 +549,8 @@ export async function getTriageHistory(limit: number = 20) {
         });
 
         return { success: true, data: results };
-    } catch (error: any) {
+    } catch (error) {
         console.error('getTriageHistory error:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch history' };
     }
 }

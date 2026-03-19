@@ -7,6 +7,22 @@ import {
     sendQueueUpdate,
     sendYourTurnAlert,
 } from '@/app/lib/whatsapp';
+import type {
+    ActionResponse,
+    PaginatedResponse,
+    PatientListItem,
+    ReceptionStats,
+    PatientDetail,
+    CheckInResult,
+    QueueItem,
+    WaitingRoomDoctor,
+    DoctorQueue,
+    Department,
+    DoctorListItem,
+    Appointment,
+    AppointmentSlot,
+    BookAppointmentInput,
+} from '@/app/types/reception';
 
 export async function getRegisteredPatients(options?: {
     search?: string;
@@ -22,7 +38,7 @@ export async function getRegisteredPatients(options?: {
         const limit = options?.limit || 25;
         const skip = (page - 1) * limit;
 
-        const where: any = {};
+        const where: Record<string, unknown> = {};
 
         // Search filter
         if (options?.search) {
@@ -71,7 +87,7 @@ export async function getRegisteredPatients(options?: {
 
         return {
             success: true,
-            data: data.map((p: any) => ({
+            data: data.map((p: { appointments: Array<{ status?: string; appointment_date?: Date }>; [key: string]: unknown }) => ({
                 ...p,
                 lastAppointmentStatus: p.appointments[0]?.status || null,
                 lastAppointmentDate: p.appointments[0]?.appointment_date || null,
@@ -165,6 +181,36 @@ export async function getPatientDetail(patientId: string) {
     } catch (error) {
         console.error('Patient Detail Error:', error);
         return { success: false, data: null };
+    }
+}
+
+/**
+ * Inline update a single patient field.
+ */
+export async function updatePatientField(patientId: string, field: string, value: string) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const allowedFields = [
+            'full_name', 'phone', 'email', 'address', 'age', 'gender',
+            'department', 'blood_group', 'date_of_birth',
+            'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relation',
+        ];
+
+        if (!allowedFields.includes(field)) {
+            return { success: false, error: 'Field not editable' };
+        }
+
+        await db.oPD_REG.update({
+            where: { patient_id: patientId },
+            data: { [field]: value || null },
+        });
+
+        revalidatePath(`/reception/patient/${patientId}`);
+        return { success: true };
+    } catch (error) {
+        console.error('Update Patient Field Error:', error);
+        return { success: false, error: 'Failed to update' };
     }
 }
 
@@ -374,7 +420,7 @@ export async function getQueueStatus(doctorId: string) {
 
         return {
             success: true,
-            data: queue.map((a: any, index: number) => ({
+            data: queue.map((a: { appointment_id: string; queue_token: number | null; patient?: { full_name: string } | null; patient_id: string; status: string; checked_in_at: Date | null }, index: number) => ({
                 appointmentId: a.appointment_id,
                 tokenNumber: a.queue_token,
                 patientName: a.patient?.full_name || 'Unknown',
@@ -470,7 +516,7 @@ export async function getDepartmentList() {
 export async function getDoctorList(department?: string) {
     try {
         const { db } = await requireTenantContext();
-        const where: any = { role: 'doctor', is_active: true };
+        const where: Record<string, unknown> = { role: 'doctor', is_active: true };
         if (department) where.specialty = department;
         const doctors = await db.user.findMany({
             where,
@@ -493,7 +539,7 @@ export async function getAppointmentCalendar(date: string, doctorId?: string) {
         const dayEnd = new Date(date);
         dayEnd.setHours(23, 59, 59, 999);
 
-        const where: any = {
+        const where: Record<string, unknown> = {
             appointment_date: { gte: dayStart, lte: dayEnd },
         };
         if (doctorId) where.doctor_id = doctorId;
@@ -640,7 +686,7 @@ export async function createBulkSlots(data: {
     try {
         const { db } = await requireTenantContext();
 
-        const slots: any[] = [];
+        const slots: Array<Record<string, unknown>> = [];
         const start = new Date(data.startDate);
         const end = new Date(data.endDate);
 
@@ -682,6 +728,127 @@ export async function createBulkSlots(data: {
     }
 }
 
+/**
+ * Walk-in appointment: auto-assigns next available slot or creates overflow.
+ */
+export async function walkInAppointment(data: {
+    patientId: string;
+    doctorId: string;
+    doctorName: string;
+    department: string;
+    reasonForVisit?: string;
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Find next available slot for this doctor today
+        const nextSlot = await db.appointmentSlot.findFirst({
+            where: {
+                doctor_id: data.doctorId,
+                date: { gte: today, lt: new Date(today.getTime() + 86400000) },
+                is_available: true,
+                is_booked: false,
+            },
+            orderBy: { start_time: 'asc' },
+        });
+
+        const count = await db.appointments.count();
+        const appointmentId = `WLK-${String(count + 1).padStart(6, '0')}`;
+
+        const appointmentDate = nextSlot
+            ? (() => {
+                const [hours, minutes] = nextSlot.start_time.split(':').map(Number);
+                const d = new Date();
+                d.setHours(hours, minutes, 0, 0);
+                return d;
+            })()
+            : new Date();
+
+        const appointment = await db.appointments.create({
+            data: {
+                appointment_id: appointmentId,
+                patient_id: data.patientId,
+                doctor_id: data.doctorId,
+                doctor_name: data.doctorName,
+                department: data.department,
+                reason_for_visit: data.reasonForVisit || 'Walk-in',
+                status: 'Checked In',
+                appointment_date: appointmentDate,
+                checked_in_at: new Date(),
+                organizationId,
+            },
+        });
+
+        // Mark slot as booked if one was found
+        if (nextSlot) {
+            await db.appointmentSlot.update({
+                where: { id: nextSlot.id },
+                data: { is_booked: true, is_available: false, booked_by: data.patientId },
+            });
+        }
+
+        // Assign next queue token
+        const lastToken = await db.appointments.findFirst({
+            where: {
+                doctor_id: data.doctorId,
+                appointment_date: { gte: today },
+                queue_token: { not: null },
+            },
+            orderBy: { queue_token: 'desc' },
+        });
+
+        const newToken = (lastToken?.queue_token || 0) + 1;
+        await db.appointments.update({
+            where: { appointment_id: appointmentId },
+            data: { queue_token: newToken },
+        });
+
+        revalidatePath('/reception/appointments');
+        revalidatePath('/reception/queue');
+        return { success: true, data: { ...appointment, queue_token: newToken } };
+    } catch (error) {
+        console.error('Walk-in Appointment Error:', error);
+        return { success: false, error: 'Failed to create walk-in appointment' };
+    }
+}
+
+/**
+ * Preview how many slots will be created before actually creating them.
+ */
+export async function previewBulkSlots(data: {
+    startDate: string;
+    endDate: string;
+    startTime: string;
+    endTime: string;
+    slotDuration: number;
+    bufferMinutes?: number;
+}): Promise<{ count: number; days: number }> {
+    const start = new Date(data.startDate);
+    const end = new Date(data.endDate);
+    const buffer = data.bufferMinutes || 0;
+    const effectiveDuration = data.slotDuration + buffer;
+    let count = 0;
+    let days = 0;
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        if (d.getDay() === 0) continue; // Skip Sundays
+        days++;
+        const [startH, startM] = data.startTime.split(':').map(Number);
+        const [endH, endM] = data.endTime.split(':').map(Number);
+        const dayStartMin = startH * 60 + startM;
+        const dayEndMin = endH * 60 + endM;
+
+        for (let min = dayStartMin; min + data.slotDuration <= dayEndMin; min += effectiveDuration) {
+            count++;
+        }
+    }
+
+    return { count, days };
+}
+
 // ========================================
 // QUEUE MANAGEMENT (ENHANCED)
 // ========================================
@@ -703,13 +870,23 @@ export async function getAllDoctorQueues() {
         });
 
         // Group by doctor
+        type DoctorQueueItem = {
+            appointmentId: string;
+            patientName: string;
+            patientId: string;
+            token: number | null;
+            status: string;
+            checkedInAt: Date | null;
+            reason: string | null;
+        };
+
         const queues: Record<string, {
             doctorId: string;
             doctorName: string;
             department: string;
-            current: any | null;
-            waiting: any[];
-            scheduled: any[];
+            current: DoctorQueueItem | null;
+            waiting: DoctorQueueItem[];
+            scheduled: DoctorQueueItem[];
         }> = {};
 
         for (const appt of appointments) {
@@ -725,7 +902,7 @@ export async function getAllDoctorQueues() {
                 };
             }
 
-            const item = {
+            const item: DoctorQueueItem = {
                 appointmentId: appt.appointment_id,
                 patientName: appt.patient?.full_name || 'Unknown',
                 patientId: appt.patient_id,

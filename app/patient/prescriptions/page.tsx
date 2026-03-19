@@ -1,23 +1,14 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Pill, Info, Printer, RefreshCw } from 'lucide-react';
-import { getPatientDashboardData } from '@/app/actions/patient-actions';
+import { usePatientDashboard } from '@/app/lib/hooks/usePatientData';
+import { usePullToRefresh } from '@/app/lib/hooks/usePullToRefresh';
 
 export default function PrescriptionsPage() {
-    const [prescriptions, setPrescriptions] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    const loadData = async () => {
-        setLoading(true);
-        const res = await getPatientDashboardData();
-        if (res.success && res.data) {
-            setPrescriptions(res.data.activePrescriptions || []);
-        }
-        setLoading(false);
-    };
-
-    useEffect(() => { loadData(); }, []);
+    const { data, isLoading: loading, isValidating, refresh } = usePatientDashboard();
+    const { refreshing } = usePullToRefresh(refresh);
+    const prescriptions = data?.activePrescriptions || [];
 
     if (loading) {
         return (
@@ -32,15 +23,22 @@ export default function PrescriptionsPage() {
 
     return (
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+            {/* Pull-to-refresh indicator */}
+            {refreshing && (
+                <div className="flex justify-center py-2">
+                    <RefreshCw className="h-5 w-5 animate-spin text-emerald-500" />
+                </div>
+            )}
+
             <div className="flex justify-between items-center">
                 <div>
                     <h2 className="text-2xl font-black text-gray-900 flex items-center gap-2">
-                        <Pill className="h-6 w-6 text-purple-500" /> Active Prescriptions
+                        <Pill className="h-6 w-6 text-purple-500" aria-hidden="true" /> Active Prescriptions
                     </h2>
                     <p className="text-sm text-gray-500 mt-1">Your medication orders from doctors.</p>
                 </div>
-                <button onClick={loadData} disabled={loading} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition disabled:opacity-50">
-                    <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+                <button onClick={refresh} disabled={isValidating} className="min-h-[44px] min-w-[44px] p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition disabled:opacity-50" aria-label="Refresh prescriptions">
+                    <RefreshCw className={`h-5 w-5 ${isValidating ? 'animate-spin' : ''}`} aria-hidden="true" />
                 </button>
             </div>
 
@@ -68,34 +66,53 @@ export default function PrescriptionsPage() {
                                 </div>
                                 <button
                                     onClick={() => window.open(`/api/reports/prescription/pdf?orderId=${px.id}`, '_blank')}
-                                    className="mt-4 md:mt-0 bg-white border border-gray-200 text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-sm transition"
+                                    className="mt-4 md:mt-0 bg-white border border-gray-200 text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 font-bold px-4 py-2.5 min-h-[44px] rounded-xl text-xs flex items-center gap-2 shadow-sm transition"
+                                    aria-label={`Print prescription order ${px.id}`}
                                 >
-                                    <Printer className="h-4 w-4" /> Print RX
+                                    <Printer className="h-4 w-4" aria-hidden="true" /> Print RX
                                 </button>
                             </div>
-                            <div className="p-5 overflow-x-auto">
+                            <div className="p-5">
                                 {items.length > 0 ? (
-                                    <table className="w-full text-left text-sm whitespace-nowrap">
-                                        <thead>
-                                            <tr className="text-xs uppercase font-bold text-gray-400 border-b border-gray-100">
-                                                <th className="pb-3 pr-4">Medication</th>
-                                                <th className="pb-3 px-4">Quantity</th>
-                                                <th className="pb-3 px-4">Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-50">
-                                            {items.map((item: any, idx: number) => (
-                                                <tr key={idx} className="hover:bg-purple-50/30">
-                                                    <td className="py-4 pr-4 font-black text-gray-900 flex items-center gap-2">
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-                                                        {item.medicine_name}
-                                                    </td>
-                                                    <td className="py-4 px-4 font-bold text-purple-700">{item.quantity_requested || item.quantity || '-'}</td>
-                                                    <td className="py-4 px-4 font-medium text-gray-600">{item.status || '-'}</td>
+                                    <>
+                                        {/* Desktop table */}
+                                        <table className="hidden md:table w-full text-left text-sm whitespace-nowrap">
+                                            <thead>
+                                                <tr className="text-xs uppercase font-bold text-gray-400 border-b border-gray-100">
+                                                    <th scope="col" className="pb-3 pr-4">Medication</th>
+                                                    <th scope="col" className="pb-3 px-4">Quantity</th>
+                                                    <th scope="col" className="pb-3 px-4">Status</th>
                                                 </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-50">
+                                                {items.map((item: any, idx: number) => (
+                                                    <tr key={idx} className="hover:bg-purple-50/30">
+                                                        <td className="py-4 pr-4 font-black text-gray-900 flex items-center gap-2">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                                                            {item.medicine_name}
+                                                        </td>
+                                                        <td className="py-4 px-4 font-bold text-purple-700">{item.quantity_requested || item.quantity || '-'}</td>
+                                                        <td className="py-4 px-4 font-medium text-gray-600">{item.status || '-'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                        {/* Mobile cards */}
+                                        <div className="md:hidden space-y-3">
+                                            {items.map((item: any, idx: number) => (
+                                                <div key={idx} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                                                    <p className="font-black text-gray-900 text-sm flex items-center gap-2">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
+                                                        {item.medicine_name}
+                                                    </p>
+                                                    <div className="flex items-center gap-4 mt-2 text-xs">
+                                                        <span className="font-bold text-purple-700">Qty: {item.quantity_requested || item.quantity || '-'}</span>
+                                                        <span className="font-medium text-gray-500">{item.status || '-'}</span>
+                                                    </div>
+                                                </div>
                                             ))}
-                                        </tbody>
-                                    </table>
+                                        </div>
+                                    </>
                                 ) : (
                                     <p className="text-sm text-gray-400 text-center py-4">No medication items.</p>
                                 )}

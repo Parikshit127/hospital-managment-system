@@ -50,6 +50,7 @@ import {
   Undo2,
   CreditCard,
   Banknote,
+  Bell,
   Clock,
   ArrowLeftRight,
   Briefcase,
@@ -291,6 +292,16 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
       icon: <CreditCard className="h-4 w-4" />,
     },
     {
+      label: "Expenses",
+      href: "/finance/expenses",
+      icon: <Banknote className="h-4 w-4" />,
+    },
+    {
+      label: "Vendors",
+      href: "/finance/vendors",
+      icon: <Truck className="h-4 w-4" />,
+    },
+    {
       label: "Cash Closure",
       href: "/finance/cash-closure",
       icon: <Wallet className="h-4 w-4" />,
@@ -301,14 +312,49 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
       icon: <Undo2 className="h-4 w-4" />,
     },
     {
+      label: "Deposits",
+      href: "/finance/deposits",
+      icon: <Wallet className="h-4 w-4" />,
+    },
+    {
+      label: "Credit Notes",
+      href: "/finance/credit-notes",
+      icon: <FileText className="h-4 w-4" />,
+    },
+    {
       label: "TPA / Insurance",
       href: "/insurance",
       icon: <ShieldCheck className="h-4 w-4" />,
     },
     {
+      label: "Revenue Analytics",
+      href: "/finance/revenue",
+      icon: <PieChart className="h-4 w-4" />,
+    },
+    {
       label: "Financial Reports",
       href: "/finance/reports",
       icon: <BarChart3 className="h-4 w-4" />,
+    },
+    {
+      label: "Fiscal Periods",
+      href: "/finance/periods",
+      icon: <CalendarCheck className="h-4 w-4" />,
+    },
+    {
+      label: "Bank Reconciliation",
+      href: "/finance/bank-recon",
+      icon: <ArrowLeftRight className="h-4 w-4" />,
+    },
+    {
+      label: "Collections",
+      href: "/finance/collections",
+      icon: <Bell className="h-4 w-4" />,
+    },
+    {
+      label: "Finance Settings",
+      href: "/finance/settings",
+      icon: <Settings className="h-4 w-4" />,
     },
   ],
   ipd_manager: [

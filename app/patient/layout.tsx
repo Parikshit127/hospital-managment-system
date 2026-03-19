@@ -1,10 +1,12 @@
 import {
     Activity, Calendar, FlaskConical, CreditCard, LogOut,
-    Pill, Heart, FileText, User, MessageSquare, MoreHorizontal, Home
+    Pill, Heart, FileText, User, MessageSquare, MoreHorizontal, Home, Bell, Shield
 } from 'lucide-react';
 import { getPatientSession, patientLogout } from './login/actions';
 import Link from 'next/link';
 import { PatientBottomNav } from './PatientBottomNav';
+import { PatientNotificationBell } from './PatientNotificationBell';
+
 
 export default async function PatientLayout({
     children,
@@ -26,16 +28,21 @@ export default async function PatientLayout({
     ];
 
     const moreNav = [
+        { label: 'Notifications', href: '/patient/notifications', icon: Bell },
         { label: 'My Vitals', href: '/patient/vitals', icon: Heart },
         { label: 'Medical Records', href: '/patient/records', icon: FileText },
         { label: 'My Profile', href: '/patient/profile', icon: User },
         { label: 'Feedback', href: '/patient/feedback', icon: MessageSquare },
+        { label: 'Privacy & Data', href: '/patient/settings/privacy', icon: Shield },
     ];
 
     return (
-        <div className="min-h-screen bg-[#f8fbf9] font-sans">
+        <div className="min-h-screen bg-gray-50 font-sans">
+            {/* Skip navigation — WCAG 2.1 AA */}
+            <a href="#main-content" className="skip-nav">Skip to main content</a>
+
             {/* Header */}
-            <header className="bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm">
+            <header className="bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm" role="banner">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center h-16">
                         <div className="flex items-center gap-6">
@@ -54,7 +61,7 @@ export default async function PatientLayout({
                             </Link>
 
                             {/* Desktop Nav */}
-                            <nav className="hidden lg:flex items-center gap-1">
+                            <nav className="hidden lg:flex items-center gap-1" aria-label="Main navigation">
                                 {primaryNav.map((item) => {
                                     const Icon = item.icon;
                                     return (
@@ -93,7 +100,8 @@ export default async function PatientLayout({
                             </nav>
                         </div>
 
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 sm:gap-4">
+                            <PatientNotificationBell />
                             <div className="text-right hidden sm:block">
                                 <p className="text-sm font-semibold text-gray-900 leading-none">{session.name}</p>
                                 <p className="text-xs text-gray-500 mt-1">{session.id}</p>
@@ -102,8 +110,8 @@ export default async function PatientLayout({
                                 {session.name?.substring(0, 2).toUpperCase()}
                             </div>
                             <form action={patientLogout}>
-                                <button className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition" title="Sign Out">
-                                    <LogOut className="h-4 w-4" />
+                                <button className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition" title="Sign Out" aria-label="Sign out">
+                                    <LogOut className="h-4 w-4" aria-hidden="true" />
                                 </button>
                             </form>
                         </div>
@@ -111,7 +119,7 @@ export default async function PatientLayout({
                 </div>
             </header>
 
-            <main className="py-8 pb-24 lg:pb-8">
+            <main id="main-content" className="py-8 pb-24 lg:pb-8" role="main">
                 {children}
             </main>
 

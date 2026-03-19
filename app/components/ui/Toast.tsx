@@ -27,10 +27,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
     const addToast = useCallback((message: string, type: ToastType) => {
         const id = ++toastId;
-        setToasts(prev => [...prev, { id, message, type }]);
+        setToasts(prev => {
+            const next = [...prev, { id, message, type }];
+            // Keep max 3 toasts visible
+            return next.length > 3 ? next.slice(-3) : next;
+        });
         setTimeout(() => {
             setToasts(prev => prev.filter(t => t.id !== id));
-        }, 4000);
+        }, 5000);
     }, []);
 
     const removeToast = useCallback((id: number) => {

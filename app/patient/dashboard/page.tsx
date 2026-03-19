@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Calendar, Pill, FileText, ChevronRight, Heart, Activity, Wind, Thermometer, CreditCard, FlaskConical, RefreshCw } from 'lucide-react';
-import { getPatientDashboardData } from '@/app/actions/patient-actions';
+import { usePatientDashboard } from '@/app/lib/hooks/usePatientData';
+import { usePullToRefresh } from '@/app/lib/hooks/usePullToRefresh';
 import Link from 'next/link';
 
 function getGreeting() {
@@ -20,25 +21,10 @@ function daysUntil(dateStr: string) {
 }
 
 export default function PatientDashboard() {
-    const [data, setData] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const { data, error, isLoading, isValidating, refresh } = usePatientDashboard();
+    const { refreshing } = usePullToRefresh(refresh);
 
-    const loadData = async () => {
-        setLoading(true);
-        setError(null);
-        const res = await getPatientDashboardData();
-        if (res.success) {
-            setData(res.data);
-        } else {
-            setError(res.error || 'Unknown error');
-        }
-        setLoading(false);
-    };
-
-    useEffect(() => { loadData(); }, []);
-
-    if (loading) {
+    if (isLoading) {
         return (
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="animate-pulse space-y-6">
@@ -73,14 +59,20 @@ export default function PatientDashboard() {
 
     return (
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+            {/* Pull-to-refresh indicator */}
+            {refreshing && (
+                <div className="flex justify-center py-2">
+                    <RefreshCw className="h-5 w-5 animate-spin text-emerald-500" />
+                </div>
+            )}
             {/* Greeting + Refresh */}
             <div className="flex justify-between items-start">
                 <div>
                     <h1 className="text-3xl font-black text-gray-900">{getGreeting()}, {firstName}</h1>
                     <p className="text-gray-500 font-medium mt-1">Patient ID: {data.patient.patient_id}</p>
                 </div>
-                <button onClick={loadData} disabled={loading} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition disabled:opacity-50">
-                    <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+                <button onClick={refresh} disabled={isValidating} className="min-h-[44px] min-w-[44px] p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition disabled:opacity-50" aria-label="Refresh dashboard">
+                    <RefreshCw className={`h-5 w-5 ${isValidating ? 'animate-spin' : ''}`} aria-hidden="true" />
                 </button>
             </div>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import {
     Calendar,
@@ -8,19 +8,22 @@ import {
     Stethoscope,
     Loader2,
     Plus,
-    X,
     CalendarX2,
     CalendarCheck2,
     Ban,
     Hash,
+    RotateCcw,
 } from 'lucide-react';
-import { getMyAppointments, cancelMyAppointment } from './actions';
+import { cancelMyAppointment, rescheduleMyAppointment, getAvailableSlots } from './actions';
+import { useAppointments, invalidateAppointments } from '@/app/lib/hooks/usePatientData';
+import { AccessibleModal } from '@/app/components/ui/AccessibleModal';
 
 type TabKey = 'upcoming' | 'past' | 'cancelled';
 
 interface Appointment {
     id: string;
     appointment_id: string;
+    doctor_id?: string;
     doctor_name: string;
     department: string;
     appointment_date: string;
@@ -30,8 +33,7 @@ interface Appointment {
 }
 
 export default function MyAppointmentsPage() {
-    const [appointments, setAppointments] = useState<Appointment[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { appointments, isLoading: loading } = useAppointments();
     const [activeTab, setActiveTab] = useState<TabKey>('upcoming');
 
     // Cancel modal state
@@ -41,19 +43,15 @@ export default function MyAppointmentsPage() {
     const [cancelling, setCancelling] = useState(false);
     const [cancelError, setCancelError] = useState('');
 
-    useEffect(() => {
-        loadAppointments();
-    }, []);
-
-    async function loadAppointments() {
-        setLoading(true);
-        try {
-            const res = await getMyAppointments();
-            if (res.success) setAppointments(res.data || []);
-        } finally {
-            setLoading(false);
-        }
-    }
+    // Reschedule modal state
+    const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
+    const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null);
+    const [rescheduleDate, setRescheduleDate] = useState('');
+    const [rescheduleSlots, setRescheduleSlots] = useState<{ id: string; start_time: string; end_time: string; is_available: boolean }[]>([]);
+    const [rescheduleSlotId, setRescheduleSlotId] = useState('');
+    const [rescheduling, setRescheduling] = useState(false);
+    const [rescheduleError, setRescheduleError] = useState('');
+    const [loadingRescheduleSlots, setLoadingRescheduleSlots] = useState(false);
 
     function openCancelModal(appt: Appointment) {
         setCancelTarget(appt);
@@ -77,7 +75,7 @@ export default function MyAppointmentsPage() {
             const res = await cancelMyAppointment(cancelTarget.appointment_id, cancelReason);
             if (res.success) {
                 closeCancelModal();
-                await loadAppointments();
+                invalidateAppointments();
             } else {
                 setCancelError(res.error || 'Failed to cancel appointment');
             }
@@ -88,15 +86,68 @@ export default function MyAppointmentsPage() {
         }
     }
 
+    function openRescheduleModal(appt: Appointment) {
+        setRescheduleTarget(appt);
+        setRescheduleDate('');
+        setRescheduleSlotId('');
+        setRescheduleSlots([]);
+        setRescheduleError('');
+        setRescheduleModalOpen(true);
+    }
+
+    function closeRescheduleModal() {
+        setRescheduleModalOpen(false);
+        setRescheduleTarget(null);
+    }
+
+    async function handleDateChangeForReschedule(date: string) {
+        setRescheduleDate(date);
+        setRescheduleSlotId('');
+        if (!rescheduleTarget || !date) return;
+        setLoadingRescheduleSlots(true);
+        const doctorId = rescheduleTarget.doctor_id;
+        if (doctorId) {
+            const res = await getAvailableSlots(doctorId, date);
+            if (res.success) {
+                setRescheduleSlots((res.data || []).filter((s: any) => s.is_available));
+            }
+        }
+        setLoadingRescheduleSlots(false);
+    }
+
+    async function handleReschedule() {
+        if (!rescheduleTarget || !rescheduleDate) return;
+        setRescheduling(true);
+        setRescheduleError('');
+        try {
+            const res = await rescheduleMyAppointment(
+                rescheduleTarget.appointment_id,
+                rescheduleDate,
+                rescheduleSlotId || undefined,
+            );
+            if (res.success) {
+                closeRescheduleModal();
+                invalidateAppointments();
+            } else {
+                setRescheduleError(res.error || 'Failed to reschedule');
+            }
+        } catch {
+            setRescheduleError('Something went wrong');
+        } finally {
+            setRescheduling(false);
+        }
+    }
+
     const now = new Date();
 
-    const upcoming = appointments.filter(
+    const typedAppointments = appointments as Appointment[];
+    const upcoming = typedAppointments.filter(
         (a) => a.status !== 'Cancelled' && new Date(a.appointment_date) >= now
     );
-    const past = appointments.filter(
+    const past = typedAppointments.filter(
         (a) => a.status !== 'Cancelled' && new Date(a.appointment_date) < now
     );
-    const cancelled = appointments.filter((a) => a.status === 'Cancelled');
+    const cancelled = typedAppointments.filter((a) => a.status === 'Cancelled');
 
     const tabData: Record<TabKey, { label: string; items: Appointment[]; icon: React.ReactNode }> = {
         upcoming: { label: 'Upcoming', items: upcoming, icon: <CalendarCheck2 className="h-4 w-4" /> },
@@ -271,12 +322,20 @@ export default function MyAppointmentsPage() {
                                         {appt.status}
                                     </span>
                                     {appt.status === 'Scheduled' && activeTab === 'upcoming' && (
-                                        <button
-                                            onClick={() => openCancelModal(appt)}
-                                            className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg transition"
-                                        >
-                                            Cancel
-                                        </button>
+                                        <div className="flex items-center gap-1.5">
+                                            <button
+                                                onClick={() => openRescheduleModal(appt)}
+                                                className="text-xs font-bold text-blue-500 hover:text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition flex items-center gap-1"
+                                            >
+                                                <RotateCcw className="h-3 w-3" /> Reschedule
+                                            </button>
+                                            <button
+                                                onClick={() => openCancelModal(appt)}
+                                                className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg transition"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
                             </div>
@@ -286,16 +345,9 @@ export default function MyAppointmentsPage() {
             )}
 
             {/* Cancel Modal */}
-            {cancelModalOpen && cancelTarget && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative">
-                        <button
-                            onClick={closeCancelModal}
-                            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition"
-                        >
-                            <X className="h-5 w-5" />
-                        </button>
-
+            <AccessibleModal open={cancelModalOpen && !!cancelTarget} onClose={closeCancelModal} title="Cancel Appointment">
+                {cancelTarget && (
+                    <>
                         <div className="mb-5">
                             <h3 className="text-lg font-bold text-gray-900">Cancel Appointment</h3>
                             <p className="text-sm text-gray-500 mt-1">
@@ -311,10 +363,11 @@ export default function MyAppointmentsPage() {
                         </div>
 
                         <div className="mb-5">
-                            <label className="text-sm font-bold text-gray-700 block mb-1.5">
+                            <label htmlFor="cancel-reason" className="text-sm font-bold text-gray-700 block mb-1.5">
                                 Reason for cancellation
                             </label>
                             <textarea
+                                id="cancel-reason"
                                 value={cancelReason}
                                 onChange={(e) => setCancelReason(e.target.value)}
                                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/10 transition-all outline-none text-sm"
@@ -324,7 +377,7 @@ export default function MyAppointmentsPage() {
                         </div>
 
                         {cancelError && (
-                            <p className="text-sm text-red-600 font-medium mb-4">{cancelError}</p>
+                            <p className="text-sm text-red-600 font-medium mb-4" role="alert">{cancelError}</p>
                         )}
 
                         <div className="flex gap-3">
@@ -340,14 +393,98 @@ export default function MyAppointmentsPage() {
                                 className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-sm transition disabled:opacity-50 flex items-center justify-center gap-2"
                             >
                                 {cancelling ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                                 ) : null}
                                 {cancelling ? 'Cancelling...' : 'Yes, Cancel'}
                             </button>
                         </div>
-                    </div>
-                </div>
-            )}
+                    </>
+                )}
+            </AccessibleModal>
+
+            {/* Reschedule Modal */}
+            <AccessibleModal open={rescheduleModalOpen && !!rescheduleTarget} onClose={closeRescheduleModal} title="Reschedule Appointment">
+                {rescheduleTarget && (
+                    <>
+                        <div className="mb-5">
+                            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                <RotateCcw className="h-5 w-5 text-blue-500" aria-hidden="true" />
+                                Reschedule Appointment
+                            </h3>
+                            <p className="text-sm text-gray-500 mt-1">
+                                Pick a new date for your appointment with{' '}
+                                <span className="font-bold">Dr. {rescheduleTarget.doctor_name}</span>
+                            </p>
+                        </div>
+
+                        <div className="mb-4">
+                            <label htmlFor="reschedule-date" className="text-sm font-bold text-gray-700 block mb-1.5">New Date</label>
+                            <input
+                                id="reschedule-date"
+                                type="date"
+                                value={rescheduleDate}
+                                onChange={(e) => handleDateChangeForReschedule(e.target.value)}
+                                min={new Date().toISOString().split('T')[0]}
+                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-400/10 transition-all outline-none text-sm"
+                            />
+                        </div>
+
+                        {/* Slot Selection */}
+                        {rescheduleDate && (
+                            <div className="mb-5" role="group" aria-label="Available time slots">
+                                <label className="text-sm font-bold text-gray-700 block mb-1.5">Available Time Slots</label>
+                                {loadingRescheduleSlots ? (
+                                    <div className="flex items-center gap-2 text-sm text-gray-400 py-3" aria-live="polite">
+                                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Loading slots...
+                                    </div>
+                                ) : rescheduleSlots.length === 0 ? (
+                                    <p className="text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded-xl">
+                                        No slots available for this date. You can still reschedule without a specific time slot.
+                                    </p>
+                                ) : (
+                                    <div className="grid grid-cols-4 gap-2 max-h-36 overflow-y-auto">
+                                        {rescheduleSlots.map((slot) => (
+                                            <button
+                                                key={slot.id}
+                                                onClick={() => setRescheduleSlotId(slot.id)}
+                                                aria-pressed={rescheduleSlotId === slot.id}
+                                                className={`py-2 text-xs font-bold rounded-xl border transition-all ${
+                                                    rescheduleSlotId === slot.id
+                                                        ? 'bg-blue-500 text-white border-transparent shadow-md'
+                                                        : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-blue-400'
+                                                }`}
+                                            >
+                                                {slot.start_time}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {rescheduleError && (
+                            <p className="text-sm text-red-600 font-medium mb-4" role="alert">{rescheduleError}</p>
+                        )}
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={closeRescheduleModal}
+                                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-50 transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleReschedule}
+                                disabled={rescheduling || !rescheduleDate}
+                                className="flex-1 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-bold text-sm transition disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {rescheduling ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RotateCcw className="h-4 w-4" aria-hidden="true" />}
+                                {rescheduling ? 'Rescheduling...' : 'Confirm Reschedule'}
+                            </button>
+                        </div>
+                    </>
+                )}
+            </AccessibleModal>
         </div>
     );
 }

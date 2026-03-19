@@ -449,3 +449,97 @@ export async function getAllPolicies(filters?: { status?: string; limit?: number
         return { success: false, error: error.message };
     }
 }
+
+// Provider performance: approval rate, avg settlement time, total settled
+export async function getProviderPerformance() {
+    try {
+        const { db } = await requireTenantContext();
+        const providers = await db.insurance_providers.findMany({
+            where: { is_active: true },
+            select: { id: true, provider_name: true, provider_code: true },
+        });
+
+        const results = await Promise.all(providers.map(async (prov: any) => {
+            const claims = await db.insurance_claims.findMany({
+                where: { policy: { provider_id: prov.id } },
+            });
+            const total = claims.length;
+            const approved = claims.filter((c: any) => ['Approved', 'PartiallyApproved', 'Settled'].includes(c.status)).length;
+            const rejected = claims.filter((c: any) => c.status === 'Rejected').length;
+            const settled = claims.filter((c: any) => c.status === 'Settled');
+
+            const totalSettled = settled.reduce((s: number, c: any) => s + Number(c.approved_amount || 0), 0);
+
+            // Average days to settle
+            let avgSettlementDays = 0;
+            if (settled.length > 0) {
+                const totalDays = settled.reduce((s: number, c: any) => {
+                    const submitted = new Date(c.submitted_at || c.created_at);
+                    const settledAt = new Date(c.settled_at || c.reviewed_at || new Date());
+                    return s + Math.floor((settledAt.getTime() - submitted.getTime()) / 86400000);
+                }, 0);
+                avgSettlementDays = Math.round(totalDays / settled.length);
+            }
+
+            return {
+                provider_name: prov.provider_name,
+                provider_code: prov.provider_code,
+                totalClaims: total,
+                approvedCount: approved,
+                rejectedCount: rejected,
+                approvalRate: total > 0 ? ((approved / total) * 100).toFixed(1) : '0',
+                totalSettled,
+                avgSettlementDays,
+            };
+        }));
+
+        return { success: true, data: serialize(results) };
+    } catch (error: any) {
+        console.error('getProviderPerformance error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Auto-submit claim for a specific invoice (finds patient's active policy and submits)
+export async function autoSubmitClaim(invoiceId: number) {
+    try {
+        const { db } = await requireTenantContext();
+        const invoice = await db.invoices.findUnique({ where: { id: invoiceId } });
+        if (!invoice) return { success: false, error: 'Invoice not found' };
+
+        // Find active policy for this patient
+        const policy = await db.insurance_policies.findFirst({
+            where: { patient_id: invoice.patient_id, status: 'Active' },
+            orderBy: { remaining_limit: 'desc' },
+        });
+        if (!policy) return { success: false, error: 'No active insurance policy found for this patient' };
+
+        const claimAmount = Math.min(Number(invoice.net_amount), Number(policy.remaining_limit || 0));
+        if (claimAmount <= 0) return { success: false, error: 'No remaining coverage available' };
+
+        const claim = await db.insurance_claims.create({
+            data: {
+                claim_number: generateClaimNumber(),
+                policy_id: policy.id,
+                invoice_id: invoiceId,
+                claimed_amount: claimAmount,
+                status: 'Submitted',
+            },
+        });
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'AUTO_SUBMIT_CLAIM',
+                module: 'insurance',
+                entity_type: 'claim',
+                entity_id: claim.claim_number,
+                details: JSON.stringify({ invoice_id: invoiceId, policy_id: policy.id, amount: claimAmount }),
+            },
+        });
+
+        return { success: true, data: serialize(claim) };
+    } catch (error: any) {
+        console.error('autoSubmitClaim error:', error);
+        return { success: false, error: error.message };
+    }
+}

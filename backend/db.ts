@@ -34,6 +34,10 @@ const TENANT_SCOPED_MODELS = new Set([
     'Notification',
     // Security hardening models
     'user_mfa', 'PatientPasswordSetupToken',
+    // Finance expense tracking models
+    'ExpenseCategory', 'Vendor', 'Expense', 'TaxConfig',
+    // Finance deposits, credit notes, fiscal, bank, dunning
+    'PatientDeposit', 'CreditNote', 'FinancialPeriod', 'BankTransaction', 'DunningRule', 'DunningLog',
 ]);
 
 // Models where organizationId is nullable (audit logs, etc.)

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     Home, Calendar, FlaskConical, CreditCard, MoreHorizontal,
-    Pill, Heart, FileText, User, MessageSquare, X
+    Pill, Heart, FileText, User, MessageSquare, X, Bell, Shield
 } from 'lucide-react';
 
 const PRIMARY_TABS = [
@@ -16,11 +16,13 @@ const PRIMARY_TABS = [
 ];
 
 const MORE_ITEMS = [
+    { label: 'Notifications', href: '/patient/notifications', icon: Bell },
     { label: 'Prescriptions', href: '/patient/prescriptions', icon: Pill },
     { label: 'My Vitals', href: '/patient/vitals', icon: Heart },
     { label: 'Medical Records', href: '/patient/records', icon: FileText },
     { label: 'My Profile', href: '/patient/profile', icon: User },
     { label: 'Feedback', href: '/patient/feedback', icon: MessageSquare },
+    { label: 'Privacy', href: '/patient/settings/privacy', icon: Shield },
 ];
 
 export function PatientBottomNav() {

@@ -175,24 +175,6 @@ export async function getPatientSession(): Promise<PatientSessionData | null> {
         const token = cookieStore.get('patient_session')?.value;
         if (!token) return null;
 
-        if (token.startsWith('{')) {
-            const data = JSON.parse(token) as {
-                id: string;
-                name: string;
-                organization_id?: string;
-                organization_name?: string;
-            };
-
-            return {
-                id: data.id,
-                name: data.name,
-                phone: null,
-                role: 'patient',
-                organization_id: data.organization_id || 'org-avani-default',
-                organization_name: data.organization_name || 'Hospital',
-            };
-        }
-
         const { payload } = await jwtVerify(token, JWT_SECRET);
         return {
             id: (payload.id as string) || '',

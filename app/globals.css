@@ -86,10 +86,32 @@ body {
   color: var(--ink);
 }
 
-/* Focus styles */
+/* Focus styles — WCAG 2.1 AA compliant */
 :focus-visible {
-  outline: 2px solid rgba(26, 171, 116, 0.4);
+  outline: 2px solid rgba(26, 171, 116, 0.6);
   outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Skip navigation link */
+.skip-nav {
+  position: absolute;
+  top: -100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 0.75rem 1.5rem;
+  background: var(--g600);
+  color: white;
+  font-weight: 700;
+  font-size: 0.875rem;
+  border-radius: 0 0 0.75rem 0.75rem;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+
+.skip-nav:focus {
+  top: 0;
 }
 
 /* Animations */

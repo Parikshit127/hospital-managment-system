@@ -44,16 +44,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
 
-        // Compute GST breakdown
+        // Fetch configurable tax rate from tax_configs, fallback to 18%
+        const taxConfig = await prisma.taxConfig.findFirst({
+            where: { organizationId: auth.context.organizationId, is_default: true, is_active: true },
+        })
+        const taxRate = taxConfig ? Number(taxConfig.rate) / 100 : 0.18
+        const taxName = taxConfig?.tax_name || 'GST'
+        const halfRate = (taxConfig ? Number(taxConfig.rate) : 18) / 2
+
+        // Compute GST breakdown using configurable rate
         const taxableItems = (invoice.items || []).filter(i =>
             ['Consumables', 'Accommodation', 'Housekeeping'].includes(i.department)
         )
         const gstableAmount = taxableItems.reduce((sum, i) => sum + Number(i.net_price), 0)
-        const gst = gstableAmount * 0.18
+        const gst = gstableAmount * taxRate
         const cgst = gst / 2
         const sgst = gst / 2
 
-        const html = generateInvoiceHTML(invoice, { gstableAmount, gst, cgst, sgst })
+        const html = generateInvoiceHTML(invoice, { gstableAmount, gst, cgst, sgst, halfRate, taxName })
 
         return new NextResponse(html, {
             headers: {
@@ -66,7 +74,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 }
 
-function generateInvoiceHTML(invoice: any, gst: { gstableAmount: number; gst: number; cgst: number; sgst: number }) {
+function generateInvoiceHTML(invoice: any, gst: { gstableAmount: number; gst: number; cgst: number; sgst: number; halfRate: number; taxName: string }) {
     const items = invoice.items || []
     const payments = invoice.payments || []
     const patient = invoice.patient || {}
@@ -175,11 +183,11 @@ function generateInvoiceHTML(invoice: any, gst: { gstableAmount: number; gst: nu
                 </tr>` : ''}
                 ${gst.gst > 0 ? `
                 <tr>
-                    <td style="padding:6px 12px;font-size:11px;color:#9ca3af;">CGST (9%)</td>
+                    <td style="padding:6px 12px;font-size:11px;color:#9ca3af;">CGST (${gst.halfRate}%)</td>
                     <td style="padding:6px 12px;font-size:11px;text-align:right;color:#6b7280;">${gst.cgst.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td>
                 </tr>
                 <tr>
-                    <td style="padding:6px 12px;font-size:11px;color:#9ca3af;">SGST (9%)</td>
+                    <td style="padding:6px 12px;font-size:11px;color:#9ca3af;">SGST (${gst.halfRate}%)</td>
                     <td style="padding:6px 12px;font-size:11px;text-align:right;color:#6b7280;">${gst.sgst.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td>
                 </tr>` : ''}
                 <tr style="border-top:2px solid #1f2937;">

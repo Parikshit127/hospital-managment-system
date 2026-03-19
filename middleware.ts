@@ -11,7 +11,8 @@ if (!process.env.JWT_SECRET) {
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
-const SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+const SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes (staff)
+const PATIENT_SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes (patient)
 
 // Route -> allowed roles
 const ROLE_ROUTES: Record<string, string[]> = {
@@ -82,7 +83,8 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/patient")) {
     const isPatientAuthPage =
       pathname.startsWith("/patient/login") ||
-      pathname.startsWith("/patient/setup-password");
+      pathname.startsWith("/patient/setup-password") ||
+      pathname.startsWith("/patient/forgot-password");
     // Allow public assessment pages without auth
     if (pathname.startsWith("/patient/assessment/")) {
       return NextResponse.next();
@@ -93,9 +95,59 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/patient/login", request.url));
     }
     if (isPatientAuthPage && patientSession) {
-      return NextResponse.redirect(new URL("/patient/dashboard", request.url));
+      // Verify JWT before redirecting — stale/invalid cookie should not block login
+      try {
+        await jwtVerify(patientSession.value, JWT_SECRET);
+        return NextResponse.redirect(
+          new URL("/patient/dashboard", request.url),
+        );
+      } catch {
+        // Invalid JWT — clear it and let them stay on auth page
+        const resp = NextResponse.next();
+        resp.cookies.delete("patient_session");
+        resp.cookies.delete("patient_last_activity");
+        return resp;
+      }
     }
-    return NextResponse.next();
+    if (isPatientAuthPage && !patientSession) {
+      return NextResponse.next();
+    }
+
+    // Authenticated patient — verify JWT + inactivity timeout
+    try {
+      await jwtVerify(patientSession!.value, JWT_SECRET);
+
+      // Check inactivity timeout (30 min)
+      const lastActivity = request.cookies.get("patient_last_activity");
+      if (lastActivity) {
+        const elapsed = Date.now() - parseInt(lastActivity.value);
+        if (elapsed > PATIENT_SESSION_TIMEOUT_MS) {
+          const resp = NextResponse.redirect(
+            new URL("/patient/login?reason=timeout", request.url),
+          );
+          resp.cookies.delete("patient_session");
+          resp.cookies.delete("patient_last_activity");
+          return resp;
+        }
+      }
+
+      // Update last activity
+      const resp = NextResponse.next();
+      resp.cookies.set("patient_last_activity", Date.now().toString(), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+      });
+      return resp;
+    } catch {
+      // Invalid JWT — redirect to login
+      const resp = NextResponse.redirect(
+        new URL("/patient/login", request.url),
+      );
+      resp.cookies.delete("patient_session");
+      resp.cookies.delete("patient_last_activity");
+      return resp;
+    }
   }
 
   // 3. Public pages (no auth required)

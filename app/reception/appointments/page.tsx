@@ -3,16 +3,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     CalendarDays, ChevronLeft, ChevronRight, Plus, Clock, User, Search,
-    Loader2, X, Check, AlertCircle, Users
+    Loader2, X, Check, AlertCircle, Users, Zap, RotateCcw
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { useToast } from '@/app/components/ui/Toast';
 import {
     getAppointmentCalendar, getDoctorList, bookAppointment,
-    cancelAppointment, createBulkSlots, getRegisteredPatients
+    cancelAppointment, createBulkSlots, getRegisteredPatients,
+    walkInAppointment, rescheduleAppointment, previewBulkSlots
 } from '@/app/actions/reception-actions';
 import { getOrCreateDailySlots } from '@/app/actions/doctor-actions';
 
 export default function AppointmentsPage() {
+    const toast = useToast();
     const [selectedDate, setSelectedDate] = useState(() => {
         const d = new Date();
         return d.toISOString().split('T')[0];
@@ -35,13 +38,30 @@ export default function AppointmentsPage() {
     const [availableSlots, setAvailableSlots] = useState<any[]>([]);
     const [loadingSlots, setLoadingSlots] = useState(false);
 
+    // Walk-in modal
+    const [showWalkInModal, setShowWalkInModal] = useState(false);
+    const [walkInForm, setWalkInForm] = useState({
+        patientSearch: '', patientId: '', doctorId: '', doctorName: '',
+        department: '', reasonForVisit: '',
+    });
+    const [walkInPatientResults, setWalkInPatientResults] = useState<any[]>([]);
+    const [processingWalkIn, setProcessingWalkIn] = useState(false);
+
+    // Reschedule modal
+    const [rescheduleTarget, setRescheduleTarget] = useState<string | null>(null);
+    const [rescheduleDate, setRescheduleDate] = useState('');
+    const [rescheduleSlotId, setRescheduleSlotId] = useState('');
+    const [rescheduleSlots, setRescheduleSlots] = useState<any[]>([]);
+    const [rescheduling, setRescheduling] = useState(false);
+
     // Bulk slots modal
     const [showBulkModal, setShowBulkModal] = useState(false);
     const [bulkForm, setBulkForm] = useState({
         doctorId: '', startDate: '', endDate: '',
-        startTime: '09:00', endTime: '17:00', slotDuration: 15,
+        startTime: '09:00', endTime: '17:00', slotDuration: 15, bufferMinutes: 5,
     });
     const [creatingSlots, setCreatingSlots] = useState(false);
+    const [slotPreview, setSlotPreview] = useState<{ count: number; days: number } | null>(null);
 
     // Cancel modal
     const [cancelTarget, setCancelTarget] = useState<string | null>(null);
@@ -111,10 +131,49 @@ export default function AppointmentsPage() {
         fetchSlots();
     }, [bookForm.doctorId, bookForm.date]);
 
+    // Walk-in patient search
+    useEffect(() => {
+        if (walkInForm.patientSearch.length < 2) { setWalkInPatientResults([]); return; }
+        const timer = setTimeout(async () => {
+            const res = await getRegisteredPatients({ search: walkInForm.patientSearch, limit: 5 });
+            if (res.success) setWalkInPatientResults(res.data || []);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [walkInForm.patientSearch]);
+
+    // Bulk slot preview
+    useEffect(() => {
+        if (bulkForm.startDate && bulkForm.endDate && bulkForm.startTime && bulkForm.endTime && bulkForm.slotDuration) {
+            previewBulkSlots({
+                startDate: bulkForm.startDate,
+                endDate: bulkForm.endDate,
+                startTime: bulkForm.startTime,
+                endTime: bulkForm.endTime,
+                slotDuration: bulkForm.slotDuration,
+                bufferMinutes: bulkForm.bufferMinutes,
+            }).then(setSlotPreview);
+        } else {
+            setSlotPreview(null);
+        }
+    }, [bulkForm.startDate, bulkForm.endDate, bulkForm.startTime, bulkForm.endTime, bulkForm.slotDuration, bulkForm.bufferMinutes]);
+
+    // Reschedule slot fetch
+    useEffect(() => {
+        if (!rescheduleTarget || !rescheduleDate) { setRescheduleSlots([]); return; }
+        const appt = appointments.find((a: any) => a.appointment_id === rescheduleTarget);
+        if (!appt?.doctor_id) return;
+        (async () => {
+            const res = await getOrCreateDailySlots(appt.doctor_id, rescheduleDate);
+            if (res.success && res.data) {
+                setRescheduleSlots((res.data as any[]).filter((s: any) => s.is_available && !s.is_booked));
+            }
+        })();
+    }, [rescheduleTarget, rescheduleDate, appointments]);
+
     const handleBook = async () => {
         if (!bookForm.patientId || !bookForm.doctorId) return;
         setBooking(true);
-        await bookAppointment({
+        const result = await bookAppointment({
             patientId: bookForm.patientId,
             doctorId: bookForm.doctorId,
             doctorName: bookForm.doctorName,
@@ -124,9 +183,35 @@ export default function AppointmentsPage() {
             reasonForVisit: bookForm.reasonForVisit,
         });
         setBooking(false);
-        setShowBookModal(false);
-        setBookForm({ patientSearch: '', patientId: '', doctorId: '', doctorName: '', department: '', date: '', slotId: '', reasonForVisit: '' });
-        loadData();
+        if (result.success) {
+            toast.success('Appointment booked successfully');
+            setShowBookModal(false);
+            setBookForm({ patientSearch: '', patientId: '', doctorId: '', doctorName: '', department: '', date: '', slotId: '', reasonForVisit: '' });
+            loadData();
+        } else {
+            toast.error(result.error || 'Failed to book appointment');
+        }
+    };
+
+    const handleWalkIn = async () => {
+        if (!walkInForm.patientId || !walkInForm.doctorId) return;
+        setProcessingWalkIn(true);
+        const result = await walkInAppointment({
+            patientId: walkInForm.patientId,
+            doctorId: walkInForm.doctorId,
+            doctorName: walkInForm.doctorName,
+            department: walkInForm.department,
+            reasonForVisit: walkInForm.reasonForVisit,
+        });
+        setProcessingWalkIn(false);
+        if (result.success) {
+            toast.success(`Walk-in registered! Token: #${result.data?.queue_token || '-'}`);
+            setShowWalkInModal(false);
+            setWalkInForm({ patientSearch: '', patientId: '', doctorId: '', doctorName: '', department: '', reasonForVisit: '' });
+            loadData();
+        } else {
+            toast.error(result.error || 'Failed to create walk-in');
+        }
     };
 
     const handleCancel = async () => {
@@ -134,13 +219,30 @@ export default function AppointmentsPage() {
         await cancelAppointment(cancelTarget, cancelReason);
         setCancelTarget(null);
         setCancelReason('');
+        toast.success('Appointment cancelled');
         loadData();
+    };
+
+    const handleReschedule = async () => {
+        if (!rescheduleTarget || !rescheduleDate) return;
+        setRescheduling(true);
+        const result = await rescheduleAppointment(rescheduleTarget, rescheduleDate, rescheduleSlotId || undefined);
+        setRescheduling(false);
+        if (result.success) {
+            toast.success('Appointment rescheduled');
+            setRescheduleTarget(null);
+            setRescheduleDate('');
+            setRescheduleSlotId('');
+            loadData();
+        } else {
+            toast.error('Failed to reschedule');
+        }
     };
 
     const handleBulkCreate = async () => {
         if (!bulkForm.doctorId || !bulkForm.startDate || !bulkForm.endDate) return;
         setCreatingSlots(true);
-        await createBulkSlots({
+        const result = await createBulkSlots({
             doctorId: bulkForm.doctorId,
             startDate: bulkForm.startDate,
             endDate: bulkForm.endDate,
@@ -149,8 +251,13 @@ export default function AppointmentsPage() {
             slotDuration: bulkForm.slotDuration,
         });
         setCreatingSlots(false);
-        setShowBulkModal(false);
-        loadData();
+        if (result.success) {
+            toast.success(`Created ${result.count} slots`);
+            setShowBulkModal(false);
+            loadData();
+        } else {
+            toast.error('Failed to create slots');
+        }
     };
 
     const getStatusColor = (status: string) => {
@@ -170,6 +277,10 @@ export default function AppointmentsPage() {
             <button onClick={() => setShowBulkModal(true)}
                 className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50">
                 <Clock className="h-3.5 w-3.5" /> Create Slots
+            </button>
+            <button onClick={() => setShowWalkInModal(true)}
+                className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold rounded-xl hover:bg-amber-100">
+                <Zap className="h-3.5 w-3.5" /> Walk-in
             </button>
             <button onClick={() => { setShowBookModal(true); setBookForm(f => ({ ...f, date: selectedDate })); }}
                 className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md">
@@ -270,10 +381,16 @@ export default function AppointmentsPage() {
                                         </td>
                                         <td className="px-4 py-3">
                                             {appt.status !== 'Cancelled' && appt.status !== 'Completed' && (
-                                                <button onClick={() => setCancelTarget(appt.appointment_id)}
-                                                    className="text-xs text-red-500 hover:text-red-700 font-medium">
-                                                    Cancel
-                                                </button>
+                                                <div className="flex items-center gap-2">
+                                                    <button onClick={() => { setRescheduleTarget(appt.appointment_id); setRescheduleDate(''); setRescheduleSlotId(''); }}
+                                                        className="text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1">
+                                                        <RotateCcw className="h-3 w-3" /> Reschedule
+                                                    </button>
+                                                    <button onClick={() => setCancelTarget(appt.appointment_id)}
+                                                        className="text-xs text-red-500 hover:text-red-700 font-medium">
+                                                        Cancel
+                                                    </button>
+                                                </div>
                                             )}
                                         </td>
                                     </tr>
@@ -503,11 +620,162 @@ export default function AppointmentsPage() {
                                     </select>
                                 </div>
                             </div>
+                            {/* Buffer Time */}
+                            <div>
+                                <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Buffer Between Slots (min)</label>
+                                <select value={bulkForm.bufferMinutes} onChange={e => setBulkForm(f => ({ ...f, bufferMinutes: Number(e.target.value) }))}
+                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500">
+                                    <option value={0}>No buffer</option>
+                                    <option value={5}>5 min</option>
+                                    <option value={10}>10 min</option>
+                                    <option value={15}>15 min</option>
+                                </select>
+                            </div>
+
+                            {/* Slot Preview */}
+                            {slotPreview && (
+                                <div className="bg-teal-50 border border-teal-200 rounded-xl px-4 py-3">
+                                    <p className="text-sm font-bold text-teal-700">
+                                        This will create <span className="text-teal-900">{slotPreview.count} slots</span> across {slotPreview.days} day{slotPreview.days !== 1 ? 's' : ''}
+                                    </p>
+                                </div>
+                            )}
+
                             <button onClick={handleBulkCreate} disabled={creatingSlots || !bulkForm.doctorId || !bulkForm.startDate || !bulkForm.endDate}
                                 className="w-full py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-sm font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
                                 {creatingSlots ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                                Create Slots
+                                Create {slotPreview ? `${slotPreview.count} ` : ''}Slots
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Walk-in Modal */}
+            {showWalkInModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowWalkInModal(false)} />
+                    <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                            <div className="flex items-center gap-2">
+                                <Zap className="h-4 w-4 text-amber-500" />
+                                <h2 className="text-base font-bold text-gray-900">Walk-in Appointment</h2>
+                            </div>
+                            <button onClick={() => setShowWalkInModal(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X className="h-4 w-4" /></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {/* Patient Search */}
+                            <div>
+                                <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Patient</label>
+                                {walkInForm.patientId ? (
+                                    <div className="flex items-center justify-between bg-amber-50 rounded-xl px-3 py-2">
+                                        <span className="text-sm font-medium text-amber-700">{walkInForm.patientSearch}</span>
+                                        <button onClick={() => setWalkInForm(f => ({ ...f, patientId: '', patientSearch: '' }))} className="text-amber-500">
+                                            <X className="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                        <input type="text" value={walkInForm.patientSearch}
+                                            onChange={e => setWalkInForm(f => ({ ...f, patientSearch: e.target.value }))}
+                                            placeholder="Search patient..."
+                                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-amber-500" />
+                                        {walkInPatientResults.length > 0 && (
+                                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-10 max-h-40 overflow-y-auto">
+                                                {walkInPatientResults.map((p: any) => (
+                                                    <button key={p.patient_id}
+                                                        onClick={() => setWalkInForm(f => ({ ...f, patientId: p.patient_id, patientSearch: `${p.full_name} (${p.patient_id})` }))}
+                                                        className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between">
+                                                        <span className="font-medium">{p.full_name}</span>
+                                                        <span className="text-xs text-gray-400 font-mono">{p.patient_id}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            {/* Doctor */}
+                            <div>
+                                <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Doctor</label>
+                                <select value={walkInForm.doctorId}
+                                    onChange={e => {
+                                        const doc = doctors.find((d: any) => d.id === e.target.value);
+                                        setWalkInForm(f => ({ ...f, doctorId: e.target.value, doctorName: doc?.name || '', department: doc?.specialty || '' }));
+                                    }}
+                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-amber-500">
+                                    <option value="">Select Doctor</option>
+                                    {doctors.map((d: any) => (
+                                        <option key={d.id} value={d.id}>{d.name} — {d.specialty || 'General'}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            {/* Reason */}
+                            <div>
+                                <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Reason</label>
+                                <input type="text" value={walkInForm.reasonForVisit}
+                                    onChange={e => setWalkInForm(f => ({ ...f, reasonForVisit: e.target.value }))}
+                                    placeholder="Walk-in consultation"
+                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-amber-500" />
+                            </div>
+                            <button onClick={handleWalkIn} disabled={processingWalkIn || !walkInForm.patientId || !walkInForm.doctorId}
+                                className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
+                                {processingWalkIn ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                                Register Walk-in
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Reschedule Modal */}
+            {rescheduleTarget && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setRescheduleTarget(null)} />
+                    <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-sm">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                            <div className="flex items-center gap-2">
+                                <RotateCcw className="h-4 w-4 text-blue-500" />
+                                <h2 className="text-base font-bold text-gray-900">Reschedule</h2>
+                            </div>
+                            <button onClick={() => setRescheduleTarget(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X className="h-4 w-4" /></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">New Date</label>
+                                <input type="date" value={rescheduleDate}
+                                    onChange={e => { setRescheduleDate(e.target.value); setRescheduleSlotId(''); }}
+                                    min={new Date().toISOString().split('T')[0]}
+                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-blue-500" />
+                            </div>
+                            {rescheduleSlots.length > 0 && (
+                                <div>
+                                    <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Select Slot</label>
+                                    <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto">
+                                        {rescheduleSlots.map((slot: any) => (
+                                            <button key={slot.id} onClick={() => setRescheduleSlotId(slot.id)}
+                                                className={`py-2 text-xs font-bold rounded-xl border transition-all ${
+                                                    rescheduleSlotId === slot.id
+                                                        ? 'bg-blue-500 text-white border-transparent'
+                                                        : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-blue-400'
+                                                }`}>
+                                                {slot.start_time}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setRescheduleTarget(null)}
+                                    className="flex-1 py-2 bg-gray-100 text-gray-600 text-sm font-bold rounded-xl">
+                                    Cancel
+                                </button>
+                                <button onClick={handleReschedule} disabled={!rescheduleDate || rescheduling}
+                                    className="flex-1 py-2 bg-blue-500 text-white text-sm font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-1">
+                                    {rescheduling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                                    Reschedule
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

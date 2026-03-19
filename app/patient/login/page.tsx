@@ -5,6 +5,7 @@ import { patientLogin } from './actions';
 import { Suspense, useState } from 'react';
 import { Activity, KeyRound, UserCircle } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 
 function PatientLoginForm() {
     const [state, loginAction, isPending] = useActionState(patientLogin, { success: false, error: '' });
@@ -90,7 +91,16 @@ function PatientLoginForm() {
                         </button>
                     </form>
 
-                    <p className="mt-8 text-center text-sm text-gray-500">
+                    <div className="mt-6 text-center">
+                        <Link
+                            href="/patient/forgot-password"
+                            className="text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition"
+                        >
+                            Forgot Password?
+                        </Link>
+                    </div>
+
+                    <p className="mt-4 text-center text-sm text-gray-500">
                         Check your welcome email from the hospital for your setup link and login details.
                     </p>
                 </div>

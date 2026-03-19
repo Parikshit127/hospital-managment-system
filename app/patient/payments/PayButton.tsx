@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { CreditCard, Loader2 } from 'lucide-react';
+import { useToast } from '@/app/components/ui/Toast';
 
 // window.Razorpay is defined in app/types/razorpay.d.ts
 
@@ -11,6 +12,7 @@ interface PayButtonProps {
 }
 
 export default function PayButton({ invoiceId, amount }: PayButtonProps) {
+    const toast = useToast();
     const [loading, setLoading] = useState(false);
 
     async function handlePay() {
@@ -34,7 +36,7 @@ export default function PayButton({ invoiceId, amount }: PayButtonProps) {
             const orderAmount = data?.data?.amount;
 
             if (!orderId || !keyId || !orderAmount) {
-                alert(data.error || 'Failed to create payment order');
+                toast.error(data.error || 'Failed to create payment order');
                 return;
             }
 
@@ -69,10 +71,10 @@ export default function PayButton({ invoiceId, amount }: PayButtonProps) {
 
                     const verifyData = await verifyRes.json();
                     if (verifyData.success) {
-                        alert('Payment successful!');
+                        toast.success('Payment successful!');
                         window.location.reload();
                     } else {
-                        alert('Payment verification failed. Please contact support.');
+                        toast.error('Payment verification failed. Please contact support.');
                     }
                 },
                 theme: { color: '#10b981' },
@@ -82,7 +84,7 @@ export default function PayButton({ invoiceId, amount }: PayButtonProps) {
             rzp.open();
         } catch (err) {
             console.error('Payment error:', err);
-            alert('Payment initiation failed.');
+            toast.error('Payment initiation failed.');
         } finally {
             setLoading(false);
         }

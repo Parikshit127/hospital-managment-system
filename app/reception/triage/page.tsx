@@ -9,15 +9,8 @@ import {
 } from 'lucide-react';
 import { performTriage } from '@/app/actions/triage-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
-
-const COMMON_SYMPTOMS = [
-    'Fever', 'Headache', 'Cough', 'Chest Pain', 'Abdominal Pain',
-    'Back Pain', 'Nausea', 'Vomiting', 'Diarrhea', 'Dizziness',
-    'Shortness of Breath', 'Fatigue', 'Joint Pain', 'Skin Rash',
-    'Sore Throat', 'Eye Pain', 'Ear Pain', 'Difficulty Breathing',
-    'High Fever', 'Severe Headache', 'Seizure', 'Severe Bleeding',
-    'Loss of Consciousness', 'Broken Bone'
-];
+import { useToast } from '@/app/components/ui/Toast';
+import { COMMON_SYMPTOMS } from '@/app/lib/constants/symptoms';
 
 export default function TriagePage() {
     // Patient Info
@@ -45,8 +38,20 @@ export default function TriagePage() {
     const [spo2, setSpo2] = useState('');
 
     // UI State
+    const toast = useToast();
     const [isTriaging, setIsTriaging] = useState(false);
-    const [triageResult, setTriageResult] = useState<any>(null);
+    const [triageResult, setTriageResult] = useState<{
+        triageLevel: string;
+        recommendedDepartment: string;
+        possibleConditions: string[];
+        recommendedTests: string[];
+        riskAlerts: string[];
+        clinicalSummary: string;
+        patientId?: string;
+        appointmentId?: string;
+        passwordSetupRequired?: boolean;
+        manualPasswordSetupLink?: string | null;
+    } | null>(null);
     const [step, setStep] = useState(1); // 1=patient info, 2=symptoms, 3=history+vitals
 
     const toggleSymptom = (symptom: string) => {
@@ -66,7 +71,7 @@ export default function TriagePage() {
 
     const handleTriage = async () => {
         if (!patientName || selectedSymptoms.length === 0) {
-            alert('Please provide patient name and at least one symptom');
+            toast.warning('Please provide patient name and at least one symptom');
             return;
         }
         setIsTriaging(true);
@@ -91,14 +96,14 @@ export default function TriagePage() {
                 }
             });
 
-            if (result.success) {
+            if (result.success && result.data) {
                 setTriageResult(result.data);
             } else {
-                alert('Triage failed: ' + result.error);
+                toast.error('Triage failed: ' + result.error);
             }
         } catch (err) {
             console.error(err);
-            alert('Error performing triage');
+            toast.error('Error performing triage');
         } finally {
             setIsTriaging(false);
         }
@@ -118,7 +123,7 @@ export default function TriagePage() {
     };
 
     const getTriageBadge = (level: string) => {
-        const config: Record<string, { bg: string; border: string; text: string; icon: any; pulse: string }> = {
+        const config: Record<string, { bg: string; border: string; text: string; icon: React.ComponentType<{ className?: string }>; pulse: string }> = {
             'Emergency': { bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400', icon: Siren, pulse: 'animate-pulse' },
             'Urgent': { bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-400', icon: AlertTriangle, pulse: '' },
             'Routine': { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', icon: CheckCircle, pulse: '' },
@@ -365,7 +370,7 @@ export default function TriagePage() {
                                 </div>
                                 <div className="flex justify-end pt-2">
                                     <button
-                                        onClick={() => patientName ? setStep(2) : alert('Please enter patient name')}
+                                        onClick={() => patientName ? setStep(2) : toast.warning('Please enter patient name')}
                                         className="px-6 py-3 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-violet-500/20 flex items-center gap-2 transition-all active:scale-95"
                                     >
                                         Continue <ArrowRight className="h-4 w-4" />
@@ -461,7 +466,7 @@ export default function TriagePage() {
                                         ← Back
                                     </button>
                                     <button
-                                        onClick={() => selectedSymptoms.length > 0 ? setStep(3) : alert('Select at least one symptom')}
+                                        onClick={() => selectedSymptoms.length > 0 ? setStep(3) : toast.warning('Select at least one symptom')}
                                         className="px-6 py-3 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-violet-500/20 flex items-center gap-2 transition-all active:scale-95"
                                     >
                                         Continue <ArrowRight className="h-4 w-4" />

@@ -89,6 +89,16 @@ model Organization {
   shift_patterns           ShiftPattern[]
   shift_assignments        ShiftAssignment[]
   notifications            Notification[]
+  expense_categories       ExpenseCategory[]
+  vendors                  Vendor[]
+  expenses                 Expense[]
+  tax_configs              TaxConfig[]
+  patient_deposits         PatientDeposit[]
+  credit_notes             CreditNote[]
+  financial_periods        FinancialPeriod[]
+  bank_transactions        BankTransaction[]
+  dunning_rules            DunningRule[]
+  dunning_logs             DunningLog[]
 
   @@map("organizations")
 }
@@ -193,8 +203,13 @@ model OPD_REG {
   aadhar_card              String?
   emergency_contact_name   String?
   emergency_contact_phone  String?
+  emergency_contact_relation String?
   blood_group              String?
   date_of_birth            String?
+  registration_consent     Boolean  @default(false)
+  profile_photo_url        String?
+  allergies                String?
+  chronic_conditions       String?
   organizationId           String
   password                 String?
   created_at               DateTime @default(now())
@@ -531,6 +546,7 @@ model invoices {
   payments         payments[]
   payment_order_intents PaymentOrderIntent[]
   insurance_claims insurance_claims[]
+  credit_notes     CreditNote[]
 
   @@index([organizationId])
   @@index([status])
@@ -1429,4 +1445,268 @@ model Notification {
   @@index([user_id])
   @@index([is_read])
   @@map("notifications")
+}
+
+// ========================================
+// MODULE — Finance: Expense Tracking
+// ========================================
+
+model ExpenseCategory {
+  id             Int       @id @default(autoincrement())
+  name           String
+  code           String
+  parent_id      Int?
+  is_active      Boolean   @default(true)
+  organizationId String
+  created_at     DateTime  @default(now())
+
+  organization Organization      @relation(fields: [organizationId], references: [id])
+  parent       ExpenseCategory?  @relation("CategoryHierarchy", fields: [parent_id], references: [id])
+  children     ExpenseCategory[] @relation("CategoryHierarchy")
+  expenses     Expense[]
+
+  @@unique([code, organizationId])
+  @@index([organizationId])
+  @@map("expense_categories")
+}
+
+model Vendor {
+  id              Int      @id @default(autoincrement())
+  vendor_name     String
+  vendor_code     String
+  contact_person  String?
+  phone           String?
+  email           String?
+  gst_number      String?
+  pan_number      String?
+  bank_name       String?
+  bank_account    String?
+  bank_ifsc       String?
+  address         String?
+  is_active       Boolean  @default(true)
+  organizationId  String
+  created_at      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  expenses     Expense[]
+
+  @@unique([vendor_code, organizationId])
+  @@index([organizationId])
+  @@map("vendors")
+}
+
+model Expense {
+  id              Int      @id @default(autoincrement())
+  expense_number  String   @unique
+  category_id     Int
+  vendor_id       Int?
+  description     String
+  amount          Decimal
+  tax_amount      Decimal  @default(0)
+  total_amount    Decimal
+  payment_method  String?
+  payment_date    DateTime?
+  reference_no    String?
+  status          String   @default("Pending") // Pending, Approved, Paid, Rejected
+  approved_by     String?
+  notes           String?
+  organizationId  String
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id])
+  category     ExpenseCategory @relation(fields: [category_id], references: [id])
+  vendor       Vendor?         @relation(fields: [vendor_id], references: [id])
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([category_id])
+  @@index([created_at])
+  @@map("expenses")
+}
+
+model TaxConfig {
+  id             Int      @id @default(autoincrement())
+  tax_name       String
+  tax_code       String
+  rate           Decimal
+  is_default     Boolean  @default(false)
+  applicable_to  String?  // Consumables, Accommodation, All, etc.
+  is_active      Boolean  @default(true)
+  organizationId String
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([tax_code, organizationId])
+  @@index([organizationId])
+  @@map("tax_configs")
+}
+
+model PatientConsent {
+  id             Int       @id @default(autoincrement())
+  patient_id     String
+  consent_type   String    // data_processing, marketing, research
+  granted        Boolean   @default(false)
+  granted_at     DateTime?
+  revoked_at     DateTime?
+  ip_address     String?
+  organizationId String
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  @@unique([patient_id, consent_type, organizationId])
+  @@index([patient_id])
+  @@index([organizationId])
+  @@map("patient_consents")
+}
+
+model PasswordResetOTP {
+  id             Int      @id @default(autoincrement())
+  patient_id     String
+  otp_hash       String
+  phone          String
+  expires_at     DateTime
+  is_used        Boolean  @default(false)
+  attempts       Int      @default(0)
+  organizationId String
+  created_at     DateTime @default(now())
+
+  @@index([patient_id])
+  @@index([organizationId])
+  @@map("password_reset_otps")
+}
+
+// ========================================
+// MODULE — Finance: Deposits & Credit Notes
+// ========================================
+
+model PatientDeposit {
+  id                 Int       @id @default(autoincrement())
+  deposit_number     String    @unique
+  patient_id         String
+  admission_id       String?
+  amount             Decimal
+  payment_method     String
+  payment_ref        String?
+  status             String    @default("Active") // Active, Applied, Refunded
+  applied_to_invoice Int?
+  applied_amount     Decimal   @default(0)
+  refunded_amount    Decimal   @default(0)
+  collected_by       String?
+  notes              String?
+  organizationId     String
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([patient_id])
+  @@index([status])
+  @@map("patient_deposits")
+}
+
+model CreditNote {
+  id                   Int      @id @default(autoincrement())
+  credit_note_number   String   @unique
+  original_invoice_id  Int
+  reason               String
+  items                String?  // JSON string of items
+  total_amount         Decimal
+  status               String   @default("Draft") // Draft, Approved, Applied
+  approved_by          String?
+  notes                String?
+  organizationId       String
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  original_invoice invoices    @relation(fields: [original_invoice_id], references: [id])
+
+  @@index([organizationId])
+  @@index([original_invoice_id])
+  @@map("credit_notes")
+}
+
+// ========================================
+// MODULE — Finance: Fiscal Periods
+// ========================================
+
+model FinancialPeriod {
+  id              Int       @id @default(autoincrement())
+  period_name     String
+  period_type     String    // Monthly, Quarterly, Yearly
+  start_date      DateTime
+  end_date        DateTime
+  status          String    @default("Open") // Open, Closed, Locked
+  closed_by       String?
+  total_revenue   Decimal   @default(0)
+  total_expenses  Decimal   @default(0)
+  net_result      Decimal   @default(0)
+  organizationId  String
+  created_at      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("financial_periods")
+}
+
+model BankTransaction {
+  id                 Int       @id @default(autoincrement())
+  transaction_date   DateTime
+  description        String
+  reference          String?
+  debit              Decimal   @default(0)
+  credit             Decimal   @default(0)
+  balance            Decimal   @default(0)
+  matched_payment_id Int?
+  matched_expense_id Int?
+  reconciled         Boolean   @default(false)
+  bank_account       String?
+  organizationId     String
+  created_at         DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([reconciled])
+  @@map("bank_transactions")
+}
+
+model DunningRule {
+  id             Int      @id @default(autoincrement())
+  rule_name      String
+  days_overdue   Int
+  action_type    String   // notification, flag
+  template_text  String?
+  is_active      Boolean  @default(true)
+  organizationId String
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  logs         DunningLog[]
+
+  @@index([organizationId])
+  @@map("dunning_rules")
+}
+
+model DunningLog {
+  id             Int      @id @default(autoincrement())
+  invoice_id     Int
+  rule_id        Int
+  patient_id     String
+  action_taken   String
+  status         String   @default("Sent")
+  organizationId String
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  rule         DunningRule  @relation(fields: [rule_id], references: [id])
+
+  @@index([organizationId])
+  @@index([invoice_id])
+  @@map("dunning_logs")
 }

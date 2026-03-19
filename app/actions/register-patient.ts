@@ -5,32 +5,77 @@ import { revalidatePath } from 'next/cache';
 import { sendAppointmentReminder } from '@/app/lib/whatsapp';
 import { sendWelcomeEmail } from '@/backend/email';
 import { createPatientPasswordSetupToken } from '@/app/lib/password-setup';
+import { patientRegistrationSchema } from '@/app/lib/validations/patient';
+import { generateUHID, generateAppointmentId } from '@/app/lib/uhid';
 
-// Generate standardized UHID: AVN-YYYY-XXXXX
-async function generateUHID(db: any): Promise<string> {
-    const year = new Date().getFullYear();
-    const count = await db.oPD_REG.count();
-    const seq = String(count + 1).padStart(5, '0');
-    return `AVN-${year}-${seq}`;
-}
+/**
+ * Check for duplicate patients by phone number.
+ * Returns matching patients so reception can decide to reuse or register new.
+ */
+export async function checkDuplicatePatient(phone: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const cleaned = phone.replace(/[\s\-+91]/g, '').slice(-10);
 
-// Generate appointment ID: APT-YYYYMMDD-XXXX
-function generateAppointmentId(): string {
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
-    return `APT-${dateStr}-${seq}`;
+        if (cleaned.length < 10) {
+            return { success: true, data: [] };
+        }
+
+        const matches = await db.oPD_REG.findMany({
+            where: {
+                organizationId,
+                phone: { contains: cleaned },
+            },
+            select: {
+                patient_id: true,
+                full_name: true,
+                phone: true,
+                age: true,
+                gender: true,
+                department: true,
+                date_of_birth: true,
+                created_at: true,
+            },
+            take: 5,
+        });
+
+        return { success: true, data: matches };
+    } catch (error) {
+        console.error('Duplicate check error:', error);
+        return { success: true, data: [] };
+    }
 }
 
 export async function registerPatient(formData: FormData) {
-    const rawData = {
+    const rawInput = {
         full_name: formData.get('full_name') as string,
         phone: formData.get('phone') as string,
         age: formData.get('age') as string,
         gender: formData.get('gender') as string,
         department: formData.get('department') as string,
-        email: (formData.get('email') as string) || "not given",
-        address: (formData.get('address') as string) || "not given",
-        aadhar: formData.get('aadhar') as string,
+        email: (formData.get('email') as string) || '',
+        address: (formData.get('address') as string) || '',
+        aadhar: (formData.get('aadhar') as string) || '',
+        date_of_birth: (formData.get('date_of_birth') as string) || '',
+        blood_group: (formData.get('blood_group') as string) || '',
+        emergency_contact_name: (formData.get('emergency_contact_name') as string) || '',
+        emergency_contact_phone: (formData.get('emergency_contact_phone') as string) || '',
+        emergency_contact_relation: (formData.get('emergency_contact_relation') as string) || '',
+        registration_consent: formData.get('registration_consent') === 'on' || formData.get('registration_consent') === 'true',
+    };
+
+    // Server-side Zod validation
+    const parsed = patientRegistrationSchema.safeParse(rawInput);
+    if (!parsed.success) {
+        const firstError = parsed.error.issues[0]?.message || 'Validation failed';
+        return { success: false, error: firstError };
+    }
+
+    const rawData = {
+        ...parsed.data,
+        email: parsed.data.email || 'not given',
+        address: parsed.data.address || 'not given',
+        aadhar: parsed.data.aadhar || '',
     };
 
     try {
@@ -61,6 +106,12 @@ export async function registerPatient(formData: FormData) {
                     // @ts-ignore
                     address: rawData.address,
                     aadhar_card: rawData.aadhar,
+                    date_of_birth: rawData.date_of_birth || null,
+                    blood_group: rawData.blood_group || null,
+                    emergency_contact_name: rawData.emergency_contact_name || null,
+                    emergency_contact_phone: rawData.emergency_contact_phone || null,
+                    emergency_contact_relation: rawData.emergency_contact_relation || null,
+                    registration_consent: rawData.registration_consent,
                     password: null,
                     organizationId,
                 },

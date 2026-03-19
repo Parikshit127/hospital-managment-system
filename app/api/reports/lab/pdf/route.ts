@@ -1,11 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
+import { verifySignedReportToken } from '@/app/lib/signed-url';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'doctor', 'lab_technician', 'receptionist', 'finance', 'ipd_manager', 'nurse'];
 
 export async function GET(req: NextRequest) {
     try {
+        // Signed token access (patient portal signed URLs — 15-min expiry)
+        const signedToken = req.nextUrl.searchParams.get('token');
+        if (signedToken) {
+            const verified = verifySignedReportToken(signedToken);
+            if (!verified) {
+                return NextResponse.json(
+                    { error: 'Link expired or invalid. Please generate a new report link.' },
+                    { status: 403 },
+                );
+            }
+
+            const order = await prisma.lab_orders.findFirst({
+                where: { barcode: verified.barcode, organizationId: verified.organizationId },
+            });
+
+            if (!order) {
+                return NextResponse.json({ error: 'Lab order not found' }, { status: 404 });
+            }
+
+            const patient = await prisma.oPD_REG.findFirst({
+                where: { patient_id: order.patient_id, organizationId: verified.organizationId },
+                select: { full_name: true, patient_id: true, phone: true, age: true, gender: true },
+            });
+
+            return renderLabReport(order, patient, verified.barcode);
+        }
+
+        // Standard auth-based access (staff + patient portal)
         const auth = await resolveRouteAuth({
             allowPatient: true,
             allowedStaffRoles: ALLOWED_STAFF_ROLES,
@@ -40,10 +69,21 @@ export async function GET(req: NextRequest) {
             select: { full_name: true, patient_id: true, phone: true, age: true, gender: true },
         });
 
-        const patientName = patient?.full_name || 'Unknown';
-        const orderDate = order.created_at ? new Date(order.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+        return renderLabReport(order, patient, barcode);
+    } catch (error) {
+        console.error('Lab PDF Error:', error);
+        return NextResponse.json({ error: 'Failed to generate report' }, { status: 500 });
+    }
+}
 
-        const html = `<!DOCTYPE html>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function renderLabReport(order: any, patient: any, barcode: string): NextResponse {
+    const patientName = patient?.full_name || 'Unknown';
+    const orderDate = order.created_at
+        ? new Date(order.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        : 'N/A';
+
+    const html = `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
@@ -133,11 +173,7 @@ export async function GET(req: NextRequest) {
 </body>
 </html>`;
 
-        return new NextResponse(html, {
-            headers: { 'Content-Type': 'text/html; charset=utf-8' },
-        });
-    } catch (error) {
-        console.error('Lab PDF Error:', error);
-        return NextResponse.json({ error: 'Failed to generate report' }, { status: 500 });
-    }
+    return new NextResponse(html, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    });
 }

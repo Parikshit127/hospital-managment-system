@@ -11,6 +11,7 @@ import {
     getInsuranceProviders, getInsuranceClaims, getInsuranceStats,
     getAllPolicies, addInsuranceProvider,
     submitInsuranceClaim, updateClaimStatus, getRevenueLeakage, getClaimableInvoices,
+    getProviderPerformance, autoSubmitClaim,
 } from '@/app/actions/insurance-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
 
@@ -41,22 +42,28 @@ export default function InsuranceDashboard() {
 
     // Revenue leakage
     const [leakage, setLeakage] = useState<any[]>([]);
+    const [autoSubmitting, setAutoSubmitting] = useState<number | null>(null);
+
+    // Provider performance
+    const [providerPerf, setProviderPerf] = useState<any[]>([]);
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const [s, p, c, pol, leak] = await Promise.all([
+            const [s, p, c, pol, leak, perf] = await Promise.all([
                 getInsuranceStats(),
                 getInsuranceProviders(),
                 getInsuranceClaims({ status: claimFilter || undefined }),
                 getAllPolicies(),
                 getRevenueLeakage(),
+                getProviderPerformance(),
             ]);
             if (s.success) setStats(s.data);
             if (p.success) setProviders(p.data || []);
             if (c.success) setClaims(c.data || []);
             if (pol.success) setPolicies(pol.data || []);
             if (leak.success) setLeakage(leak.data || []);
+            if (perf.success) setProviderPerf(perf.data || []);
         } catch (err) { console.error('Insurance load error:', err); }
         setLoading(false);
     };
@@ -118,6 +125,17 @@ export default function InsuranceDashboard() {
         setClaimModal(null);
         setClaimUpdateForm({ status: '', approved_amount: '', rejection_reason: '' });
         loadData();
+    };
+
+    const handleAutoSubmit = async (invoiceId: number) => {
+        setAutoSubmitting(invoiceId);
+        const res = await autoSubmitClaim(invoiceId);
+        if (res.success) {
+            loadData();
+        } else {
+            alert(res.error || 'Failed to auto-submit claim');
+        }
+        setAutoSubmitting(null);
     };
 
     const getClaimStatusColor = (status: string) => {
@@ -237,7 +255,7 @@ export default function InsuranceDashboard() {
                         </div>
 
                         {/* OVERVIEW */}
-                        {activeTab === 'overview' && (
+                        {activeTab === 'overview' && (<>
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 {/* Providers */}
                                 <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
@@ -304,7 +322,49 @@ export default function InsuranceDashboard() {
                                     </div>
                                 </div>
                             </div>
-                        )}
+
+                            {/* Provider Performance */}
+                            {providerPerf.length > 0 && (
+                                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                                    <div className="p-5 border-b border-gray-200">
+                                        <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
+                                            <Building2 className="h-4 w-4 text-teal-400" /> Provider Performance
+                                        </h3>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead>
+                                                <tr className="border-b border-gray-200">
+                                                    <th className="text-left px-5 py-3 text-[10px] font-black text-gray-400 uppercase tracking-wider">Provider</th>
+                                                    <th className="text-center px-5 py-3 text-[10px] font-black text-gray-400 uppercase tracking-wider">Claims</th>
+                                                    <th className="text-center px-5 py-3 text-[10px] font-black text-gray-400 uppercase tracking-wider">Approval Rate</th>
+                                                    <th className="text-center px-5 py-3 text-[10px] font-black text-gray-400 uppercase tracking-wider">Avg Days</th>
+                                                    <th className="text-right px-5 py-3 text-[10px] font-black text-gray-400 uppercase tracking-wider">Total Settled</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {providerPerf.map((p: any, i: number) => (
+                                                    <tr key={i} className="border-b border-gray-200 hover:bg-gray-50">
+                                                        <td className="px-5 py-3">
+                                                            <p className="text-xs font-bold text-gray-700">{p.provider_name}</p>
+                                                            <p className="text-[10px] text-gray-400">{p.provider_code}</p>
+                                                        </td>
+                                                        <td className="px-5 py-3 text-center text-xs font-bold text-gray-600">{p.totalClaims}</td>
+                                                        <td className="px-5 py-3 text-center">
+                                                            <span className={`text-xs font-black ${Number(p.approvalRate) >= 70 ? 'text-emerald-400' : Number(p.approvalRate) >= 40 ? 'text-amber-400' : 'text-rose-400'}`}>
+                                                                {p.approvalRate}%
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-5 py-3 text-center text-xs font-bold text-gray-500">{p.avgSettlementDays}d</td>
+                                                        <td className="px-5 py-3 text-right text-xs font-black text-teal-400">{'\u20B9'}{p.totalSettled.toLocaleString()}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+                        </>)}
 
                         {/* CLAIMS TAB */}
                         {activeTab === 'claims' && (
@@ -451,12 +511,13 @@ export default function InsuranceDashboard() {
                                                     <th className="text-right px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Net Amount</th>
                                                     <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Status</th>
                                                     <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Date</th>
+                                                    <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Action</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {leakage.length === 0 ? (
                                                     <tr>
-                                                        <td colSpan={6} className="px-5 py-16 text-center text-gray-300">
+                                                        <td colSpan={7} className="px-5 py-16 text-center text-gray-300">
                                                             <CheckCircle className="h-8 w-8 mx-auto mb-2 text-emerald-400/40" />
                                                             <p className="text-xs font-bold text-emerald-400/60">No revenue leakage detected</p>
                                                         </td>
@@ -475,6 +536,13 @@ export default function InsuranceDashboard() {
                                                         </td>
                                                         <td className="px-5 py-3.5 text-center text-[10px] text-gray-500">
                                                             {new Date(inv.created_at).toLocaleDateString('en-IN')}
+                                                        </td>
+                                                        <td className="px-5 py-3.5 text-center">
+                                                            <button onClick={() => handleAutoSubmit(inv.id)} disabled={autoSubmitting === inv.id}
+                                                                className="px-3 py-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition disabled:opacity-50 inline-flex items-center gap-1">
+                                                                {autoSubmitting === inv.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUpRight className="h-3 w-3" />}
+                                                                Auto-Submit
+                                                            </button>
                                                         </td>
                                                     </tr>
                                                 ))}
