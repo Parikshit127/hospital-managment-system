@@ -72,6 +72,11 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
       icon: <LayoutDashboard className="h-4 w-4" />,
     },
     {
+      label: "Patient List",
+      href: "/admin/patients",
+      icon: <Users className="h-4 w-4" />,
+    },
+    {
       label: "Departments",
       href: "/admin/departments",
       icon: <LayoutGrid className="h-4 w-4" />,
