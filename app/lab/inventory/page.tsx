@@ -5,6 +5,7 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { FlaskConical, Search, Plus, AlertTriangle, Edit2, LayoutGrid } from 'lucide-react';
 import { getLabInventory, addLabReagent, updateLabInventory } from '@/app/actions/lab-actions';
 import { z } from 'zod';
+import { useToast } from '@/app/components/ui/Toast';
 
 const ReagentSchema = z.object({
     reagent_name: z.string().min(2, "Name is required"),
@@ -15,6 +16,7 @@ const ReagentSchema = z.object({
 });
 
 export default function LabInventoryPage() {
+    const toast = useToast();
     const [inventory, setInventory] = useState<any[]>([]);
     const [filtered, setFiltered] = useState<any[]>([]);
     const [refreshing, setRefreshing] = useState(false);
@@ -49,7 +51,7 @@ export default function LabInventoryPage() {
         try {
             ReagentSchema.parse(form); // Validate
         } catch (err) {
-            alert('Please check required fields.');
+            toast.warning('Please check required fields.');
             return;
         }
 
@@ -69,7 +71,7 @@ export default function LabInventoryPage() {
         if (res.success) {
             setModalOpen(false);
             loadData();
-        } else alert('Failed to save reagent');
+        } else toast.error('Failed to save reagent');
         setSaving(false);
     };
 

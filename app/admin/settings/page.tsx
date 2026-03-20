@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import { Settings, Save, ShieldAlert, Globe, Clock, Banknote, Smartphone, Cpu } from 'lucide-react';
 import { getOrganizationSettings, updateOrganizationSettings } from '@/app/actions/admin-actions';
 import { useRouter } from 'next/navigation';
@@ -35,10 +35,10 @@ export default function OrgSettingsPage() {
         setSaving(false);
     };
 
-    if (loading) return <AppShell pageTitle="Loading"><div className="p-10 text-center text-gray-500 font-medium">Loading organization configuration...</div></AppShell>;
+    if (loading) return <AdminPage pageTitle="Loading"><div className="p-10 text-center text-gray-500 font-medium">Loading organization configuration...</div></AdminPage>;
 
     return (
-        <AppShell
+        <AdminPage
             pageTitle="Organization Configuration"
             pageIcon={<Settings className="h-5 w-5" />}
         >
@@ -153,6 +153,6 @@ export default function OrgSettingsPage() {
                     </button>
                 </div>
             </form>
-        </AppShell>
+        </AdminPage>
     );
 }

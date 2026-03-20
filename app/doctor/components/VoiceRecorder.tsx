@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { Mic, Square, Loader2 } from 'lucide-react';
+import { useToast } from '@/app/components/ui/Toast';
 
 interface VoiceRecorderProps {
     onTranscription: (text: string) => void;
@@ -9,6 +10,7 @@ interface VoiceRecorderProps {
 }
 
 export default function VoiceRecorder({ onTranscription, disabled }: VoiceRecorderProps) {
+    const toast = useToast();
     const [recording, setRecording] = useState(false);
     const [transcribing, setTranscribing] = useState(false);
     const [duration, setDuration] = useState(0);
@@ -39,7 +41,7 @@ export default function VoiceRecorder({ onTranscription, disabled }: VoiceRecord
             timerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
         } catch (err) {
             console.error('Microphone access denied:', err);
-            alert('Please allow microphone access to use voice recording.');
+            toast.warning('Please allow microphone access to use voice recording.');
         }
     }, []);
 
@@ -66,11 +68,11 @@ export default function VoiceRecorder({ onTranscription, disabled }: VoiceRecord
             if (result.success && result.data) {
                 onTranscription(result.data);
             } else {
-                alert(result.error || 'Transcription failed. Is OPENAI_API_KEY configured?');
+                toast.error(result.error || 'Transcription failed. Is OPENAI_API_KEY configured?');
             }
         } catch (err) {
             console.error('Transcription error:', err);
-            alert('Transcription failed.');
+            toast.error('Transcription failed.');
         } finally {
             setTranscribing(false);
         }

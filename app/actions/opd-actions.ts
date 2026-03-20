@@ -86,15 +86,17 @@ export async function getTodaysAppointments(options?: { department?: string; sta
                 id: a.id,
                 appointment_id: a.appointment_id,
                 patient_id: a.patient_id,
-                patient_name: a.patient.full_name,
-                age: a.patient.age,
-                gender: a.patient.gender,
-                phone: a.patient.phone,
+                patient_name: a.patient?.full_name || 'Unknown',
+                age: a.patient?.age,
+                gender: a.patient?.gender,
+                phone: a.patient?.phone,
                 department: a.department,
                 doctor_name: a.doctor_name,
                 status: a.status,
                 reason_for_visit: a.reason_for_visit,
-                appointment_date: a.appointment_date,
+                appointment_date: a.appointment_date instanceof Date
+                    ? a.appointment_date.toISOString()
+                    : a.appointment_date,
             })),
         };
     } catch (error) {

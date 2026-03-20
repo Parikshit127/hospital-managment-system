@@ -5,8 +5,10 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { useParams } from 'next/navigation';
 import { User, Bed, Clock, ClipboardEdit, Utensils, MoveRight, Stethoscope, FileText, CheckCircle2 } from 'lucide-react';
 import { getAdmissionFullDetails, createNursingTask } from '@/app/actions/ipd-actions';
+import { useToast } from '@/app/components/ui/Toast';
 
 export default function AdmissionDetailPage() {
+    const toast = useToast();
     const params = useParams();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -36,7 +38,7 @@ export default function AdmissionDetailPage() {
             setTaskType('Vitals'); setDesc(''); setTime('');
             loadData();
         } else {
-            alert('Failed to create task');
+            toast.error('Failed to create task');
         }
     };
 

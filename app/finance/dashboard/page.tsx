@@ -16,8 +16,10 @@ import { getDepositStats } from '@/app/actions/deposit-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { InvoiceDetailModal } from '@/app/components/finance/InvoiceDetailModal';
 import { PaymentRecordModal } from '@/app/components/finance/PaymentRecordModal';
+import { useToast } from '@/app/components/ui/Toast';
 
 export default function FinanceDashboard() {
+    const toast = useToast();
     const [stats, setStats] = useState<any>(null);
     const [expenseStats, setExpenseStats] = useState<any>(null);
     const [depositStats, setDepositStats] = useState<any>(null);
@@ -78,7 +80,7 @@ export default function FinanceDashboard() {
                 body: JSON.stringify({ invoice_id: paymentModal.id }),
             });
             const orderData = await orderRes.json();
-            if (!orderData.success) { alert('Failed to create Razorpay order: ' + orderData.error); setPaymentLoading(false); return; }
+            if (!orderData.success) { toast.error('Failed to create Razorpay order: ' + orderData.error); setPaymentLoading(false); return; }
 
             const rzp = new window.Razorpay({
                 key: orderData.data.key_id, amount: orderData.data.amount, currency: orderData.data.currency,
@@ -92,17 +94,17 @@ export default function FinanceDashboard() {
                         });
                         const verifyData = await verifyRes.json();
                         if (verifyData.success) { setPaymentModal(null); setPaymentForm({ amount: '', method: 'Cash', type: 'Settlement', notes: '' }); loadData(); }
-                        else alert('Payment verification failed: ' + verifyData.error);
-                    } catch { alert('Payment completed but verification failed. The webhook will reconcile automatically.'); }
+                        else toast.error('Payment verification failed: ' + verifyData.error);
+                    } catch { toast.warning('Payment completed but verification failed. The webhook will reconcile automatically.'); }
                     setPaymentLoading(false);
                 },
                 prefill: { name: paymentModal.patient?.full_name || '', contact: paymentModal.patient?.phone || '' },
                 theme: { color: '#10b981' },
                 modal: { ondismiss: () => setPaymentLoading(false) },
             });
-            rzp.on('payment.failed', (r: any) => { alert(`Payment failed: ${r.error.description}`); setPaymentLoading(false); });
+            rzp.on('payment.failed', (r: any) => { toast.error(`Payment failed: ${r.error.description}`); setPaymentLoading(false); });
             rzp.open();
-        } catch (err: any) { alert('Failed to initiate Razorpay payment: ' + err.message); setPaymentLoading(false); }
+        } catch (err: any) { toast.error('Failed to initiate Razorpay payment: ' + err.message); setPaymentLoading(false); }
     };
 
     const handleFinalize = async (id: number) => { await finalizeInvoice(id); loadData(); };

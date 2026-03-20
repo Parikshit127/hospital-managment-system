@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { getLabOrders, getLabStats, uploadResult } from '@/app/actions/lab-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { useToast } from '@/app/components/ui/Toast';
+import { Skeleton } from '@/app/components/ui/Skeleton';
 
 type LabOrder = {
     order_id: string;
@@ -21,6 +23,7 @@ type LabOrder = {
 };
 
 export default function LabPage() {
+    const toast = useToast();
     const [orders, setOrders] = useState<LabOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'Pending' | 'Completed'>('Pending');
@@ -64,7 +67,7 @@ export default function LabPage() {
                 setSelectedOrder(null);
                 loadData();
             } else {
-                alert('Error: ' + res.error);
+                toast.error(res.error || 'Failed to upload result');
             }
         } finally {
             setIsSubmitting(false);
@@ -178,12 +181,17 @@ export default function LabPage() {
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {loading ? (
-                                    <tr><td colSpan={6} className="text-center py-16 text-gray-400 font-medium">
-                                        <div className="flex items-center justify-center gap-3">
-                                            <Loader2 className="h-5 w-5 animate-spin text-teal-400" />
-                                            Fetching orders...
-                                        </div>
-                                    </td></tr>
+                                    <>
+                                        {Array.from({ length: 5 }).map((_, i) => (
+                                            <tr key={`sk-${i}`} className="border-b border-gray-50">
+                                                {Array.from({ length: 6 }).map((_, c) => (
+                                                    <td key={c} className="px-4 py-3.5">
+                                                        <Skeleton width={c === 0 ? '70%' : '55%'} height="0.625rem" />
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </>
                                 ) : orders.length === 0 ? (
                                     <tr>
                                         <td colSpan={6} className="text-center py-20">

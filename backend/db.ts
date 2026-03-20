@@ -38,6 +38,10 @@ const TENANT_SCOPED_MODELS = new Set([
     'ExpenseCategory', 'Vendor', 'Expense', 'TaxConfig',
     // Finance deposits, credit notes, fiscal, bank, dunning
     'PatientDeposit', 'CreditNote', 'FinancialPeriod', 'BankTransaction', 'DunningRule', 'DunningLog',
+    // Branch management
+    'Branch',
+    // Admin panel dynamic configuration
+    'ModuleConfig', 'Role', 'DocumentTemplate', 'AlertRule',
 ]);
 
 // Models where organizationId is nullable (audit logs, etc.)
@@ -52,7 +56,7 @@ export function getTenantPrisma(organizationId: string): any {
             $allModels: {
                 async $allOperations({ operation, model, args, query }: any) {
                     if (model && (TENANT_SCOPED_MODELS.has(model) || NULLABLE_ORG_MODELS.has(model))) {
-                        if (['findMany', 'findFirst', 'updateMany', 'deleteMany', 'count', 'aggregate'].includes(operation)) {
+                        if (['findMany', 'findFirst', 'updateMany', 'deleteMany', 'count', 'aggregate', 'groupBy', 'findUnique'].includes(operation)) {
                             args.where = { ...args.where, organizationId };
                         } else if (operation === 'create') {
                             args.data = { ...args.data, organizationId };

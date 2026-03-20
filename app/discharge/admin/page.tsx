@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { getAdmittedPatients, processDischarge, generateAISummary } from '@/app/actions/discharge-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { useToast } from '@/app/components/ui/Toast';
 
 type Patient = {
     id: string;
@@ -20,6 +21,7 @@ type Patient = {
 };
 
 export default function DischargePage() {
+    const toast = useToast();
     const [patients, setPatients] = useState<Patient[]>([]);
     const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
     const [notes, setNotes] = useState('');
@@ -59,21 +61,21 @@ export default function DischargePage() {
             if (res.success && res.summary) {
                 setAiSummary(res.summary);
             } else {
-                alert(res.error || 'Failed to generate AI summary');
+                toast.error(res.error || 'Failed to generate AI summary');
             }
         } catch (err) {
-            alert('AI summary generation failed');
+            toast.error('AI summary generation failed');
         }
         setAiLoading(false);
     };
 
     const handleConfirmDischarge = async () => {
         if (!selectedPatient) return;
-        if (!checklist.billing) return alert('Final Bill must be cleared!');
+        if (!checklist.billing) return toast.warning('Final Bill must be cleared!');
 
         const fullNotes = aiSummary ? `${aiSummary}\n\n--- Additional Notes ---\n${notes}` : notes;
         await processDischarge(selectedPatient.id, selectedPatient.patient_name, fullNotes);
-        alert('Discharge Summary Generated & Sent');
+        toast.success('Discharge Summary Generated & Sent');
         setSelectedPatient(null);
         setPatients(prev => prev.filter(p => p.id !== selectedPatient.id));
     };

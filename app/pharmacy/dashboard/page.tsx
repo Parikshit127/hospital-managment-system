@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Activity, Clock, CheckCircle2, AlertTriangle, IndianRupee, Bell, PackageOpen } from 'lucide-react';
 import { getPharmacyDashboardStats } from '@/app/actions/pharmacy-actions';
+import { SkeletonCard } from '@/app/components/ui/Skeleton';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
@@ -38,7 +39,12 @@ export default function PharmacyDashboardPage() {
             onRefresh={loadStats}
             refreshing={refreshing}
         >
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {!stats && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
+                </div>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6" style={{ display: !stats ? 'none' : undefined }}>
                 {kpis.map((kpi, index) => {
                     const Icon = kpi.icon;
                     return (

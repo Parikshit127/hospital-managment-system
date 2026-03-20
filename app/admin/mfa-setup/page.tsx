@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Shield, ArrowLeft, Loader2, CheckCircle, KeyRound, Copy, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
-import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import { setupMFA, enableMFA, getMFAStatus } from '@/app/actions/mfa-actions';
 
 export default function MFASetupPage() {
@@ -69,7 +69,7 @@ export default function MFASetupPage() {
     };
 
     return (
-        <AppShell pageTitle="MFA Setup" pageIcon={<Shield className="h-5 w-5" />}>
+        <AdminPage pageTitle="MFA Setup" pageIcon={<Shield className="h-5 w-5" />}>
             <div className="max-w-[800px] mx-auto space-y-6">
                 {step === 'loading' && (
                     <div className="flex items-center justify-center py-20">
@@ -176,6 +176,6 @@ export default function MFASetupPage() {
                     </div>
                 )}
             </div>
-        </AppShell>
+        </AdminPage>
     );
 }

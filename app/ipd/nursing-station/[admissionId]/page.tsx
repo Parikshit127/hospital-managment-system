@@ -3,6 +3,8 @@ import { NursingActionWorkspace } from '@/app/components/ipd/nursing/NursingActi
 import { notFound } from 'next/navigation';
 import { requireTenantContext } from '@/backend/tenant';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
     title: 'Nursing Action Workspace | Hospital OS',
 };

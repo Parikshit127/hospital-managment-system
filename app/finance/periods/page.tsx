@@ -10,8 +10,10 @@ import {
     IndianRupee, X, AlertCircle, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { useToast } from '@/app/components/ui/Toast';
 
 export default function PeriodsPage() {
+    const toast = useToast();
     const [periods, setPeriods] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -45,7 +47,7 @@ export default function PeriodsPage() {
             setCreateForm({ period_name: '', period_type: 'Monthly', start_date: '', end_date: '' });
             loadData();
         } else {
-            alert(res.error);
+            toast.error(res.error || 'Failed to create financial period');
         }
         setCreateLoading(false);
     }
@@ -54,14 +56,14 @@ export default function PeriodsPage() {
         if (!confirm('Close this period? This will calculate and snapshot the P&L.')) return;
         const res = await closeFinancialPeriod(id);
         if (res.success) loadData();
-        else alert(res.error);
+        else toast.error(res.error || 'Failed to close period');
     }
 
     async function handleLock(id: number) {
         if (!confirm('Lock this period? This cannot be undone.')) return;
         const res = await lockFinancialPeriod(id);
         if (res.success) loadData();
-        else alert(res.error);
+        else toast.error(res.error || 'Failed to lock period');
     }
 
     async function handlePreview(period: any) {

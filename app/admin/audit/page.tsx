@@ -5,7 +5,7 @@ import {
     Shield, Search, Loader2, ChevronLeft, ChevronRight,
     Download, Filter, AlertTriangle, Clock
 } from 'lucide-react';
-import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import { getAuditLogs, getAuditStats } from '@/app/actions/audit-actions';
 
 const CRITICAL_ACTIONS = ['PAYMENT_REVERSED', 'DISCOUNT_APPLIED', 'DELETE', 'CANCEL_INVOICE', 'DRUG_INTERACTION_WARNING'];
@@ -68,7 +68,7 @@ export default function AuditTrailPage() {
     const isCritical = (action: string) => CRITICAL_ACTIONS.some(ca => action?.toUpperCase().includes(ca));
 
     return (
-        <AppShell
+        <AdminPage
             pageTitle="Audit Trail"
             pageIcon={<Shield className="h-5 w-5" />}
             onRefresh={loadData}
@@ -197,6 +197,6 @@ export default function AuditTrailPage() {
                     </div>
                 </div>
             </div>
-        </AppShell>
+        </AdminPage>
     );
 }

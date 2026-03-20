@@ -4,6 +4,8 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { Activity } from 'lucide-react';
 import { requireTenantContext } from '@/backend/tenant';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
     title: 'Admissions Hub | Hospital OS',
 };

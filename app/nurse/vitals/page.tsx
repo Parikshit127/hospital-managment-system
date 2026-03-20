@@ -7,8 +7,10 @@ import {
     HeartPulse, Scale, Ruler, Clock, User, CheckCircle2, X
 } from 'lucide-react';
 import { recordVitals, getPatientVitals, getWardPatients } from '@/app/actions/nurse-actions';
+import { useToast } from '@/app/components/ui/Toast';
 
 export default function NurseVitalsPage() {
+    const toast = useToast();
     const [nurseId, setNurseId] = useState('');
     const [refreshing, setRefreshing] = useState(false);
 
@@ -123,11 +125,11 @@ export default function NurseVitalsPage() {
                 loadRecentVitals(selectedPatient.patientId);
                 setTimeout(() => setSuccessMsg(''), 4000);
             } else {
-                alert(res.error || 'Failed to record vitals.');
+                toast.error(res.error || 'Failed to record vitals.');
             }
         } catch (e) {
             console.error('Failed to record vitals', e);
-            alert('An error occurred while recording vitals.');
+            toast.error('An error occurred while recording vitals.');
         } finally {
             setSaving(false);
         }

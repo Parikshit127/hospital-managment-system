@@ -5,7 +5,7 @@ import {
     Stethoscope, Users, X, Loader2, Clock, User, Search,
     Activity, Phone, Mail
 } from 'lucide-react';
-import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import { getUsersList } from '@/app/actions/admin-actions';
 import { getPatientQueue } from '@/app/actions/doctor-actions';
 
@@ -48,7 +48,7 @@ export default function AdminDoctorsPage() {
     });
 
     return (
-        <AppShell pageTitle="Doctor Console" pageIcon={<Stethoscope className="h-5 w-5" />}
+        <AdminPage pageTitle="Doctor Console" pageIcon={<Stethoscope className="h-5 w-5" />}
             onRefresh={loadDoctors} refreshing={loading}>
             <div className="space-y-6">
                 {/* Search + Stats */}
@@ -220,6 +220,6 @@ export default function AdminDoctorsPage() {
                     </div>
                 </div>
             )}
-        </AppShell>
+        </AdminPage>
     );
 }

@@ -4,8 +4,10 @@ import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Activity, ClipboardCheck, Clock, CheckCircle } from 'lucide-react';
 import { getNursingTasks, completeNursingTask } from '@/app/actions/ipd-actions';
+import { useToast } from '@/app/components/ui/Toast';
 
 export default function NursingStationPage() {
+    const toast = useToast();
     const [tasks, setTasks] = useState<any[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
@@ -29,7 +31,7 @@ export default function NursingStationPage() {
             setNotes('');
             loadTasks();
         } else {
-            alert('Failed to complete task.');
+            toast.error('Failed to complete task.');
         }
     };
 

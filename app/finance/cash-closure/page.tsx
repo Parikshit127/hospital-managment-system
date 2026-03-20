@@ -4,8 +4,10 @@ import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Wallet, ShieldAlert, CheckCircle2, History } from 'lucide-react';
 import { performCashClosure, getCashClosures } from '@/app/actions/finance-actions';
+import { useToast } from '@/app/components/ui/Toast';
 
 export default function CashClosurePage() {
+    const toast = useToast();
     const [closures, setClosures] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [closing, setClosing] = useState(false);
@@ -31,9 +33,9 @@ export default function CashClosurePage() {
         if (res.success) {
             setNotes('');
             loadData();
-            alert(`Drawer successfully closed with Cash Total: ₹${Number(res.data.cash_total).toFixed(2)}`);
+            toast.success(`Drawer successfully closed with Cash Total: ₹${Number(res.data.cash_total).toFixed(2)}`);
         } else {
-            alert('Closure failed: ' + res.error);
+            toast.error('Closure failed: ' + (res.error || 'Unknown error'));
         }
     };
 

@@ -1,8 +1,10 @@
 import { getIpdInventory } from './actions';
 import { WardManager } from '@/app/components/admin/ipd/WardManager';
-import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import { BedDouble } from 'lucide-react';
 import { requireTenantContext } from '@/backend/tenant';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata = {
     title: 'IPD Inventory | Hospital OS',
@@ -15,7 +17,7 @@ export default async function AdminIpdSetupPage() {
     const { wards, departments } = await getIpdInventory();
 
     return (
-        <AppShell
+        <AdminPage
             pageTitle="IPD Inventory & Configuration"
             pageIcon={<BedDouble className="h-5 w-5" />}
         >
@@ -26,7 +28,7 @@ export default async function AdminIpdSetupPage() {
                     organizationId={organizationId} 
                 />
             </div>
-        </AppShell>
+        </AdminPage>
     );
 }
 

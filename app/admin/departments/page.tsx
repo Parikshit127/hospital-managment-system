@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import { LayoutGrid, Plus, MoreVertical, Edit2, ShieldAlert } from 'lucide-react';
 import { getDepartments, createDepartment, updateDepartment } from '@/app/actions/admin-actions';
 import { useRouter } from 'next/navigation';
@@ -68,7 +68,7 @@ export default function DepartmentsPage() {
     };
 
     return (
-        <AppShell
+        <AdminPage
             pageTitle="Clinical Departments"
             pageIcon={<LayoutGrid className="h-5 w-5" />}
             onRefresh={loadData}
@@ -161,6 +161,6 @@ export default function DepartmentsPage() {
                     </form>
                 </div>
             )}
-        </AppShell>
+        </AdminPage>
     );
 }

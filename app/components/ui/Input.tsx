@@ -23,7 +23,7 @@ export function Input({ label, icon, error, className = '', ...props }: InputPro
                     </div>
                 )}
                 <input
-                    className={`w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors ${icon ? 'pl-10' : ''} ${error ? 'border-rose-400 focus:ring-rose-500/20 focus:border-rose-500' : ''} ${className}`}
+                    className={`w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/15 focus:border-teal-500 transition-all duration-200 shadow-sm hover:border-gray-300 ${icon ? 'pl-10' : ''} ${error ? 'border-rose-300 focus:ring-rose-500/15 focus:border-rose-500 hover:border-rose-300' : ''} ${className}`}
                     {...props}
                 />
             </div>
@@ -46,7 +46,7 @@ export function Textarea({ label, error, className = '', ...props }: TextareaPro
                 </label>
             )}
             <textarea
-                className={`w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors resize-none ${error ? 'border-rose-400' : ''} ${className}`}
+                className={`w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/15 focus:border-teal-500 transition-all duration-200 resize-none shadow-sm hover:border-gray-300 ${error ? 'border-rose-300 hover:border-rose-300' : ''} ${className}`}
                 {...props}
             />
             {error && <p className="text-xs text-rose-600 font-medium">{error}</p>}

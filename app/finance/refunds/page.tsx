@@ -4,8 +4,10 @@ import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Undo2, Search, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { getRefunds, updateRefundStatus, requestRefund } from '@/app/actions/finance-actions';
+import { useToast } from '@/app/components/ui/Toast';
 
 export default function RefundsPage() {
+    const toast = useToast();
     const [refunds, setRefunds] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -27,7 +29,7 @@ export default function RefundsPage() {
     const processStatus = async (id: number, status: string) => {
         const res = await updateRefundStatus(id, status);
         if (res.success) loadData();
-        else alert('Failed to update status.');
+        else toast.error('Failed to update status.');
     };
 
     const handleRequest = async (e: React.FormEvent) => {
@@ -41,9 +43,9 @@ export default function RefundsPage() {
         setSubmitting(false);
         if (res.success) {
             setInvId(''); setAmt(''); setReason('');
-            alert('Refund successfully queued for manager approval.');
+            toast.success('Refund successfully queued for manager approval.');
             loadData();
-        } else alert('Failed to queue refund.');
+        } else toast.error('Failed to queue refund.');
     };
 
     return (

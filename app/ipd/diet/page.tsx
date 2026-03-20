@@ -4,8 +4,10 @@ import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Utensils, Search, UtensilsCrossed } from 'lucide-react';
 import { getIPDAdmissions, assignDietPlan } from '@/app/actions/ipd-actions';
+import { useToast } from '@/app/components/ui/Toast';
 
 export default function DietPage() {
+    const toast = useToast();
     const [admissions, setAdmissions] = useState<any[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -44,7 +46,7 @@ export default function DietPage() {
             setInstructions('');
             loadData();
         } else {
-            alert('Failed to assign diet');
+            toast.error('Failed to assign diet');
         }
         setSaving(false);
     };

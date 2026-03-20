@@ -14,8 +14,10 @@ import {
     getProviderPerformance, autoSubmitClaim,
 } from '@/app/actions/insurance-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { useToast } from '@/app/components/ui/Toast';
 
 export default function InsuranceDashboard() {
+    const toast = useToast();
     const [stats, setStats] = useState<any>(null);
     const [providers, setProviders] = useState<any[]>([]);
     const [claims, setClaims] = useState<any[]>([]);
@@ -111,7 +113,7 @@ export default function InsuranceDashboard() {
             setNewClaimModal(false);
             loadData();
         } else {
-            alert(res.error || 'Failed to submit claim');
+            toast.error(res.error || 'Failed to submit claim');
         }
     };
 
@@ -133,7 +135,7 @@ export default function InsuranceDashboard() {
         if (res.success) {
             loadData();
         } else {
-            alert(res.error || 'Failed to auto-submit claim');
+            toast.error(res.error || 'Failed to auto-submit claim');
         }
         setAutoSubmitting(null);
     };

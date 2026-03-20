@@ -10,8 +10,10 @@ import {
     Search, IndianRupee, X, Settings, Send, CheckCircle,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { useToast } from '@/app/components/ui/Toast';
 
 export default function CollectionsPage() {
+    const toast = useToast();
     const [activeTab, setActiveTab] = useState<'overdue' | 'rules' | 'log'>('overdue');
     const [overdueInvoices, setOverdueInvoices] = useState<any[]>([]);
     const [rules, setRules] = useState<any[]>([]);
@@ -58,7 +60,7 @@ export default function CollectionsPage() {
             setRuleForm({ rule_name: '', days_overdue: '', action_type: 'notification', template_text: '' });
             loadData();
         } else {
-            alert(res.error);
+            toast.error(res.error || 'Failed to create dunning rule');
         }
         setRuleLoading(false);
     }
@@ -73,10 +75,10 @@ export default function CollectionsPage() {
         setExecuting(true);
         const res = await executeDunning();
         if (res.success) {
-            alert(`Dunning completed: ${res.data?.actionsCreated} reminders sent`);
+            toast.success(`Dunning completed: ${res.data?.actionsCreated} reminders sent`);
             loadData();
         } else {
-            alert(res.error);
+            toast.error(res.error || 'Failed to execute dunning');
         }
         setExecuting(false);
     }

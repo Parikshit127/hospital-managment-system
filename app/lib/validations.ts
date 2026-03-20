@@ -138,19 +138,76 @@ export const submitClaimSchema = z.object({
 // ========================================
 
 export const createOrganizationSchema = z.object({
+    // Step 1: Hospital Details
     name: z.string().min(2, 'Hospital name is required').max(200),
     slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with dashes'),
     code: z.string().min(2).max(10).toUpperCase(),
+    hospital_type: z.string().optional(),
+    bed_capacity: z.string().optional(), // comes as string from FormData, parsed to int
+    specialties: z.string().optional(), // comma-separated, parsed to array
+    // Step 2: Contact & Location
     address: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    pincode: z.string().optional(),
     phone: z.string().optional(),
     email: z.string().email().optional().or(z.literal('')),
+    website: z.string().optional(),
+    latitude: z.string().optional(),
+    longitude: z.string().optional(),
+    // Step 3: Regulatory
     license_no: z.string().optional(),
-    plan: z.enum(['free', 'starter', 'pro', 'enterprise']).default('free'),
-    // Initial admin user
+    registration_number: z.string().optional(),
+    registration_authority: z.string().optional(),
+    accreditation_body: z.string().optional(),
+    accreditation_number: z.string().optional(),
+    accreditation_expiry: z.string().optional(),
+    established_year: z.string().optional(),
+    // Step 4: Admin User
     admin_username: z.string().min(3).max(50),
     admin_password: z.string().min(6).max(100),
     admin_name: z.string().min(2).max(200),
     admin_email: z.string().email(),
+    // Step 5: Plan & Config
+    plan: z.enum(['free', 'starter', 'pro', 'enterprise']).default('free'),
+    appointment_duration: z.string().optional(),
+    fiscal_year_start: z.string().optional(),
+});
+
+export const organizationProfileSchema = z.object({
+    name: z.string().min(2, 'Hospital name is required').max(200),
+    slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with dashes'),
+    code: z.string().min(2).max(10),
+    address: z.string().optional().nullable(),
+    phone: z.string().optional().nullable(),
+    email: z.string().email().optional().or(z.literal('')).nullable(),
+    license_no: z.string().optional().nullable(),
+    hospital_type: z.string().optional().nullable(),
+    bed_capacity: z.number().int().min(0).optional().nullable(),
+    accreditation_body: z.string().optional().nullable(),
+    accreditation_number: z.string().optional().nullable(),
+    accreditation_expiry: z.string().optional().nullable(),
+    registration_number: z.string().optional().nullable(),
+    registration_authority: z.string().optional().nullable(),
+    established_year: z.number().int().min(1800).max(2100).optional().nullable(),
+    website: z.string().optional().nullable(),
+    specialties: z.array(z.string()).optional(),
+    latitude: z.number().optional().nullable(),
+    longitude: z.number().optional().nullable(),
+});
+
+export const branchSchema = z.object({
+    branch_name: z.string().min(2, 'Branch name is required').max(200),
+    branch_code: z.string().min(2, 'Branch code is required').max(20),
+    address: z.string().optional().nullable(),
+    city: z.string().optional().nullable(),
+    state: z.string().optional().nullable(),
+    pincode: z.string().optional().nullable(),
+    phone: z.string().optional().nullable(),
+    email: z.string().email().optional().or(z.literal('')).nullable(),
+    is_main_branch: z.boolean().optional(),
+    latitude: z.number().optional().nullable(),
+    longitude: z.number().optional().nullable(),
 });
 
 // ========================================

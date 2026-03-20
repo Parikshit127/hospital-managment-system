@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import { CheckCircle2, XCircle, Info, AlertTriangle, X } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'info' | 'warning';
@@ -9,13 +9,15 @@ interface Toast {
     id: number;
     message: string;
     type: ToastType;
+    duration: number;
+    exiting?: boolean;
 }
 
 interface ToastContextType {
-    success: (message: string) => void;
-    error: (message: string) => void;
-    info: (message: string) => void;
-    warning: (message: string) => void;
+    success: (message: string, duration?: number) => void;
+    error: (message: string, duration?: number) => void;
+    info: (message: string, duration?: number) => void;
+    warning: (message: string, duration?: number) => void;
 }
 
 const ToastContext = createContext<ToastContextType | null>(null);
@@ -24,60 +26,94 @@ let toastId = 0;
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
     const [toasts, setToasts] = useState<Toast[]>([]);
-
-    const addToast = useCallback((message: string, type: ToastType) => {
-        const id = ++toastId;
-        setToasts(prev => {
-            const next = [...prev, { id, message, type }];
-            // Keep max 3 toasts visible
-            return next.length > 3 ? next.slice(-3) : next;
-        });
-        setTimeout(() => {
-            setToasts(prev => prev.filter(t => t.id !== id));
-        }, 5000);
-    }, []);
+    const timersRef = useRef<Map<number, NodeJS.Timeout>>(new Map());
 
     const removeToast = useCallback((id: number) => {
-        setToasts(prev => prev.filter(t => t.id !== id));
+        setToasts(prev => prev.map(t => t.id === id ? { ...t, exiting: true } : t));
+        setTimeout(() => {
+            setToasts(prev => prev.filter(t => t.id !== id));
+            const timer = timersRef.current.get(id);
+            if (timer) {
+                clearTimeout(timer);
+                timersRef.current.delete(id);
+            }
+        }, 280);
     }, []);
 
+    const addToast = useCallback((message: string, type: ToastType, duration = 4000) => {
+        const id = ++toastId;
+        setToasts(prev => {
+            const next = [...prev, { id, message, type, duration }];
+            if (next.length > 3) {
+                const removed = next.shift();
+                if (removed) {
+                    const timer = timersRef.current.get(removed.id);
+                    if (timer) { clearTimeout(timer); timersRef.current.delete(removed.id); }
+                }
+            }
+            return next;
+        });
+        const timer = setTimeout(() => removeToast(id), duration);
+        timersRef.current.set(id, timer);
+    }, [removeToast]);
+
     const toast: ToastContextType = {
-        success: (msg) => addToast(msg, 'success'),
-        error: (msg) => addToast(msg, 'error'),
-        info: (msg) => addToast(msg, 'info'),
-        warning: (msg) => addToast(msg, 'warning'),
+        success: (msg, dur) => addToast(msg, 'success', dur),
+        error: (msg, dur) => addToast(msg, 'error', dur),
+        info: (msg, dur) => addToast(msg, 'info', dur),
+        warning: (msg, dur) => addToast(msg, 'warning', dur),
     };
 
     const iconMap = {
-        success: <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />,
-        error: <XCircle className="h-4 w-4 text-rose-500 shrink-0" />,
-        info: <Info className="h-4 w-4 text-blue-500 shrink-0" />,
-        warning: <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />,
+        success: <CheckCircle2 className="h-4.5 w-4.5 text-emerald-500 shrink-0" />,
+        error: <XCircle className="h-4.5 w-4.5 text-rose-500 shrink-0" />,
+        info: <Info className="h-4.5 w-4.5 text-sky-500 shrink-0" />,
+        warning: <AlertTriangle className="h-4.5 w-4.5 text-amber-500 shrink-0" />,
     };
 
     const bgMap = {
-        success: 'bg-emerald-50 border-emerald-200 text-emerald-800',
-        error: 'bg-rose-50 border-rose-200 text-rose-800',
-        info: 'bg-blue-50 border-blue-200 text-blue-800',
-        warning: 'bg-amber-50 border-amber-200 text-amber-800',
+        success: 'bg-white border-emerald-200/60',
+        error: 'bg-white border-rose-200/60',
+        info: 'bg-white border-sky-200/60',
+        warning: 'bg-white border-amber-200/60',
+    };
+
+    const accentMap = {
+        success: 'bg-emerald-500',
+        error: 'bg-rose-500',
+        info: 'bg-sky-500',
+        warning: 'bg-amber-500',
     };
 
     return (
         <ToastContext.Provider value={toast}>
             {children}
             {/* Toast Container */}
-            <div className="fixed top-4 right-4 z-[200] flex flex-col gap-2 max-w-sm">
+            <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none">
                 {toasts.map(t => (
                     <div
                         key={t.id}
-                        className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-lg text-sm font-medium animate-in ${bgMap[t.type]}`}
-                        style={{ animation: 'fadeIn 0.2s ease-out' }}
+                        className={`pointer-events-auto relative flex items-start gap-3 pl-4 pr-3 py-3 rounded-xl border shadow-lg text-sm font-medium overflow-hidden ${bgMap[t.type]}`}
+                        style={{
+                            animation: t.exiting
+                                ? 'toastOut 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards'
+                                : 'toastIn 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
+                            boxShadow: 'var(--shadow-lg)',
+                        }}
                     >
-                        {iconMap[t.type]}
-                        <span className="flex-1">{t.message}</span>
-                        <button onClick={() => removeToast(t.id)} className="p-0.5 rounded hover:bg-black/5 transition-colors shrink-0">
-                            <X className="h-3.5 w-3.5" />
+                        <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${accentMap[t.type]}`} />
+                        <span className="mt-0.5">{iconMap[t.type]}</span>
+                        <span className="flex-1 text-gray-800 text-[13px] leading-snug">{t.message}</span>
+                        <button onClick={() => removeToast(t.id)} className="p-1 rounded-lg hover:bg-gray-100 transition-colors shrink-0">
+                            <X className="h-3.5 w-3.5 text-gray-400" />
                         </button>
+                        {/* Progress bar */}
+                        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gray-100">
+                            <div
+                                className={`h-full ${accentMap[t.type]} opacity-30`}
+                                style={{ animation: `toastProgress ${t.duration}ms linear forwards` }}
+                            />
+                        </div>
                     </div>
                 ))}
             </div>
@@ -88,7 +124,6 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 export function useToast(): ToastContextType {
     const ctx = useContext(ToastContext);
     if (!ctx) {
-        // Return a no-op fallback so pages work even without provider
         return {
             success: () => {},
             error: () => {},

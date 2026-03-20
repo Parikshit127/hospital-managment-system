@@ -18,6 +18,7 @@ import {
   saveTemplate,
   deleteTemplate,
 } from "@/app/actions/doctor-actions";
+import { useToast } from '@/app/components/ui/Toast';
 
 interface Template {
   id: string;
@@ -29,6 +30,7 @@ interface Template {
 }
 
 export default function DoctorTemplates() {
+  const toast = useToast();
   const [session, setSession] = useState<{
     id: string;
     username: string;
@@ -121,11 +123,11 @@ export default function DoctorTemplates() {
         await fetchTemplates();
         handleCloseModal();
       } else {
-        alert("Failed to save template");
+        toast.error("Failed to save template");
       }
     } catch (error) {
       console.error(error);
-      alert("Error saving template");
+      toast.error("Error saving template");
     } finally {
       setIsSaving(false);
     }
@@ -139,11 +141,11 @@ export default function DoctorTemplates() {
       if (res.success) {
         await fetchTemplates();
       } else {
-        alert("Failed to delete template");
+        toast.error("Failed to delete template");
       }
     } catch (error) {
       console.error(error);
-      alert("Error deleting template");
+      toast.error("Error deleting template");
     }
   };
 

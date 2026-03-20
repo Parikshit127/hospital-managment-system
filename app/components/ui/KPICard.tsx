@@ -14,25 +14,25 @@ interface KPICardProps {
     className?: string;
 }
 
-const colorMap: Record<KPIColor, { bg: string; iconBg: string; text: string }> = {
-    blue: { bg: 'bg-blue-50', iconBg: 'bg-blue-100 text-blue-600', text: 'text-blue-600' },
-    teal: { bg: 'bg-teal-50', iconBg: 'bg-teal-100 text-teal-600', text: 'text-teal-600' },
-    violet: { bg: 'bg-violet-50', iconBg: 'bg-violet-100 text-violet-600', text: 'text-violet-600' },
-    amber: { bg: 'bg-amber-50', iconBg: 'bg-amber-100 text-amber-600', text: 'text-amber-600' },
-    emerald: { bg: 'bg-emerald-50', iconBg: 'bg-emerald-100 text-emerald-600', text: 'text-emerald-600' },
-    rose: { bg: 'bg-rose-50', iconBg: 'bg-rose-100 text-rose-600', text: 'text-rose-600' },
+const colorMap: Record<KPIColor, { iconBg: string; accent: string }> = {
+    blue: { iconBg: 'bg-sky-50 text-sky-600 ring-1 ring-sky-100', accent: 'text-sky-600' },
+    teal: { iconBg: 'bg-teal-50 text-teal-600 ring-1 ring-teal-100', accent: 'text-teal-600' },
+    violet: { iconBg: 'bg-violet-50 text-violet-600 ring-1 ring-violet-100', accent: 'text-violet-600' },
+    amber: { iconBg: 'bg-amber-50 text-amber-600 ring-1 ring-amber-100', accent: 'text-amber-600' },
+    emerald: { iconBg: 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100', accent: 'text-emerald-600' },
+    rose: { iconBg: 'bg-rose-50 text-rose-600 ring-1 ring-rose-100', accent: 'text-rose-600' },
 };
 
 export function KPICard({ label, value, icon, color = 'blue', subtitle, trend, className = '' }: KPICardProps) {
     const colors = colorMap[color];
 
     return (
-        <div className={`bg-white rounded-xl border border-gray-200 shadow-sm p-5 ${className}`}>
+        <div className={`bg-white rounded-2xl border border-gray-200/60 shadow-[var(--shadow-card)] p-5 hover:shadow-[var(--shadow-card-hover)] transition-all duration-200 ${className}`}>
             <div className="flex items-start justify-between">
                 <div className="space-y-2">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
-                    <p className="text-2xl font-black text-gray-900">{value}</p>
-                    {subtitle && <p className="text-xs text-gray-400">{subtitle}</p>}
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{label}</p>
+                    <p className="text-2xl font-extrabold text-gray-900 tracking-tight">{value}</p>
+                    {subtitle && <p className="text-xs text-gray-400 leading-relaxed">{subtitle}</p>}
                     {trend && (
                         <p className={`text-xs font-semibold ${trend.positive ? 'text-emerald-600' : 'text-rose-600'}`}>
                             {trend.positive ? '+' : ''}{trend.value}

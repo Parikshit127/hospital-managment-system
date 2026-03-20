@@ -12,8 +12,10 @@ import {
     ChevronDown, X,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { useToast } from '@/app/components/ui/Toast';
 
 export default function DepositsPage() {
+    const toast = useToast();
     const [deposits, setDeposits] = useState<any[]>([]);
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -68,7 +70,7 @@ export default function DepositsPage() {
             setCollectForm({ patient_id: '', amount: '', payment_method: 'Cash', payment_ref: '', notes: '', admission_id: '' });
             loadData();
         } else {
-            alert(res.error);
+            toast.error(res.error || 'Failed to collect deposit');
         }
         setCollectLoading(false);
     }
@@ -89,7 +91,7 @@ export default function DepositsPage() {
             setApplyModal(null);
             loadData();
         } else {
-            alert(res.error);
+            toast.error(res.error || 'Failed to apply deposit');
         }
         setApplyLoading(false);
     }
@@ -102,7 +104,7 @@ export default function DepositsPage() {
             setRefundModal(null);
             loadData();
         } else {
-            alert(res.error);
+            toast.error(res.error || 'Failed to process refund');
         }
         setRefundLoading(false);
     }

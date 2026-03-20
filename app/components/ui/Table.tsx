@@ -9,7 +9,7 @@ interface TableProps {
 
 export function Table({ children, className = '' }: TableProps) {
     return (
-        <div className={`overflow-x-auto ${className}`}>
+        <div className={`overflow-x-auto rounded-xl border border-gray-200/60 shadow-[var(--shadow-card)] ${className}`}>
             <table className="w-full text-sm">{children}</table>
         </div>
     );
@@ -18,19 +18,19 @@ export function Table({ children, className = '' }: TableProps) {
 export function TableHeader({ children, className = '' }: TableProps) {
     return (
         <thead>
-            <tr className={`border-b border-gray-200 ${className}`}>{children}</tr>
+            <tr className={`border-b border-gray-100 bg-gray-50/60 ${className}`}>{children}</tr>
         </thead>
     );
 }
 
 export function TableBody({ children, className = '' }: TableProps) {
-    return <tbody className={`divide-y divide-gray-100 ${className}`}>{children}</tbody>;
+    return <tbody className={`divide-y divide-gray-100/80 ${className}`}>{children}</tbody>;
 }
 
 export function TableRow({ children, className = '', onClick }: TableProps & { onClick?: () => void }) {
     return (
         <tr
-            className={`hover:bg-gray-50 transition-colors ${onClick ? 'cursor-pointer' : ''} ${className}`}
+            className={`hover:bg-gray-50/60 transition-colors duration-150 ${onClick ? 'cursor-pointer' : ''} ${className}`}
             onClick={onClick}
         >
             {children}
@@ -47,10 +47,10 @@ interface TableCellProps {
 export function TableCell({ children, className = '', header = false }: TableCellProps) {
     if (header) {
         return (
-            <th className={`px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide ${className}`}>
+            <th className={`px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider ${className}`}>
                 {children}
             </th>
         );
     }
-    return <td className={`px-4 py-3 text-gray-700 ${className}`}>{children}</td>;
+    return <td className={`px-4 py-3.5 text-gray-700 ${className}`}>{children}</td>;
 }

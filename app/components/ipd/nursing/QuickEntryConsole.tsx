@@ -5,10 +5,12 @@ import { Activity, Stethoscope, ArrowLeftRight, Coffee, Send, Loader2, Save } fr
 import { addMedicalNote } from '@/app/actions/ipd-actions';
 import { Input } from '@/app/components/ui/Input';
 import { Button } from '@/app/components/ui/Button';
+import { useToast } from '@/app/components/ui/Toast';
 
 type Tab = 'Vitals' | 'Doctor Round' | 'Nursing Handover' | 'Diet/Meals';
 
 export function QuickEntryConsole({ admissionId, patientName }: { admissionId: string, patientName: string }) {
+    const toast = useToast();
     const [activeTab, setActiveTab] = useState<Tab>('Vitals');
     const [submitting, setSubmitting] = useState(false);
 
@@ -27,10 +29,10 @@ export function QuickEntryConsole({ admissionId, patientName }: { admissionId: s
         try {
             await addMedicalNote(admissionId, 'Vitals', details);
             setVitals({ temp: '', bp: '', hr: '', spo2: '' });
-            alert("Vitals saved successfully");
+            toast.success("Vitals saved successfully");
         } catch (e) {
             console.error(e);
-            alert("Error saving vitals");
+            toast.error("Error saving vitals");
         }
         setSubmitting(false);
     };
@@ -42,10 +44,10 @@ export function QuickEntryConsole({ admissionId, patientName }: { admissionId: s
         try {
             await addMedicalNote(admissionId, type, content);
             setter('');
-            alert(`${type} saved successfully`);
+            toast.success(`${type} saved successfully`);
         } catch (e) {
             console.error(e);
-            alert(`Error saving ${type}`);
+            toast.error(`Error saving ${type}`);
         }
         setSubmitting(false);
     };

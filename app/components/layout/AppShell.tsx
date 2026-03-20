@@ -34,23 +34,41 @@ export function AppShell({
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="flex h-screen" style={{ backgroundColor: "var(--admin-bg)" }}>
       <Sidebar session={session} />
 
-      {/* Main content area — offset by sidebar width */}
-      <div className="lg:pl-(--sidebar-offset) min-h-screen flex flex-col">
+      {/* Main content area */}
+      <div className="flex-1 overflow-y-auto flex flex-col min-w-0">
         {/* Header bar */}
         {pageTitle && (
-          <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-200 px-6 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 pl-10 lg:pl-0">
+          <header
+            className="sticky top-0 z-30 px-5 sm:px-8 lg:px-10 py-3.5 shrink-0"
+            style={{
+              backgroundColor: "rgba(250, 250, 248, 0.8)",
+              backdropFilter: "blur(24px)",
+              WebkitBackdropFilter: "blur(24px)",
+              borderBottom: "1px solid var(--admin-border)",
+            }}
+          >
+            <div className="flex items-center justify-between max-w-[1360px] mx-auto">
+              <div className="flex items-center gap-3.5 pl-10 lg:pl-0">
                 {pageIcon && (
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white shadow-lg shadow-teal-500/20">
+                  <div
+                    className="p-2 rounded-xl text-white shadow-md"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, var(--admin-primary), var(--admin-primary-dark))",
+                      boxShadow: "0 4px 12px var(--admin-primary-10)",
+                    }}
+                  >
                     {pageIcon}
                   </div>
                 )}
                 <div>
-                  <h1 className="text-lg font-black text-gray-900">
+                  <h1
+                    className="text-lg font-extrabold tracking-tight"
+                    style={{ color: "var(--admin-text)" }}
+                  >
                     {pageTitle}
                   </h1>
                 </div>
@@ -60,7 +78,8 @@ export function AppShell({
                   <button
                     onClick={onRefresh}
                     disabled={refreshing}
-                    className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+                    className="p-2 rounded-xl hover:bg-gray-100 transition-all duration-200 disabled:opacity-50 border border-transparent hover:border-gray-200"
+                    style={{ color: "var(--admin-text-muted)" }}
                   >
                     <RefreshCw
                       className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
@@ -75,7 +94,11 @@ export function AppShell({
         )}
 
         {/* Page content */}
-        <main className="flex-1 p-6">{children}</main>
+        <main className="flex-1">
+          <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-10 py-6">
+            {children}
+          </div>
+        </main>
       </div>
     </div>
   );

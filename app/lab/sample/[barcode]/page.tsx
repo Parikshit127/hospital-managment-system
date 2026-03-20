@@ -5,9 +5,11 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { FlaskConical, Save, AlertTriangle, ArrowLeft, CheckCircle } from 'lucide-react';
 import { getLabOrderDetails, updateSampleStatus, uploadResult, flagCriticalResult } from '@/app/actions/lab-actions';
 import { useParams, useRouter } from 'next/navigation';
+import { useToast } from '@/app/components/ui/Toast';
 import Link from 'next/link';
 
 export default function ProcessSamplePage() {
+    const toast = useToast();
     const params = useParams();
     const barcode = params.barcode as string;
     const router = useRouter();
@@ -53,7 +55,7 @@ export default function ProcessSamplePage() {
             setOrder({ ...order, status: 'Completed', result_value: resultData });
             router.push('/lab/worklist');
         } else {
-            alert(res.error || 'Failed to save result');
+            toast.error(res.error || 'Failed to save result');
         }
         setSaving(false);
     };
@@ -63,7 +65,7 @@ export default function ProcessSamplePage() {
             const res = await flagCriticalResult(barcode);
             if (res.success) {
                 setOrder({ ...order, is_critical: true });
-                alert("Critical alert flagged successfully!");
+                toast.success("Critical alert flagged successfully!");
             }
         }
     };

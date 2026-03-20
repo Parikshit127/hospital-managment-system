@@ -10,8 +10,10 @@ import {
     IndianRupee, Search, AlertCircle, Receipt,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { useToast } from '@/app/components/ui/Toast';
 
 export default function CreditNotesPage() {
+    const toast = useToast();
     const [notes, setNotes] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [statusFilter, setStatusFilter] = useState('');
@@ -60,7 +62,7 @@ export default function CreditNotesPage() {
             setShowCreate(false);
             loadData();
         } else {
-            alert(res.error);
+            toast.error(res.error || 'Failed to create credit note');
         }
         setCreateLoading(false);
     }
@@ -69,7 +71,7 @@ export default function CreditNotesPage() {
         if (!confirm('Approve this credit note?')) return;
         const res = await approveCreditNote(id);
         if (res.success) loadData();
-        else alert(res.error);
+        else toast.error(res.error || 'Failed to approve credit note');
     }
 
     const fmt = (n: number) => n.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });

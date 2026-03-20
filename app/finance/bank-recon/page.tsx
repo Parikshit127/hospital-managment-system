@@ -9,8 +9,10 @@ import {
     Search, IndianRupee, Link2, X, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { useToast } from '@/app/components/ui/Toast';
 
 export default function BankReconPage() {
+    const toast = useToast();
     const [transactions, setTransactions] = useState<any[]>([]);
     const [summary, setSummary] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -45,7 +47,7 @@ export default function BankReconPage() {
             const text = await file.text();
             const lines = text.split('\n').filter(l => l.trim());
             if (lines.length < 2) {
-                alert('CSV must have at least a header row and one data row');
+                toast.warning('CSV must have at least a header row and one data row');
                 setUploading(false);
                 return;
             }
@@ -70,10 +72,10 @@ export default function BankReconPage() {
             if (res.success) {
                 loadData();
             } else {
-                alert(res.error);
+                toast.error(res.error || 'Failed to import bank statement');
             }
         } catch (err: any) {
-            alert('Failed to parse CSV: ' + err.message);
+            toast.error('Failed to parse CSV: ' + err.message);
         }
         setUploading(false);
         if (fileRef.current) fileRef.current.value = '';
@@ -83,10 +85,10 @@ export default function BankReconPage() {
         setAutoReconciling(true);
         const res = await autoReconcile();
         if (res.success) {
-            alert(`Auto-reconciled ${res.data?.matchedCount} of ${res.data?.totalUnmatched} unmatched transactions`);
+            toast.success(`Auto-reconciled ${res.data?.matchedCount} of ${res.data?.totalUnmatched} unmatched transactions`);
             loadData();
         } else {
-            alert(res.error);
+            toast.error(res.error || 'Auto-reconciliation failed');
         }
         setAutoReconciling(false);
     }

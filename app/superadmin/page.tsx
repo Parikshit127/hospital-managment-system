@@ -1,10 +1,11 @@
 import { requireSuperAdmin, getSystemStats, listOrganizations } from '@/app/actions/superadmin-actions';
-import SuperAdminShell from './components/SuperAdminShell';
-import { Building2, Users, UserCheck, Bed, Activity, TrendingUp, AlertCircle } from 'lucide-react';
+import { Building2, Users, UserCheck, Bed, Activity } from 'lucide-react';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
+
 export default async function SuperAdminDashboard() {
-    const session = await requireSuperAdmin();
+    await requireSuperAdmin();
     const [statsResult, orgsResult] = await Promise.all([
         getSystemStats(),
         listOrganizations(),
@@ -22,7 +23,7 @@ export default async function SuperAdminDashboard() {
     ];
 
     return (
-        <SuperAdminShell session={session}>
+        <>
             {/* Header */}
             <div className="mb-8">
                 <h1 className="text-2xl font-bold text-white">Platform Dashboard</h1>
@@ -73,7 +74,7 @@ export default async function SuperAdminDashboard() {
                         {orgs.slice(0, 5).map((org: any) => (
                             <Link
                                 key={org.id}
-                                href={`/superadmin/organizations?selected=${org.id}`}
+                                href={`/superadmin/organizations/${org.id}`}
                                 className="flex items-center justify-between px-6 py-4 hover:bg-white/[0.02] transition"
                             >
                                 <div className="flex items-center gap-4">
@@ -108,6 +109,6 @@ export default async function SuperAdminDashboard() {
                     </div>
                 )}
             </div>
-        </SuperAdminShell>
+        </>
     );
 }

@@ -7,7 +7,7 @@ import {
     FlaskConical, Pill, DollarSign, Bed, UserCheck, UserX,
     HeartPulse, ClipboardList, Briefcase
 } from 'lucide-react';
-import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import {
     getUsersList, getStaffStats, addUser, updateUser,
     resetUserPassword, toggleUserActive
@@ -209,7 +209,7 @@ export default function StaffManagement() {
     );
 
     return (
-        <AppShell
+        <AdminPage
             pageTitle="Staff Management"
             pageIcon={<Users className="h-5 w-5" />}
             headerActions={headerActions}
@@ -648,6 +648,6 @@ export default function StaffManagement() {
                     </div>
                 </div>
             )}
-        </AppShell>
+        </AdminPage>
     );
 }

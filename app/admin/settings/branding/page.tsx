@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import { Building2, Save, Type, Palette, LayoutTemplate } from 'lucide-react';
 import { getOrganizationBranding, updateOrganizationBranding } from '@/app/actions/admin-actions';
 
@@ -33,10 +33,10 @@ export default function BrandingPage() {
         setSaving(false);
     };
 
-    if (loading) return <AppShell pageTitle="Loading"><div className="p-10 text-center text-gray-500 font-medium">Loading asset definitions...</div></AppShell>;
+    if (loading) return <AdminPage pageTitle="Loading"><div className="p-10 text-center text-gray-500 font-medium">Loading asset definitions...</div></AdminPage>;
 
     return (
-        <AppShell
+        <AdminPage
             pageTitle="Portal Branding"
             pageIcon={<Building2 className="h-5 w-5" />}
         >
@@ -139,6 +139,6 @@ export default function BrandingPage() {
                 </div>
 
             </form>
-        </AppShell>
+        </AdminPage>
     );
 }

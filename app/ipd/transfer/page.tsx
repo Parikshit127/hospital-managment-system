@@ -5,8 +5,10 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { MoveRight, Search, Bed } from 'lucide-react';
 import { getIPDAdmissions, getAllBeds, transferPatient } from '@/app/actions/ipd-actions';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/app/components/ui/Toast';
 
 export default function TransferPage() {
+    const toast = useToast();
     const [admissions, setAdmissions] = useState<any[]>([]);
     const [beds, setBeds] = useState<any[]>([]);
     const [refreshing, setRefreshing] = useState(false);
@@ -49,7 +51,7 @@ export default function TransferPage() {
             setTransferReason('');
             setNewBedId('');
             loadData();
-        } else alert(res.error);
+        } else toast.error(res.error || 'Transfer failed');
         setSaving(false);
     };
 

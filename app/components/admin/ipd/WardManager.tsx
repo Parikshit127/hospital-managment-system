@@ -8,8 +8,10 @@ import { Button } from '@/app/components/ui/Button';
 import { Modal } from '@/app/components/ui/Modal';
 import { Input } from '@/app/components/ui/Input';
 import { Select } from '@/app/components/ui/Select';
+import { useToast } from '@/app/components/ui/Toast';
 
 export function WardManager({ wards, departments, organizationId }: { wards: any[], departments: any[], organizationId: string }) {
+    const toast = useToast();
     const [expandedWard, setExpandedWard] = useState<number | null>(wards[0]?.ward_id || null);
     
     // Create Ward State
@@ -40,7 +42,7 @@ export function WardManager({ wards, departments, organizationId }: { wards: any
         if (!activeWardId) return;
         const start = parseInt(bedsForm.start_number);
         const end = parseInt(bedsForm.end_number);
-        if (isNaN(start) || isNaN(end) || start > end) return alert("Invalid bed range");
+        if (isNaN(start) || isNaN(end) || start > end) return toast.warning("Invalid bed range");
 
         setSubmitting(true);
         try {
@@ -55,7 +57,7 @@ export function WardManager({ wards, departments, organizationId }: { wards: any
             setIsAddBedsOpen(false);
             setBedsForm({ start_number: '1', end_number: '10', prefix: 'B-', bed_category: 'Standard', pricing_tier: 'Base' });
         } catch (e: any) {
-            alert(e.message || "Failed to add beds");
+            toast.error(e.message || "Failed to add beds");
         }
         setSubmitting(false);
     };

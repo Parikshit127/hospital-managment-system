@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { Skeleton, SkeletonCard } from '@/app/components/ui/Skeleton';
 import { getRegisteredPatients, getReceptionStats, getPatientDetail } from '@/app/actions/reception-actions';
 
 export default function ReceptionDashboard() {
@@ -106,7 +107,12 @@ export default function ReceptionDashboard() {
         >
             <div className="space-y-6">
                 {/* KPI ROW */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                {loading && !stats ? (
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        {Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)}
+                    </div>
+                ) : null}
+                <div className={`grid grid-cols-2 md:grid-cols-5 gap-4 ${loading && !stats ? 'hidden' : ''}`}>
                     <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Today's Registrations</span>
@@ -199,12 +205,17 @@ export default function ReceptionDashboard() {
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {loading && patients.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={8} className="text-center py-16">
-                                            <Loader2 className="h-6 w-6 animate-spin text-teal-500 mx-auto" />
-                                            <p className="text-gray-400 text-xs mt-2">Loading patients...</p>
-                                        </td>
-                                    </tr>
+                                    <>
+                                        {Array.from({ length: 6 }).map((_, i) => (
+                                            <tr key={`skel-${i}`}>
+                                                {Array.from({ length: 8 }).map((_, c) => (
+                                                    <td key={c} className="px-4 py-3.5">
+                                                        <Skeleton height="0.625rem" width={c === 1 ? '70%' : c === 7 ? '2rem' : '60%'} />
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </>
                                 ) : patients.length === 0 ? (
                                     <tr>
                                         <td colSpan={8} className="text-center py-16">

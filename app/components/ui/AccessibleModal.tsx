@@ -57,7 +57,6 @@ export function AccessibleModal({ open, onClose, title, children, maxWidth = 'ma
             previousFocusRef.current = document.activeElement as HTMLElement;
             document.addEventListener('keydown', handleKeyDown);
             document.body.style.overflow = 'hidden';
-            // Focus first focusable element in dialog
             requestAnimationFrame(() => {
                 const first = dialogRef.current?.querySelector<HTMLElement>(
                     'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -79,21 +78,23 @@ export function AccessibleModal({ open, onClose, title, children, maxWidth = 'ma
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/30 backdrop-blur-sm p-4"
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
             role="presentation"
+            style={{ animation: 'fadeIn 0.15s ease-out' }}
         >
             <div
                 ref={dialogRef}
                 role="dialog"
                 aria-modal="true"
                 aria-label={title}
-                className={`bg-white rounded-2xl shadow-2xl ${maxWidth} w-full p-6 relative focus:outline-none`}
+                className={`bg-white rounded-2xl ${maxWidth} w-full p-6 relative focus:outline-none`}
+                style={{ animation: 'scaleIn 0.2s cubic-bezier(0.22, 1, 0.36, 1)', boxShadow: 'var(--shadow-xl)' }}
                 tabIndex={-1}
             >
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 rounded-lg p-1"
+                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 rounded-lg p-1 hover:bg-gray-100"
                     aria-label="Close dialog"
                 >
                     <X className="h-5 w-5" />

@@ -99,8 +99,69 @@ model Organization {
   bank_transactions        BankTransaction[]
   dunning_rules            DunningRule[]
   dunning_logs             DunningLog[]
+  branches                 Branch[]
+  // Admin panel dynamic configuration
+  module_configs           ModuleConfig[]
+  custom_roles             Role[]
+  document_templates       DocumentTemplate[]
+  alert_rules              AlertRule[]
+
+  // Extended hospital profile fields
+  hospital_type            String?   // General, Multi-Specialty, Super-Specialty, Clinic, Nursing Home
+  bed_capacity             Int?
+  accreditation_body       String?   // NABH, NABL, JCI, ISO
+  accreditation_number     String?
+  accreditation_expiry     DateTime?
+  registration_number      String?
+  registration_authority   String?
+  established_year         Int?
+  website                  String?
+  specialties              String[]  @default([])
+  latitude                 Float?
+  longitude                Float?
 
   @@map("organizations")
+}
+
+model Branch {
+  id              String   @id @default(uuid())
+  branch_name     String
+  branch_code     String
+  address         String?
+  city            String?
+  state           String?
+  pincode         String?
+  phone           String?
+  email           String?
+  is_main_branch  Boolean  @default(false)
+  is_active       Boolean  @default(true)
+  latitude        Float?
+  longitude       Float?
+  organizationId  String
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@map("branches")
+}
+
+model SubscriptionPlan {
+  id                    String   @id @default(uuid())
+  plan_name             String
+  plan_code             String   @unique // free, starter, pro, enterprise
+  max_users             Int      @default(0) // 0 = unlimited
+  max_branches          Int      @default(0)
+  max_patients_per_month Int?
+  features              String[] @default([])
+  price_monthly         Float    @default(0)
+  price_yearly          Float    @default(0)
+  is_active             Boolean  @default(true)
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  @@map("subscription_plans")
 }
 
 model OrganizationConfig {
@@ -141,6 +202,98 @@ model OrganizationBranding {
   organization Organization @relation(fields: [organizationId], references: [id])
 
   @@map("organization_brandings")
+}
+
+// ========================================
+// MODULE — Admin Panel Dynamic Configuration
+// ========================================
+
+model ModuleConfig {
+  id              String   @id @default(uuid())
+  organizationId  String
+  module_key      String   // 'opd', 'ipd', 'lab', 'pharmacy', 'finance', 'hr', 'insurance', 'patient_portal'
+  enabled         Boolean  @default(true)
+  config_json     Json     @default("{}")
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, module_key])
+  @@index([organizationId])
+  @@map("module_configs")
+}
+
+model Role {
+  id              String   @id @default(uuid())
+  organizationId  String
+  name            String
+  slug            String
+  is_system       Boolean  @default(false)
+  is_active       Boolean  @default(true)
+  permissions     Json     @default("[]")
+  data_scope      String   @default("own") // own, department, branch, organization
+  description     String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+  @@map("roles")
+}
+
+model Permission {
+  id          String  @id @default(uuid())
+  key         String  @unique // 'opd.view', 'opd.create', 'billing.approve_discount'
+  module      String  // 'opd', 'ipd', 'lab', 'pharmacy', 'finance', 'admin', 'hr'
+  action      String  // 'view', 'create', 'edit', 'delete', 'approve', 'export'
+  label       String
+  description String?
+
+  @@map("permissions")
+}
+
+model DocumentTemplate {
+  id              String   @id @default(uuid())
+  organizationId  String
+  type            String   // 'prescription', 'invoice', 'discharge_summary', 'lab_report', 'consent_form', 'referral', 'medical_certificate'
+  name            String
+  content_json    Json     @default("{}")
+  is_default      Boolean  @default(false)
+  is_active       Boolean  @default(true)
+  created_by      String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, type, name])
+  @@index([organizationId])
+  @@map("document_templates")
+}
+
+model AlertRule {
+  id              String   @id @default(uuid())
+  organizationId  String
+  category        String   // 'clinical', 'operational', 'financial', 'staff', 'patient', 'system'
+  trigger_key     String   // 'lab_critical_value', 'bed_occupancy_high', 'invoice_overdue', 'stock_low'
+  name            String
+  enabled         Boolean  @default(true)
+  channels        Json     @default("[\"in_app\"]")
+  recipients      Json     @default("{}")
+  threshold       Json?
+  escalation      Json?
+  template        String?
+  quiet_hours     Json?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@map("alert_rules")
 }
 
 // ========================================

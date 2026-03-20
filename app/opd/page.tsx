@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { SkeletonCard, Skeleton } from '@/app/components/ui/Skeleton';
 import { getOPDDashboardStats, getTodaysAppointments } from '@/app/actions/opd-actions';
 
 export default function OPDDashboard() {
@@ -63,7 +64,12 @@ export default function OPDDashboard() {
         >
             <div className="space-y-6">
                 {/* KPI ROW */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {loading && !stats ? (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
+                    </div>
+                ) : null}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ display: loading && !stats ? 'none' : undefined }}>
                     <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Total Today</span>
@@ -163,11 +169,17 @@ export default function OPDDashboard() {
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {loading ? (
-                                    <tr>
-                                        <td colSpan={7} className="text-center py-16">
-                                            <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" />
-                                        </td>
-                                    </tr>
+                                    <>
+                                        {Array.from({ length: 6 }).map((_, i) => (
+                                            <tr key={`sk-${i}`} className="border-b border-gray-50">
+                                                {Array.from({ length: 7 }).map((_, c) => (
+                                                    <td key={c} className="px-4 py-3.5">
+                                                        <Skeleton width={c === 1 ? '70%' : '60%'} height="0.625rem" />
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </>
                                 ) : appointments.length === 0 ? (
                                     <tr>
                                         <td colSpan={7} className="text-center py-16">

@@ -7,7 +7,6 @@ import { logout } from "@/app/login/actions";
 import {
   LayoutDashboard,
   Users,
-  KeyRound,
   Stethoscope,
   UserPlus,
   Brain,
@@ -24,6 +23,7 @@ import {
   ClipboardList,
   ShieldCheck,
   ChevronLeft,
+  ChevronRight,
   Building2,
   CalendarDays,
   ListOrdered,
@@ -61,471 +61,228 @@ import {
 interface NavItem {
   label: string;
   href: string;
-  icon: React.ReactNode;
+  icon: React.ElementType;
 }
 
-const NAV_BY_ROLE: Record<string, NavItem[]> = {
+interface NavSection {
+  title: string;
+  items: NavItem[];
+}
+
+const NAV_BY_ROLE: Record<string, NavSection[]> = {
   admin: [
     {
-      label: "Dashboard",
-      href: "/admin/dashboard",
-      icon: <LayoutDashboard className="h-4 w-4" />,
+      title: "Overview",
+      items: [
+        { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+        { label: "Departments", href: "/admin/departments", icon: LayoutGrid },
+        { label: "Staff Management", href: "/admin/staff", icon: Users },
+      ],
     },
     {
-      label: "Patient List",
-      href: "/admin/patients",
-      icon: <Users className="h-4 w-4" />,
+      title: "Operations",
+      items: [
+        { label: "OPD Overview", href: "/opd", icon: ClipboardList },
+        { label: "Reception", href: "/reception", icon: UserPlus },
+        { label: "Doctor Console", href: "/admin/doctors", icon: Stethoscope },
+        { label: "Lab Orders", href: "/lab/technician", icon: FlaskConical },
+        { label: "Pharmacy", href: "/pharmacy/billing", icon: Pill },
+        { label: "IPD Management", href: "/ipd", icon: Bed },
+        { label: "Finance", href: "/finance/dashboard", icon: DollarSign },
+        { label: "Discharge", href: "/discharge/admin", icon: FileText },
+      ],
     },
     {
-      label: "Departments",
-      href: "/admin/departments",
-      icon: <LayoutGrid className="h-4 w-4" />,
-    },
-    {
-      label: "Staff Management",
-      href: "/admin/staff",
-      icon: <Users className="h-4 w-4" />,
-    },
-    {
-      label: "OPD Overview",
-      href: "/opd",
-      icon: <ClipboardList className="h-4 w-4" />,
-    },
-    {
-      label: "Reception",
-      href: "/reception",
-      icon: <UserPlus className="h-4 w-4" />,
-    },
-    {
-      label: "Doctor Console",
-      href: "/admin/doctors",
-      icon: <Stethoscope className="h-4 w-4" />,
-    },
-    {
-      label: "Lab Orders",
-      href: "/lab/technician",
-      icon: <FlaskConical className="h-4 w-4" />,
-    },
-    {
-      label: "Pharmacy",
-      href: "/pharmacy/billing",
-      icon: <Pill className="h-4 w-4" />,
-    },
-    {
-      label: "IPD Management",
-      href: "/ipd",
-      icon: <Bed className="h-4 w-4" />,
-    },
-    {
-      label: "Finance",
-      href: "/finance/dashboard",
-      icon: <DollarSign className="h-4 w-4" />,
-    },
-    {
-      label: "Discharge",
-      href: "/discharge/admin",
-      icon: <FileText className="h-4 w-4" />,
-    },
-    {
-      label: "Reports Hub",
-      href: "/admin/reports",
-      icon: <BarChart3 className="h-4 w-4" />,
-    },
-    {
-      label: "Org Settings",
-      href: "/admin/settings",
-      icon: <Settings className="h-4 w-4" />,
-    },
-    {
-      label: "Branding",
-      href: "/admin/settings/branding",
-      icon: <Building2 className="h-4 w-4" />,
-    },
-    {
-      label: "Audit Log",
-      href: "/admin/audit",
-      icon: <Activity className="h-4 w-4" />,
+      title: "System",
+      items: [
+        { label: "Reports Hub", href: "/admin/reports", icon: BarChart3 },
+        { label: "Org Settings", href: "/admin/settings", icon: Settings },
+        { label: "Branding", href: "/admin/settings/branding", icon: Building2 },
+        { label: "Audit Log", href: "/admin/audit", icon: Activity },
+      ],
     },
   ],
   doctor: [
     {
-      label: "Dashboard",
-      href: "/doctor/overview",
-      icon: <LayoutDashboard className="h-4 w-4" />,
-    },
-    {
-      label: "My Patients",
-      href: "/doctor/dashboard",
-      icon: <Stethoscope className="h-4 w-4" />,
-    },
-    {
-      label: "Schedule",
-      href: "/doctor/schedule",
-      icon: <CalendarClock className="h-4 w-4" />,
-    },
-    {
-      label: "Templates",
-      href: "/doctor/templates",
-      icon: <FileStack className="h-4 w-4" />,
-    },
-    {
-      label: "Follow-Ups",
-      href: "/doctor/follow-ups",
-      icon: <UserCheck className="h-4 w-4" />,
+      title: "Clinical",
+      items: [
+        { label: "Dashboard", href: "/doctor/overview", icon: LayoutDashboard },
+        { label: "My Patients", href: "/doctor/dashboard", icon: Stethoscope },
+        { label: "Schedule", href: "/doctor/schedule", icon: CalendarClock },
+        { label: "Templates", href: "/doctor/templates", icon: FileStack },
+        { label: "Follow-Ups", href: "/doctor/follow-ups", icon: UserCheck },
+      ],
     },
   ],
   receptionist: [
     {
-      label: "Patient List",
-      href: "/reception",
-      icon: <Users className="h-4 w-4" />,
+      title: "Front Desk",
+      items: [
+        { label: "Patient List", href: "/reception", icon: Users },
+        { label: "Register Patient", href: "/reception/register", icon: UserPlus },
+        { label: "Appointments", href: "/reception/appointments", icon: CalendarDays },
+      ],
     },
     {
-      label: "Register Patient",
-      href: "/reception/register",
-      icon: <UserPlus className="h-4 w-4" />,
+      title: "Queue & Triage",
+      items: [
+        { label: "Queue Management", href: "/reception/queue", icon: ListOrdered },
+        { label: "Token Display", href: "/reception/token-display", icon: MonitorPlay },
+        { label: "AI Triage", href: "/reception/triage", icon: Brain },
+      ],
     },
     {
-      label: "Appointments",
-      href: "/reception/appointments",
-      icon: <CalendarDays className="h-4 w-4" />,
-    },
-    {
-      label: "Queue Management",
-      href: "/reception/queue",
-      icon: <ListOrdered className="h-4 w-4" />,
-    },
-    {
-      label: "Token Display",
-      href: "/reception/token-display",
-      icon: <MonitorPlay className="h-4 w-4" />,
-    },
-    {
-      label: "AI Triage",
-      href: "/reception/triage",
-      icon: <Brain className="h-4 w-4" />,
-    },
-    {
-      label: "OPD Overview",
-      href: "/opd",
-      icon: <ClipboardList className="h-4 w-4" />,
+      title: "Overview",
+      items: [
+        { label: "OPD Overview", href: "/opd", icon: ClipboardList },
+      ],
     },
   ],
   lab_technician: [
     {
-      label: "Dashboard",
-      href: "/lab/dashboard",
-      icon: <LayoutDashboard className="h-4 w-4" />,
-    },
-    {
-      label: "Worklist",
-      href: "/lab/worklist",
-      icon: <ClipboardCheck className="h-4 w-4" />,
-    },
-    {
-      label: "Lab Orders",
-      href: "/lab/technician",
-      icon: <FlaskConical className="h-4 w-4" />,
-    },
-    {
-      label: "Inventory",
-      href: "/lab/inventory",
-      icon: <Package className="h-4 w-4" />,
-    },
-    {
-      label: "Reports",
-      href: "/lab/reports",
-      icon: <BarChart3 className="h-4 w-4" />,
+      title: "Laboratory",
+      items: [
+        { label: "Dashboard", href: "/lab/dashboard", icon: LayoutDashboard },
+        { label: "Worklist", href: "/lab/worklist", icon: ClipboardCheck },
+        { label: "Lab Orders", href: "/lab/technician", icon: FlaskConical },
+        { label: "Inventory", href: "/lab/inventory", icon: Package },
+        { label: "Reports", href: "/lab/reports", icon: BarChart3 },
+      ],
     },
   ],
   pharmacist: [
     {
-      label: "Dashboard",
-      href: "/pharmacy/dashboard",
-      icon: <LayoutDashboard className="h-4 w-4" />,
+      title: "Pharmacy",
+      items: [
+        { label: "Dashboard", href: "/pharmacy/dashboard", icon: LayoutDashboard },
+        { label: "Orders", href: "/pharmacy/orders", icon: ScrollText },
+        { label: "Dispensing", href: "/pharmacy/billing", icon: Pill },
+      ],
     },
     {
-      label: "Orders",
-      href: "/pharmacy/orders",
-      icon: <ScrollText className="h-4 w-4" />,
+      title: "Inventory",
+      items: [
+        { label: "Stock", href: "/pharmacy/inventory", icon: Package },
+        { label: "Purchase Orders", href: "/pharmacy/purchase-orders", icon: ShoppingCart },
+        { label: "Suppliers", href: "/pharmacy/suppliers", icon: Truck },
+        { label: "Returns", href: "/pharmacy/returns", icon: RotateCcw },
+      ],
     },
     {
-      label: "Dispensing",
-      href: "/pharmacy/billing",
-      icon: <Pill className="h-4 w-4" />,
-    },
-    {
-      label: "Inventory",
-      href: "/pharmacy/inventory",
-      icon: <Package className="h-4 w-4" />,
-    },
-    {
-      label: "Purchase Orders",
-      href: "/pharmacy/purchase-orders",
-      icon: <ShoppingCart className="h-4 w-4" />,
-    },
-    {
-      label: "Suppliers",
-      href: "/pharmacy/suppliers",
-      icon: <Truck className="h-4 w-4" />,
-    },
-    {
-      label: "Returns",
-      href: "/pharmacy/returns",
-      icon: <RotateCcw className="h-4 w-4" />,
-    },
-    {
-      label: "Reports",
-      href: "/pharmacy/reports",
-      icon: <BarChart3 className="h-4 w-4" />,
+      title: "Reports",
+      items: [
+        { label: "Pharmacy Reports", href: "/pharmacy/reports", icon: BarChart3 },
+      ],
     },
   ],
   finance: [
     {
-      label: "Finance Dashboard",
-      href: "/finance/dashboard",
-      icon: <DollarSign className="h-4 w-4" />,
+      title: "Finance",
+      items: [
+        { label: "Dashboard", href: "/finance/dashboard", icon: DollarSign },
+        { label: "All Invoices", href: "/finance/invoices", icon: FileText },
+        { label: "Payment Ledger", href: "/finance/payments", icon: CreditCard },
+        { label: "Expenses", href: "/finance/expenses", icon: Banknote },
+      ],
     },
     {
-      label: "All Invoices",
-      href: "/finance/invoices",
-      icon: <FileText className="h-4 w-4" />,
+      title: "Operations",
+      items: [
+        { label: "Vendors", href: "/finance/vendors", icon: Truck },
+        { label: "Cash Closure", href: "/finance/cash-closure", icon: Wallet },
+        { label: "Refunds", href: "/finance/refunds", icon: Undo2 },
+        { label: "Deposits", href: "/finance/deposits", icon: Wallet },
+        { label: "Credit Notes", href: "/finance/credit-notes", icon: FileText },
+      ],
     },
     {
-      label: "Payment Ledger",
-      href: "/finance/payments",
-      icon: <CreditCard className="h-4 w-4" />,
-    },
-    {
-      label: "Expenses",
-      href: "/finance/expenses",
-      icon: <Banknote className="h-4 w-4" />,
-    },
-    {
-      label: "Vendors",
-      href: "/finance/vendors",
-      icon: <Truck className="h-4 w-4" />,
-    },
-    {
-      label: "Cash Closure",
-      href: "/finance/cash-closure",
-      icon: <Wallet className="h-4 w-4" />,
-    },
-    {
-      label: "Refund Processing",
-      href: "/finance/refunds",
-      icon: <Undo2 className="h-4 w-4" />,
-    },
-    {
-      label: "Deposits",
-      href: "/finance/deposits",
-      icon: <Wallet className="h-4 w-4" />,
-    },
-    {
-      label: "Credit Notes",
-      href: "/finance/credit-notes",
-      icon: <FileText className="h-4 w-4" />,
-    },
-    {
-      label: "TPA / Insurance",
-      href: "/insurance",
-      icon: <ShieldCheck className="h-4 w-4" />,
-    },
-    {
-      label: "Revenue Analytics",
-      href: "/finance/revenue",
-      icon: <PieChart className="h-4 w-4" />,
-    },
-    {
-      label: "Financial Reports",
-      href: "/finance/reports",
-      icon: <BarChart3 className="h-4 w-4" />,
-    },
-    {
-      label: "Fiscal Periods",
-      href: "/finance/periods",
-      icon: <CalendarCheck className="h-4 w-4" />,
-    },
-    {
-      label: "Bank Reconciliation",
-      href: "/finance/bank-recon",
-      icon: <ArrowLeftRight className="h-4 w-4" />,
-    },
-    {
-      label: "Collections",
-      href: "/finance/collections",
-      icon: <Bell className="h-4 w-4" />,
-    },
-    {
-      label: "Finance Settings",
-      href: "/finance/settings",
-      icon: <Settings className="h-4 w-4" />,
+      title: "Analytics",
+      items: [
+        { label: "TPA / Insurance", href: "/insurance", icon: ShieldCheck },
+        { label: "Revenue Analytics", href: "/finance/revenue", icon: PieChart },
+        { label: "Financial Reports", href: "/finance/reports", icon: BarChart3 },
+        { label: "Fiscal Periods", href: "/finance/periods", icon: CalendarCheck },
+        { label: "Bank Recon", href: "/finance/bank-recon", icon: ArrowLeftRight },
+        { label: "Collections", href: "/finance/collections", icon: Bell },
+        { label: "Settings", href: "/finance/settings", icon: Settings },
+      ],
     },
   ],
   ipd_manager: [
-    { label: "IPD Dashboard", href: "/ipd", icon: <Bed className="h-4 w-4" /> },
     {
-      label: "Bed Matrix",
-      href: "/ipd/bed-matrix",
-      icon: <BedDouble className="h-4 w-4" />,
+      title: "Inpatient",
+      items: [
+        { label: "IPD Dashboard", href: "/ipd", icon: Bed },
+        { label: "Bed Matrix", href: "/ipd/bed-matrix", icon: BedDouble },
+        { label: "Transfer", href: "/ipd/transfer", icon: RotateCcw },
+      ],
     },
     {
-      label: "Transfer",
-      href: "/ipd/transfer",
-      icon: <RotateCcw className="h-4 w-4" />,
-    },
-    {
-      label: "Nursing Station",
-      href: "/ipd/nursing-station",
-      icon: <Syringe className="h-4 w-4" />,
-    },
-    {
-      label: "Diet Plans",
-      href: "/ipd/diet",
-      icon: <UtensilsCrossed className="h-4 w-4" />,
-    },
-    {
-      label: "Ward Rounds",
-      href: "/ipd/ward-rounds",
-      icon: <ClipboardCheck className="h-4 w-4" />,
-    },
-    {
-      label: "Census",
-      href: "/ipd/census",
-      icon: <PieChart className="h-4 w-4" />,
-    },
-    {
-      label: "Discharge",
-      href: "/discharge/admin",
-      icon: <FileText className="h-4 w-4" />,
+      title: "Patient Care",
+      items: [
+        { label: "Nursing Station", href: "/ipd/nursing-station", icon: Syringe },
+        { label: "Diet Plans", href: "/ipd/diet", icon: UtensilsCrossed },
+        { label: "Ward Rounds", href: "/ipd/ward-rounds", icon: ClipboardCheck },
+        { label: "Census", href: "/ipd/census", icon: PieChart },
+        { label: "Discharge", href: "/discharge/admin", icon: FileText },
+      ],
     },
   ],
   patient: [
     {
-      label: "Patient Dashboard",
-      href: "/patient/dashboard",
-      icon: <LayoutDashboard className="h-4 w-4" />,
+      title: "My Health",
+      items: [
+        { label: "Dashboard", href: "/patient/dashboard", icon: LayoutDashboard },
+        { label: "My Profile", href: "/patient/profile", icon: Users },
+        { label: "Book Appointment", href: "/patient/appointments/book", icon: CalendarPlus },
+      ],
     },
     {
-      label: "My Profile",
-      href: "/patient/profile",
-      icon: <Users className="h-4 w-4" />,
-    },
-    {
-      label: "Book Appointment",
-      href: "/patient/appointments/book",
-      icon: <CalendarPlus className="h-4 w-4" />,
-    },
-    {
-      label: "Prescriptions",
-      href: "/patient/prescriptions",
-      icon: <Pill className="h-4 w-4" />,
-    },
-    {
-      label: "Medical Records",
-      href: "/patient/records",
-      icon: <FileText className="h-4 w-4" />,
-    },
-    {
-      label: "My Vitals",
-      href: "/patient/vitals",
-      icon: <Activity className="h-4 w-4" />,
-    },
-    {
-      label: "Provide Feedback",
-      href: "/patient/feedback",
-      icon: <MessageSquare className="h-4 w-4" />,
+      title: "Records",
+      items: [
+        { label: "Prescriptions", href: "/patient/prescriptions", icon: Pill },
+        { label: "Medical Records", href: "/patient/records", icon: FileText },
+        { label: "My Vitals", href: "/patient/vitals", icon: Activity },
+        { label: "Provide Feedback", href: "/patient/feedback", icon: MessageSquare },
+      ],
     },
   ],
   nurse: [
     {
-      label: "Dashboard",
-      href: "/nurse/dashboard",
-      icon: <LayoutDashboard className="h-4 w-4" />,
-    },
-    {
-      label: "My Patients",
-      href: "/nurse/patients",
-      icon: <Users className="h-4 w-4" />,
-    },
-    {
-      label: "Vitals",
-      href: "/nurse/vitals",
-      icon: <Activity className="h-4 w-4" />,
-    },
-    {
-      label: "Medications",
-      href: "/nurse/medications",
-      icon: <Syringe className="h-4 w-4" />,
-    },
-    {
-      label: "Tasks",
-      href: "/nurse/tasks",
-      icon: <ClipboardCheck className="h-4 w-4" />,
-    },
-    {
-      label: "Handover",
-      href: "/nurse/handover",
-      icon: <ArrowLeftRight className="h-4 w-4" />,
+      title: "Nursing",
+      items: [
+        { label: "Dashboard", href: "/nurse/dashboard", icon: LayoutDashboard },
+        { label: "My Patients", href: "/nurse/patients", icon: Users },
+        { label: "Vitals", href: "/nurse/vitals", icon: Activity },
+        { label: "Medications", href: "/nurse/medications", icon: Syringe },
+        { label: "Tasks", href: "/nurse/tasks", icon: ClipboardCheck },
+        { label: "Handover", href: "/nurse/handover", icon: ArrowLeftRight },
+      ],
     },
   ],
   opd_manager: [
     {
-      label: "Dashboard",
-      href: "/opd-manager/dashboard",
-      icon: <LayoutDashboard className="h-4 w-4" />,
-    },
-    {
-      label: "Live Queues",
-      href: "/opd-manager/queues",
-      icon: <ListOrdered className="h-4 w-4" />,
-    },
-    {
-      label: "Doctors",
-      href: "/opd-manager/doctors",
-      icon: <Stethoscope className="h-4 w-4" />,
-    },
-    {
-      label: "Appointments",
-      href: "/opd-manager/appointments",
-      icon: <CalendarCheck className="h-4 w-4" />,
-    },
-    {
-      label: "Reports",
-      href: "/opd-manager/reports",
-      icon: <BarChart3 className="h-4 w-4" />,
+      title: "OPD Management",
+      items: [
+        { label: "Dashboard", href: "/opd-manager/dashboard", icon: LayoutDashboard },
+        { label: "Live Queues", href: "/opd-manager/queues", icon: ListOrdered },
+        { label: "Doctors", href: "/opd-manager/doctors", icon: Stethoscope },
+        { label: "Appointments", href: "/opd-manager/appointments", icon: CalendarCheck },
+        { label: "Reports", href: "/opd-manager/reports", icon: BarChart3 },
+      ],
     },
   ],
   hr: [
     {
-      label: "Dashboard",
-      href: "/hr/dashboard",
-      icon: <LayoutDashboard className="h-4 w-4" />,
-    },
-    {
-      label: "Employees",
-      href: "/hr/employees",
-      icon: <Briefcase className="h-4 w-4" />,
-    },
-    {
-      label: "Attendance",
-      href: "/hr/attendance",
-      icon: <Clock className="h-4 w-4" />,
-    },
-    {
-      label: "Leave",
-      href: "/hr/leave",
-      icon: <CalendarDays className="h-4 w-4" />,
-    },
-    {
-      label: "Shifts",
-      href: "/hr/shifts",
-      icon: <Timer className="h-4 w-4" />,
-    },
-    {
-      label: "Reports",
-      href: "/hr/reports",
-      icon: <BarChart3 className="h-4 w-4" />,
+      title: "HR Management",
+      items: [
+        { label: "Dashboard", href: "/hr/dashboard", icon: LayoutDashboard },
+        { label: "Employees", href: "/hr/employees", icon: Briefcase },
+        { label: "Attendance", href: "/hr/attendance", icon: Clock },
+        { label: "Leave", href: "/hr/leave", icon: CalendarDays },
+        { label: "Shifts", href: "/hr/shifts", icon: Timer },
+        { label: "Reports", href: "/hr/reports", icon: BarChart3 },
+      ],
     },
   ],
 };
@@ -542,6 +299,20 @@ interface SidebarProps {
   } | null;
 }
 
+const roleLabelMap: Record<string, string> = {
+  admin: "Administrator",
+  doctor: "Doctor",
+  receptionist: "Receptionist",
+  lab_technician: "Lab Technician",
+  pharmacist: "Pharmacist",
+  finance: "Finance",
+  ipd_manager: "IPD Manager",
+  patient: "Patient Portal",
+  nurse: "Nurse",
+  opd_manager: "OPD Manager",
+  hr: "HR Manager",
+};
+
 export function Sidebar({ session }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -549,48 +320,157 @@ export function Sidebar({ session }: SidebarProps) {
 
   useEffect(() => {
     const savedState = window.localStorage.getItem("sidebar-collapsed");
-    if (savedState === "true") {
-      setCollapsed(true);
-    }
+    if (savedState === "true") setCollapsed(true);
   }, []);
 
   useEffect(() => {
-    const sidebarOffset = collapsed ? "4rem" : "15rem";
-    document.documentElement.style.setProperty(
-      "--sidebar-offset",
-      sidebarOffset,
-    );
     window.localStorage.setItem("sidebar-collapsed", String(collapsed));
-
-    return () => {
-      document.documentElement.style.setProperty("--sidebar-offset", "15rem");
-    };
   }, [collapsed]);
 
-  const navItems = session ? NAV_BY_ROLE[session.role] || [] : [];
+  const sections = session ? NAV_BY_ROLE[session.role] || [] : [];
+  const orgName = session?.organization_name || "Hospital OS";
 
-  const roleLabelMap: Record<string, string> = {
-    admin: "Administrator",
-    doctor: "Doctor",
-    receptionist: "Receptionist",
-    lab_technician: "Lab Technician",
-    pharmacist: "Pharmacist",
-    finance: "Finance",
-    ipd_manager: "IPD Manager",
-    patient: "Patient Portal",
-    nurse: "Nurse",
-    opd_manager: "OPD Manager",
-    hr: "HR Manager",
+  const isActive = (href: string) => {
+    if (pathname === href) return true;
+    if (href !== "/" && pathname.startsWith(href + "/")) return true;
+    return false;
   };
 
-  const orgName = session?.organization_name || "Hospital OS";
+  const sidebarContent = (
+    <aside
+      className={`${collapsed ? "w-[68px]" : "w-[260px]"} flex flex-col transition-all duration-300 ease-out h-screen sticky top-0 shrink-0`}
+      style={{
+        backgroundColor: "var(--admin-sidebar-bg)",
+        borderRight: "1px solid var(--admin-sidebar-border)",
+      }}
+    >
+      {/* Brand Header */}
+      <div
+        className="flex items-center gap-3 px-4 h-[60px] shrink-0"
+        style={{ borderBottom: "1px solid var(--admin-sidebar-border)" }}
+      >
+        <div
+          className="p-1.5 rounded-lg shrink-0"
+          style={{
+            background: "linear-gradient(135deg, var(--admin-primary), var(--admin-primary-dark))",
+          }}
+        >
+          <HeartPulse className="h-5 w-5 text-white" />
+        </div>
+        {!collapsed && (
+          <div className="overflow-hidden">
+            <p className="text-[13px] font-bold text-white truncate tracking-tight">
+              {orgName}
+            </p>
+            <p className="text-[10px] text-gray-500 tracking-wider font-medium">
+              {roleLabelMap[session?.role || ""] || "PORTAL"}
+            </p>
+          </div>
+        )}
+        <button
+          onClick={() => setMobileOpen(false)}
+          className="lg:hidden ml-auto p-1 text-gray-500 hover:text-white transition-colors"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto py-4 px-2.5 space-y-5">
+        {sections.map((section) => (
+          <div key={section.title}>
+            {!collapsed && (
+              <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500 font-semibold px-2.5 mb-1.5">
+                {section.title}
+              </p>
+            )}
+            <div className="space-y-0.5">
+              {section.items.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    title={collapsed ? item.label : undefined}
+                    className={`flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-all duration-150 ${
+                      active
+                        ? "text-white"
+                        : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.06]"
+                    } ${collapsed ? "justify-center px-2" : ""}`}
+                    style={
+                      active
+                        ? {
+                            backgroundColor: "var(--admin-primary-20)",
+                            color: "var(--admin-primary-light)",
+                          }
+                        : undefined
+                    }
+                  >
+                    <Icon className={`h-[16px] w-[16px] shrink-0 ${active ? "" : "opacity-70"}`} />
+                    {!collapsed && <span className="truncate">{item.label}</span>}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      {/* User Info + Logout + Collapse */}
+      <div
+        className="px-2.5 py-3 space-y-1 shrink-0"
+        style={{ borderTop: "1px solid var(--admin-sidebar-border)" }}
+      >
+        {!collapsed && session && (
+          <div className="mb-2 px-2.5">
+            <p className="text-xs font-bold text-white/90 truncate">
+              {session.name || session.username}
+            </p>
+            <p className="text-[10px] text-gray-500 font-medium">
+              {roleLabelMap[session.role] || session.role}
+            </p>
+            {session.specialty && (
+              <p className="text-[10px] font-medium" style={{ color: "var(--admin-primary)" }}>
+                {session.specialty}
+              </p>
+            )}
+          </div>
+        )}
+        <button
+          onClick={() => logout()}
+          title={collapsed ? "Logout" : undefined}
+          className={`flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-gray-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-150 ${
+            collapsed ? "justify-center px-2" : ""
+          }`}
+        >
+          <LogOut className="h-4 w-4 shrink-0" />
+          {!collapsed && <span>Logout</span>}
+        </button>
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className={`hidden lg:flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-gray-500 hover:text-white hover:bg-white/[0.06] transition-all duration-150 ${
+            collapsed ? "justify-center px-2" : ""
+          }`}
+        >
+          {collapsed ? (
+            <ChevronRight className="h-4 w-4 shrink-0" />
+          ) : (
+            <ChevronLeft className="h-4 w-4 shrink-0" />
+          )}
+          {!collapsed && <span>Collapse</span>}
+        </button>
+      </div>
+    </aside>
+  );
 
   return (
     <>
       {/* Mobile hamburger */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="lg:hidden fixed top-3 left-3 z-50 p-2 bg-white rounded-lg shadow-md border border-gray-200 text-gray-600"
+        className="lg:hidden fixed top-3 left-3 z-50 p-2 bg-white rounded-xl shadow-md border border-gray-200/60 text-gray-600 hover:bg-gray-50 transition-all"
       >
         <Menu className="h-5 w-5" />
       </button>
@@ -598,106 +478,23 @@ export function Sidebar({ session }: SidebarProps) {
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/40"
+          className="lg:hidden fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
           onClick={() => setMobileOpen(false)}
+          style={{ animation: "fadeIn 0.15s ease-out" }}
         />
       )}
 
-      {/* Sidebar */}
-      <aside
-        className={`fixed top-0 left-0 h-screen bg-[var(--ink)] text-white z-50 flex flex-col transition-all duration-300 ${
-          collapsed ? "w-16" : "w-60"
-        } ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
+      {/* Desktop: always visible */}
+      <div className="hidden lg:block">{sidebarContent}</div>
+
+      {/* Mobile: slide-in */}
+      <div
+        className={`lg:hidden fixed top-0 left-0 h-screen z-50 transition-transform duration-300 ease-out ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
       >
-        {/* Header — shows organization name */}
-        <div
-          className={`flex items-center gap-3 px-4 py-4 border-b border-white/10 ${collapsed ? "justify-center" : ""}`}
-        >
-          <div className="bg-gradient-to-br from-teal-500 to-emerald-600 p-2 rounded-xl shrink-0">
-            <HeartPulse className="h-5 w-5 text-white" />
-          </div>
-          {!collapsed && (
-            <div className="min-w-0">
-              <h1 className="text-sm font-black tracking-tight truncate">
-                {orgName}
-              </h1>
-              <p className="text-[10px] text-teal-400/80 flex items-center gap-1">
-                <Building2 className="h-2.5 w-2.5" />
-                Management System
-              </p>
-            </div>
-          )}
-          <button
-            onClick={() => {
-              setCollapsed(!collapsed);
-              setMobileOpen(false);
-            }}
-            className={`p-1 rounded hover:bg-white/10 text-white/50 transition-colors ${collapsed ? "mx-auto mt-2" : "ml-auto"} hidden lg:block`}
-          >
-            <ChevronLeft
-              className={`h-4 w-4 transition-transform ${collapsed ? "rotate-180" : ""}`}
-            />
-          </button>
-          <button
-            onClick={() => setMobileOpen(false)}
-            className="lg:hidden p-1 text-slate-400"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-          {navItems.map((item) => {
-            const isActive =
-              pathname === item.href || pathname.startsWith(item.href + "/");
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                  isActive
-                    ? "bg-teal-500/20 text-teal-400"
-                    : "text-white/60 hover:bg-white/5 hover:text-white"
-                } ${collapsed ? "justify-center px-2" : ""}`}
-                title={collapsed ? item.label : undefined}
-              >
-                <span className={isActive ? "text-teal-400" : "text-white/50"}>
-                  {item.icon}
-                </span>
-                {!collapsed && <span className="truncate">{item.label}</span>}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* User info + Logout */}
-        <div
-          className={`border-t border-white/10 px-3 py-3 ${collapsed ? "text-center" : ""}`}
-        >
-          {!collapsed && session && (
-            <div className="mb-2">
-              <p className="text-xs font-bold text-white truncate">
-                {session.name || session.username}
-              </p>
-              <p className="text-[10px] text-white/50">
-                {roleLabelMap[session.role] || session.role}
-              </p>
-              {session.specialty && (
-                <p className="text-[10px] text-teal-400">{session.specialty}</p>
-              )}
-            </div>
-          )}
-          <button
-            onClick={() => logout()}
-            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-white/60 hover:bg-white/10 hover:text-white transition-all ${collapsed ? "justify-center px-2" : ""}`}
-          >
-            <LogOut className="h-4 w-4" />
-            {!collapsed && <span>Logout</span>}
-          </button>
-        </div>
-      </aside>
+        {sidebarContent}
+      </div>
     </>
   );
 }

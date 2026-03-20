@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import { BarChart3, TrendingUp, Users, ShieldAlert, Download, CalendarClock } from 'lucide-react';
 import { generateAdminReport } from '@/app/actions/admin-actions';
 import * as XLSX from 'xlsx';
@@ -68,7 +68,7 @@ export default function ReportsHub() {
     };
 
     return (
-        <AppShell
+        <AdminPage
             pageTitle="Analytics & Reports Hub"
             pageIcon={<BarChart3 className="h-5 w-5" />}
         >
@@ -223,6 +223,6 @@ export default function ReportsHub() {
                     )}
                 </div>
             </div>
-        </AppShell>
+        </AdminPage>
     );
 }

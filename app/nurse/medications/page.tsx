@@ -9,8 +9,10 @@ import {
 import {
     getMedicationSchedule, administerMedication, updateMedicationStatus
 } from '@/app/actions/nurse-actions';
+import { useToast } from '@/app/components/ui/Toast';
 
 export default function NurseMedicationsPage() {
+    const toast = useToast();
     const [nurseId, setNurseId] = useState('');
     const [medications, setMedications] = useState<any[]>([]);
     const [refreshing, setRefreshing] = useState(false);
@@ -60,11 +62,11 @@ export default function NurseMedicationsPage() {
             if (res.success) {
                 await loadMedications();
             } else {
-                alert(res.error || 'Failed to administer medication.');
+                toast.error(res.error || 'Failed to administer medication.');
             }
         } catch (e) {
             console.error('Administer error', e);
-            alert('An error occurred.');
+            toast.error('An error occurred.');
         } finally {
             setActionLoading(null);
         }
@@ -77,11 +79,11 @@ export default function NurseMedicationsPage() {
             if (res.success) {
                 await loadMedications();
             } else {
-                alert(res.error || 'Failed to update status.');
+                toast.error(res.error || 'Failed to update status.');
             }
         } catch (e) {
             console.error('Status update error', e);
-            alert('An error occurred.');
+            toast.error('An error occurred.');
         } finally {
             setActionLoading(null);
         }
