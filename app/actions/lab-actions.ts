@@ -1,6 +1,7 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
+import { getTodayRange, getOrgTimezone } from '@/app/lib/timezone';
 import { revalidatePath } from 'next/cache';
 import { logAudit } from '@/app/lib/audit';
 import { sendLabReportReady } from '@/app/lib/whatsapp';
@@ -80,15 +81,15 @@ export async function getLabStats() {
     try {
         const { db } = await requireTenantContext();
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const tz = await getOrgTimezone();
+        const { start: todayStart } = getTodayRange(tz);
 
         const [pendingCount, completedToday] = await Promise.all([
             db.lab_orders.count({
                 where: { status: { in: ['Pending', 'Processing'] } }
             }),
             db.lab_orders.count({
-                where: { status: 'Completed', created_at: { gte: today } }
+                where: { status: 'Completed', created_at: { gte: todayStart } }
             }),
         ]);
 
@@ -108,7 +109,7 @@ export async function uploadResult(barcode: string, resultValue: string, remarks
             data: {
                 status: 'Completed',
                 result_value: resultValue,
-                // technician_remarks: remarks // Add to schema if needed, for now just result_value
+                technician_remarks: remarks,
             },
         });
 
@@ -146,10 +147,8 @@ export async function getLabDashboardStats() {
     try {
         const { db } = await requireTenantContext();
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
+        const tz = await getOrgTimezone();
+        const { start: todayStart, end: todayEnd } = getTodayRange(tz);
 
         const [
             pendingCount, processingCount, completedToday, totalToday,
@@ -157,15 +156,15 @@ export async function getLabDashboardStats() {
         ] = await Promise.all([
             db.lab_orders.count({ where: { status: 'Pending' } }),
             db.lab_orders.count({ where: { status: 'Processing' } }),
-            db.lab_orders.count({ where: { status: 'Completed', created_at: { gte: today } } }),
-            db.lab_orders.count({ where: { created_at: { gte: today } } }),
+            db.lab_orders.count({ where: { status: 'Completed', created_at: { gte: todayStart } } }),
+            db.lab_orders.count({ where: { created_at: { gte: todayStart } } }),
             db.lab_orders.count({ where: { is_critical: true, status: { not: 'Completed' } } }),
             db.lab_orders.count(),
         ]);
 
         // TAT calculation: average time from creation to completion for today's completed orders
         const completedOrders = await db.lab_orders.findMany({
-            where: { status: 'Completed', created_at: { gte: today } },
+            where: { status: 'Completed', created_at: { gte: todayStart } },
             select: { created_at: true },
         });
 

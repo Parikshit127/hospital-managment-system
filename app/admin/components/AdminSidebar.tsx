@@ -11,7 +11,7 @@ import {
     Users, UserCog, Building2, ShieldCheck,
     Settings, Palette, FileText, Bell, Plug, Clock, BarChart3, Lock,
     LogOut, ChevronLeft, ChevronRight, Workflow,
-    GitBranch, Menu, X,
+    GitBranch, Menu, X, DatabaseBackup, BookOpen,
 } from 'lucide-react';
 
 const NAV_SECTIONS = [
@@ -53,7 +53,9 @@ const NAV_SECTIONS = [
             { label: 'Audit Trail', href: '/admin/audit', icon: Clock },
             { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
             { label: 'Workflows', href: '/admin/workflows', icon: Workflow },
+            { label: 'Data Import', href: '/admin/data-import', icon: DatabaseBackup },
             { label: 'Branches', href: '/admin/branches', icon: GitBranch },
+            { label: 'API Documentation', href: '/admin/api-docs', icon: BookOpen },
             { label: 'MFA Setup', href: '/admin/mfa-setup', icon: Lock },
         ],
     },

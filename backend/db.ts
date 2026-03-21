@@ -9,6 +9,11 @@ export const prisma = globalForPrisma.prisma || new PrismaClient();
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
+// Models that support is_archived field for warm/cold archival
+const ARCHIVABLE_MODELS = new Set([
+    'OPD_REG', 'invoices', 'admissions', 'lab_orders', 'Clinical_EHR',
+]);
+
 // List of models that must be tenant-scoped
 const TENANT_SCOPED_MODELS = new Set([
     'User', 'OPD_REG', 'appointments', 'Clinical_EHR', 'vital_signs',
@@ -42,6 +47,10 @@ const TENANT_SCOPED_MODELS = new Set([
     'Branch',
     // Admin panel dynamic configuration
     'ModuleConfig', 'Role', 'DocumentTemplate', 'AlertRule',
+    // Data import & archival
+    'DataImportJob', 'ArchivedPatientRecord',
+    // Zealthix insurance integration
+    'ZealthixApiKey',
 ]);
 
 // Models where organizationId is nullable (audit logs, etc.)
@@ -58,6 +67,10 @@ export function getTenantPrisma(organizationId: string): any {
                     if (model && (TENANT_SCOPED_MODELS.has(model) || NULLABLE_ORG_MODELS.has(model))) {
                         if (['findMany', 'findFirst', 'updateMany', 'deleteMany', 'count', 'aggregate', 'groupBy', 'findUnique'].includes(operation)) {
                             args.where = { ...args.where, organizationId };
+                            // Auto-filter archived records unless explicitly querying for them
+                            if (ARCHIVABLE_MODELS.has(model) && args.where?.is_archived === undefined) {
+                                args.where.is_archived = false;
+                            }
                         } else if (operation === 'create') {
                             args.data = { ...args.data, organizationId };
                         } else if (operation === 'createMany' && args.data) {

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { Pill, Search, ClipboardList, ChevronRight } from 'lucide-react';
+import { Pill, Search, ClipboardList, ChevronRight, AlertTriangle } from 'lucide-react';
 import { getPharmacyQueue } from '@/app/actions/pharmacy-actions';
 import Link from 'next/link';
 
@@ -70,6 +70,7 @@ export default function PharmacyOrdersPage() {
                                 <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Doctor</th>
                                 <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Time</th>
                                 <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Total Items</th>
+                                <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Stock</th>
                                 <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Status</th>
                                 <th className="px-6 py-4 font-bold text-xs right-align">Action</th>
                             </tr>
@@ -83,6 +84,21 @@ export default function PharmacyOrdersPage() {
                                         {new Date(order.created_at).toLocaleString()}
                                     </td>
                                     <td className="px-6 py-4 font-medium text-gray-700">{order.items.length} items</td>
+                                    <td className="px-6 py-4">
+                                        {order.stockWarning === 'Out of Stock' ? (
+                                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold tracking-wide bg-rose-100 text-rose-700">
+                                                <AlertTriangle className="h-3 w-3" /> Out of Stock
+                                            </span>
+                                        ) : order.stockWarning === 'Low Stock' ? (
+                                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold tracking-wide bg-amber-100 text-amber-700">
+                                                <AlertTriangle className="h-3 w-3" /> Low Stock
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold tracking-wide bg-emerald-100 text-emerald-700">
+                                                In Stock
+                                            </span>
+                                        )}
+                                    </td>
                                     <td className="px-6 py-4">
                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold tracking-wide ${getStatusStyle(order.status)}`}>
                                             {order.status}
@@ -104,7 +120,7 @@ export default function PharmacyOrdersPage() {
                                 </tr>
                             )) : (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                                         <Pill className="h-8 w-8 mx-auto text-gray-300 mb-2" />
                                         <p className="font-medium">No pending pharmacy orders.</p>
                                     </td>

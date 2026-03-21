@@ -85,10 +85,40 @@ export async function getPharmacyQueue() {
             where: { patient_id: { in: patientIds } }
         });
 
-        const ordersWithPatient = orders.map((order: any) => ({
-            ...order,
-            patient: patients.find((p: any) => p.patient_id === order.patient_id) || null
-        }));
+        // Collect all medicine names from order items to check stock
+        const allMedicineNames = Array.from(new Set(
+            orders.flatMap((o: any) => o.items.map((i: any) => i.medicine_name))
+        ));
+
+        // Fetch stock info for all medicines in these orders
+        const medicines = await db.pharmacy_medicine_master.findMany({
+            where: { brand_name: { in: allMedicineNames as string[] } },
+            include: { batches: { where: { current_stock: { gt: 0 } } } },
+        });
+
+        const stockMap = new Map<string, { totalStock: number; status: 'In Stock' | 'Low Stock' | 'Out of Stock' }>();
+        for (const med of medicines) {
+            const totalStock = (med.batches as any[]).reduce((sum: number, b: any) => sum + b.current_stock, 0);
+            stockMap.set(med.brand_name, {
+                totalStock,
+                status: totalStock === 0 ? 'Out of Stock' : totalStock <= med.min_threshold ? 'Low Stock' : 'In Stock',
+            });
+        }
+
+        const ordersWithPatient = orders.map((order: any) => {
+            const itemsWithStock = order.items.map((item: any) => ({
+                ...item,
+                stock: stockMap.get(item.medicine_name) || { totalStock: 0, status: 'Out of Stock' },
+            }));
+            const hasOutOfStock = itemsWithStock.some((i: any) => i.stock.status === 'Out of Stock');
+            const hasLowStock = itemsWithStock.some((i: any) => i.stock.status === 'Low Stock');
+            return {
+                ...order,
+                items: itemsWithStock,
+                patient: patients.find((p: any) => p.patient_id === order.patient_id) || null,
+                stockWarning: hasOutOfStock ? 'Out of Stock' : hasLowStock ? 'Low Stock' : null,
+            };
+        });
 
         return { success: true, data: ordersWithPatient };
     } catch (error) {
@@ -519,7 +549,25 @@ export async function getPharmacyOrderDetails(orderId: number) {
             where: { patient_id: order.patient_id }
         });
 
-        return { success: true, data: { ...order, patient } };
+        // Enrich each item with available batches & stock
+        const medicineNames = order.items.map((i: any) => i.medicine_name);
+        const medicines = await db.pharmacy_medicine_master.findMany({
+            where: { brand_name: { in: medicineNames } },
+            include: { batches: { where: { current_stock: { gt: 0 } }, orderBy: { expiry_date: 'asc' } } },
+        });
+
+        const itemsWithStock = order.items.map((item: any) => {
+            const med = medicines.find((m: any) => m.brand_name === item.medicine_name);
+            const batches = med?.batches || [];
+            const totalStock = batches.reduce((sum: number, b: any) => sum + b.current_stock, 0);
+            return {
+                ...item,
+                available_batches: batches.map((b: any) => ({ batch_no: b.batch_no, stock: b.current_stock, expiry: b.expiry_date })),
+                total_stock: totalStock,
+            };
+        });
+
+        return { success: true, data: { ...order, items: itemsWithStock, patient } };
     } catch (error) {
         return { success: false, error: 'Failed' };
     }

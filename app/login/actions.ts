@@ -95,9 +95,17 @@ export async function login(prevState: any, formData: FormData) {
                 organizationId: org.id,
             },
         });
-    } catch (error) {
-        console.error('Login error:', error);
-        return { success: false, error: 'Internal server error' };
+    } catch (error: any) {
+        console.error('Login error for user:', username, {
+            message: error?.message,
+            code: error?.code,
+            meta: error?.meta,
+            stack: error?.stack?.split('\n').slice(0, 3).join('\n'),
+        });
+        const msg = error?.code === 'P2025' ? 'User account data is incomplete. Contact admin.'
+            : error?.code === 'P2002' ? 'A data conflict occurred. Contact admin.'
+            : 'Something went wrong. Please try again or contact admin.';
+        return { success: false, error: msg };
     }
 
     // Redirect based on role

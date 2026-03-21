@@ -16,7 +16,6 @@ export default function DispensePage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    // items: { id, medicine_name, quantity, batch_no }
     const [dispenseList, setDispenseList] = useState<any[]>([]);
     const [interactions, setInteractions] = useState<any>(null);
 
@@ -29,10 +28,12 @@ export default function DispensePage() {
             setDispenseList(res.data.items.map((it: any) => ({
                 id: it.id,
                 medicine_name: it.medicine_name,
-                requested_qty: it.quantity,
-                dispense_qty: it.quantity,
+                requested_qty: it.quantity_requested || it.quantity,
+                dispense_qty: it.quantity_requested || it.quantity,
                 batch_no: '',
-                instructions: it.instructions
+                instructions: it.instructions,
+                available_batches: it.available_batches || [],
+                total_stock: it.total_stock ?? 0,
             })));
         }
         setLoading(false);
@@ -116,24 +117,46 @@ export default function DispensePage() {
                     <div className="space-y-4">
                         {dispenseList.map((item, index) => (
                             <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-4 border border-gray-100 bg-gray-50 rounded-xl">
-                                <div className="md:col-span-4">
+                                <div className="md:col-span-3">
                                     <p className="font-bold text-gray-900 text-sm">{item.medicine_name}</p>
                                     <p className="text-[10px] text-gray-500 font-medium">Req: {item.requested_qty} • {item.instructions}</p>
+                                    <span className={`inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${item.total_stock === 0 ? 'bg-rose-100 text-rose-700' : item.total_stock <= item.requested_qty ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                        Stock: {item.total_stock}
+                                    </span>
                                 </div>
                                 <div className="md:col-span-3">
                                     <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Batch No. *</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={item.batch_no}
-                                        onChange={(e) => {
-                                            const newList = [...dispenseList];
-                                            newList[index].batch_no = e.target.value;
-                                            setDispenseList(newList);
-                                        }}
-                                        className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-teal-500"
-                                        placeholder="Scan/Type Batch"
-                                    />
+                                    {item.available_batches?.length > 0 ? (
+                                        <select
+                                            value={item.batch_no}
+                                            onChange={(e) => {
+                                                const newList = [...dispenseList];
+                                                newList[index].batch_no = e.target.value;
+                                                setDispenseList(newList);
+                                            }}
+                                            className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-teal-500"
+                                        >
+                                            <option value="">Select Batch</option>
+                                            {item.available_batches.map((b: any) => (
+                                                <option key={b.batch_no} value={b.batch_no}>
+                                                    {b.batch_no} (Stock: {b.stock}, Exp: {new Date(b.expiry).toLocaleDateString('en-IN')})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    ) : (
+                                        <input
+                                            type="text"
+                                            required
+                                            value={item.batch_no}
+                                            onChange={(e) => {
+                                                const newList = [...dispenseList];
+                                                newList[index].batch_no = e.target.value;
+                                                setDispenseList(newList);
+                                            }}
+                                            className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-teal-500"
+                                            placeholder="Scan/Type Batch"
+                                        />
+                                    )}
                                 </div>
                                 <div className="md:col-span-2">
                                     <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Dispense Qty</label>

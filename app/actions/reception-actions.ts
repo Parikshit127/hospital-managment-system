@@ -2,11 +2,13 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
+import { getTodayRange, getOrgTimezone } from '@/app/lib/timezone';
 import {
     sendQueueToken,
     sendQueueUpdate,
     sendYourTurnAlert,
 } from '@/app/lib/whatsapp';
+import { sendAppointmentConfirmationEmail } from '@/backend/email';
 import type {
     ActionResponse,
     PaginatedResponse,
@@ -23,6 +25,38 @@ import type {
     AppointmentSlot,
     BookAppointmentInput,
 } from '@/app/types/reception';
+
+// ========================================
+// LAZY EXPIRATION: STALE APPOINTMENTS
+// ========================================
+
+/**
+ * Expire stale "Scheduled" appointments whose date has fully passed
+ * (before the start of today) by marking them as "No Show".
+ *
+ * Uses a lazy-expiration pattern: called at the top of dashboard /
+ * calendar fetches so the cost is amortised and no cron job is needed.
+ */
+async function expireStaleAppointments(): Promise<void> {
+    try {
+        const { db } = await requireTenantContext();
+        const tz = await getOrgTimezone();
+        const { start: todayStart } = getTodayRange(tz);
+
+        await db.appointments.updateMany({
+            where: {
+                status: 'Scheduled',
+                appointment_date: { lt: todayStart },
+            },
+            data: {
+                status: 'No Show',
+            },
+        });
+    } catch (error) {
+        // Silently log – never let expiration break the caller
+        console.error('expireStaleAppointments Error:', error);
+    }
+}
 
 export async function getRegisteredPatients(options?: {
     search?: string;
@@ -104,12 +138,13 @@ export async function getRegisteredPatients(options?: {
 
 export async function getReceptionStats() {
     try {
+        // Lazy-expire stale appointments before computing stats
+        await expireStaleAppointments();
+
         const { db } = await requireTenantContext();
 
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
+        const tz = await getOrgTimezone();
+        const { start: todayStart, end: todayEnd } = getTodayRange(tz);
 
         const [todayRegistrations, todayAppointments, pendingAppointments, completedToday, totalPatients] = await Promise.all([
             db.oPD_REG.count({
@@ -532,6 +567,9 @@ export async function getDoctorList(department?: string) {
 
 export async function getAppointmentCalendar(date: string, doctorId?: string) {
     try {
+        // Lazy-expire stale appointments before loading calendar
+        await expireStaleAppointments();
+
         const { db } = await requireTenantContext();
 
         const dayStart = new Date(date);
@@ -576,7 +614,7 @@ export async function bookAppointment(data: {
     reasonForVisit?: string;
 }) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, session } = await requireTenantContext();
 
         // Generate appointment ID
         const count = await db.appointments.count();
@@ -619,6 +657,34 @@ export async function bookAppointment(data: {
 
         revalidatePath('/reception/appointments');
         revalidatePath('/reception');
+
+        // Send appointment confirmation email (non-blocking, failure won't break booking)
+        try {
+            const patient = await db.oPD_REG.findUnique({
+                where: { patient_id: data.patientId },
+                select: { email: true, full_name: true },
+            });
+            if (patient?.email) {
+                const formattedDate = appointmentDate.toLocaleDateString('en-IN', {
+                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+                });
+                const formattedTime = appointmentDate.toLocaleTimeString('en-IN', {
+                    hour: '2-digit', minute: '2-digit', hour12: true,
+                });
+                await sendAppointmentConfirmationEmail({
+                    to: patient.email,
+                    patientName: patient.full_name || 'Patient',
+                    doctorName: data.doctorName,
+                    department: data.department,
+                    date: formattedDate,
+                    time: formattedTime,
+                    hospitalName: session.organization_name || 'Hospital',
+                });
+            }
+        } catch (emailError) {
+            console.error('Appointment confirmation email failed:', emailError);
+        }
+
         return { success: true, data: appointment };
     } catch (error) {
         console.error('Book Appointment Error:', error);

@@ -5,6 +5,7 @@ import { getTenantPrisma } from "@/backend/db";
 import { revalidatePath } from "next/cache";
 import { searchICD10 } from "@/app/lib/icd10";
 import { sendPrescriptionEmail, sendAdmissionEmail } from "@/backend/email";
+import { getTodayRange, getOrgTimezone } from "@/app/lib/timezone";
 
 export async function getPatientQueue(options?: {
   doctor_id?: string;
@@ -16,7 +17,7 @@ export async function getPatientQueue(options?: {
   includeAllStatuses?: boolean;
 }) {
   try {
-    const { db } = await requireTenantContext();
+    const { db, session } = await requireTenantContext();
 
     const where: any = {};
 
@@ -27,10 +28,8 @@ export async function getPatientQueue(options?: {
       };
     }
 
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
+    const tz = await getOrgTimezone();
+    const { start: todayStart, end: todayEnd } = getTodayRange(tz);
 
     // Default range remains "today" to avoid regressions in existing views.
     const range = options?.dateRange || "today";
@@ -48,9 +47,24 @@ export async function getPatientQueue(options?: {
     // Filter by doctor if "My Patients" view.
     // Use strict doctor_id matching when available to avoid leaking other doctors' patients.
     if (options?.view === "my") {
-      if (options?.doctor_id) {
-        where.AND = [...(where.AND || []), { doctor_id: options.doctor_id }];
+      // Resolve the effective doctor_id: prefer the explicitly passed value,
+      // then fall back to the authenticated session's user id.
+      const effectiveDoctorId = options?.doctor_id || session?.id;
+
+      if (effectiveDoctorId) {
+        if (!options?.doctor_id) {
+          console.warn(
+            `[getPatientQueue] "my" view requested without doctor_id. ` +
+            `Falling back to session user id: ${effectiveDoctorId}`
+          );
+        }
+        where.AND = [...(where.AND || []), { doctor_id: effectiveDoctorId }];
       } else {
+        // No doctor_id and no session id — try name-based fallback filters.
+        console.warn(
+          `[getPatientQueue] "my" view requested without doctor_id and no session id available. ` +
+          `Attempting name-based fallback.`
+        );
         const fallbackFilters: any[] = [];
 
         if (options?.doctor_name) {
@@ -71,6 +85,10 @@ export async function getPatientQueue(options?: {
           where.AND = [...(where.AND || []), { OR: fallbackFilters }];
         } else {
           // Safety: never return unscoped data for "my" view.
+          console.warn(
+            `[getPatientQueue] "my" view: no doctor_id, no session id, and no name filters. ` +
+            `Returning empty queue to prevent unscoped data leak.`
+          );
           return { success: true, data: [] };
         }
       }

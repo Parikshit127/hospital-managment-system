@@ -1,5 +1,14 @@
 import nodemailer from 'nodemailer';
 
+function escapeHtml(str: string): string {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function getAppBaseUrl() {
     return process.env.APP_BASE_URL || 'http://localhost:3000';
 }
@@ -55,12 +64,12 @@ export async function sendWelcomeEmail(to: string, patientName: string, patientI
     const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
-            <h2 style="color: #1aab74;">Welcome to Avani Hospital, ${patientName}!</h2>
+            <h2 style="color: #1aab74;">Welcome to Avani Hospital, ${escapeHtml(patientName)}!</h2>
             <p>Your registration is complete. You can now access all your health records, prescriptions, and lab results in your personal Patient Portal.</p>
-            
+
             <div style="background: #f0faf6; padding: 15px; border-radius: 8px; margin: 20px 0;">
                 <p style="margin: 0; font-weight: bold; color: #0f8f5e;">Your Login Credentials:</p>
-                <p style="margin: 5px 0 0 0;"><strong>Patient ID:</strong> ${patientId}</p>
+                <p style="margin: 5px 0 0 0;"><strong>Patient ID:</strong> ${escapeHtml(patientId)}</p>
                 <p style="margin: 8px 0 0 0;">Set your password securely using the link below:</p>
                 <p style="margin: 12px 0 0 0;">
                     <a href="${setupLink}" style="display:inline-block;background:#10b981;color:#ffffff;padding:10px 14px;border-radius:8px;text-decoration:none;font-weight:600;">Set Portal Password</a>
@@ -84,9 +93,9 @@ export async function sendPrescriptionEmail(to: string, patientName: string, doc
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
             <h2 style="color: #1aab74;">New Clinical Summary Added</h2>
-            <p>Dear ${patientName},</p>
-            <p>Dr. ${doctorName} has added a new clinical summary and prescription to your record.</p>
-            
+            <p>Dear ${escapeHtml(patientName)},</p>
+            <p>Dr. ${escapeHtml(doctorName)} has added a new clinical summary and prescription to your record.</p>
+
             <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #eee;">
                 ${summaryHtml}
             </div>
@@ -106,12 +115,12 @@ export async function sendAdmissionEmail(to: string, patientName: string, bedDet
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
             <h2 style="color: #1aab74;">Admission Confirmation</h2>
-            <p>Dear ${patientName},</p>
-            <p>This email confirms your admission at Avani Hospital under the care of Dr. ${doctorName}.</p>
-            
+            <p>Dear ${escapeHtml(patientName)},</p>
+            <p>This email confirms your admission at Avani Hospital under the care of Dr. ${escapeHtml(doctorName)}.</p>
+
             <div style="background: #f0faf6; padding: 15px; border-radius: 8px; margin: 20px 0;">
                 <p style="margin: 0; font-weight: bold; color: #0f8f5e;">Your bed assignment is confirmed as:</p>
-                <p style="margin: 5px 0 0 0; font-size: 18px;">🛏️ <strong>${bedDetails}</strong></p>
+                <p style="margin: 5px 0 0 0; font-size: 18px;">🛏️ <strong>${escapeHtml(bedDetails)}</strong></p>
             </div>
             
             <p>Please log in to the <a href="${appBaseUrl}/patient/login" style="color: #1aab74;">Patient Portal</a> to track your vital signs, nursing notes, and live billing status.</p>
@@ -119,4 +128,46 @@ export async function sendAdmissionEmail(to: string, patientName: string, bedDet
     `;
 
     return sendEmail({ to, subject: 'Hospital Admission Confirmation', html });
+}
+
+/**
+ * Template: Appointment Confirmation
+ */
+export async function sendAppointmentConfirmationEmail({
+    to,
+    patientName,
+    doctorName,
+    department,
+    date,
+    time,
+    hospitalName,
+}: {
+    to: string;
+    patientName: string;
+    doctorName: string;
+    department: string;
+    date: string;
+    time: string;
+    hospitalName: string;
+}) {
+    const appBaseUrl = getAppBaseUrl();
+    const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+            <h2 style="color: #1aab74;">Appointment Confirmed</h2>
+            <p>Dear ${escapeHtml(patientName)},</p>
+            <p>Your appointment at <strong>${escapeHtml(hospitalName)}</strong> has been successfully booked. Here are the details:</p>
+
+            <div style="background: #f0faf6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 0;"><strong>Doctor:</strong> Dr. ${escapeHtml(doctorName)}</p>
+                <p style="margin: 8px 0 0 0;"><strong>Department:</strong> ${escapeHtml(department)}</p>
+                <p style="margin: 8px 0 0 0;"><strong>Date:</strong> ${escapeHtml(date)}</p>
+                <p style="margin: 8px 0 0 0;"><strong>Time:</strong> ${escapeHtml(time)}</p>
+            </div>
+
+            <p>Please arrive 15 minutes before your scheduled time. You can view or manage your appointments in the <a href="${appBaseUrl}/patient/login" style="color: #1aab74;">Patient Portal</a>.</p>
+            <p style="color: #666; font-size: 12px; margin-top: 30px;">If you need to cancel or reschedule, please do so at least 24 hours in advance.</p>
+        </div>
+    `;
+
+    return sendEmail({ to, subject: `Appointment Confirmation - ${escapeHtml(hospitalName)}`, html });
 }

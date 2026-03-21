@@ -71,6 +71,8 @@ export async function registerPatient(formData: FormData) {
         return { success: false, error: firstError };
     }
 
+    const skipAppointment = formData.get('skipAppointment') === 'true';
+
     const rawData = {
         ...parsed.data,
         email: parsed.data.email || 'not given',
@@ -101,6 +103,7 @@ export async function registerPatient(formData: FormData) {
                     full_name: rawData.full_name,
                     phone: rawData.phone,
                     age: rawData.age,
+                    gender: rawData.gender,
                     department: rawData.department,
                     email: rawData.email,
                     // @ts-ignore
@@ -129,33 +132,37 @@ export async function registerPatient(formData: FormData) {
             }
         }
 
-        // 3. Create Appointment (If not exists)
-        const existingAppt = await db.appointments.findUnique({
-            where: { appointment_id: appointmentId }
-        });
-
-        if (!existingAppt) {
-            // Find a doctor in that department
-            const matchingDoctor = await db.user.findFirst({
-                where: {
-                    role: 'doctor',
-                    specialty: rawData.department,
-                    is_active: true
-                }
+        // 3. Create Appointment (If not exists and not skipped)
+        if (!skipAppointment) {
+            const existingAppt = await db.appointments.findUnique({
+                where: { appointment_id: appointmentId }
             });
 
-            await db.appointments.create({
-                data: {
-                    appointment_id: appointmentId,
-                    patient_id: agentPatientId, // FK to OPD_REG
-                    status: 'Pending',
-                    department: rawData.department,
-                    doctor_id: matchingDoctor ? matchingDoctor.id : null,
-                    doctor_name: matchingDoctor ? matchingDoctor.name || matchingDoctor.username : null,
-                    reason_for_visit: 'Initial Consultation',
-                    organizationId,
-                }
-            });
+            if (!existingAppt) {
+                // Find a doctor in that department
+                const matchingDoctor = await db.user.findFirst({
+                    where: {
+                        role: 'doctor',
+                        specialty: rawData.department,
+                        is_active: true
+                    }
+                });
+
+                await db.appointments.create({
+                    data: {
+                        appointment_id: appointmentId,
+                        patient_id: agentPatientId, // FK to OPD_REG
+                        status: 'Pending',
+                        department: rawData.department,
+                        doctor_id: matchingDoctor ? matchingDoctor.id : null,
+                        doctor_name: matchingDoctor ? matchingDoctor.name || matchingDoctor.username : null,
+                        reason_for_visit: 'Initial Consultation',
+                        organizationId,
+                    }
+                });
+            }
+        } else {
+            appointmentId = null;
         }
 
         revalidatePath('/doctor/dashboard');
@@ -171,8 +178,8 @@ export async function registerPatient(formData: FormData) {
                 organizationId,
             }
         });
-        // Send WhatsApp appointment reminder (non-blocking)
-        if (rawData.phone) {
+        // Send WhatsApp appointment reminder (non-blocking, only if appointment was created)
+        if (!skipAppointment && rawData.phone) {
             sendAppointmentReminder(rawData.phone, rawData.full_name, rawData.department, 'as scheduled').catch(err =>
                 console.warn('[WhatsApp] Failed to send reminder:', err)
             );

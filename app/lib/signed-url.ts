@@ -1,6 +1,9 @@
 import { createHmac } from 'crypto';
 
-const SECRET = process.env.JWT_SECRET || 'fallback-secret';
+if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET environment variable is required');
+}
+const SECRET: string = process.env.JWT_SECRET;
 const DEFAULT_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
 
 /**

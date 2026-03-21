@@ -1,15 +1,14 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
+import { getTodayRange, getOrgTimezone } from '@/app/lib/timezone';
 
 export async function getOPDDashboardStats() {
     try {
         const { db } = await requireTenantContext();
 
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
+        const tz = await getOrgTimezone();
+        const { start: todayStart, end: todayEnd } = getTodayRange(tz);
 
         const [totalToday, pending, inProgress, completed, byDepartment] = await Promise.all([
             db.appointments.count({
@@ -63,10 +62,8 @@ export async function getTodaysAppointments(options?: { department?: string; sta
     try {
         const { db } = await requireTenantContext();
 
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
+        const tz = await getOrgTimezone();
+        const { start: todayStart, end: todayEnd } = getTodayRange(tz);
 
         const where: any = {
             appointment_date: { gte: todayStart, lte: todayEnd },

@@ -48,7 +48,10 @@ export const registerPatientSchema = z.object({
 
 export const addUserSchema = z.object({
     username: z.string().min(3, 'Username must be at least 3 characters').max(50),
-    password: z.string().min(6, 'Password must be at least 6 characters').max(100),
+    password: z.string().min(8, 'Password must be at least 8 characters').max(100)
+        .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+        .regex(/[0-9]/, 'Password must contain at least one number')
+        .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
     name: z.string().min(2, 'Name is required').max(200),
     role: z.enum(staffRoles),
     specialty: z.string().optional(),
@@ -165,7 +168,10 @@ export const createOrganizationSchema = z.object({
     established_year: z.string().optional(),
     // Step 4: Admin User
     admin_username: z.string().min(3).max(50),
-    admin_password: z.string().min(6).max(100),
+    admin_password: z.string().min(8, 'Password must be at least 8 characters').max(100)
+        .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+        .regex(/[0-9]/, 'Password must contain at least one number')
+        .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
     admin_name: z.string().min(2).max(200),
     admin_email: z.string().email(),
     // Step 5: Plan & Config

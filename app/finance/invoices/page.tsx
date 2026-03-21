@@ -96,7 +96,7 @@ export default function InvoicesPage() {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <Link href={`/pharmacy/billing?invoice=${inv.id}`} className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-bold bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
+                                        <Link href={`/finance/invoices/${inv.id}`} className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-bold bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
                                             <Eye className="h-4 w-4" /> View
                                         </Link>
                                     </td>

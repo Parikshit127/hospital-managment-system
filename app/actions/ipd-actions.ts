@@ -969,6 +969,50 @@ export async function getAdmissionFullDetails(admissionId: string) {
   }
 }
 
+// Change the assigned doctor for an admission
+export async function changeAdmissionDoctor(
+  admissionId: string,
+  newDoctorName: string,
+) {
+  try {
+    const { db } = await requireTenantContext();
+
+    const trimmed = (newDoctorName || "").trim();
+    if (!trimmed) {
+      return { success: false, error: "Doctor name cannot be empty" };
+    }
+
+    const admission = await db.admissions.findUnique({
+      where: { admission_id: admissionId },
+    });
+
+    if (!admission) {
+      return { success: false, error: "Admission not found" };
+    }
+
+    const oldDoctorName = admission.doctor_name || "N/A";
+
+    await db.admissions.update({
+      where: { admission_id: admissionId },
+      data: { doctor_name: trimmed },
+    });
+
+    await logAudit({
+      action: "CHANGE_ADMISSION_DOCTOR",
+      module: "IPD",
+      entity_type: "admission",
+      entity_id: admissionId,
+      details: JSON.stringify({ oldDoctorName, newDoctorName: trimmed }),
+    });
+
+    revalidatePath(`/ipd/admission/${admissionId}`);
+    return { success: true, data: { oldDoctorName, newDoctorName: trimmed } };
+  } catch (error: any) {
+    console.error("changeAdmissionDoctor error:", error);
+    return { success: false, error: error.message };
+  }
+}
+
 export async function createNursingTask(data: {
   admission_id: string;
   task_type: string;

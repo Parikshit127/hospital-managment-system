@@ -110,7 +110,7 @@ export default function ReceptionPage() {
         if (result.success) {
             setSuccessData({
                 patient_id: result.patient_id!,
-                appointment_id: result.appointment_id,
+                appointment_id: result.appointment_id ?? undefined,
                 user_type: result.user_type,
                 password_setup_required: result.password_setup_required,
                 manual_password_setup_link: result.manual_password_setup_link,
@@ -529,6 +529,27 @@ export default function ReceptionPage() {
                                                 </span>
                                                 <p className="text-xs text-gray-400 mt-0.5">
                                                     I confirm the patient has given consent for registration and data collection as per hospital policy.
+                                                </p>
+                                            </div>
+                                        </label>
+                                    </div>
+
+                                    {/* Skip Appointment Option */}
+                                    <div className="mb-6 border-t border-gray-200 pt-6">
+                                        <label className="flex items-start gap-3 cursor-pointer group">
+                                            <input
+                                                type="checkbox"
+                                                name="skipAppointment"
+                                                value="true"
+                                                className="mt-1 h-4 w-4 rounded border-gray-300 text-amber-500 focus:ring-amber-500/20"
+                                            />
+                                            <div>
+                                                <span className="text-sm font-bold text-gray-700 group-hover:text-gray-900 transition-colors flex items-center gap-1.5">
+                                                    <Calendar className="h-3.5 w-3.5 text-amber-400" />
+                                                    Register only (skip appointment)
+                                                </span>
+                                                <p className="text-xs text-gray-400 mt-0.5">
+                                                    Check this to register the patient without creating an appointment. You can book an appointment later.
                                                 </p>
                                             </div>
                                         </label>

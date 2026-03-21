@@ -52,6 +52,7 @@ export function LabTab({ labOrders, selectedTest, setSelectedTest, loadingLabs, 
                             <div className="text-right">
                                 <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide border ${order.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>{order.status}</span>
                                 {order.result_value && <p className="text-xs text-gray-500 mt-1 font-mono bg-gray-100 px-2 py-0.5 rounded-lg border border-gray-200 inline-block">{order.result_value}</p>}
+                                {order.technician_remarks && <p className="text-xs text-gray-400 mt-1 italic">{order.technician_remarks}</p>}
                             </div>
                         </div>
                     ))}

@@ -105,6 +105,11 @@ model Organization {
   custom_roles             Role[]
   document_templates       DocumentTemplate[]
   alert_rules              AlertRule[]
+  // Data import & archival
+  data_import_jobs         DataImportJob[]
+  archived_patient_records ArchivedPatientRecord[]
+  // Zealthix insurance integration
+  zealthix_api_keys        ZealthixApiKey[]
 
   // Extended hospital profile fields
   hospital_type            String?   // General, Multi-Specialty, Super-Specialty, Clinic, Nursing Home
@@ -324,8 +329,9 @@ model User {
   specialty        String?
   email            String?
   phone            String?
-  assigned_ward_id Int?
-  organizationId   String
+  assigned_ward_id       Int?
+  doctor_registration_no String?
+  organizationId         String
   is_active        Boolean  @default(true)
   working_hours    String   @default("09:00-17:00")
   slot_duration    Int      @default(20)
@@ -363,8 +369,15 @@ model OPD_REG {
   profile_photo_url        String?
   allergies                String?
   chronic_conditions       String?
+  abha_number              String?
+  abha_address             String?
+  pan_number               String?
+  employee_id              String?
+  registration_number      String?
   organizationId           String
   password                 String?
+  is_archived              Boolean  @default(false)
+  archived_at              DateTime?
   created_at               DateTime @default(now())
 
   organization       Organization          @relation(fields: [organizationId], references: [id])
@@ -376,6 +389,7 @@ model OPD_REG {
   password_setup_tokens PatientPasswordSetupToken[]
 
   @@index([organizationId])
+  @@index([organizationId, is_archived])
 }
 
 model appointments {
@@ -415,11 +429,14 @@ model Clinical_EHR {
   diagnosis      String?
   doctor_notes   String?
   organizationId String
+  is_archived    Boolean  @default(false)
+  archived_at    DateTime?
   created_at     DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
+  @@index([organizationId, is_archived])
 }
 
 // ========================================
@@ -434,11 +451,14 @@ model lab_orders {
   test_type              String
   status                 String
   result_value           String?
+  technician_remarks     String?
   report_url             String?
   assigned_technician_id String?
   is_critical            Boolean  @default(false)
   critical_notified_at   DateTime?
   organizationId         String
+  is_archived            Boolean  @default(false)
+  archived_at            DateTime?
   created_at             DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
@@ -447,6 +467,7 @@ model lab_orders {
   @@index([status])
   @@index([patient_id])
   @@index([created_at])
+  @@index([organizationId, is_archived])
 }
 
 model lab_test_inventory {
@@ -581,7 +602,24 @@ model admissions {
   status         String // Admitted, Discharged
   diagnosis      String?
   doctor_name    String?
+  line_of_treatment     String?
+  admission_type        String?
+  surgery_requested     String?
+  is_death              Boolean   @default(false)
+  case_fir_number       String?
+  case_is_rta           Boolean   @default(false)
+  case_is_substance_abuse Boolean @default(false)
+  case_is_police_report Boolean   @default(false)
+  case_is_test_conducted Boolean  @default(false)
+  case_injury_date      DateTime?
+  past_ailments         String?
+  past_ailment_duration String?
+  other_ailments        String?
+  consent_signature_url String?
+  id_cards_url          String?
   organizationId String
+  is_archived    Boolean   @default(false)
+  archived_at    DateTime?
   admission_date DateTime  @default(now())
   discharge_date DateTime?
 
@@ -602,6 +640,7 @@ model admissions {
   @@index([status])
   @@index([patient_id])
   @@index([admission_date])
+  @@index([organizationId, is_archived])
 }
 
 model medical_notes {
@@ -688,6 +727,8 @@ model invoices {
   status         String    @default("Draft")
   notes          String?
   organizationId String
+  is_archived    Boolean   @default(false)
+  archived_at    DateTime?
   created_at     DateTime  @default(now())
   updated_at     DateTime  @updatedAt
   finalized_at   DateTime?
@@ -705,6 +746,7 @@ model invoices {
   @@index([status])
   @@index([patient_id])
   @@index([created_at])
+  @@index([organizationId, is_archived])
 }
 
 model invoice_items {
@@ -816,6 +858,11 @@ model insurance_policies {
   policy_number   String    @unique
   policy_holder   String?
   plan_name       String?
+  member_id       String?
+  policy_type     String?
+  corporate_name  String?
+  insurer_id      String?
+  payer_id        String?
   coverage_limit  Decimal?
   remaining_limit Decimal?
   valid_from      DateTime?
@@ -838,15 +885,21 @@ model insurance_claims {
   policy_id        Int
   invoice_id       Int
   admission_id     String?
-  claimed_amount   Decimal
-  approved_amount  Decimal?
-  rejected_amount  Decimal?
-  status           String    @default("Submitted")
-  rejection_reason String?
-  organizationId   String
-  submitted_at     DateTime  @default(now())
-  reviewed_at      DateTime?
-  settled_at       DateTime?
+  claimed_amount         Decimal
+  approved_amount        Decimal?
+  rejected_amount        Decimal?
+  status                 String    @default("Submitted")
+  rejection_reason       String?
+  zealthix_claim_number  String?
+  action_status          String?
+  settled_amount         Decimal?
+  tds_amount             Decimal?
+  zealthix_remarks       String?
+  zealthix_attachments   Json?
+  organizationId         String
+  submitted_at           DateTime  @default(now())
+  reviewed_at            DateTime?
+  settled_at             DateTime?
 
   organization Organization        @relation(fields: [organizationId], references: [id])
   policy       insurance_policies  @relation(fields: [policy_id], references: [id])
@@ -1862,4 +1915,80 @@ model DunningLog {
   @@index([organizationId])
   @@index([invoice_id])
   @@map("dunning_logs")
+}
+
+// ========================================
+// MODULE — Data Import / Migration
+// ========================================
+
+model DataImportJob {
+  id              String    @id @default(uuid())
+  import_type     String    // patients, staff, invoices, lab_results, pharmacy, appointments
+  file_name       String
+  file_size       Int
+  total_rows      Int       @default(0)
+  processed_rows  Int       @default(0)
+  successful_rows Int       @default(0)
+  failed_rows     Int       @default(0)
+  skipped_rows    Int       @default(0)
+  status          String    @default("uploaded") // uploaded, mapping, validating, importing, completed, failed, cancelled
+  column_mapping  Json?
+  validation_summary Json?
+  error_log       Json?
+  import_data     Json?
+  started_at      DateTime?
+  completed_at    DateTime?
+  created_by      String
+  organizationId  String
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([created_at])
+  @@map("data_import_jobs")
+}
+
+// ========================================
+// MODULE — Data Archival (7-Year Retention)
+// ========================================
+
+model ArchivedPatientRecord {
+  id                  String   @id @default(uuid())
+  original_patient_id String
+  patient_data        Json
+  clinical_data       Json?
+  financial_data      Json?
+  archive_reason      String   @default("retention_policy")
+  original_created_at DateTime
+  archived_at         DateTime @default(now())
+  organizationId      String
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([original_patient_id])
+  @@index([archived_at])
+  @@map("archived_patient_records")
+}
+
+// ========================================
+// MODULE — Zealthix Insurance Integration
+// ========================================
+
+model ZealthixApiKey {
+  id              String    @id @default(uuid())
+  api_key_hash    String    @unique
+  label           String?
+  is_active       Boolean   @default(true)
+  last_used_at    DateTime?
+  organizationId  String
+  created_at      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@map("zealthix_api_keys")
 }

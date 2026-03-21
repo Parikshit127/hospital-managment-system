@@ -3,8 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useParams } from 'next/navigation';
-import { User, Bed, Clock, ClipboardEdit, Utensils, MoveRight, Stethoscope, FileText, CheckCircle2 } from 'lucide-react';
-import { getAdmissionFullDetails, createNursingTask } from '@/app/actions/ipd-actions';
+import { User, Bed, Clock, ClipboardEdit, Utensils, MoveRight, Stethoscope, FileText, CheckCircle2, Pencil } from 'lucide-react';
+import { getAdmissionFullDetails, createNursingTask, changeAdmissionDoctor } from '@/app/actions/ipd-actions';
 import { useToast } from '@/app/components/ui/Toast';
 
 export default function AdmissionDetailPage() {
@@ -17,6 +17,11 @@ export default function AdmissionDetailPage() {
     const [desc, setDesc] = useState('');
     const [time, setTime] = useState('');
 
+    // Change Doctor state
+    const [showDoctorForm, setShowDoctorForm] = useState(false);
+    const [newDoctorName, setNewDoctorName] = useState('');
+    const [savingDoctor, setSavingDoctor] = useState(false);
+
     const loadData = async () => {
         setLoading(true);
         const res = await getAdmissionFullDetails(params.id as string);
@@ -25,6 +30,22 @@ export default function AdmissionDetailPage() {
     };
 
     useEffect(() => { loadData(); }, [params.id]);
+
+    const handleChangeDoctor = async () => {
+        const trimmed = newDoctorName.trim();
+        if (!trimmed) { toast.error('Please enter a doctor name'); return; }
+        setSavingDoctor(true);
+        const res = await changeAdmissionDoctor(data.admission_id, trimmed);
+        setSavingDoctor(false);
+        if (res.success) {
+            toast.success(`Doctor changed to Dr. ${trimmed}`);
+            setShowDoctorForm(false);
+            setNewDoctorName('');
+            loadData();
+        } else {
+            toast.error(res.error || 'Failed to change doctor');
+        }
+    };
 
     const handleAddTask = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -63,7 +84,18 @@ export default function AdmissionDetailPage() {
                             <div className="mt-2 text-sm font-medium text-gray-500 flex flex-wrap gap-x-6 gap-y-2">
                                 <span className="flex items-center gap-1"><User className="h-4 w-4" /> {data.patient?.age} yrs, {data.patient?.gender}</span>
                                 <span className="flex items-center gap-1"><Bed className="h-4 w-4" /> Ward: {data.bed?.wards?.ward_name} ({data.bed_id})</span>
-                                <span className="flex items-center gap-1"><Stethoscope className="h-4 w-4" /> Dr. {data.doctor_name}</span>
+                                <span className="flex items-center gap-1">
+                                    <Stethoscope className="h-4 w-4" /> Dr. {data.doctor_name}
+                                    {data.status === 'Admitted' && !showDoctorForm && (
+                                        <button
+                                            onClick={() => { setNewDoctorName(data.doctor_name || ''); setShowDoctorForm(true); }}
+                                            className="ml-1 p-1 rounded-md hover:bg-gray-100 transition-colors text-gray-400 hover:text-teal-600"
+                                            title="Change Doctor"
+                                        >
+                                            <Pencil className="h-3.5 w-3.5" />
+                                        </button>
+                                    )}
+                                </span>
                             </div>
                         </div>
                         <div className="text-right">
@@ -73,6 +105,35 @@ export default function AdmissionDetailPage() {
                             <p className="text-sm font-bold text-teal-700">{data.diagnosis}</p>
                         </div>
                     </div>
+
+                    {/* Change Doctor Inline Form */}
+                    {showDoctorForm && (
+                        <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap items-center gap-3">
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">New Doctor:</label>
+                            <input
+                                type="text"
+                                value={newDoctorName}
+                                onChange={e => setNewDoctorName(e.target.value)}
+                                placeholder="Enter doctor name"
+                                className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent w-56"
+                                autoFocus
+                                onKeyDown={e => { if (e.key === 'Enter') handleChangeDoctor(); if (e.key === 'Escape') { setShowDoctorForm(false); setNewDoctorName(''); } }}
+                            />
+                            <button
+                                onClick={handleChangeDoctor}
+                                disabled={savingDoctor}
+                                className="px-4 py-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors shadow-sm"
+                            >
+                                {savingDoctor ? 'Saving...' : 'Save'}
+                            </button>
+                            <button
+                                onClick={() => { setShowDoctorForm(false); setNewDoctorName(''); }}
+                                className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded-lg transition-colors"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Two Column Layout */}

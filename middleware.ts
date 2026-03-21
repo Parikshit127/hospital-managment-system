@@ -74,7 +74,8 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/api/invoice/") ||
     pathname.startsWith("/api/discharge/") ||
     pathname.startsWith("/api/razorpay/") ||
-    pathname.startsWith("/api/verify-lab-pharmacy")
+    pathname.startsWith("/api/verify-lab-pharmacy") ||
+    pathname.startsWith("/api/zealthix/")
   ) {
     return NextResponse.next();
   }
@@ -184,7 +185,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // 3. Public pages (no auth required)
-  if (pathname === "/opd/display") {
+  if (pathname === "/opd/display" || pathname.startsWith("/hospital")) {
     return NextResponse.next();
   }
 

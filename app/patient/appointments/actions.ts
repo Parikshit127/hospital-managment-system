@@ -5,6 +5,7 @@ import { getPatientSession } from "../login/actions";
 import { revalidatePath } from "next/cache";
 import { getOrCreateDailySlots } from "@/app/actions/doctor-actions";
 import { logPatientAudit } from "@/app/lib/audit";
+import { sendAppointmentConfirmationEmail } from "@/backend/email";
 
 export async function getAvailableDoctors() {
     try {
@@ -190,6 +191,33 @@ export async function bookAppointment(
 
         revalidatePath("/patient/appointments");
         revalidatePath("/patient/dashboard");
+
+        // Send appointment confirmation email (non-blocking, failure won't break booking)
+        try {
+            const patient = await db.OPD_REG.findUnique({
+                where: { patient_id: session.id },
+                select: { email: true },
+            });
+            if (patient?.email) {
+                const formattedDate = appointmentDate.toLocaleDateString('en-IN', {
+                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+                });
+                const formattedTime = appointmentDate.toLocaleTimeString('en-IN', {
+                    hour: '2-digit', minute: '2-digit', hour12: true,
+                });
+                await sendAppointmentConfirmationEmail({
+                    to: patient.email,
+                    patientName: session.name,
+                    doctorName: doctor.name,
+                    department: doctor.specialty || 'General',
+                    date: formattedDate,
+                    time: formattedTime,
+                    hospitalName: session.organization_name || 'Hospital',
+                });
+            }
+        } catch (emailError) {
+            console.error('Appointment confirmation email failed:', emailError);
+        }
 
         return { success: true, data: { appointmentId: apptId } };
     } catch (error) {
