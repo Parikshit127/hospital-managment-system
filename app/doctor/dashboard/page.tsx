@@ -538,7 +538,7 @@ export default function DoctorDashboard() {
     "text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1 block mb-1.5";
 
   return (
-    <div className="flex h-[calc(100vh-52px)] bg-gray-50 font-sans text-gray-900 overflow-hidden relative lg:pl-(--sidebar-offset)">
+    <div className="flex h-screen bg-gray-50 font-sans text-gray-900 overflow-hidden relative">
       <style jsx global>{`
         @media print {
           body * {

@@ -110,6 +110,7 @@ model Organization {
   archived_patient_records ArchivedPatientRecord[]
   // Zealthix insurance integration
   zealthix_api_keys        ZealthixApiKey[]
+  pill_reminders           PillReminder[]
 
   // Extended hospital profile fields
   hospital_type            String?   // General, Multi-Specialty, Super-Specialty, Clinic, Nursing Home
@@ -387,6 +388,7 @@ model OPD_REG {
   insurance_policies insurance_policies[]
   feedbacks          PatientFeedback[]
   password_setup_tokens PatientPasswordSetupToken[]
+  pill_reminders        PillReminder[]
 
   @@index([organizationId])
   @@index([organizationId, is_archived])
@@ -1991,4 +1993,27 @@ model ZealthixApiKey {
 
   @@index([organizationId])
   @@map("zealthix_api_keys")
+}
+
+model PillReminder {
+  id                String   @id @default(uuid())
+  patient_id        String
+  doctor_id         String
+  medication_name   String
+  dosage            String
+  schedule_times    String[] // e.g. ["08:00", "20:00"]
+  start_date        DateTime
+  end_date          DateTime
+  notes             String?
+  status            String   @default("Active")
+  organizationId    String
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  patient           OPD_REG      @relation(fields: [patient_id], references: [patient_id])
+
+  @@index([organizationId])
+  @@index([patient_id])
+  @@map("pill_reminders")
 }

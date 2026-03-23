@@ -182,11 +182,11 @@ export default function DoctorOverviewDashboard() {
   }, [filteredPatients, sortBy]);
 
   return (
-    <div className="flex min-h-screen bg-gray-50 text-gray-900 lg:pl-(--sidebar-offset)">
+    <div className="flex h-screen bg-gray-50 text-gray-900 overflow-hidden relative">
       <Sidebar session={session} />
 
-      <main className="w-full p-4 sm:p-6 lg:p-8">
-        <div className="max-w-7xl mx-auto space-y-6">
+      <main className="flex-1 min-w-0 h-full overflow-y-auto">
+        <div className="p-4 md:p-8 max-w-[1400px] mx-auto w-full space-y-6">
           <section className="rounded-2xl border border-gray-200 bg-white px-5 py-6 sm:px-6 shadow-sm">
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-gray-900">
               Doctor Dashboard

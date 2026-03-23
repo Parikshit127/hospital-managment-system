@@ -162,7 +162,7 @@ export default function DoctorTemplates() {
     "w-full p-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400 transition-all shadow-sm";
 
   return (
-    <div className="flex h-[calc(100vh-52px)] bg-gray-50 font-sans text-gray-900 overflow-hidden relative lg:pl-(--sidebar-offset)">
+    <div className="flex h-screen bg-gray-50 font-sans text-gray-900 overflow-hidden relative">
       <Sidebar session={session} />
 
       {/* Modal */}
@@ -253,8 +253,8 @@ export default function DoctorTemplates() {
         </div>
       )}
 
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto w-full">
-        <div className="p-8 max-w-6xl mx-auto w-full space-y-8">
+      <main className="flex-1 min-w-0 h-full overflow-y-auto">
+        <div className="p-4 md:p-8 max-w-[1400px] mx-auto w-full space-y-8">
           {/* Header */}
           <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
             <div>

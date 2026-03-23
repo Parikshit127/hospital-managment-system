@@ -51,6 +51,7 @@ const TENANT_SCOPED_MODELS = new Set([
     'DataImportJob', 'ArchivedPatientRecord',
     // Zealthix insurance integration
     'ZealthixApiKey',
+    'PillReminder',
 ]);
 
 // Models where organizationId is nullable (audit logs, etc.)

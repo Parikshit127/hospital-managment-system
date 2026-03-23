@@ -171,3 +171,45 @@ export async function sendAppointmentConfirmationEmail({
 
     return sendEmail({ to, subject: `Appointment Confirmation - ${escapeHtml(hospitalName)}`, html });
 }
+
+/**
+ * Template: Pill Reminder
+ */
+export async function sendPillReminderEmail({
+    to,
+    patientName,
+    medicationName,
+    dosage,
+    notes
+}: {
+    to: string;
+    patientName: string;
+    medicationName: string;
+    dosage: string;
+    notes?: string | null;
+}) {
+    const appBaseUrl = getAppBaseUrl();
+    const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+            <div style="text-align: center; margin-bottom: 20px;">
+                <span style="font-size: 40px;">💊</span>
+            </div>
+            <h2 style="color: #1aab74; text-align: center;">Medication Reminder</h2>
+            <p>Dear ${escapeHtml(patientName)},</p>
+            <p>It's time for your medication as prescribed by your doctor.</p>
+
+            <div style="background: #f0faf6; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #d1fae5;">
+                <p style="margin: 0;"><strong>Medication:</strong> ${escapeHtml(medicationName)}</p>
+                <p style="margin: 8px 0 0 0;"><strong>Dosage:</strong> ${escapeHtml(dosage)}</p>
+                ${notes ? `<p style="margin: 8px 0 0 0; font-style: italic; color: #666;">Note: ${escapeHtml(notes)}</p>` : ''}
+            </div>
+
+            <p>Please ensure you take your medication on time. You can track your full prescription history in the <a href="${appBaseUrl}/patient/login" style="color: #1aab74;">Patient Portal</a>.</p>
+            
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
+            <p style="color: #999; font-size: 12px; text-align: center;">This is an automated reminder from Avani Hospital. Please do not reply to this email.</p>
+        </div>
+    `;
+
+    return sendEmail({ to, subject: `Medication Reminder: ${escapeHtml(medicationName)}`, html });
+}

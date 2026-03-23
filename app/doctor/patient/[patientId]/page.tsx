@@ -351,11 +351,11 @@ export default function DoctorPatientDetailsPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-52px)] bg-gray-50 font-sans text-gray-900 overflow-hidden relative lg:pl-(--sidebar-offset)">
+    <div className="flex h-screen bg-gray-50 font-sans text-gray-900 overflow-hidden relative">
       <Sidebar session={session} />
 
       <main className="flex-1 min-w-0 h-full overflow-y-auto">
-        <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
+        <div className="p-4 md:p-8 max-w-[1400px] mx-auto space-y-6">
           <div className="flex flex-wrap gap-3 items-center justify-between">
             <Link
               href="/doctor/dashboard"
