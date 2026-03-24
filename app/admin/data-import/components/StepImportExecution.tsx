@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, Loader2, CheckCircle2, XCircle, Ban } from 'lucide-react';
-import { executeImportBatch, cancelImport, CHUNK_SIZE } from '@/app/actions/import-actions';
+import { executeImportBatch, cancelImport } from '@/app/actions/import-actions';
+import { CHUNK_SIZE } from '@/app/lib/import/chunked-processor';
 
 interface Props {
     jobId: string;

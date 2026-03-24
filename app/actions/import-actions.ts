@@ -369,4 +369,6 @@ export async function triggerArchival(olderThanYears: number = 5) {
     return { success: true, ...result };
 }
 
-export { CHUNK_SIZE };
+export async function getChunkSize() {
+    return CHUNK_SIZE;
+}

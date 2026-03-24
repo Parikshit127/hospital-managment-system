@@ -20,7 +20,15 @@ export async function POST(request: NextRequest) {
     let body: Record<string, unknown> = {};
 
     try {
-        body = await request.json();
+        try {
+            body = await request.json();
+        } catch {
+            await logZealthixApiCall(organizationId, apiKeyId, '/claim/patient/visit', {}, 400);
+            return NextResponse.json(
+                { success: false, message: 'Invalid or missing JSON body. Required fields: visitId, visitType' },
+                { status: 400 }
+            );
+        }
         const { visitId, visitType } = body as {
             visitId?: string;
             visitDateTime?: string;
@@ -194,10 +202,11 @@ export async function POST(request: NextRequest) {
             });
         }
     } catch (error) {
-        console.error('Zealthix patient visit error:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('Zealthix patient visit error:', errorMessage, error);
         await logZealthixApiCall(organizationId, apiKeyId, '/claim/patient/visit', body, 500);
         return NextResponse.json(
-            { success: false, message: 'Internal server error' },
+            { success: false, message: 'Internal server error', error: errorMessage },
             { status: 500 }
         );
     }
