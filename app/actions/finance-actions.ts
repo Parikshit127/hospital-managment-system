@@ -139,34 +139,172 @@ async function recalculateInvoice(invoiceId: number) {
     });
 }
 
-// Get all invoices with filters
+// Get all invoices with filters (Aggregates IPD, OPD, Lab, and Pharmacy)
 export async function getInvoices(filters?: {
     status?: string;
     patient_id?: string;
     invoice_type?: string;
+    mobile_number?: string;
     limit?: number;
 }) {
     try {
         const { db } = await requireTenantContext();
 
-        const where: any = {};
-        if (filters?.status) where.status = filters.status;
-        if (filters?.patient_id) where.patient_id = filters.patient_id;
-        if (filters?.invoice_type) where.invoice_type = filters.invoice_type;
+        const limit = filters?.limit || 100;
 
-        const invoices = await db.invoices.findMany({
-            where,
-            include: {
-                patient: { select: { full_name: true, phone: true } },
-                items: true,
-                payments: true,
-                insurance_claims: { select: { claim_number: true, status: true, approved_amount: true } },
-            },
-            orderBy: { created_at: 'desc' },
-            take: filters?.limit || 100,
-        });
+        // Determine which sources to fetch based on invoice_type filter
+        const fetchStandard = !filters?.invoice_type || ['OPD', 'IPD'].includes(filters.invoice_type);
+        const fetchLab = !filters?.invoice_type || filters.invoice_type === 'LAB';
+        const fetchPharm = !filters?.invoice_type || filters.invoice_type === 'PHARMACY';
 
-        return { success: true, data: serialize(invoices) };
+        // 1. Fetch Standard Invoices (IPD/OPD)
+        let standardInvoices: any[] = [];
+        if (fetchStandard) {
+            const where: any = {};
+            if (filters?.status) where.status = filters.status;
+            if (filters?.patient_id) where.patient_id = filters.patient_id;
+            if (filters?.invoice_type) where.invoice_type = filters.invoice_type;
+            if (filters?.mobile_number) {
+                where.patient = { phone: { contains: filters.mobile_number } };
+            }
+
+            standardInvoices = await db.invoices.findMany({
+                where,
+                include: {
+                    patient: { select: { full_name: true, phone: true } },
+                },
+                orderBy: { created_at: 'desc' },
+                take: limit,
+            });
+        }
+
+        // 2. Fetch Lab Orders
+        let labOrders: any[] = [];
+        if (fetchLab) {
+            const where: any = {};
+            if (filters?.status) {
+                // Map status if needed, but Lab uses Pendning/Completed
+                if (filters.status === 'Draft') where.status = 'Pending';
+                else if (filters.status === 'Paid') where.status = 'Completed';
+                else where.status = filters.status;
+            }
+            if (filters?.patient_id) where.patient_id = filters.patient_id;
+            if (filters?.mobile_number) {
+                const patients = await db.oPD_REG.findMany({
+                    where: { phone: { contains: filters.mobile_number } },
+                    select: { patient_id: true }
+                });
+                where.patient_id = { in: patients.map((p: any) => p.patient_id) };
+            }
+
+            labOrders = await db.lab_orders.findMany({
+                where,
+                orderBy: { created_at: 'desc' },
+                take: limit,
+            });
+        }
+
+        // 3. Fetch Pharmacy Orders
+        let pharmacyOrders: any[] = [];
+        if (fetchPharm) {
+            const where: any = {};
+            if (filters?.status) {
+                if (filters.status === 'Draft') where.status = 'Pending';
+                else if (filters.status === 'Paid') where.status = 'Completed';
+                else where.status = filters.status;
+            }
+            if (filters?.patient_id) where.patient_id = filters.patient_id;
+            if (filters?.mobile_number) {
+                const patients = await db.oPD_REG.findMany({
+                    where: { phone: { contains: filters.mobile_number } },
+                    select: { patient_id: true }
+                });
+                where.patient_id = { in: patients.map((p: any) => p.patient_id) };
+            }
+
+            pharmacyOrders = await db.pharmacy_orders.findMany({
+                where,
+                orderBy: { created_at: 'desc' },
+                take: limit,
+            });
+        }
+
+        // 4. Enrich Lab/Pharmacy with Patient Names & Lab pricing
+        const allPatientIds = Array.from(new Set([
+            ...labOrders.map((o: any) => o.patient_id),
+            ...pharmacyOrders.map((o: any) => o.patient_id)
+        ]));
+
+        const [patients, testInventory] = await Promise.all([
+            db.oPD_REG.findMany({
+                where: { patient_id: { in: allPatientIds } },
+                select: { patient_id: true, full_name: true, phone: true }
+            }),
+            db.lab_test_inventory.findMany({
+                select: { test_name: true, price: true }
+            })
+        ]);
+
+        const patientMap = new Map<string, any>(patients.map((p: any) => [p.patient_id, p]));
+        const priceMap = new Map<string, any>(testInventory.map((t: any) => [t.test_name.toLowerCase(), t.price]));
+
+        // 5. Unify Results
+        const unified = [
+            ...standardInvoices.map((inv: any) => ({
+                id: inv.id,
+                invoice_number: inv.invoice_number,
+                patient_id: inv.patient_id,
+                patient: inv.patient,
+                invoice_type: inv.invoice_type,
+                net_amount: inv.net_amount,
+                balance_due: inv.balance_due,
+                status: inv.status,
+                created_at: inv.created_at,
+                source: inv.invoice_type
+            })),
+            ...labOrders.map((lab: any) => {
+                const p = patientMap.get(lab.patient_id);
+                const price = priceMap.get(lab.test_type.toLowerCase()) || 0;
+                return {
+                    id: lab.id,
+                    invoice_number: lab.barcode,
+                    patient_id: lab.patient_id,
+                    patient: {
+                        full_name: p?.full_name || 'Unknown',
+                        phone: p?.phone || 'N/A'
+                    },
+                    invoice_type: 'LAB',
+                    net_amount: price,
+                    balance_due: lab.status === 'Completed' ? 0 : price,
+                    status: lab.status === 'Pending' ? 'Draft' : lab.status === 'Completed' ? 'Paid' : lab.status,
+                    created_at: lab.created_at,
+                    source: 'LAB'
+                };
+            }),
+            ...pharmacyOrders.map((pharm: any) => {
+                const p = patientMap.get(pharm.patient_id);
+                return {
+                    id: pharm.id,
+                    invoice_number: `PHARM-${pharm.id}`,
+                    patient_id: pharm.patient_id,
+                    patient: {
+                        full_name: p?.full_name || 'Unknown',
+                        phone: p?.phone || 'N/A'
+                    },
+                    invoice_type: 'PHARMACY',
+                    net_amount: pharm.total_amount,
+                    balance_due: pharm.status === 'Completed' ? 0 : pharm.total_amount,
+                    status: pharm.status === 'Pending' ? 'Draft' : pharm.status === 'Completed' ? 'Paid' : pharm.status,
+                    created_at: pharm.created_at,
+                    source: 'PHARMACY'
+                };
+            })
+        ];
+
+        // Sort by date DESC
+        unified.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+        return { success: true, data: serialize(unified.slice(0, limit)) };
     } catch (error: any) {
         console.error('getInvoices error:', error);
         return { success: false, error: error.message };
@@ -768,6 +906,44 @@ export async function updateRefundStatus(id: number, status: string) {
         });
         return { success: true, data: serialize(refund) };
     } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+export async function approveInvoice(id: string | number, source: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        if (source === 'OPD' || source === 'IPD') {
+            await db.invoices.update({
+                where: { id: Number(id) },
+                data: { status: 'Paid', balance_due: 0 }
+            });
+        } else if (source === 'LAB') {
+            await db.lab_orders.update({
+                where: { id: Number(id) },
+                data: { status: 'Completed' }
+            });
+        } else if (source === 'PHARMACY') {
+            await db.pharmacy_orders.update({
+                where: { id: Number(id) },
+                data: { status: 'Completed' }
+            });
+        }
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'APPROVE_PAYMENT',
+                module: 'finance',
+                entity_type: source.toLowerCase(),
+                entity_id: String(id),
+                details: `Approved ${source} payment via registry`,
+                organizationId,
+            },
+        });
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('approveInvoice error:', error);
         return { success: false, error: error.message };
     }
 }
