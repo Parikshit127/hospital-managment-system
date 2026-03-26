@@ -14,11 +14,20 @@ import {
   CalendarDays,
   Building2,
   Stethoscope,
+  BedDouble,
+  UserPlus,
+  Droplets,
 } from "lucide-react";
 import { AppShell } from "@/app/components/layout/AppShell";
-import { getAdminPatientList } from "@/app/actions/admin-actions";
+import {
+  getAdminPatientList,
+  getAdminPatientStats,
+  getDepartments,
+} from "@/app/actions/admin-actions";
 
 const PAGE_LIMIT = 25;
+
+const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
 type DateRange = "today" | "week" | "month" | "all";
 type PatientStateFilter =
@@ -34,6 +43,7 @@ export default function AdminPatientsPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("");
+  const [bloodGroup, setBloodGroup] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [dateRange, setDateRange] = useState<DateRange>("all");
   const [patientState, setPatientState] = useState<PatientStateFilter>("all");
@@ -41,12 +51,34 @@ export default function AdminPatientsPage() {
   const [totalPages, setTotalPages] = useState(0);
   const [total, setTotal] = useState(0);
 
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [stats, setStats] = useState<{
+    totalPatients: number;
+    admittedNow: number;
+    appointmentsToday: number;
+    newThisMonth: number;
+  } | null>(null);
+
+  // Load departments and stats once on mount
+  useEffect(() => {
+    async function loadMeta() {
+      const [deptRes, statsRes] = await Promise.all([
+        getDepartments(),
+        getAdminPatientStats(),
+      ]);
+      if (deptRes.success && deptRes.data) setDepartments(deptRes.data);
+      if (statsRes.success && statsRes.data) setStats(statsRes.data);
+    }
+    loadMeta();
+  }, []);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const res = await getAdminPatientList({
         search,
         department,
+        bloodGroup: bloodGroup || undefined,
         date: selectedDate || undefined,
         dateRange,
         page,
@@ -70,7 +102,7 @@ export default function AdminPatientsPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, department, selectedDate, dateRange, page]);
+  }, [search, department, bloodGroup, selectedDate, dateRange, page]);
 
   useEffect(() => {
     loadData();
@@ -121,6 +153,33 @@ export default function AdminPatientsPage() {
     </div>
   );
 
+  const statCards = [
+    {
+      label: "Total Patients",
+      value: stats?.totalPatients ?? "-",
+      icon: Users,
+      cls: "text-teal-600 bg-teal-50 border-teal-100",
+    },
+    {
+      label: "Currently Admitted",
+      value: stats?.admittedNow ?? "-",
+      icon: BedDouble,
+      cls: "text-rose-600 bg-rose-50 border-rose-100",
+    },
+    {
+      label: "Today's Appointments",
+      value: stats?.appointmentsToday ?? "-",
+      icon: CalendarDays,
+      cls: "text-blue-600 bg-blue-50 border-blue-100",
+    },
+    {
+      label: "New This Month",
+      value: stats?.newThisMonth ?? "-",
+      icon: UserPlus,
+      cls: "text-emerald-600 bg-emerald-50 border-emerald-100",
+    },
+  ];
+
   return (
     <AppShell
       pageTitle="Patient List"
@@ -130,6 +189,29 @@ export default function AdminPatientsPage() {
       refreshing={loading}
     >
       <div className="space-y-6">
+        {/* Stat Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {statCards.map((s) => (
+            <div
+              key={s.label}
+              className="bg-white border border-gray-200 rounded-2xl p-4"
+            >
+              <span
+                className={`inline-flex p-2 rounded-xl border ${s.cls}`}
+              >
+                <s.icon className="h-4 w-4" />
+              </span>
+              <p className="mt-2 text-2xl font-black text-gray-900">
+                {s.value}
+              </p>
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                {s.label}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/* Filters */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
           <div className="relative lg:col-span-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -142,7 +224,7 @@ export default function AdminPatientsPage() {
             />
           </div>
 
-          <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="lg:col-span-8 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <div className="relative">
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <select
@@ -154,14 +236,30 @@ export default function AdminPatientsPage() {
                 className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500"
               >
                 <option value="">All Departments</option>
-                <option value="General Medicine">General Medicine</option>
-                <option value="Cardiology">Cardiology</option>
-                <option value="Orthopedics">Orthopedics</option>
-                <option value="Pediatrics">Pediatrics</option>
-                <option value="Neurology">Neurology</option>
-                <option value="ENT">ENT</option>
-                <option value="Dermatology">Dermatology</option>
-                <option value="Pulmonology">Pulmonology</option>
+                {departments.map((d: any) => (
+                  <option key={d.id} value={d.name}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="relative">
+              <Droplets className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <select
+                value={bloodGroup}
+                onChange={(e) => {
+                  setBloodGroup(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500"
+              >
+                <option value="">All Blood Groups</option>
+                {BLOOD_GROUPS.map((bg) => (
+                  <option key={bg} value={bg}>
+                    {bg}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -174,7 +272,7 @@ export default function AdminPatientsPage() {
               className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500"
             >
               <option value="all">All Time</option>
-              "Date",
+              <option value="today">Today</option>
               <option value="week">This Week</option>
               <option value="month">This Month</option>
             </select>
@@ -205,6 +303,7 @@ export default function AdminPatientsPage() {
           </div>
         </div>
 
+        {/* Table */}
         <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -248,9 +347,7 @@ export default function AdminPatientsPage() {
                   </tr>
                 ) : (
                   filteredPatients.map((patient: any) => {
-                    const detailHref = patient.latestAppointmentId
-                      ? `/admin/patients/${patient.patient_id}?appointmentId=${encodeURIComponent(patient.latestAppointmentId)}`
-                      : `/admin/patients/${patient.patient_id}`;
+                    const detailHref = `/admin/patients/${patient.patient_id}`;
                     const dateValue =
                       patient.activeAdmissionDate ||
                       patient.latestAppointmentDate ||
@@ -259,7 +356,7 @@ export default function AdminPatientsPage() {
                       ? "Admitted Date"
                       : patient.latestAppointmentDate
                         ? "Appointment Date"
-                        : "Form Filled Date";
+                        : "Registration Date";
 
                     return (
                       <tr
@@ -283,6 +380,11 @@ export default function AdminPatientsPage() {
                               </p>
                               <p className="text-xs text-gray-400">
                                 {patient.age || "-"} / {patient.gender || "-"}
+                                {patient.blood_group && (
+                                  <span className="ml-1.5 text-rose-500 font-semibold">
+                                    {patient.blood_group}
+                                  </span>
+                                )}
                               </p>
                             </div>
                           </div>

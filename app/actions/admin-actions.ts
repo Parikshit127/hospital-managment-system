@@ -244,6 +244,7 @@ export async function getPatientFlow() {
 export async function getAdminPatientList(options?: {
   search?: string;
   department?: string;
+  bloodGroup?: string;
   date?: string;
   dateRange?: "today" | "week" | "month" | "all";
   page?: number;
@@ -269,6 +270,10 @@ export async function getAdminPatientList(options?: {
 
     if (options?.department) {
       where.department = options.department;
+    }
+
+    if (options?.bloodGroup) {
+      where.blood_group = options.bloodGroup;
     }
 
     if (options?.date) {
@@ -845,6 +850,194 @@ export async function updateOrganizationBranding(data: any) {
     });
     return { success: true, data: brand };
   } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+// Get patient stats for admin patient list header
+export async function getAdminPatientStats() {
+  try {
+    const { db } = await requireTenantContext();
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    const [totalPatients, admittedNow, appointmentsToday, newThisMonth] =
+      await Promise.all([
+        db.oPD_REG.count(),
+        db.admissions.count({ where: { status: "Admitted" } }),
+        db.appointments.count({
+          where: { appointment_date: { gte: today } },
+        }),
+        db.oPD_REG.count({
+          where: { created_at: { gte: monthStart } },
+        }),
+      ]);
+
+    return {
+      success: true,
+      data: { totalPatients, admittedNow, appointmentsToday, newThisMonth },
+    };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+// Get comprehensive patient details for admin detail view
+export async function getAdminPatientFullDetails(patientId: string) {
+  try {
+    const { db } = await requireTenantContext();
+
+    const [
+      patient,
+      appointments,
+      admissions,
+      clinicalEHRs,
+      labOrders,
+      pharmacyOrders,
+      vitalSigns,
+      insurancePolicies,
+      invoices,
+      patientDeposits,
+      patientFeedbacks,
+      followUps,
+      pillReminders,
+    ] = await Promise.all([
+      db.oPD_REG.findUnique({ where: { patient_id: patientId } }),
+
+      db.appointments.findMany({
+        where: { patient_id: patientId },
+        orderBy: { appointment_date: "desc" },
+      }),
+
+      db.admissions.findMany({
+        where: { patient_id: patientId },
+        orderBy: { admission_date: "desc" },
+        include: {
+          bed: { include: { wards: true } },
+          ward: true,
+          medical_notes: { orderBy: { created_at: "desc" } },
+          summaries: { orderBy: { created_at: "desc" } },
+          invoices: { include: { items: true, payments: true } },
+          insurance_claims: {
+            include: { policy: { include: { provider: true } } },
+          },
+          bed_transfers: { orderBy: { created_at: "desc" } },
+          diet_plans: { orderBy: { created_at: "desc" } },
+          ward_rounds: { orderBy: { created_at: "desc" } },
+          nursing_tasks: { orderBy: { scheduled_at: "desc" } },
+        },
+      }),
+
+      db.clinical_EHR.findMany({
+        where: { patient_id: patientId },
+        orderBy: { created_at: "desc" },
+      }),
+
+      db.lab_orders.findMany({
+        where: { patient_id: patientId },
+        orderBy: { created_at: "desc" },
+      }),
+
+      db.pharmacy_orders.findMany({
+        where: { patient_id: patientId },
+        orderBy: { created_at: "desc" },
+        include: { items: true },
+      }),
+
+      db.vital_signs.findMany({
+        where: { patient_id: patientId },
+        orderBy: { created_at: "desc" },
+      }),
+
+      db.insurance_policies.findMany({
+        where: { patient_id: patientId },
+        include: { provider: true, claims: true },
+      }),
+
+      db.invoices.findMany({
+        where: { patient_id: patientId },
+        orderBy: { created_at: "desc" },
+        include: { items: true, payments: true },
+      }),
+
+      db.patientDeposit.findMany({
+        where: { patient_id: patientId },
+        orderBy: { created_at: "desc" },
+      }),
+
+      db.patientFeedback.findMany({
+        where: { patient_id: patientId },
+        orderBy: { created_at: "desc" },
+      }),
+
+      db.followUp.findMany({
+        where: { patient_id: patientId },
+        orderBy: { scheduled_date: "desc" },
+      }),
+
+      db.pillReminder.findMany({
+        where: { patient_id: patientId },
+        orderBy: { created_at: "desc" },
+      }),
+    ]);
+
+    if (!patient) {
+      return { success: false, error: "Patient not found" };
+    }
+
+    const totalInvoiceAmount = invoices.reduce(
+      (sum: number, inv: any) => sum + Number(inv.net_amount || 0),
+      0,
+    );
+    const totalPaidAmount = invoices.reduce(
+      (sum: number, inv: any) => sum + Number(inv.paid_amount || 0),
+      0,
+    );
+    const totalBalanceDue = invoices.reduce(
+      (sum: number, inv: any) => sum + Number(inv.balance_due || 0),
+      0,
+    );
+    const totalDeposits = patientDeposits.reduce(
+      (sum: number, d: any) => sum + Number(d.amount || 0),
+      0,
+    );
+    const activeAdmission =
+      admissions.find((a: any) => a.status === "Admitted") || null;
+
+    return {
+      success: true,
+      data: {
+        patient,
+        appointments,
+        admissions,
+        clinicalEHRs,
+        labOrders,
+        pharmacyOrders,
+        vitalSigns,
+        insurancePolicies,
+        invoices,
+        patientDeposits,
+        patientFeedbacks,
+        followUps,
+        pillReminders,
+        summary: {
+          totalAppointments: appointments.length,
+          totalAdmissions: admissions.length,
+          totalLabOrders: labOrders.length,
+          criticalLabOrders: labOrders.filter((l: any) => l.is_critical).length,
+          totalPrescriptions: pharmacyOrders.length,
+          totalInvoiceAmount,
+          totalPaidAmount,
+          totalBalanceDue,
+          totalDeposits,
+          activeAdmission: !!activeAdmission,
+        },
+      },
+    };
+  } catch (error: any) {
+    console.error("getAdminPatientFullDetails error:", error);
     return { success: false, error: error.message };
   }
 }
