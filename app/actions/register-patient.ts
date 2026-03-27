@@ -2,7 +2,7 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
-import { sendAppointmentReminder } from '@/app/lib/whatsapp';
+import { sendAppointmentReminder, sendWelcomeMessage } from '@/app/lib/whatsapp';
 import { sendWelcomeEmail } from '@/backend/email';
 import { createPatientPasswordSetupToken } from '@/app/lib/password-setup';
 import { patientRegistrationSchema } from '@/app/lib/validations/patient';
@@ -129,6 +129,13 @@ export async function registerPatient(formData: FormData) {
             // 3b. Send email with credentials
             if (rawData.email && rawData.email !== "not given") {
                 await sendWelcomeEmail(rawData.email, rawData.full_name, agentPatientId, setupLink);
+            }
+
+            // 3c. Send WhatsApp with credentials (mirroring email)
+            if (rawData.phone) {
+                sendWelcomeMessage(rawData.phone, rawData.full_name, agentPatientId, setupLink).catch(err =>
+                    console.warn('[WhatsApp] Failed to send welcome message:', err)
+                );
             }
         }
 

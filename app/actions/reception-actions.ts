@@ -7,6 +7,7 @@ import {
     sendQueueToken,
     sendQueueUpdate,
     sendYourTurnAlert,
+    sendAppointmentReminder,
 } from '@/app/lib/whatsapp';
 import { sendAppointmentConfirmationEmail } from '@/backend/email';
 import type {
@@ -681,8 +682,24 @@ export async function bookAppointment(data: {
                     hospitalName: session.organization_name || 'Hospital',
                 });
             }
-        } catch (emailError) {
-            console.error('Appointment confirmation email failed:', emailError);
+            const patientForWA = await db.oPD_REG.findUnique({
+                where: { patient_id: data.patientId },
+                select: { phone: true, full_name: true },
+            });
+            if (patientForWA?.phone) {
+                const formattedTime = appointmentDate.toLocaleTimeString('en-IN', {
+                    hour: '2-digit', minute: '2-digit', hour12: true,
+                });
+                sendAppointmentReminder(
+                    patientForWA.phone,
+                    patientForWA.full_name || 'Patient',
+                    data.doctorName,
+                    formattedTime,
+                    session.organization_name || 'Hospital'
+                ).catch((err: any) => console.warn('[WhatsApp] Failed to send appointment reminder:', err));
+            }
+        } catch (error) {
+            console.error('Appointment notifications failed:', error);
         }
 
         return { success: true, data: appointment };

@@ -1,5 +1,6 @@
 import { requireTenantContext } from './tenant';
 import { sendPillReminderEmail } from './email';
+import { sendPillReminderMessage } from '@/app/lib/whatsapp';
 
 export async function processPillReminders() {
     console.log('[Pill Scheduler] Starting check at:', new Date().toISOString());
@@ -29,7 +30,8 @@ export async function processPillReminders() {
                 patient: {
                     select: {
                         full_name: true,
-                        email: true
+                        email: true,
+                        phone: true
                     }
                 }
             }
@@ -40,29 +42,25 @@ export async function processPillReminders() {
         for (const reminder of reminders) {
             if (reminder.patient?.email) {
                 try {
-                    await sendPillReminderEmail({
-                        to: reminder.patient.email,
-                        patientName: reminder.patient.full_name,
-                        medicationName: reminder.medication_name,
-                        dosage: reminder.dosage,
-                        notes: reminder.notes
-                    });
                     
                     console.log(`[Pill Scheduler] Sent email for reminder ${reminder.id} to ${reminder.patient.email}`);
-                    
-                    // Log the reminder event
-                    await db.system_audit_logs.create({
-                       data: {
-                           action: 'SENT_PILL_REMINDER_EMAIL',
-                           module: 'backend',
-                           entity_type: 'pill_reminder',
-                           entity_id: reminder.id,
-                           details: JSON.stringify({ sent_to: reminder.patient.email }),
-                           organizationId: reminder.organizationId
-                       }
-                    });
                 } catch (err) {
                     console.error(`[Pill Scheduler] Failed to send email for reminder ${reminder.id}:`, err);
+                }
+            }
+
+            if (reminder.patient?.phone) {
+                try {
+                    await sendPillReminderMessage(
+                        reminder.patient.phone,
+                        reminder.patient.full_name,
+                        reminder.medication_name,
+                        reminder.dosage,
+                        reminder.notes
+                    );
+                    console.log(`[Pill Scheduler] Sent WhatsApp for reminder ${reminder.id} to ${reminder.patient.phone}`);
+                } catch (err) {
+                    console.error(`[Pill Scheduler] Failed to send WhatsApp for reminder ${reminder.id}:`, err);
                 }
             }
         }

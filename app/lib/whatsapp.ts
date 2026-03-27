@@ -62,3 +62,32 @@ export async function sendYourTurnAlert(phone: string, patientName: string, doct
         `*${hospitalName} — Your Turn!*\n\nDear ${patientName},\n\nPlease proceed to *Dr. ${doctorName}*'s consultation room.${roomInfo}\n\nThank you for your patience.`
     )
 }
+
+// ========================================
+// Email Mirroring Templates
+// ========================================
+
+export async function sendWelcomeMessage(phone: string, patientName: string, patientId: string, setupLink: string, hospitalName: string = 'Avani Hospital') {
+    return sendWhatsAppMessage(phone,
+        `*Welcome to ${hospitalName}*\n\nDear ${patientName},\n\nYour registration is complete. Use the link below to set your portal password.\n\n*Patient ID:* ${patientId}\n*Setup Link:* ${setupLink}\n\nThank you.`
+    )
+}
+
+export async function sendPrescriptionMessage(phone: string, patientName: string, doctorName: string, diagnosis: string, hospitalName: string = 'Avani Hospital') {
+    return sendWhatsAppMessage(phone,
+        `*${hospitalName} — Prescription*\n\nDear ${patientName},\n\nDr. ${doctorName} has added a new clinical summary.\n\n*Diagnosis:* ${diagnosis}\n\nView details in your Patient Portal.`
+    )
+}
+
+export async function sendAdmissionMessage(phone: string, patientName: string, bedDetails: string, doctorName: string, hospitalName: string = 'Avani Hospital') {
+    return sendWhatsAppMessage(phone,
+        `*${hospitalName} — Admission Confirmation*\n\nDear ${patientName},\n\nYou have been admitted under the care of *Dr. ${doctorName}*.\n\n*Bed Assignment:* ${bedDetails}\n\nTrack your status in the Patient Portal.`
+    )
+}
+
+export async function sendPillReminderMessage(phone: string, patientName: string, medicationName: string, dosage: string, notes?: string | null, hospitalName: string = 'Avani Hospital') {
+    const noteStr = notes ? `\n*Note:* ${notes}` : '';
+    return sendWhatsAppMessage(phone,
+        `*${hospitalName} — Medication Reminder*\n\nDear ${patientName},\n\nIt's time for your medication:\n\n*Medication:* ${medicationName}\n*Dosage:* ${dosage}${noteStr}\n\nPlease take it on time.`
+    )
+}

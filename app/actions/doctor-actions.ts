@@ -5,6 +5,7 @@ import { getTenantPrisma } from "@/backend/db";
 import { revalidatePath } from "next/cache";
 import { searchICD10 } from "@/app/lib/icd10";
 import { sendPrescriptionEmail, sendAdmissionEmail } from "@/backend/email";
+import { sendAdmissionMessage, sendPrescriptionMessage } from "@/app/lib/whatsapp";
 import { getTodayRange, getOrgTimezone } from "@/app/lib/timezone";
 
 export async function getPatientQueue(options?: {
@@ -184,6 +185,14 @@ export async function admitPatient(
         doctorName,
       );
     }
+    if (patient && patient.phone) {
+      sendAdmissionMessage(
+        patient.phone,
+        patient.full_name,
+        "Pending Ward Assignment",
+        doctorName,
+      ).catch((err) => console.warn("[WhatsApp] Failed to send admission message:", err));
+    }
 
     revalidatePath("/doctor/dashboard");
     return { success: true, admission_id: admission.admission_id };
@@ -297,6 +306,14 @@ export async function saveClinicalNotes(data: any) {
         data.doctor_name,
         summaryHtml,
       );
+    }
+    if (patient && patient.phone) {
+      sendPrescriptionMessage(
+        patient.phone,
+        patient.full_name,
+        data.doctor_name,
+        data.diagnosis || "Pending",
+      ).catch((err) => console.warn("[WhatsApp] Failed to send prescription message:", err));
     }
 
     revalidatePath("/doctor/dashboard");
