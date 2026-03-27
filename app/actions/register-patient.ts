@@ -2,11 +2,8 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
-<<<<<<< HEAD
 import { sendAppointmentReminder, sendWelcomeMessage } from '@/app/lib/whatsapp';
-=======
 import { notifyPatient } from '@/app/lib/notify-patient';
->>>>>>> 2330147fb0a84ff6f180101f5f64bf9f5c2aa095
 import { sendWelcomeEmail } from '@/backend/email';
 import { createPatientPasswordSetupToken } from '@/app/lib/password-setup';
 import { patientRegistrationSchema } from '@/app/lib/validations/patient';
