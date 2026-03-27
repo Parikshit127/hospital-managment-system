@@ -8,7 +8,7 @@ import {
     sendQueueUpdate,
     sendYourTurnAlert,
 } from '@/app/lib/whatsapp';
-import { sendAppointmentConfirmationEmail } from '@/backend/email';
+import { notifyPatient } from '@/app/lib/notify-patient';
 import type {
     ActionResponse,
     PaginatedResponse,
@@ -658,31 +658,24 @@ export async function bookAppointment(data: {
         revalidatePath('/reception/appointments');
         revalidatePath('/reception');
 
-        // Send appointment confirmation email (non-blocking, failure won't break booking)
+        // Send appointment notification (email + WhatsApp, non-blocking)
         try {
             const patient = await db.oPD_REG.findUnique({
                 where: { patient_id: data.patientId },
-                select: { email: true, full_name: true },
+                select: { email: true, phone: true, full_name: true },
             });
-            if (patient?.email) {
-                const formattedDate = appointmentDate.toLocaleDateString('en-IN', {
-                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-                });
-                const formattedTime = appointmentDate.toLocaleTimeString('en-IN', {
-                    hour: '2-digit', minute: '2-digit', hour12: true,
-                });
-                await sendAppointmentConfirmationEmail({
-                    to: patient.email,
-                    patientName: patient.full_name || 'Patient',
-                    doctorName: data.doctorName,
-                    department: data.department,
-                    date: formattedDate,
-                    time: formattedTime,
-                    hospitalName: session.organization_name || 'Hospital',
-                });
-            }
+            const formattedDate = appointmentDate.toLocaleDateString('en-IN', {
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+            });
+            const formattedTime = appointmentDate.toLocaleTimeString('en-IN', {
+                hour: '2-digit', minute: '2-digit', hour12: true,
+            });
+            notifyPatient(
+                { email: patient?.email, phone: patient?.phone },
+                { type: 'appointment', patientName: patient?.full_name || 'Patient', doctorName: data.doctorName, department: data.department, date: formattedDate, time: formattedTime, hospitalName: session.organization_name || 'Hospital' },
+            ).catch(err => console.error('[Notify] Walk-in appointment notification failed:', err));
         } catch (emailError) {
-            console.error('Appointment confirmation email failed:', emailError);
+            console.error('Appointment notification failed:', emailError);
         }
 
         return { success: true, data: appointment };

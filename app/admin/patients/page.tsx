@@ -18,7 +18,6 @@ import {
   UserPlus,
   Droplets,
 } from "lucide-react";
-import { AppShell } from "@/app/components/layout/AppShell";
 import {
   getAdminPatientList,
   getAdminPatientStats,
@@ -181,13 +180,38 @@ export default function AdminPatientsPage() {
   ];
 
   return (
-    <AppShell
-      pageTitle="Patient List"
-      pageIcon={<Users className="h-5 w-5" />}
-      headerActions={headerActions}
-      onRefresh={loadData}
-      refreshing={loading}
-    >
+    <div className="space-y-6">
+      {/* HEADER */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3.5">
+          <div
+            className="p-2 rounded-xl text-white shadow-md mx-2 my-2"
+            style={{
+              background: "linear-gradient(135deg, var(--admin-primary), var(--admin-primary-dark))",
+              boxShadow: "0 4px 12px var(--admin-primary-10)",
+            }}
+          >
+            <Users className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black tracking-tight" style={{ color: "var(--admin-text)" }}>
+              Patient List
+            </h1>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {headerActions}
+          <button
+            onClick={loadData}
+            disabled={loading}
+            className="p-2 rounded-xl border transition-all hover:opacity-80 disabled:opacity-50"
+            style={{ borderColor: "var(--admin-border)", color: "var(--admin-text-muted)" }}
+          >
+            <Loader2 className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
+      </div>
+
       <div className="space-y-6">
         {/* Stat Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -489,6 +513,6 @@ export default function AdminPatientsPage() {
           )}
         </div>
       </div>
-    </AppShell>
+    </div>
   );
 }

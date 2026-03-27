@@ -111,6 +111,8 @@ model Organization {
   // Zealthix insurance integration
   zealthix_api_keys        ZealthixApiKey[]
   pill_reminders           PillReminder[]
+  message_delivery_logs    MessageDeliveryLog[]
+  whatsapp_incoming_msgs   WhatsAppIncomingMessage[]
 
   // Extended hospital profile fields
   hospital_type            String?   // General, Multi-Specialty, Super-Specialty, Clinic, Nursing Home
@@ -188,6 +190,8 @@ model OrganizationConfig {
   smtp_pass        String?
   whatsapp_api_token  String?
   whatsapp_phone_id   String?
+  whatsapp_webhook_verify_token String?
+  whatsapp_app_secret           String?
   openai_key       String?
 
   organization Organization @relation(fields: [organizationId], references: [id])
@@ -392,6 +396,8 @@ model OPD_REG {
 
   @@index([organizationId])
   @@index([organizationId, is_archived])
+  @@index([created_at])
+  @@index([organizationId, created_at])
 }
 
 model appointments {
@@ -690,6 +696,7 @@ model beds {
   wards        wards?       @relation(fields: [ward_id], references: [ward_id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([organizationId])
+  @@index([organizationId, status])
 }
 
 model wards {
@@ -936,6 +943,7 @@ model billing_records {
   @@index([organizationId])
   @@index([payment_status])
   @@index([created_at])
+  @@index([payment_status, created_at])
 }
 
 // ========================================
@@ -2016,4 +2024,44 @@ model PillReminder {
   @@index([organizationId])
   @@index([patient_id])
   @@map("pill_reminders")
+}
+
+// ========================================
+// MODULE — WhatsApp Webhook & Delivery Tracking
+// ========================================
+
+model MessageDeliveryLog {
+  id              String   @id @default(uuid())
+  organizationId  String
+  message_id      String   // WhatsApp message ID (wamid) or email messageId
+  patient_phone   String?
+  patient_email   String?
+  channel         String   // "whatsapp" | "email"
+  event_type      String   // "appointment" | "prescription" | "admission" | "lab_report" | "discharge" | "pill_reminder" | "invoice"
+  status          String   // "sent" | "delivered" | "read" | "failed"
+  error_detail    String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, patient_phone])
+  @@index([message_id])
+  @@map("message_delivery_log")
+}
+
+model WhatsAppIncomingMessage {
+  id              String   @id @default(uuid())
+  organizationId  String
+  from_phone      String
+  message_type    String   // "text" | "image" | "document" | "audio" | "video" | "location"
+  message_body    String?
+  wa_message_id   String   @unique
+  timestamp       DateTime
+  created_at      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, from_phone])
+  @@map("whatsapp_incoming_messages")
 }

@@ -4,7 +4,7 @@ import { requireTenantContext } from "@/backend/tenant";
 import { getTenantPrisma } from "@/backend/db";
 import { revalidatePath } from "next/cache";
 import { searchICD10 } from "@/app/lib/icd10";
-import { sendPrescriptionEmail, sendAdmissionEmail } from "@/backend/email";
+import { notifyPatient } from "@/app/lib/notify-patient";
 import { getTodayRange, getOrgTimezone } from "@/app/lib/timezone";
 
 export async function getPatientQueue(options?: {
@@ -175,14 +175,13 @@ export async function admitPatient(
 
     const patient = await db.oPD_REG.findUnique({
       where: { patient_id: patientId },
+      select: { email: true, phone: true, full_name: true },
     });
-    if (patient && patient.email) {
-      await sendAdmissionEmail(
-        patient.email,
-        patient.full_name,
-        "Pending Ward Assignment",
-        doctorName,
-      );
+    if (patient) {
+      notifyPatient(
+        { email: patient.email, phone: patient.phone },
+        { type: 'admission', patientName: patient.full_name, doctorName, bedDetails: 'Pending Ward Assignment' },
+      ).catch(err => console.error('[Notify] Admission notification failed:', err));
     }
 
     revalidatePath("/doctor/dashboard");
@@ -282,21 +281,21 @@ export async function saveClinicalNotes(data: any) {
       },
     });
 
-    // 2. Send email prescription
+    // 2. Send prescription notification (email + WhatsApp)
     const patient = await db.oPD_REG.findUnique({
       where: { patient_id: data.patient_id },
+      select: { email: true, phone: true, full_name: true },
     });
-    if (patient && patient.email) {
+    if (patient) {
       const summaryHtml = `
                 <h3 style="margin-top:0;">Diagnosis: ${data.diagnosis || "Pending"}</h3>
                 <div>${data.notes ? data.notes.replace(/\\n/g, "<br/>") : "No additional notes provided."}</div>
             `;
-      await sendPrescriptionEmail(
-        patient.email,
-        patient.full_name,
-        data.doctor_name,
-        summaryHtml,
-      );
+      const summaryText = `Diagnosis: ${data.diagnosis || "Pending"}\n${data.notes || "No additional notes."}`;
+      notifyPatient(
+        { email: patient.email, phone: patient.phone },
+        { type: 'prescription', patientName: patient.full_name, doctorName: data.doctor_name, summaryHtml, summaryText },
+      ).catch(err => console.error('[Notify] Prescription notification failed:', err));
     }
 
     revalidatePath("/doctor/dashboard");

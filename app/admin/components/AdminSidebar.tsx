@@ -8,7 +8,7 @@ import { logout } from '@/app/login/actions';
 import {
     LayoutDashboard, LineChart,
     Stethoscope, Bed, FlaskConical, Pill, DollarSign, Briefcase,
-    Users, UserCog, Building2, ShieldCheck,
+    Users, UserCog, Building2, ShieldCheck, UserRound,
     Settings, Palette, FileText, Bell, Plug, Clock, BarChart3, Lock,
     LogOut, ChevronLeft, ChevronRight, Workflow,
     GitBranch, Menu, X, DatabaseBackup, BookOpen,
@@ -39,6 +39,7 @@ const NAV_SECTIONS = [
             { label: 'Staff & Users', href: '/admin/staff', icon: Users },
             { label: 'Doctors', href: '/admin/doctors', icon: UserCog },
             { label: 'Departments', href: '/admin/departments', icon: Building2 },
+            { label: 'Patients', href: '/admin/patients', icon: UserRound },
             { label: 'Roles & Permissions', href: '/admin/roles', icon: ShieldCheck },
         ],
     },

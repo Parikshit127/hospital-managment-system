@@ -1,7 +1,7 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
-import { sendDischargeSummary } from '@/app/lib/whatsapp';
+import { notifyPatient } from '@/app/lib/notify-patient';
 import OpenAI from 'openai';
 
 
@@ -131,12 +131,13 @@ export async function processDischarge(patientId: string, patientName: string, n
         });
 
 
-        // Send WhatsApp discharge notification (non-blocking)
-        const patient = await db.oPD_REG.findFirst({ where: { patient_id: patientId }, select: { phone: true } });
-        if (patient?.phone) {
-            sendDischargeSummary(patient.phone, patientName).catch(err =>
-                console.warn('[WhatsApp] Failed to send discharge summary:', err)
-            );
+        // Send discharge notification (email + WhatsApp, non-blocking)
+        const patient = await db.oPD_REG.findFirst({ where: { patient_id: patientId }, select: { phone: true, email: true } });
+        if (patient) {
+            notifyPatient(
+                { email: patient.email, phone: patient.phone },
+                { type: 'discharge', patientName },
+            ).catch(err => console.warn('[Notify] Discharge notification failed:', err));
         }
 
         return { success: true };

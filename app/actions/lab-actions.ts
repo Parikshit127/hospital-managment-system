@@ -4,7 +4,7 @@ import { requireTenantContext } from '@/backend/tenant';
 import { getTodayRange, getOrgTimezone } from '@/app/lib/timezone';
 import { revalidatePath } from 'next/cache';
 import { logAudit } from '@/app/lib/audit';
-import { sendLabReportReady } from '@/app/lib/whatsapp';
+import { notifyPatient } from '@/app/lib/notify-patient';
 
 export async function getLabOrders(statusFilter: 'Pending' | 'Completed' | 'All' = 'Pending') {
     try {
@@ -122,12 +122,13 @@ export async function uploadResult(barcode: string, resultValue: string, remarks
             details: JSON.stringify({ resultValue, remarks }),
         });
 
-        // Send WhatsApp notification (non-blocking)
-        const patient = await db.oPD_REG.findFirst({ where: { patient_id: order.patient_id }, select: { phone: true, full_name: true } });
-        if (patient?.phone) {
-            sendLabReportReady(patient.phone, patient.full_name, order.test_type).catch(err =>
-                console.warn('[WhatsApp] Failed to send lab report notification:', err)
-            );
+        // Send notification (email + WhatsApp, non-blocking)
+        const patient = await db.oPD_REG.findFirst({ where: { patient_id: order.patient_id }, select: { phone: true, email: true, full_name: true } });
+        if (patient) {
+            notifyPatient(
+                { email: patient.email, phone: patient.phone },
+                { type: 'lab_report', patientName: patient.full_name, testName: order.test_type },
+            ).catch(err => console.warn('[Notify] Lab report notification failed:', err));
         }
 
         revalidatePath('/lab/technician');
