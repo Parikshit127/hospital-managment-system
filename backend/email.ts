@@ -10,7 +10,10 @@ function escapeHtml(str: string): string {
 }
 
 function getAppBaseUrl() {
-    return process.env.APP_BASE_URL || 'http://localhost:3000';
+    return process.env.APP_BASE_URL
+        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+        || (process.env.NEXT_PUBLIC_APP_URL)
+        || 'http://localhost:3000';
 }
 
 // Create a singleton transporter instance
