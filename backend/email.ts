@@ -10,7 +10,10 @@ function escapeHtml(str: string): string {
 }
 
 function getAppBaseUrl() {
-    return process.env.APP_BASE_URL || 'http://localhost:3000';
+    return process.env.APP_BASE_URL
+        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+        || (process.env.NEXT_PUBLIC_APP_URL)
+        || 'http://localhost:3000';
 }
 
 // Create a singleton transporter instance
@@ -212,4 +215,73 @@ export async function sendPillReminderEmail({
     `;
 
     return sendEmail({ to, subject: `Medication Reminder: ${escapeHtml(medicationName)}`, html });
+}
+
+/**
+ * Template: Lab Report Ready
+ */
+export async function sendLabReportEmail(to: string, patientName: string, testName: string, hospitalName: string = 'Avani Hospital') {
+    const appBaseUrl = getAppBaseUrl();
+    const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+            <h2 style="color: #1aab74;">Lab Report Ready</h2>
+            <p>Dear ${escapeHtml(patientName)},</p>
+            <p>Your <strong>${escapeHtml(testName)}</strong> report from ${escapeHtml(hospitalName)} is ready.</p>
+
+            <div style="background: #f0faf6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 0; font-weight: bold; color: #0f8f5e;">You can view and download your lab report from the Patient Portal.</p>
+            </div>
+
+            <p>Log in at <a href="${appBaseUrl}/patient/login" style="color: #1aab74;">Patient Portal</a> to access your report, or collect a printed copy from the Lab.</p>
+        </div>
+    `;
+
+    return sendEmail({ to, subject: `Lab Report Ready: ${escapeHtml(testName)} — ${escapeHtml(hospitalName)}`, html });
+}
+
+/**
+ * Template: Discharge Summary
+ */
+export async function sendDischargeEmail(to: string, patientName: string, doctorName: string, hospitalName: string = 'Avani Hospital') {
+    const appBaseUrl = getAppBaseUrl();
+    const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+            <h2 style="color: #1aab74;">Discharge Summary Ready</h2>
+            <p>Dear ${escapeHtml(patientName)},</p>
+            <p>Your discharge summary has been prepared by Dr. ${escapeHtml(doctorName)} at ${escapeHtml(hospitalName)}.</p>
+
+            <div style="background: #f0faf6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 0; font-weight: bold; color: #0f8f5e;">Your discharge summary and follow-up instructions are available online.</p>
+            </div>
+
+            <p>View your complete discharge report in the <a href="${appBaseUrl}/patient/login" style="color: #1aab74;">Patient Portal</a>, or collect from reception.</p>
+            <p style="color: #666; font-size: 12px; margin-top: 30px;">Wishing you a speedy recovery! For any questions, contact reception.</p>
+        </div>
+    `;
+
+    return sendEmail({ to, subject: `Discharge Summary — ${escapeHtml(hospitalName)}`, html });
+}
+
+/**
+ * Template: Invoice / Billing Notification
+ */
+export async function sendInvoiceEmail(to: string, patientName: string, invoiceNumber: string, amount: string, hospitalName: string = 'Avani Hospital') {
+    const appBaseUrl = getAppBaseUrl();
+    const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+            <h2 style="color: #1aab74;">Invoice Generated</h2>
+            <p>Dear ${escapeHtml(patientName)},</p>
+            <p>An invoice has been generated at ${escapeHtml(hospitalName)}.</p>
+
+            <div style="background: #f0faf6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 0;"><strong>Invoice No:</strong> #${escapeHtml(invoiceNumber)}</p>
+                <p style="margin: 8px 0 0 0; font-size: 22px; font-weight: bold; color: #0f8f5e;">&#8377;${escapeHtml(amount)}</p>
+            </div>
+
+            <p>You can view the detailed breakdown and pay online via the <a href="${appBaseUrl}/patient/login" style="color: #1aab74;">Patient Portal</a>.</p>
+            <p style="color: #666; font-size: 12px; margin-top: 30px;">For billing queries, contact our finance desk.</p>
+        </div>
+    `;
+
+    return sendEmail({ to, subject: `Invoice #${escapeHtml(invoiceNumber)} — ${escapeHtml(hospitalName)}`, html });
 }

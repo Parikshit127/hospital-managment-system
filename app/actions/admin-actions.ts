@@ -19,7 +19,6 @@ export async function getDashboardStats() {
       pendingLabOrders,
       completedLabToday,
       totalRevenue,
-      pendingDischarges,
       appointmentsToday,
     ] = await Promise.all([
       db.oPD_REG.count({
@@ -39,9 +38,6 @@ export async function getDashboardStats() {
         _sum: { net_amount: true },
         where: { payment_status: "Paid" },
       }),
-      db.admissions.count({
-        where: { status: "Admitted" },
-      }),
       db.appointments.count({
         where: { appointment_date: { gte: today } },
       }),
@@ -56,7 +52,7 @@ export async function getDashboardStats() {
         pendingLabOrders,
         completedLabToday,
         totalRevenue: totalRevenue._sum.net_amount || 0,
-        pendingDischarges,
+        pendingDischarges: activeAdmissions,
         appointmentsToday,
       },
     };
@@ -71,26 +67,26 @@ export async function getBedOccupancy() {
   try {
     const { db } = await requireTenantContext();
 
-    const [total, occupied, available, maintenance, wardBeds] =
-      await Promise.all([
-        db.beds.count(),
-        db.beds.count({ where: { status: "Occupied" } }),
-        db.beds.count({ where: { status: "Available" } }),
-        db.beds.count({ where: { status: "Maintenance" } }),
-        db.beds.findMany({
-          select: {
-            status: true,
-            wards: { select: { ward_name: true, ward_type: true } },
-          },
-        }),
-      ]);
+    // Single query — fetch all beds with ward info, process in-memory
+    const allBeds = await db.beds.findMany({
+      select: {
+        status: true,
+        wards: { select: { ward_name: true, ward_type: true } },
+      },
+    });
 
-    // Group by ward
+    let total = 0, occupied = 0, available = 0, maintenance = 0;
     const wardMap: Record<
       string,
       { total: number; occupied: number; available: number; wardType: string }
     > = {};
-    for (const bed of wardBeds) {
+
+    for (const bed of allBeds) {
+      total++;
+      if (bed.status === "Occupied") occupied++;
+      else if (bed.status === "Available") available++;
+      else if (bed.status === "Maintenance") maintenance++;
+
       const wardName = bed.wards?.ward_name || "Unassigned";
       if (!wardMap[wardName]) {
         wardMap[wardName] = {
@@ -137,7 +133,7 @@ export async function getRevenueBreakdown() {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const [byDeptRaw, byTypeRaw, totalAgg, recentRecords] = await Promise.all([
+    const [byDeptRaw, byTypeRaw, totalAgg, dailyTrendRaw] = await Promise.all([
       db.billing_records.groupBy({
         by: ["department"],
         _sum: { net_amount: true },
@@ -152,19 +148,22 @@ export async function getRevenueBreakdown() {
         _sum: { net_amount: true },
         where: { payment_status: "Paid" },
       }),
-      db.billing_records.findMany({
-        where: { payment_status: "Paid", created_at: { gte: sevenDaysAgo } },
-        select: { created_at: true, net_amount: true },
-        orderBy: { created_at: "asc" },
-      }),
+      // Aggregate daily revenue in DB instead of fetching all rows
+      db.$queryRaw<{ day: Date; total: number }[]>`
+        SELECT DATE("created_at") as day, SUM("net_amount")::float as total
+        FROM "billing_records"
+        WHERE "payment_status" = 'Paid' AND "created_at" >= ${sevenDaysAgo}
+        GROUP BY DATE("created_at")
+        ORDER BY day ASC
+      `,
     ]);
 
     const dailyRevenue: Record<string, number> = {};
-    for (const r of recentRecords) {
-      const day = r.created_at.toLocaleDateString("en-IN", {
+    for (const r of dailyTrendRaw) {
+      const day = new Date(r.day).toLocaleDateString("en-IN", {
         weekday: "short",
       });
-      dailyRevenue[day] = (dailyRevenue[day] || 0) + r.net_amount;
+      dailyRevenue[day] = (dailyRevenue[day] || 0) + r.total;
     }
 
     return {
@@ -215,25 +214,26 @@ export async function getPatientFlow() {
 
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
 
-    const patients = await db.oPD_REG.findMany({
-      where: { created_at: { gte: sevenDaysAgo } },
-      select: { created_at: true },
-      orderBy: { created_at: "asc" },
-    });
-
-    const dailyCount: Record<string, number> = {};
-    for (const p of patients) {
-      const day = p.created_at.toLocaleDateString("en-IN", {
-        weekday: "short",
-        day: "numeric",
-      });
-      dailyCount[day] = (dailyCount[day] || 0) + 1;
-    }
+    // Use raw count query grouped by date instead of fetching all rows
+    const patients = await db.$queryRaw<{ day: Date; count: bigint }[]>`
+      SELECT DATE("created_at") as day, COUNT(*)::bigint as count
+      FROM "OPD_REG"
+      WHERE "created_at" >= ${sevenDaysAgo}
+      GROUP BY DATE("created_at")
+      ORDER BY day ASC
+    `;
 
     return {
       success: true,
-      data: Object.entries(dailyCount).map(([day, count]) => ({ day, count })),
+      data: patients.map((p: { day: Date; count: bigint }) => ({
+        day: new Date(p.day).toLocaleDateString("en-IN", {
+          weekday: "short",
+          day: "numeric",
+        }),
+        count: Number(p.count),
+      })),
     };
   } catch (error: any) {
     console.error("getPatientFlow error:", error);

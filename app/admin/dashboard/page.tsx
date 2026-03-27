@@ -7,7 +7,7 @@ import {
     Loader2, ChevronRight,
     Stethoscope, FileText, Package, ArrowUpRight,
     Zap, Settings, UserPlus, X, Power, Building2,
-    CheckCircle2, XCircle, RefreshCw, LayoutGrid
+    CheckCircle2, XCircle, RefreshCw, LayoutGrid, Briefcase
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -520,7 +520,7 @@ export default function AdminDashboard() {
                                     <Package className="h-4 w-4 text-amber-500" />
                                     Inventory Alerts
                                 </h3>
-                                <Link href="/pharmacy/billing" className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1 hover:opacity-80" style={{ color: 'var(--admin-primary)' }}>
+                                <Link href="/admin/pharmacy" className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1 hover:opacity-80" style={{ color: 'var(--admin-primary)' }}>
                                     Pharmacy <ChevronRight className="h-3 w-3" />
                                 </Link>
                             </div>
@@ -824,13 +824,13 @@ export default function AdminDashboard() {
                     {/* QUICK ACTIONS ROW */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {[
-                            { href: '/reception/triage', icon: Zap, title: 'AI Triage Intake', subtitle: 'Smart patient intake & routing', color: 'text-teal-500', bg: 'bg-teal-500/10' },
-                            { href: '/ipd', icon: Bed, title: 'IPD Management', subtitle: 'Beds, admissions & care', color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
-                            { href: '/finance/dashboard', icon: DollarSign, title: 'Finance & Billing', subtitle: 'Invoices, payments & revenue', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-                            { href: '/lab/technician', icon: FlaskConical, title: 'Lab Worklist', subtitle: 'Test orders & result upload', color: 'text-amber-500', bg: 'bg-amber-500/10' },
-                            { href: '/pharmacy/billing', icon: Pill, title: 'Pharmacy', subtitle: 'Inventory & dispensing', color: 'text-cyan-500', bg: 'bg-cyan-500/10' },
-                            { href: '/insurance', icon: Shield, title: 'Insurance & TPA', subtitle: 'Claims & policy management', color: 'text-blue-500', bg: 'bg-blue-500/10' },
-                            { href: '/discharge/admin', icon: FileText, title: 'Discharge Hub', subtitle: 'Summary & clearance', color: 'text-rose-500', bg: 'bg-rose-500/10' },
+                            { href: '/admin/opd', icon: Zap, title: 'OPD Management', subtitle: 'Appointments, triage & queues', color: 'text-teal-500', bg: 'bg-teal-500/10' },
+                            { href: '/admin/ipd', icon: Bed, title: 'IPD Management', subtitle: 'Beds, admissions & care', color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
+                            { href: '/admin/finance', icon: DollarSign, title: 'Finance & Billing', subtitle: 'Invoices, payments & revenue', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+                            { href: '/admin/lab', icon: FlaskConical, title: 'Lab Management', subtitle: 'Test orders & result upload', color: 'text-amber-500', bg: 'bg-amber-500/10' },
+                            { href: '/admin/pharmacy', icon: Pill, title: 'Pharmacy', subtitle: 'Inventory & dispensing', color: 'text-cyan-500', bg: 'bg-cyan-500/10' },
+                            { href: '/admin/integrations', icon: Shield, title: 'Insurance & TPA', subtitle: 'Claims & policy management', color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                            { href: '/admin/hr', icon: Briefcase, title: 'HR Management', subtitle: 'Staff, attendance & payroll', color: 'text-rose-500', bg: 'bg-rose-500/10' },
                             { href: '/admin/mfa-setup', icon: Shield, title: 'MFA Setup', subtitle: 'Two-factor authentication', color: 'text-purple-500', bg: 'bg-purple-500/10' },
                         ].map(item => {
                             const Icon = item.icon;

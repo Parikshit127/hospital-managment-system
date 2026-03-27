@@ -91,3 +91,31 @@ export async function sendPillReminderMessage(phone: string, patientName: string
         `*${hospitalName} — Medication Reminder*\n\nDear ${patientName},\n\nIt's time for your medication:\n\n*Medication:* ${medicationName}\n*Dosage:* ${dosage}${noteStr}\n\nPlease take it on time.`
     )
 }
+
+// ========================================
+// Clinical & Billing WhatsApp Notifications
+// ========================================
+
+export async function sendPrescriptionWhatsApp(phone: string, patientName: string, doctorName: string, summaryText: string, hospitalName: string = 'Hospital') {
+    return sendWhatsAppMessage(phone,
+        `*${hospitalName} — Prescription Ready*\n\nDear ${patientName},\n\nDr. ${doctorName} has added a new prescription to your record.\n\n${summaryText}\n\nView details in your Patient Portal.`
+    )
+}
+
+export async function sendAdmissionWhatsApp(phone: string, patientName: string, doctorName: string, bedDetails: string, hospitalName: string = 'Hospital') {
+    return sendWhatsAppMessage(phone,
+        `*${hospitalName} — Admission Confirmed*\n\nDear ${patientName},\n\nYou have been admitted under *Dr. ${doctorName}*.\nBed: *${bedDetails}*\n\nTrack your vitals and billing in the Patient Portal.\n\nWishing you a speedy recovery!`
+    )
+}
+
+export async function sendPillReminderWhatsApp(phone: string, patientName: string, medicationName: string, dosage: string, hospitalName: string = 'Hospital') {
+    return sendWhatsAppMessage(phone,
+        `*${hospitalName} — Medication Reminder* 💊\n\nDear ${patientName},\n\nIt's time for your medication:\n*${medicationName}* — ${dosage}\n\nPlease take your medicine on time.`
+    )
+}
+
+export async function sendInvoiceWhatsApp(phone: string, patientName: string, invoiceNumber: string, amount: string, hospitalName: string = 'Hospital') {
+    return sendWhatsAppMessage(phone,
+        `*${hospitalName} — Invoice Generated*\n\nDear ${patientName},\n\nInvoice *#${invoiceNumber}* for *₹${amount}* has been generated.\n\nYou can view and pay online via the Patient Portal.\n\nThank you.`
+    )
+}

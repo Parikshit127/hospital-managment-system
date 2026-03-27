@@ -10,6 +10,7 @@ import {
     sendAppointmentReminder,
 } from '@/app/lib/whatsapp';
 import { sendAppointmentConfirmationEmail } from '@/backend/email';
+import { notifyPatient } from '@/app/lib/notify-patient';
 import type {
     ActionResponse,
     PaginatedResponse,
@@ -122,7 +123,7 @@ export async function getRegisteredPatients(options?: {
 
         return {
             success: true,
-            data: data.map((p: { appointments: Array<{ status?: string; appointment_date?: Date }>; [key: string]: unknown }) => ({
+            data: data.map((p: { appointments: Array<{ status?: string; appointment_date?: Date }>;[key: string]: unknown }) => ({
                 ...p,
                 lastAppointmentStatus: p.appointments[0]?.status || null,
                 lastAppointmentDate: p.appointments[0]?.appointment_date || null,
@@ -659,11 +660,11 @@ export async function bookAppointment(data: {
         revalidatePath('/reception/appointments');
         revalidatePath('/reception');
 
-        // Send appointment confirmation email (non-blocking, failure won't break booking)
+        // Send appointment notification (email + WhatsApp, non-blocking)
         try {
             const patient = await db.oPD_REG.findUnique({
                 where: { patient_id: data.patientId },
-                select: { email: true, full_name: true },
+                select: { email: true, phone: true, full_name: true },
             });
             if (patient?.email) {
                 const formattedDate = appointmentDate.toLocaleDateString('en-IN', {
@@ -682,24 +683,8 @@ export async function bookAppointment(data: {
                     hospitalName: session.organization_name || 'Hospital',
                 });
             }
-            const patientForWA = await db.oPD_REG.findUnique({
-                where: { patient_id: data.patientId },
-                select: { phone: true, full_name: true },
-            });
-            if (patientForWA?.phone) {
-                const formattedTime = appointmentDate.toLocaleTimeString('en-IN', {
-                    hour: '2-digit', minute: '2-digit', hour12: true,
-                });
-                sendAppointmentReminder(
-                    patientForWA.phone,
-                    patientForWA.full_name || 'Patient',
-                    data.doctorName,
-                    formattedTime,
-                    session.organization_name || 'Hospital'
-                ).catch((err: any) => console.warn('[WhatsApp] Failed to send appointment reminder:', err));
-            }
-        } catch (error) {
-            console.error('Appointment notifications failed:', error);
+        } catch (emailError) {
+            console.error('Appointment confirmation email failed:', emailError);
         }
 
         return { success: true, data: appointment };

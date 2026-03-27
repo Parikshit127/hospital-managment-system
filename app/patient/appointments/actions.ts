@@ -5,7 +5,7 @@ import { getPatientSession } from "../login/actions";
 import { revalidatePath } from "next/cache";
 import { getOrCreateDailySlots } from "@/app/actions/doctor-actions";
 import { logPatientAudit } from "@/app/lib/audit";
-import { sendAppointmentConfirmationEmail } from "@/backend/email";
+import { notifyPatient } from "@/app/lib/notify-patient";
 
 export async function getAvailableDoctors() {
     try {
@@ -192,31 +192,24 @@ export async function bookAppointment(
         revalidatePath("/patient/appointments");
         revalidatePath("/patient/dashboard");
 
-        // Send appointment confirmation email (non-blocking, failure won't break booking)
+        // Send appointment notification (email + WhatsApp, non-blocking)
         try {
             const patient = await db.OPD_REG.findUnique({
                 where: { patient_id: session.id },
-                select: { email: true },
+                select: { email: true, phone: true },
             });
-            if (patient?.email) {
-                const formattedDate = appointmentDate.toLocaleDateString('en-IN', {
-                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-                });
-                const formattedTime = appointmentDate.toLocaleTimeString('en-IN', {
-                    hour: '2-digit', minute: '2-digit', hour12: true,
-                });
-                await sendAppointmentConfirmationEmail({
-                    to: patient.email,
-                    patientName: session.name,
-                    doctorName: doctor.name,
-                    department: doctor.specialty || 'General',
-                    date: formattedDate,
-                    time: formattedTime,
-                    hospitalName: session.organization_name || 'Hospital',
-                });
-            }
+            const formattedDate = appointmentDate.toLocaleDateString('en-IN', {
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+            });
+            const formattedTime = appointmentDate.toLocaleTimeString('en-IN', {
+                hour: '2-digit', minute: '2-digit', hour12: true,
+            });
+            notifyPatient(
+                { email: patient?.email, phone: patient?.phone },
+                { type: 'appointment', patientName: session.name, doctorName: doctor.name, department: doctor.specialty || 'General', date: formattedDate, time: formattedTime, hospitalName: session.organization_name || 'Hospital' },
+            ).catch(err => console.error('[Notify] Appointment notification failed:', err));
         } catch (emailError) {
-            console.error('Appointment confirmation email failed:', emailError);
+            console.error('Appointment notification failed:', emailError);
         }
 
         return { success: true, data: { appointmentId: apptId } };

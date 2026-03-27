@@ -2,7 +2,11 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
+<<<<<<< HEAD
 import { sendAppointmentReminder, sendWelcomeMessage } from '@/app/lib/whatsapp';
+=======
+import { notifyPatient } from '@/app/lib/notify-patient';
+>>>>>>> 2330147fb0a84ff6f180101f5f64bf9f5c2aa095
 import { sendWelcomeEmail } from '@/backend/email';
 import { createPatientPasswordSetupToken } from '@/app/lib/password-setup';
 import { patientRegistrationSchema } from '@/app/lib/validations/patient';
@@ -185,11 +189,12 @@ export async function registerPatient(formData: FormData) {
                 organizationId,
             }
         });
-        // Send WhatsApp appointment reminder (non-blocking, only if appointment was created)
-        if (!skipAppointment && rawData.phone) {
-            sendAppointmentReminder(rawData.phone, rawData.full_name, rawData.department, 'as scheduled').catch(err =>
-                console.warn('[WhatsApp] Failed to send reminder:', err)
-            );
+        // Send appointment notification (email + WhatsApp, non-blocking)
+        if (!skipAppointment) {
+            notifyPatient(
+                { email: rawData.email !== 'not given' ? rawData.email : undefined, phone: rawData.phone },
+                { type: 'appointment', patientName: rawData.full_name, doctorName: rawData.department, department: rawData.department, date: 'Today', time: 'as scheduled', hospitalName: 'Hospital' },
+            ).catch(err => console.warn('[Notify] Registration appointment notification failed:', err));
         }
 
         return {

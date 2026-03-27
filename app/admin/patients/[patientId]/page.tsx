@@ -17,7 +17,7 @@ import {
   Loader2,
   BedDouble,
 } from "lucide-react";
-import { AppShell } from "@/app/components/layout/AppShell";
+import { AdminPage } from "../../components/AdminPage";
 import { getAdminPatientFullDetails } from "@/app/actions/admin-actions";
 
 import OverviewTab from "./tabs/OverviewTab";
@@ -137,7 +137,7 @@ export default function AdminPatientDetailsPage() {
     : [];
 
   return (
-    <AppShell
+    <AdminPage
       pageTitle={patient ? patient.full_name : "Patient Details"}
       pageIcon={<User className="h-5 w-5" />}
       headerActions={headerActions}
@@ -314,6 +314,6 @@ export default function AdminPatientDetailsPage() {
           </>
         )}
       </div>
-    </AppShell>
+    </AdminPage>
   );
 }
