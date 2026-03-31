@@ -383,8 +383,8 @@ export default function ReceptionDashboard() {
                                                 <div key={t.id} className="p-3 bg-gray-50 rounded-xl">
                                                     <div className="flex items-center justify-between mb-1">
                                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${t.triage_level === 'Emergency' ? 'bg-rose-50 text-rose-700' :
-                                                                t.triage_level === 'Urgent' ? 'bg-amber-50 text-amber-700' :
-                                                                    'bg-blue-50 text-blue-700'
+                                                            t.triage_level === 'Urgent' ? 'bg-amber-50 text-amber-700' :
+                                                                'bg-blue-50 text-blue-700'
                                                             }`}>{t.triage_level}</span>
                                                         <span className="text-[10px] text-gray-400">
                                                             {new Date(t.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}

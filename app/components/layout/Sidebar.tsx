@@ -119,13 +119,18 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       ],
     },
   ],
+
   receptionist: [
     {
       title: "Front Desk",
       items: [
+        { label: "Dashboard", href: "/reception/dashboard", icon: LayoutDashboard },
         { label: "Patient List", href: "/reception", icon: Users },
         { label: "Register Patient", href: "/reception/register", icon: UserPlus },
         { label: "Appointments", href: "/reception/appointments", icon: CalendarDays },
+        { label: "Finance & Config", href: "/reception/finance", icon: DollarSign },
+        { label: "Generate Receipt", href: "/reception/fees", icon: FileText },
+        { label: "Patient History", href: "/reception/history", icon: Clock },
       ],
     },
     {
@@ -335,9 +340,17 @@ export function Sidebar({ session }: SidebarProps) {
   const sections = session ? NAV_BY_ROLE[session.role] || [] : [];
   const orgName = session?.organization_name || "Hospital OS";
 
+  const allHrefs = sections.flatMap((s) => s.items.map((i) => i.href));
+  const longestMatch = allHrefs.reduce((longest, currentHref) => {
+    if (pathname === currentHref || pathname.startsWith(currentHref + "/")) {
+      return currentHref.length > longest.length ? currentHref : longest;
+    }
+    return longest;
+  }, "");
+
   const isActive = (href: string) => {
     if (pathname === href) return true;
-    if (href !== "/" && pathname.startsWith(href + "/")) return true;
+    if (href === longestMatch) return true;
     return false;
   };
 
@@ -399,17 +412,16 @@ export function Sidebar({ session }: SidebarProps) {
                     href={item.href}
                     onClick={() => setMobileOpen(false)}
                     title={collapsed ? item.label : undefined}
-                    className={`flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-all duration-150 ${
-                      active
-                        ? "text-white"
-                        : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.06]"
-                    } ${collapsed ? "justify-center px-2" : ""}`}
+                    className={`flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-all duration-150 ${active
+                      ? "text-white"
+                      : "text-gray-400 hover:text-gray-200 hover:bg-white/[0.06]"
+                      } ${collapsed ? "justify-center px-2" : ""}`}
                     style={
                       active
                         ? {
-                            backgroundColor: "var(--admin-primary-20)",
-                            color: "var(--admin-primary-light)",
-                          }
+                          backgroundColor: "var(--admin-primary-20)",
+                          color: "var(--admin-primary-light)",
+                        }
                         : undefined
                     }
                   >
@@ -446,18 +458,16 @@ export function Sidebar({ session }: SidebarProps) {
         <button
           onClick={() => logout()}
           title={collapsed ? "Logout" : undefined}
-          className={`flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-gray-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-150 ${
-            collapsed ? "justify-center px-2" : ""
-          }`}
+          className={`flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-gray-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-150 ${collapsed ? "justify-center px-2" : ""
+            }`}
         >
           <LogOut className="h-4 w-4 shrink-0" />
           {!collapsed && <span>Logout</span>}
         </button>
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className={`hidden lg:flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-gray-500 hover:text-white hover:bg-white/[0.06] transition-all duration-150 ${
-            collapsed ? "justify-center px-2" : ""
-          }`}
+          className={`hidden lg:flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-gray-500 hover:text-white hover:bg-white/[0.06] transition-all duration-150 ${collapsed ? "justify-center px-2" : ""
+            }`}
         >
           {collapsed ? (
             <ChevronRight className="h-4 w-4 shrink-0" />
@@ -494,9 +504,8 @@ export function Sidebar({ session }: SidebarProps) {
 
       {/* Mobile: slide-in */}
       <div
-        className={`lg:hidden fixed top-0 left-0 h-screen z-50 transition-transform duration-300 ease-out ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`lg:hidden fixed top-0 left-0 h-screen z-50 transition-transform duration-300 ease-out ${mobileOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         {sidebarContent}
       </div>

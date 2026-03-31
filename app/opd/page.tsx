@@ -113,11 +113,10 @@ export default function OPDDashboard() {
                                 <button
                                     key={dept.department}
                                     onClick={() => setDeptFilter(deptFilter === dept.department ? '' : dept.department)}
-                                    className={`p-3 rounded-xl border text-center transition-all ${
-                                        deptFilter === dept.department
+                                    className={`p-3 rounded-xl border text-center transition-all ${deptFilter === dept.department
                                             ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
                                             : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
-                                    }`}
+                                        }`}
                                 >
                                     <p className="text-xl font-black text-gray-900">{dept.count}</p>
                                     <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mt-1">{dept.department}</p>
