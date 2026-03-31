@@ -374,30 +374,31 @@ export default function ApiDocsPage() {
     })).filter((section) => section.endpoints.length > 0);
 
     return (
-        <div className="min-h-screen p-4 sm:p-6 lg:p-8" style={{ backgroundColor: 'var(--admin-bg)' }}>
+        <div className="min-h-screen p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
             {/* Hero Header */}
-            <div className="relative mb-8 overflow-hidden rounded-2xl border border-gray-700/40 bg-gradient-to-br from-gray-800/80 via-gray-800/60 to-gray-900/80 p-6 sm:p-8">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-600/10 via-transparent to-purple-600/5" />
+            <div className="relative mb-8 overflow-hidden rounded-3xl border border-blue-500/20 bg-gradient-to-br from-slate-800/90 via-blue-950/40 to-slate-900/90 p-6 sm:p-8 shadow-2xl shadow-blue-500/10">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/20 via-transparent to-purple-500/10" />
+                <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjAzIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30" />
                 <div className="relative flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                     <div className="flex items-start gap-4">
-                        <div className="p-3 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/20">
+                        <div className="p-3 rounded-2xl bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600 shadow-xl shadow-blue-500/30 ring-1 ring-blue-400/20">
                             <BookOpen className="h-6 w-6 text-white" />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-bold text-white tracking-tight">API Documentation</h1>
-                            <p className="text-sm text-gray-400 mt-1 max-w-lg">
+                            <h1 className="text-3xl font-bold bg-gradient-to-r from-white via-blue-50 to-purple-100 bg-clip-text text-transparent tracking-tight">API Documentation</h1>
+                            <p className="text-sm text-slate-300 mt-2 max-w-lg leading-relaxed">
                                 Explore available endpoints, manage API keys, and test integrations for your Hospital OS instance.
                             </p>
-                            <div className="flex items-center gap-3 mt-3">
-                                <span className="inline-flex items-center gap-1.5 text-xs text-gray-400 bg-gray-700/40 px-2.5 py-1 rounded-full">
+                            <div className="flex items-center gap-3 mt-4">
+                                <span className="inline-flex items-center gap-1.5 text-xs text-blue-200 bg-blue-500/20 backdrop-blur-sm px-3 py-1.5 rounded-full border border-blue-400/30">
                                     <Lock className="h-3 w-3" />
                                     API Key Auth
                                 </span>
-                                <span className="inline-flex items-center gap-1.5 text-xs text-gray-400 bg-gray-700/40 px-2.5 py-1 rounded-full">
+                                <span className="inline-flex items-center gap-1.5 text-xs text-purple-200 bg-purple-500/20 backdrop-blur-sm px-3 py-1.5 rounded-full border border-purple-400/30">
                                     <Zap className="h-3 w-3" />
                                     REST / JSON
                                 </span>
-                                <span className="inline-flex items-center gap-1.5 text-xs text-gray-400 bg-gray-700/40 px-2.5 py-1 rounded-full">
+                                <span className="inline-flex items-center gap-1.5 text-xs text-emerald-200 bg-emerald-500/20 backdrop-blur-sm px-3 py-1.5 rounded-full border border-emerald-400/30">
                                     <Shield className="h-3 w-3" />
                                     Multi-tenant
                                 </span>
@@ -407,17 +408,17 @@ export default function ApiDocsPage() {
 
                     {/* Quick Stats */}
                     <div className="flex gap-3 sm:gap-4">
-                        <div className="text-center px-4 py-2 bg-gray-900/40 rounded-xl border border-gray-700/30">
-                            <p className="text-xl font-bold text-white">{stats.activeKeys}</p>
-                            <p className="text-[11px] text-gray-500 font-medium mt-0.5">Active Keys</p>
+                        <div className="text-center px-5 py-3 bg-gradient-to-br from-blue-500/10 to-blue-600/5 backdrop-blur-sm rounded-2xl border border-blue-400/20 shadow-lg shadow-blue-500/10">
+                            <p className="text-2xl font-bold bg-gradient-to-br from-blue-200 to-blue-400 bg-clip-text text-transparent">{stats.activeKeys}</p>
+                            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-1">Active Keys</p>
                         </div>
-                        <div className="text-center px-4 py-2 bg-gray-900/40 rounded-xl border border-gray-700/30">
-                            <p className="text-xl font-bold text-white">{stats.totalApiCalls}</p>
-                            <p className="text-[11px] text-gray-500 font-medium mt-0.5">API Calls</p>
+                        <div className="text-center px-5 py-3 bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-sm rounded-2xl border border-purple-400/20 shadow-lg shadow-purple-500/10">
+                            <p className="text-2xl font-bold bg-gradient-to-br from-purple-200 to-purple-400 bg-clip-text text-transparent">{stats.totalApiCalls}</p>
+                            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-1">API Calls</p>
                         </div>
-                        <div className="text-center px-4 py-2 bg-gray-900/40 rounded-xl border border-gray-700/30">
-                            <p className="text-xl font-bold text-white">{stats.recentClaims}</p>
-                            <p className="text-[11px] text-gray-500 font-medium mt-0.5">Claims</p>
+                        <div className="text-center px-5 py-3 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 backdrop-blur-sm rounded-2xl border border-emerald-400/20 shadow-lg shadow-emerald-500/10">
+                            <p className="text-2xl font-bold bg-gradient-to-br from-emerald-200 to-emerald-400 bg-clip-text text-transparent">{stats.recentClaims}</p>
+                            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-1">Claims</p>
                         </div>
                     </div>
                 </div>
@@ -425,13 +426,13 @@ export default function ApiDocsPage() {
 
             {/* Controls Row: Tabs + Search */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <div className="flex gap-1 p-1 bg-gray-800/60 rounded-xl border border-gray-700/30">
+                <div className="flex gap-2 p-1.5 bg-slate-800/60 backdrop-blur-sm rounded-2xl border border-slate-600/30 shadow-lg">
                     <button
                         onClick={() => setActiveTab('hims')}
-                        className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
                             activeTab === 'hims'
-                                ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md shadow-blue-500/20'
-                                : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/30'
+                                ? 'bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30'
+                                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
                         }`}
                     >
                         <Globe className="h-4 w-4" />
@@ -439,10 +440,10 @@ export default function ApiDocsPage() {
                     </button>
                     <button
                         onClick={() => setActiveTab('external')}
-                        className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
                             activeTab === 'external'
-                                ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md shadow-blue-500/20'
-                                : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/30'
+                                ? 'bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30'
+                                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
                         }`}
                     >
                         <Zap className="h-4 w-4" />
@@ -451,13 +452,13 @@ export default function ApiDocsPage() {
                 </div>
 
                 <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                     <input
                         type="text"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Search endpoints..."
-                        className="pl-9 pr-4 py-2 w-full sm:w-64 bg-gray-800/60 border border-gray-700/30 rounded-xl text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all"
+                        className="pl-10 pr-4 py-2.5 w-full sm:w-72 bg-slate-800/60 backdrop-blur-sm border border-slate-600/40 rounded-2xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 transition-all shadow-lg"
                     />
                 </div>
             </div>
@@ -465,14 +466,14 @@ export default function ApiDocsPage() {
             {/* HIMS Tab */}
             {activeTab === 'hims' && (
                 <div className="space-y-6">
-                    <div className="bg-gray-800/30 border border-gray-700/30 rounded-2xl p-5">
+                    <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-cyan-500/10 backdrop-blur-sm border border-emerald-400/20 rounded-3xl p-6 shadow-xl shadow-emerald-500/10">
                         <div className="flex items-start gap-3">
-                            <div className="p-2 bg-emerald-500/10 rounded-lg">
-                                <Server className="h-5 w-5 text-emerald-400" />
+                            <div className="p-2.5 bg-gradient-to-br from-emerald-500/20 to-teal-500/20 rounded-xl ring-1 ring-emerald-400/30">
+                                <Server className="h-5 w-5 text-emerald-300" />
                             </div>
                             <div>
-                                <h2 className="text-base font-semibold text-white mb-1">Hospital Information Management System</h2>
-                                <p className="text-sm text-gray-400">
+                                <h2 className="text-lg font-bold bg-gradient-to-r from-emerald-200 to-teal-200 bg-clip-text text-transparent mb-2">Hospital Information Management System</h2>
+                                <p className="text-sm text-slate-300 leading-relaxed">
                                     Internal APIs powering Hospital OS. Used for payment processing,
                                     report generation, data import, and system health monitoring.
                                 </p>
@@ -483,41 +484,41 @@ export default function ApiDocsPage() {
                     {filteredHimsSections.map((section) => {
                         const Icon = section.icon;
                         return (
-                            <div key={section.title} className="space-y-2">
-                                <div className="flex items-center gap-3 mb-3">
-                                    <div className="p-1.5 bg-gray-700/40 rounded-lg">
-                                        <Icon className="h-4 w-4 text-gray-400" />
+                            <div key={section.title} className="space-y-3">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="p-2 bg-gradient-to-br from-slate-700/50 to-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-600/30">
+                                        <Icon className="h-4 w-4 text-slate-300" />
                                     </div>
                                     <div>
-                                        <h3 className="text-sm font-semibold text-white">
+                                        <h3 className="text-base font-bold text-white">
                                             {section.title}
                                         </h3>
-                                        <p className="text-xs text-gray-500">{section.description}</p>
+                                        <p className="text-xs text-slate-400">{section.description}</p>
                                     </div>
                                     <div className="ml-auto">
-                                        <span className="text-[11px] text-gray-600 bg-gray-800/60 px-2 py-0.5 rounded-full">
+                                        <span className="text-xs text-slate-400 bg-slate-800/60 backdrop-blur-sm px-3 py-1 rounded-full border border-slate-600/30 font-medium">
                                             {section.endpoints.length} endpoint{section.endpoints.length !== 1 ? 's' : ''}
                                         </span>
                                     </div>
                                 </div>
-                                <div className="space-y-1.5">
+                                <div className="space-y-2">
                                     {section.endpoints.map((ep) => (
                                         <div
                                             key={ep.path}
-                                            className="group flex items-center gap-3 px-4 py-3 bg-gray-800/20 border border-gray-700/20 rounded-xl hover:bg-gray-800/40 hover:border-gray-700/40 transition-all cursor-default"
+                                            className="group flex items-center gap-3 px-5 py-3.5 bg-slate-800/40 backdrop-blur-sm border border-slate-600/30 rounded-2xl hover:bg-slate-700/50 hover:border-slate-500/40 hover:shadow-lg hover:shadow-slate-900/50 transition-all duration-200 cursor-default"
                                         >
                                             <span
-                                                className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase border shrink-0 ${
+                                                className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase border shrink-0 ${
                                                     ep.method === 'GET'
-                                                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                                                        : 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+                                                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40 shadow-sm shadow-emerald-500/20'
+                                                        : 'bg-blue-500/20 text-blue-300 border-blue-400/40 shadow-sm shadow-blue-500/20'
                                                 }`}
                                             >
                                                 {ep.method}
                                             </span>
-                                            <code className="text-sm text-gray-200 font-mono">{ep.path}</code>
-                                            <ArrowRight className="h-3 w-3 text-gray-600 shrink-0 hidden sm:block" />
-                                            <span className="text-sm text-gray-500 hidden sm:inline truncate">{ep.description}</span>
+                                            <code className="text-sm text-slate-200 font-mono font-medium">{ep.path}</code>
+                                            <ArrowRight className="h-3.5 w-3.5 text-slate-600 group-hover:text-slate-500 shrink-0 hidden sm:block transition-colors" />
+                                            <span className="text-sm text-slate-400 group-hover:text-slate-300 hidden sm:inline truncate transition-colors">{ep.description}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -538,29 +539,29 @@ export default function ApiDocsPage() {
             {activeTab === 'external' && (
                 <div className="space-y-6">
                     {/* Overview */}
-                    <div className="bg-gradient-to-br from-blue-900/15 to-indigo-900/10 border border-blue-700/20 rounded-2xl p-5">
+                    <div className="bg-gradient-to-br from-blue-500/15 via-indigo-500/10 to-purple-500/15 backdrop-blur-sm border border-blue-400/30 rounded-3xl p-6 shadow-xl shadow-blue-500/10">
                         <div className="flex items-start gap-3">
-                            <div className="p-2.5 bg-blue-500/15 rounded-xl">
-                                <Zap className="h-5 w-5 text-blue-400" />
+                            <div className="p-3 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 rounded-xl ring-1 ring-blue-400/30">
+                                <Zap className="h-5 w-5 text-blue-300" />
                             </div>
                             <div>
-                                <h2 className="text-base font-semibold text-white mb-1">External Integration APIs</h2>
-                                <p className="text-sm text-gray-400 mb-3">
+                                <h2 className="text-lg font-bold bg-gradient-to-r from-blue-200 via-indigo-200 to-purple-200 bg-clip-text text-transparent mb-2">External Integration APIs</h2>
+                                <p className="text-sm text-slate-300 mb-4 leading-relaxed">
                                     Real-time integration endpoints for third-party partners. These endpoints
                                     allow authorized systems to fetch patient data, visit details, documents,
                                     and push claim status updates.
                                 </p>
                                 <div className="flex flex-wrap items-center gap-3 text-xs">
-                                    <span className="inline-flex items-center gap-1.5 text-gray-400 bg-gray-800/60 px-2.5 py-1 rounded-full border border-gray-700/30">
-                                        <Lock className="h-3 w-3 text-blue-400" />
+                                    <span className="inline-flex items-center gap-1.5 text-blue-200 bg-blue-500/20 backdrop-blur-sm px-3 py-1.5 rounded-full border border-blue-400/30">
+                                        <Lock className="h-3 w-3 text-blue-300" />
                                         X-Api-Key Header
                                     </span>
-                                    <span className="inline-flex items-center gap-1.5 text-gray-400 bg-gray-800/60 px-2.5 py-1 rounded-full border border-gray-700/30">
-                                        <Activity className="h-3 w-3 text-emerald-400" />
+                                    <span className="inline-flex items-center gap-1.5 text-emerald-200 bg-emerald-500/20 backdrop-blur-sm px-3 py-1.5 rounded-full border border-emerald-400/30">
+                                        <Activity className="h-3 w-3 text-emerald-300" />
                                         JSON Response
                                     </span>
-                                    <span className="inline-flex items-center gap-1.5 text-gray-400 bg-gray-800/60 px-2.5 py-1 rounded-full border border-gray-700/30">
-                                        <Shield className="h-3 w-3 text-purple-400" />
+                                    <span className="inline-flex items-center gap-1.5 text-purple-200 bg-purple-500/20 backdrop-blur-sm px-3 py-1.5 rounded-full border border-purple-400/30">
+                                        <Shield className="h-3 w-3 text-purple-300" />
                                         Rate Limited
                                     </span>
                                 </div>
@@ -569,15 +570,15 @@ export default function ApiDocsPage() {
                     </div>
 
                     {/* API Key Management */}
-                    <div className="bg-gray-800/30 border border-gray-700/30 rounded-2xl overflow-hidden">
-                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700/20">
-                            <div className="flex items-center gap-2.5">
-                                <div className="p-1.5 bg-amber-500/10 rounded-lg">
-                                    <Key className="h-4 w-4 text-amber-400" />
+                    <div className="bg-slate-800/40 backdrop-blur-sm border border-slate-600/30 rounded-3xl overflow-hidden shadow-xl">
+                        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-600/30 bg-gradient-to-r from-amber-500/10 to-orange-500/10">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-xl ring-1 ring-amber-400/30">
+                                    <Key className="h-4 w-4 text-amber-300" />
                                 </div>
                                 <div>
-                                    <h3 className="text-sm font-semibold text-white">API Key Management</h3>
-                                    <p className="text-xs text-gray-500">Generate and manage access keys for external partners</p>
+                                    <h3 className="text-base font-bold text-white">API Key Management</h3>
+                                    <p className="text-xs text-slate-400 mt-0.5">Generate and manage access keys for external partners</p>
                                 </div>
                             </div>
                             <button
@@ -586,9 +587,9 @@ export default function ApiDocsPage() {
                                     setGeneratedKey('');
                                     setNewKeyLabel('');
                                 }}
-                                className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white text-xs font-medium rounded-xl transition-all shadow-sm shadow-blue-500/20"
+                                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 hover:from-blue-500 hover:via-blue-400 hover:to-indigo-500 text-white text-sm font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-blue-500/30"
                             >
-                                <Plus className="h-3.5 w-3.5" />
+                                <Plus className="h-4 w-4" />
                                 Generate Key
                             </button>
                         </div>
@@ -721,14 +722,14 @@ export default function ApiDocsPage() {
 
             {/* New Key Modal */}
             {showNewKeyModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
-                    <div className="bg-gray-800 border border-gray-700/50 rounded-2xl w-full max-w-lg shadow-2xl shadow-black/40">
-                        <div className="px-6 py-4 border-b border-gray-700/30">
-                            <div className="flex items-center gap-2.5">
-                                <div className="p-1.5 bg-blue-500/10 rounded-lg">
-                                    <Key className="h-4 w-4 text-blue-400" />
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-lg p-4">
+                    <div className="bg-slate-800 border border-slate-600/50 rounded-3xl w-full max-w-lg shadow-2xl shadow-blue-500/20">
+                        <div className="px-6 py-5 border-b border-slate-600/30 bg-gradient-to-r from-blue-500/10 to-indigo-500/10">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 rounded-xl ring-1 ring-blue-400/30">
+                                    <Key className="h-5 w-5 text-blue-300" />
                                 </div>
-                                <h3 className="text-base font-semibold text-white">
+                                <h3 className="text-lg font-bold text-white">
                                     {generatedKey ? 'Key Generated Successfully' : 'Generate New API Key'}
                                 </h3>
                             </div>

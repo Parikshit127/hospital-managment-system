@@ -1,0 +1,174 @@
+{
+  "info": {
+    "name": "Zealthix API Integration",
+    "description": "Hospital OS - Zealthix API Integration Endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "value",
+        "value": "{{API_KEY}}",
+        "type": "string"
+      },
+      {
+        "key": "key",
+        "value": "X-Api-Key",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://your-hospital.com",
+      "type": "string"
+    },
+    {
+      "key": "API_KEY",
+      "value": "your_api_key_here",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Patient Search",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"patientId\": \"AVN-20250101-0001\",\n  \"mobileNumber\": \"\",\n  \"ipNumber\": \"\",\n  \"abhaNumber\": \"\",\n  \"ipdVisitType\": \"\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/zealthix/patient/find",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "zealthix", "patient", "find"]
+        },
+        "description": "Search for patients by ID, mobile number, IP number, ABHA number, or visit type.\n\n**Use Cases:**\n- Find patient before creating pre-auth\n- Search by mobile number when patient ID unknown\n- Get current active visits for a patient\n\n**Search Options (use at least one):**\n- `patientId`: Patient UHID (e.g., AVN-20250101-0001)\n- `mobileNumber`: Patient mobile (e.g., 9876543210)\n- `ipNumber`: Inpatient admission ID\n- `abhaNumber`: Ayushman Bharat Health Account number\n- `ipdVisitType`: Filter by OUTPATIENT, INPATIENT, or FINANCIAL_COUNSELLING"
+      },
+      "response": []
+    },
+    {
+      "name": "2. Patient Visit Details",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"visitId\": \"ADM-001\",\n  \"visitDateTime\": \"2025-01-15T10:00:00\",\n  \"visitType\": \"INPATIENT\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/zealthix/patient/visit",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "zealthix", "patient", "visit"]
+        },
+        "description": "Get comprehensive visit details including patient info, treatment details, billing breakdown.\n\n**Use Cases:**\n- Get complete visit information for pre-auth\n- Retrieve billing details for claim submission\n- Get doctor and treatment information\n\n**Request Fields:**\n- `visitId`: Required - Visit/Admission ID from patient search\n- `visitDateTime`: Optional - Visit date-time in ISO format\n- `visitType`: Required - INPATIENT or OUTPATIENT or FINANCIAL_COUNSELLING\n\n**Response Includes:**\n- Patient details (name, phone, policy, payer)\n- Treatment details (admission/discharge, diagnosis)\n- Doctor details (name, department, room type)\n- Bill breakdown by category (surgery, pharmacy, lab, etc.)"
+      },
+      "response": []
+    },
+    {
+      "name": "3. Visit Documents",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"visitId\": \"ADM-001\",\n  \"visitDateTime\": \"2025-01-15T10:00:00\",\n  \"visitType\": \"INPATIENT\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/zealthix/visit/documents",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "zealthix", "visit", "documents"]
+        },
+        "description": "Retrieve all documents related to a visit as base64-encoded PDFs.\n\n**Use Cases:**\n- Download invoices for claim processing\n- Get discharge summary for final claim\n- Retrieve lab reports and consent forms\n\n**Request Fields:**\n- `visitId`: Required - Visit/Admission ID\n- `visitDateTime`: Optional - Visit date-time\n- `visitType`: Required - INPATIENT or OUTPATIENT\n\n**Response:**\nArray of documents, each containing:\n- `id`: Document ID\n- `title`: Document name\n- `contentType`: application/pdf\n- `attachmentType`: Bill, DischargeSummary, Investigation, Consent\n- `base64`: Base64 encoded PDF content\n\n**Note:** You'll need to decode base64 to get the actual PDF file."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Claim Status Update",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"claimNumber\": \"C2874001XCB\",\n  \"patientName\": \"Rajesh Kumar\",\n  \"patientMobileNumber\": \"9876543210\",\n  \"patientEmailId\": \"rajesh@example.com\",\n  \"patientDob\": \"1985-05-15\",\n  \"patientGender\": \"Male\",\n  \"policyNo\": \"POL123456\",\n  \"actionStatus\": \"PREAUTH\",\n  \"status\": \"Pre Auth Approved\",\n  \"lineOfTreatment\": \"Surgical\",\n  \"admissionDateTime\": \"2025-01-15T10:00:00\",\n  \"dischargeDateTime\": \"2025-01-20T14:00:00\",\n  \"doctorName\": \"Dr. Sharma\",\n  \"roomType\": \"General Ward\",\n  \"totalAmount\": 50000.0,\n  \"approvedAmount\": 48000.0,\n  \"settledAmount\": 47500.0,\n  \"tdsAmount\": 500.0,\n  \"remarks\": \"Claim approved and settled\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/zealthix/claim/update",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "zealthix", "claim", "update"]
+        },
+        "description": "Zealthix calls this endpoint to update claim status in Hospital OS.\n\n**Use Cases:**\n- Update pre-auth status (initiated, approved, rejected)\n- Update enhancement request status\n- Update final claim status\n- Update settlement details\n\n**Action Status Types:**\n- `PREAUTH`: Pre-authorization request\n- `ENHANCEMENT`: Enhancement request for additional amount\n- `DISCHARGE`: Discharge intimation\n- `FINAL`: Final claim settlement\n\n**Status Examples:**\n- \"Pre Auth Initiated\"\n- \"Pre Auth Approved\"\n- \"Pre Auth Rejected\"\n- \"Claim Submitted\"\n- \"Claim Approved\"\n- \"Claim Settled\"\n\n**Amount Fields:**\n- `totalAmount`: Total claim amount\n- `approvedAmount`: Amount approved by insurance\n- `settledAmount`: Final settled amount (after TDS)\n- `tdsAmount`: TDS deducted\n\n**Note:** This updates the claim record in Hospital OS. Hospital staff can see the status in their dashboard."
+      },
+      "response": []
+    },
+    {
+      "name": "Test - Search by Mobile",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"mobileNumber\": \"9876543210\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/zealthix/patient/find",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "zealthix", "patient", "find"]
+        },
+        "description": "Example: Search patient by mobile number only"
+      },
+      "response": []
+    },
+    {
+      "name": "Test - Outpatient Visit",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"visitId\": \"OPD-001\",\n  \"visitType\": \"OUTPATIENT\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/zealthix/patient/visit",
+          "host": ["{{BASE_URL}}"],
+          "path": ["api", "zealthix", "patient", "visit"]
+        },
+        "description": "Example: Get outpatient visit details"
+      },
+      "response": []
+    }
+  ]
+}

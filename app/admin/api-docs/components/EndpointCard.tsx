@@ -38,10 +38,10 @@ export default function EndpointCard({
     const [copied, setCopied] = useState(false);
 
     const methodConfig: Record<string, { bg: string; text: string; border: string; glow: string }> = {
-        GET: { bg: 'bg-emerald-500/12', text: 'text-emerald-400', border: 'border-emerald-500/25', glow: 'shadow-emerald-500/5' },
-        POST: { bg: 'bg-blue-500/12', text: 'text-blue-400', border: 'border-blue-500/25', glow: 'shadow-blue-500/5' },
-        PUT: { bg: 'bg-amber-500/12', text: 'text-amber-400', border: 'border-amber-500/25', glow: 'shadow-amber-500/5' },
-        DELETE: { bg: 'bg-red-500/12', text: 'text-red-400', border: 'border-red-500/25', glow: 'shadow-red-500/5' },
+        GET: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-400/40', glow: 'shadow-emerald-500/20' },
+        POST: { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-400/40', glow: 'shadow-blue-500/20' },
+        PUT: { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-400/40', glow: 'shadow-amber-500/20' },
+        DELETE: { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-400/40', glow: 'shadow-red-500/20' },
     };
 
     const mc = methodConfig[method];
@@ -65,17 +65,17 @@ export default function EndpointCard({
     ];
 
     return (
-        <div className={`border rounded-2xl overflow-hidden transition-all ${
+        <div className={`border rounded-3xl overflow-hidden transition-all duration-200 ${
             expanded
-                ? 'border-gray-600/40 bg-gray-800/40 shadow-lg'
-                : 'border-gray-700/30 bg-gray-800/20 hover:border-gray-700/50 hover:bg-gray-800/30'
+                ? 'border-slate-500/50 bg-slate-800/60 backdrop-blur-sm shadow-2xl shadow-slate-900/50'
+                : 'border-slate-600/30 bg-slate-800/40 backdrop-blur-sm hover:border-slate-500/50 hover:bg-slate-700/50 hover:shadow-xl hover:shadow-slate-900/30'
         }`}>
             {/* Header */}
             <button
                 onClick={() => setExpanded(!expanded)}
-                className="w-full flex items-center gap-3 px-5 py-4 transition-colors"
+                className="w-full flex items-center gap-3 px-6 py-4 transition-all"
             >
-                <div className={`p-0.5 rounded ${expanded ? 'text-gray-300' : 'text-gray-600'}`}>
+                <div className={`p-1 rounded-lg transition-all ${expanded ? 'text-slate-200 bg-slate-700/50' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/30'}`}>
                     {expanded ? (
                         <ChevronDown className="h-4 w-4" />
                     ) : (
@@ -83,43 +83,43 @@ export default function EndpointCard({
                     )}
                 </div>
                 <span
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase border tracking-wide ${mc.bg} ${mc.text} ${mc.border}`}
+                    className={`px-3 py-1 rounded-xl text-[10px] font-bold uppercase border tracking-wider shadow-sm ${mc.bg} ${mc.text} ${mc.border} ${mc.glow}`}
                 >
                     {method}
                 </span>
-                <code className="text-sm text-gray-200 font-mono tracking-tight">{path}</code>
+                <code className="text-sm text-slate-100 font-mono font-medium tracking-tight">{path}</code>
                 {auth && (
-                    <Lock className="h-3 w-3 text-amber-500/60 shrink-0" />
+                    <Lock className="h-3.5 w-3.5 text-amber-400/70 shrink-0" />
                 )}
-                <span className="text-sm text-gray-500 ml-auto hidden sm:inline text-right truncate max-w-xs">
+                <span className="text-sm text-slate-400 ml-auto hidden sm:inline text-right truncate max-w-xs">
                     {description}
                 </span>
             </button>
 
             {/* Expanded content */}
             {expanded && (
-                <div className="border-t border-gray-700/30">
+                <div className="border-t border-slate-600/30">
                     {/* Description bar */}
-                    <div className="px-5 py-3 bg-gray-900/20 border-b border-gray-700/20">
-                        <p className="text-sm text-gray-400">{description}</p>
+                    <div className="px-6 py-4 bg-slate-900/30 border-b border-slate-600/20">
+                        <p className="text-sm text-slate-300 leading-relaxed">{description}</p>
                         {auth && (
-                            <div className="mt-2 inline-flex items-center gap-2 bg-amber-500/8 border border-amber-500/15 rounded-lg px-2.5 py-1">
-                                <Lock className="h-3 w-3 text-amber-400" />
-                                <code className="text-xs text-amber-300/80">{auth}</code>
+                            <div className="mt-3 inline-flex items-center gap-2 bg-amber-500/15 backdrop-blur-sm border border-amber-400/30 rounded-xl px-3 py-1.5">
+                                <Lock className="h-3.5 w-3.5 text-amber-300" />
+                                <code className="text-xs text-amber-200 font-medium">{auth}</code>
                             </div>
                         )}
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex gap-1 px-5 py-2 border-b border-gray-700/20 bg-gray-900/10">
+                    <div className="flex gap-2 px-6 py-3 border-b border-slate-600/20 bg-slate-900/20">
                         {tabs.map((tab) => (
                             <button
                                 key={tab.key}
                                 onClick={() => setActiveTab(tab.key as typeof activeTab)}
-                                className={`px-3.5 py-2 text-xs font-medium rounded-lg transition-all ${
+                                className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all duration-200 ${
                                     activeTab === tab.key
-                                        ? 'text-white bg-gray-700/60 shadow-sm'
-                                        : 'text-gray-500 hover:text-gray-300 hover:bg-gray-700/20'
+                                        ? 'text-white bg-gradient-to-r from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/30'
+                                        : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
                                 }`}
                             >
                                 {tab.label}
@@ -128,39 +128,39 @@ export default function EndpointCard({
                     </div>
 
                     {/* Tab content */}
-                    <div className="p-5">
+                    <div className="p-6">
                         {activeTab === 'schema' && requestFields && (
                             <div>
-                                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
                                     Request Fields
                                 </h4>
-                                <div className="overflow-x-auto rounded-xl border border-gray-700/20">
+                                <div className="overflow-x-auto rounded-2xl border border-slate-600/30 shadow-lg">
                                     <table className="w-full text-sm">
                                         <thead>
-                                            <tr className="text-left text-gray-500 text-xs uppercase bg-gray-900/30">
-                                                <th className="px-4 py-2.5 pr-4 font-medium">Field</th>
-                                                <th className="px-4 py-2.5 pr-4 font-medium">Type</th>
-                                                <th className="px-4 py-2.5 pr-4 font-medium">Required</th>
-                                                <th className="px-4 py-2.5 font-medium">Description</th>
+                                            <tr className="text-left text-slate-400 text-xs uppercase bg-slate-900/50">
+                                                <th className="px-5 py-3 pr-4 font-bold">Field</th>
+                                                <th className="px-5 py-3 pr-4 font-bold">Type</th>
+                                                <th className="px-5 py-3 pr-4 font-bold">Required</th>
+                                                <th className="px-5 py-3 font-bold">Description</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-700/20">
+                                        <tbody className="divide-y divide-slate-600/20">
                                             {requestFields.map((f) => (
-                                                <tr key={f.name} className="hover:bg-gray-700/10 transition-colors">
-                                                    <td className="px-4 py-2.5 pr-4">
-                                                        <code className="text-blue-300 text-xs bg-blue-500/8 px-1.5 py-0.5 rounded">{f.name}</code>
+                                                <tr key={f.name} className="hover:bg-slate-700/20 transition-colors">
+                                                    <td className="px-5 py-3 pr-4">
+                                                        <code className="text-blue-300 text-xs bg-blue-500/15 backdrop-blur-sm px-2 py-1 rounded-lg font-semibold">{f.name}</code>
                                                     </td>
-                                                    <td className="px-4 py-2.5 pr-4">
-                                                        <span className="text-gray-400 text-xs font-mono">{f.type}</span>
+                                                    <td className="px-5 py-3 pr-4">
+                                                        <span className="text-slate-300 text-xs font-mono">{f.type}</span>
                                                     </td>
-                                                    <td className="px-4 py-2.5 pr-4">
+                                                    <td className="px-5 py-3 pr-4">
                                                         {f.required ? (
-                                                            <span className="text-amber-400 text-[11px] font-semibold bg-amber-500/10 px-2 py-0.5 rounded-full">required</span>
+                                                            <span className="text-amber-300 text-[11px] font-bold bg-amber-500/20 backdrop-blur-sm px-2.5 py-1 rounded-full">required</span>
                                                         ) : (
-                                                            <span className="text-gray-600 text-[11px]">optional</span>
+                                                            <span className="text-slate-500 text-[11px] font-medium">optional</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-2.5 text-gray-400 text-xs">{f.description}</td>
+                                                    <td className="px-5 py-3 text-slate-400 text-xs">{f.description}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -169,19 +169,19 @@ export default function EndpointCard({
 
                                 {responseExample && (
                                     <div className="mt-6">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                                                 Response (200)
                                             </h4>
                                             <button
                                                 onClick={() => handleCopy(JSON.stringify(responseExample, null, 2))}
-                                                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-white transition-colors"
+                                                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white bg-slate-700/30 hover:bg-slate-600/50 px-3 py-1.5 rounded-lg transition-all"
                                             >
                                                 {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                                                 {copied ? 'Copied!' : 'Copy'}
                                             </button>
                                         </div>
-                                        <pre className="bg-gray-950/60 rounded-xl p-4 text-xs text-gray-300 overflow-x-auto font-mono leading-relaxed border border-gray-700/20">
+                                        <pre className="bg-slate-950/80 rounded-2xl p-5 text-xs text-slate-300 overflow-x-auto font-mono leading-relaxed border border-slate-600/30 shadow-xl">
                                             {JSON.stringify(responseExample, null, 2)}
                                         </pre>
                                     </div>
@@ -191,28 +191,28 @@ export default function EndpointCard({
 
                         {activeTab === 'example' && (
                             <div>
-                                <div className="flex items-center justify-between mb-3">
-                                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                                         cURL Example
                                     </h4>
                                     <button
                                         onClick={() => handleCopy(curlExample)}
-                                        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-white transition-colors bg-gray-700/30 hover:bg-gray-700/50 px-2.5 py-1.5 rounded-lg"
+                                        className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-all bg-slate-700/30 hover:bg-slate-600/50 px-3 py-1.5 rounded-lg"
                                     >
                                         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                                         {copied ? 'Copied!' : 'Copy'}
                                     </button>
                                 </div>
-                                <pre className="bg-gray-950/60 rounded-xl p-4 text-xs text-gray-300 overflow-x-auto font-mono leading-relaxed border border-gray-700/20">
+                                <pre className="bg-slate-950/80 rounded-2xl p-5 text-xs text-slate-300 overflow-x-auto font-mono leading-relaxed border border-slate-600/30 shadow-xl">
                                     {curlExample}
                                 </pre>
 
                                 {requestBody && (
                                     <div className="mt-6">
-                                        <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
                                             Request Body
                                         </h4>
-                                        <pre className="bg-gray-950/60 rounded-xl p-4 text-xs text-gray-300 overflow-x-auto font-mono leading-relaxed border border-gray-700/20">
+                                        <pre className="bg-slate-950/80 rounded-2xl p-5 text-xs text-slate-300 overflow-x-auto font-mono leading-relaxed border border-slate-600/30 shadow-xl">
                                             {JSON.stringify(requestBody, null, 2)}
                                         </pre>
                                     </div>
@@ -222,28 +222,28 @@ export default function EndpointCard({
 
                         {activeTab === 'mapping' && fieldMappings && (
                             <div>
-                                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
                                     Field Mapping (API &rarr; Hospital OS)
                                 </h4>
-                                <div className="overflow-x-auto rounded-xl border border-gray-700/20">
+                                <div className="overflow-x-auto rounded-2xl border border-slate-600/30 shadow-lg">
                                     <table className="w-full text-sm">
                                         <thead>
-                                            <tr className="text-left text-gray-500 text-xs uppercase bg-gray-900/30">
-                                                <th className="px-4 py-2.5 pr-4 font-medium">API Field</th>
-                                                <th className="px-4 py-2.5 pr-4 font-medium">Our DB Field</th>
-                                                <th className="px-4 py-2.5 font-medium">Description</th>
+                                            <tr className="text-left text-slate-400 text-xs uppercase bg-slate-900/50">
+                                                <th className="px-5 py-3 pr-4 font-bold">API Field</th>
+                                                <th className="px-5 py-3 pr-4 font-bold">Our DB Field</th>
+                                                <th className="px-5 py-3 font-bold">Description</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-700/20">
+                                        <tbody className="divide-y divide-slate-600/20">
                                             {fieldMappings.map((m, i) => (
-                                                <tr key={i} className="hover:bg-gray-700/10 transition-colors">
-                                                    <td className="px-4 py-2.5 pr-4">
-                                                        <code className="text-blue-300 text-xs bg-blue-500/8 px-1.5 py-0.5 rounded">{m.externalField}</code>
+                                                <tr key={i} className="hover:bg-slate-700/20 transition-colors">
+                                                    <td className="px-5 py-3 pr-4">
+                                                        <code className="text-blue-300 text-xs bg-blue-500/15 backdrop-blur-sm px-2 py-1 rounded-lg font-semibold">{m.externalField}</code>
                                                     </td>
-                                                    <td className="px-4 py-2.5 pr-4">
-                                                        <code className="text-emerald-300 text-xs bg-emerald-500/8 px-1.5 py-0.5 rounded">{m.ourField}</code>
+                                                    <td className="px-5 py-3 pr-4">
+                                                        <code className="text-emerald-300 text-xs bg-emerald-500/15 backdrop-blur-sm px-2 py-1 rounded-lg font-semibold">{m.ourField}</code>
                                                     </td>
-                                                    <td className="px-4 py-2.5 text-gray-400 text-xs">{m.description}</td>
+                                                    <td className="px-5 py-3 text-slate-400 text-xs">{m.description}</td>
                                                 </tr>
                                             ))}
                                         </tbody>

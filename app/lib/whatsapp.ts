@@ -6,20 +6,60 @@ export async function sendWhatsAppMessage(to: string, message: string) {
         return { skipped: true }
     }
 
-    const response = await fetch(WA_API_URL, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${process.env.WHATSAPP_API_TOKEN}`,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            to: to.replace(/\D/g, ''),
-            type: 'text',
-            text: { body: message }
-        })
-    })
-    return response.json()
+    // Clean and format phone number - must include country code
+    let phoneNumber = to.replace(/\D/g, '');
+
+    // If phone starts with 91 (India), keep it; otherwise add 91 prefix
+    if (!phoneNumber.startsWith('91') && phoneNumber.length === 10) {
+        phoneNumber = '91' + phoneNumber;
+    }
+
+    console.log('[WhatsApp] Attempting to send message to:', phoneNumber);
+    console.log('[WhatsApp] Using Phone Number ID:', process.env.WHATSAPP_PHONE_NUMBER_ID);
+
+    try {
+        const response = await fetch(WA_API_URL, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${process.env.WHATSAPP_API_TOKEN}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                messaging_product: 'whatsapp',
+                to: phoneNumber,
+                type: 'text',
+                text: { body: message }
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error('[WhatsApp] API Error Response:', {
+                status: response.status,
+                statusText: response.statusText,
+                error: data
+            });
+            return {
+                success: false,
+                error: data.error?.message || 'Unknown error',
+                details: data
+            };
+        }
+
+        console.log('[WhatsApp] Message sent successfully:', {
+            to: phoneNumber,
+            messageId: data.messages?.[0]?.id
+        });
+
+        return { success: true, data };
+    } catch (error) {
+        console.error('[WhatsApp] Network or fetch error:', error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Network error'
+        };
+    }
 }
 
 export async function sendAppointmentReminder(phone: string, patientName: string, doctorName: string, time: string, hospitalName: string = 'Hospital') {
