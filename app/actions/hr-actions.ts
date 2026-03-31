@@ -9,46 +9,80 @@ import { revalidatePath } from 'next/cache';
 
 export async function getHRDashboard() {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
 
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
+        // 1. Get dynamic role breakdown from User table (where actual portal users are defined)
+        const userRoles = await db.user.groupBy({
+            by: ['role'],
+            where: { organizationId, is_active: true },
+            _count: { _all: true }
+        });
 
-        const [totalEmployees, activeEmployees, todayPresent, pendingLeaves] = await Promise.all([
-            db.employee.count(),
-            db.employee.count({ where: { is_active: true } }),
-            db.attendance.count({
-                where: { date: { gte: todayStart, lte: todayEnd }, status: 'Present' },
+        // 2. Get dynamic designation breakdown from Employee table (for offline/generic staff)
+        const employeeRoles = await db.employee.groupBy({
+            by: ['designation'],
+            where: { organizationId, is_active: true },
+            _count: { _all: true }
+        });
+
+        // 3. Fetch comprehensive directory (Combined Users and Employees)
+        const [systemUsers, hospitalEmployees] = await Promise.all([
+            db.user.findMany({
+                where: { organizationId, is_active: true },
+                select: { id: true, name: true, role: true, username: true, phone: true, email: true },
             }),
-            db.leaveRequest.count({ where: { status: 'Pending' } }),
+            db.employee.findMany({
+                where: { organizationId, is_active: true },
+                select: { id: true, name: true, designation: true, employee_code: true, phone: true, email: true },
+            })
         ]);
 
-        // Recent hires (last 30 days)
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const recentHires = await db.employee.count({
-            where: { date_of_joining: { gte: thirtyDaysAgo } },
+        // Format role counts into a unified mapping
+        const analyticsMapping: Record<string, number> = {};
+        userRoles.forEach((ur: any) => {
+            const label = ur.role.charAt(0).toUpperCase() + ur.role.slice(1).replace('_', ' ');
+            analyticsMapping[label] = (analyticsMapping[label] || 0) + ur._count._all;
+        });
+        employeeRoles.forEach((er: any) => {
+            if (!er.designation) return;
+            const label = er.designation.charAt(0).toUpperCase() + er.designation.slice(1);
+            analyticsMapping[label] = (analyticsMapping[label] || 0) + er._count._all;
         });
 
-        // Department breakdown
-        const employees = await db.employee.findMany({
-            where: { is_active: true },
-            select: { designation: true },
+        // Combine into a unified personnel list for the directory
+        const personnelMap = new Map();
+        
+        systemUsers.forEach((u: any) => {
+            personnelMap.set(u.id, {
+                id: u.id,
+                name: u.name || u.username,
+                role: u.role.charAt(0).toUpperCase() + u.role.slice(1).replace('_', ' '),
+                code: u.username,
+                phone: u.phone,
+                email: u.email
+            });
         });
 
-        const deptBreakdown: Record<string, number> = {};
-        for (const emp of employees) {
-            const dept = emp.designation || 'Other';
-            deptBreakdown[dept] = (deptBreakdown[dept] || 0) + 1;
-        }
+        hospitalEmployees.forEach((e: any) => {
+            // If already exists (maybe linked), we'll keep the system user entry but perhaps enrich it
+            if (!personnelMap.has(e.id)) {
+                personnelMap.set(e.id, {
+                    id: e.id,
+                    name: e.name,
+                    role: e.designation,
+                    code: e.employee_code,
+                    phone: e.phone,
+                    email: e.email
+                });
+            }
+        });
 
         return {
             success: true,
             data: {
-                totalEmployees, activeEmployees, todayPresent, pendingLeaves, recentHires,
-                departmentBreakdown: Object.entries(deptBreakdown).map(([dept, count]) => ({ dept, count })),
+                totalStrength: Object.values(analyticsMapping).reduce((a: number, b: number) => a + b, 0),
+                roleBreakdown: Object.entries(analyticsMapping).map(([role, count]) => ({ role, count })),
+                staffList: Array.from(personnelMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
             },
         };
     } catch (error) {
