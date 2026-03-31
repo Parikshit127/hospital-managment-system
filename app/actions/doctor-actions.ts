@@ -7,6 +7,7 @@ import { searchICD10 } from "@/app/lib/icd10";
 import { notifyPatient } from "@/app/lib/notify-patient";
 import { sendAdmissionMessage, sendPrescriptionMessage } from "@/app/lib/whatsapp";
 import { getTodayRange, getOrgTimezone } from "@/app/lib/timezone";
+import { sendAdmissionEmail, sendPrescriptionEmail } from "@/backend/email";
 
 export async function getPatientQueue(options?: {
   doctor_id?: string;
