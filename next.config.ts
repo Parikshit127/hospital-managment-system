@@ -3,6 +3,12 @@ import type { NextConfig } from 'next'
 const nextConfig: NextConfig = {
     poweredByHeader: false,
     productionBrowserSourceMaps: false,
+    experimental: {
+        optimizePackageImports: ['lucide-react', 'date-fns', 'clsx', 'tailwind-merge', 'chart.js', 'react-chartjs-2'],
+    },
+    compiler: {
+        removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error"] } : false,
+    },
     async headers() {
         return [
             {
