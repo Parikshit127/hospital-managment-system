@@ -47,8 +47,14 @@ import {
 import { dischargePatient } from "@/app/actions/discharge-actions";
 import { registerPatient } from "@/app/actions/register-patient";
 import { getPatientTriageData } from "@/app/actions/triage-actions";
+import {
+    getPendingCallRequests,
+    respondToVideoCall,
+    getAllCallRequests,
+} from "@/app/actions/video-call-actions";
 import { Sidebar } from "@/app/components/layout/Sidebar";
 import SOAPAssistant from "@/app/doctor/components/SOAPAssistant";
+import { Video } from "lucide-react";
 
 export default function DoctorDashboard() {
   // ─── SESSION STATE ───
@@ -73,7 +79,7 @@ export default function DoctorDashboard() {
   const [queue, setQueue] = useState<any[]>([]);
   const [activePatient, setActivePatient] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<
-    "notes" | "history" | "lab" | "pharmacy" | "triage" | "followup"
+    "notes" | "history" | "lab" | "pharmacy" | "triage" | "followup" | "video-calls"
   >("triage");
   const [triageData, setTriageData] = useState<any>(null);
   const [loadingTriage, setLoadingTriage] = useState(false);
@@ -120,6 +126,49 @@ export default function DoctorDashboard() {
   const [followUpNotes, setFollowUpNotes] = useState("");
   const [patientFollowUps, setPatientFollowUps] = useState<any[]>([]);
   const [loadingFollowUps, setLoadingFollowUps] = useState(false);
+
+  // ─── VIDEO CALL STATE ───
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [selectedVideoRequest, setSelectedVideoRequest] = useState<any>(null);
+  const [videoScheduleTime, setVideoScheduleTime] = useState("");
+  const [videoRejectionReason, setVideoRejectionReason] = useState("");
+  const [videoMeetLink, setVideoMeetLink] = useState("");
+  const [allVideoRequests, setAllVideoRequests] = useState<any[]>([]);
+  const [loadingVideoRequests, setLoadingVideoRequests] = useState(false);
+
+  const refreshVideoRequests = useCallback(async () => {
+    if (!doctorId) return;
+    const res = await getPendingCallRequests(doctorId);
+    if (res.success) setPendingRequests(res.data);
+    
+    // Also refresh all requests history
+    setLoadingVideoRequests(true);
+    const resAll = await getAllCallRequests(doctorId);
+    if (resAll.success) setAllVideoRequests(resAll.data);
+    setLoadingVideoRequests(false);
+  }, [doctorId]);
+
+  const handleVideoResponse = async (status: "Accepted" | "Rejected") => {
+    if (!selectedVideoRequest || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const res = await respondToVideoCall({
+        requestId: selectedVideoRequest.id,
+        status,
+        scheduledAt: status === "Accepted" ? videoScheduleTime : undefined,
+        rejectionReason: status === "Rejected" ? videoRejectionReason : undefined,
+        meetLink: status === "Accepted" ? videoMeetLink : undefined,
+      });
+      if (res.success) {
+        alert(`Call ${status.toLowerCase()} successfully!`);
+        setShowVideoModal(false);
+        refreshVideoRequests();
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // ─── FETCH SESSION ───
   useEffect(() => {
@@ -197,7 +246,7 @@ export default function DoctorDashboard() {
       }
 
       try {
-        const [queueRes, medsRes] = await Promise.all([
+        const [queueRes, medsRes, vRes] = await Promise.all([
           getPatientQueue({
             doctor_id: doctorId,
             doctor_name: session?.name,
@@ -208,6 +257,7 @@ export default function DoctorDashboard() {
             includeAllStatuses: true,
           }),
           getMedicineList(),
+          getPendingCallRequests(doctorId),
         ]);
         if (queueRes.success) {
           setQueue(queueRes.data as any);
@@ -215,6 +265,7 @@ export default function DoctorDashboard() {
             setActivePatient(queueRes.data[0] as any);
         }
         if (medsRes.success) setMedicines(medsRes.data as any);
+        if (vRes.success) setPendingRequests(vRes.data);
       } finally {
         setLoading(false);
       }
@@ -565,6 +616,80 @@ export default function DoctorDashboard() {
       {/* ── NAV SIDEBAR ── */}
       <Sidebar session={session} />
 
+      {/* ── VIDEO CALL MODAL ── */}
+      {showVideoModal && selectedVideoRequest && (
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md border border-gray-100 overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+              <h3 className="font-black text-xl flex items-center gap-3">
+                <Video className="h-6 w-6 text-rose-500" /> Video Call Request
+              </h3>
+              <button onClick={() => setShowVideoModal(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                <X className="h-5 w-5 text-gray-400" />
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-6">
+              <div className="bg-gray-50/50 rounded-2xl p-5 border border-gray-100">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Patient Name</p>
+                <p className="text-lg font-black text-gray-800 uppercase">{selectedVideoRequest.patient.full_name}</p>
+                <p className="text-xs text-gray-500 font-medium">Requested: {new Date(selectedVideoRequest.request_date).toLocaleString()}</p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className={labelCls}>Schedule Date & Time</label>
+                  <input 
+                    type="datetime-local" 
+                    className={inputCls}
+                    value={videoScheduleTime}
+                    onChange={(e) => setVideoScheduleTime(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className={labelCls}>Manual Meeting Link (Google Meet/Zoom)</label>
+                  <input 
+                    type="url" 
+                    className={inputCls}
+                    placeholder="https://meet.google.com/xxx-yyyy-zzz"
+                    value={videoMeetLink}
+                    onChange={(e) => setVideoMeetLink(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className={labelCls}>Rejection Reason (Optional)</label>
+                  <textarea 
+                    className={inputCls}
+                    placeholder="Why are you rejecting?"
+                    value={videoRejectionReason}
+                    onChange={(e) => setVideoRejectionReason(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => handleVideoResponse('Rejected')}
+                  disabled={isSubmitting}
+                  className="flex-1 px-6 py-4 bg-gray-100 hover:bg-gray-200 text-gray-600 font-black rounded-2xl transition-all disabled:opacity-50"
+                >
+                  REJECT
+                </button>
+                <button 
+                  onClick={() => handleVideoResponse('Accepted')}
+                  disabled={!videoScheduleTime || isSubmitting}
+                  className="flex-[2] px-6 py-4 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black rounded-2xl shadow-xl shadow-teal-500/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+                >
+                  ACCEPT & SEND LINK
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── DISCHARGE PDF MODAL ── */}
       {showDischargeModal && dischargePdfUrl && (
         <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-md flex items-center justify-center p-4">
@@ -857,9 +982,22 @@ export default function DoctorDashboard() {
             <h3 className="font-black text-gray-500 flex items-center gap-2 text-sm">
               <Users className="h-4 w-4 text-teal-400" /> Patient Queue
             </h3>
-            <span className="bg-teal-500/10 text-teal-400 text-[10px] px-2.5 py-1 rounded-lg font-black border border-teal-500/20">
-              {filteredQueue.length}
-            </span>
+            <div className="flex items-center gap-2">
+              {pendingRequests.length > 0 && (
+                <button 
+                  onClick={() => {
+                    setSelectedVideoRequest(pendingRequests[0]);
+                    setShowVideoModal(true);
+                  }}
+                  className="bg-rose-500 text-white text-[10px] px-2.5 py-1 rounded-lg font-black flex items-center gap-1.5 animate-bounce shadow-lg shadow-rose-500/20"
+                >
+                  <Video className="h-3 w-3" /> {pendingRequests.length} CALL REQUESTS
+                </button>
+              )}
+              <span className="bg-teal-500/10 text-teal-400 text-[10px] px-2.5 py-1 rounded-lg font-black border border-teal-500/20">
+                {filteredQueue.length}
+              </span>
+            </div>
           </div>
           {/* ── VIEW MODE TOGGLE ── */}
           <div className="flex mb-3 bg-gray-100 rounded-lg p-0.5">
@@ -1093,7 +1231,7 @@ export default function DoctorDashboard() {
 
             {/* Tabs */}
             <div className="bg-white border border-gray-200 shadow-sm rounded-2xl min-h-[500px] flex flex-col overflow-hidden">
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 border-b border-gray-200 px-2 pt-2 gap-1">
+              <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 border-b border-gray-200 px-2 pt-2 gap-1">
                 {(
                   [
                     "triage",
@@ -1102,11 +1240,15 @@ export default function DoctorDashboard() {
                     "lab",
                     "pharmacy",
                     "followup",
+                    "video-calls",
                   ] as const
                 ).map((tab) => (
                   <button
                     key={tab}
-                    onClick={() => setActiveTab(tab)}
+                    onClick={() => {
+                        setActiveTab(tab);
+                        if (tab === 'video-calls') refreshVideoRequests();
+                    }}
                     className={`px-4 py-4 text-sm font-bold border-b-2 flex items-center justify-center gap-2 transition-all outline-none text-center ${activeTab === tab ? "border-teal-400 text-teal-400 bg-teal-500/5 rounded-t-lg" : "border-transparent text-gray-400 hover:text-gray-600 rounded-t-lg"}`}
                   >
                     {tab === "triage" && <Brain className="h-4 w-4" />}
@@ -1115,6 +1257,7 @@ export default function DoctorDashboard() {
                     {tab === "lab" && <FlaskConical className="h-4 w-4" />}
                     {tab === "pharmacy" && <Pill className="h-4 w-4" />}
                     {tab === "followup" && <Clock className="h-4 w-4" />}
+                    {tab === "video-calls" && <Video className="h-4 w-4" />}
                     {tab === "triage"
                       ? "AI Assessment"
                       : tab === "notes"
@@ -1127,7 +1270,9 @@ export default function DoctorDashboard() {
                             ? "Labs"
                             : tab === "pharmacy"
                               ? "Pharmacy"
-                              : "Follow Up"}
+                              : tab === "video-calls"
+                                ? "Video Calls"
+                                : "Follow Up"}
                   </button>
                 ))}
               </div>
@@ -1948,6 +2093,64 @@ export default function DoctorDashboard() {
                       </div>
                     </div>
                   </div>
+                )}
+
+                {/* VIDEO CALLS TAB */}
+                {activeTab === "video-calls" && (
+                    <div className="w-full max-w-4xl space-y-6">
+                        <h3 className="font-black text-gray-700 mb-4 flex items-center gap-2 text-lg">
+                            <Video className="h-5 w-5 text-rose-400" /> Video Consultations
+                        </h3>
+                        {loadingVideoRequests ? (
+                            <div className="text-center py-12 text-gray-400 font-bold">Loading...</div>
+                        ) : allVideoRequests.length === 0 ? (
+                            <div className="bg-gray-100 border border-dashed border-gray-300 rounded-xl p-8 text-center text-gray-400 text-sm font-bold">
+                                No video consultations found.
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {allVideoRequests.map((req, i) => (
+                                    <div key={i} className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider ${
+                                                        req.status === 'Accepted' ? 'bg-emerald-100 text-emerald-600' : 
+                                                        req.status === 'Rejected' ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'
+                                                    }`}>
+                                                        {req.status}
+                                                    </span>
+                                                    <span className="text-xs text-gray-400 font-medium">#{req.id.slice(-6)}</span>
+                                                </div>
+                                                <p className="font-black text-gray-800 text-lg uppercase">{req.patient?.full_name}</p>
+                                                <p className="text-xs text-gray-500 font-medium mt-1">Requested: {new Date(req.request_date).toLocaleString()}</p>
+                                            </div>
+                                            {req.scheduled_at && (
+                                                <div className="text-right">
+                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Scheduled For</p>
+                                                    <p className="text-sm font-black text-teal-600 bg-teal-50 px-3 py-1 rounded-lg border border-teal-100">
+                                                        {new Date(req.scheduled_at).toLocaleString()}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                        
+                                        {req.status === 'Accepted' && req.meet_link && (
+                                            <div className="mt-4 pt-4 border-t border-gray-50 flex items-center justify-between">
+                                                <div className="flex-1 mr-4">
+                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Meeting Link</p>
+                                                    <p className="text-sm font-medium text-emerald-600 truncate max-w-sm">{req.meet_link}</p>
+                                                </div>
+                                                <a href={req.meet_link} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black rounded-xl transition-all shadow-lg shadow-emerald-500/20">
+                                                    JOIN CALL
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 )}
                 {/* PHARMACY TAB */}
                 {activeTab === "pharmacy" && (

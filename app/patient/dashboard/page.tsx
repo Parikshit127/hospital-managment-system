@@ -1,9 +1,12 @@
 'use client';
 
-import React from 'react';
-import { Calendar, Pill, FileText, ChevronRight, Heart, Activity, Wind, Thermometer, CreditCard, FlaskConical, RefreshCw } from 'lucide-react';
-import { usePatientDashboard } from '@/app/lib/hooks/usePatientData';
+import React, { useState } from 'react';
+import { Calendar, Pill, FileText, ChevronRight, Heart, Activity, Wind, Thermometer, CreditCard, FlaskConical, RefreshCw, Video, X } from 'lucide-react';
+import { usePatientDashboard, useVideoCalls } from '@/app/lib/hooks/usePatientData';
 import { usePullToRefresh } from '@/app/lib/hooks/usePullToRefresh';
+import { requestVideoCall } from '@/app/actions/video-call-actions';
+import { getActiveDoctors } from '@/app/actions/doctor-list-actions';
+import { useToast } from '@/app/components/ui/Toast';
 import Link from 'next/link';
 
 function getGreeting() {
@@ -13,6 +16,13 @@ function getGreeting() {
     return 'Good evening';
 }
 
+// Guarantees link always opens externally
+const safeUrl = (url?: string) => {
+    if (!url) return '#';
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    return `https://${url}`;
+};
+
 function daysUntil(dateStr: string) {
     const diff = Math.ceil((new Date(dateStr).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     if (diff === 0) return 'Today';
@@ -20,9 +30,101 @@ function daysUntil(dateStr: string) {
     return `In ${diff} days`;
 }
 
+function VideoCallStatus() {
+    const { requests, refresh } = useVideoCalls();
+    const active = requests.filter((r: any) => r.status === 'Pending' || r.status === 'Accepted')[0];
+
+    if (!active) return null;
+
+    return (
+        <div className={`p-5 rounded-2xl border-2 flex flex-col sm:flex-row items-center justify-between gap-4 ${active.status === 'Accepted' ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+            <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-xl ${active.status === 'Accepted' ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'}`}>
+                    <Video className="h-6 w-6" />
+                </div>
+                <div>
+                    <h3 className="font-black text-gray-900">{active.status === 'Accepted' ? 'Video Call Accepted' : 'Call Request Pending'}</h3>
+                    <p className="text-sm text-gray-600 font-medium">
+                        {active.status === 'Accepted' 
+                            ? `Scheduled for: ${new Date(active.scheduled_at!).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}` 
+                            : 'Waiting for your doctor to respond...'}
+                    </p>
+                </div>
+            </div>
+            {active.status === 'Accepted' && active.meet_link && (
+                <button
+                    onClick={() => window.open(safeUrl(active.meet_link), '_blank', 'noopener,noreferrer')}
+                    className="w-full sm:w-auto bg-emerald-600 text-white px-6 py-3 rounded-xl font-black text-sm text-center hover:bg-emerald-700 transition"
+                >
+                    JOIN VIDEO CALL
+                </button>
+            )}
+        </div>
+    );
+}
+
+function DoctorSelectionModal({ isOpen, onClose, onSelect, loading }: any) {
+    const [doctors, setDoctors] = useState<any[]>([]);
+    const [fetching, setFetching] = useState(false);
+
+    React.useEffect(() => {
+        if (isOpen) {
+            setFetching(true);
+            getActiveDoctors().then(res => {
+                if (res.success) setDoctors(res.data);
+                setFetching(false);
+            });
+        }
+    }, [isOpen]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md border border-gray-100 overflow-hidden flex flex-col max-h-[80vh]">
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                    <h3 className="font-black text-xl flex items-center gap-3">
+                        <Video className="h-6 w-6 text-rose-500" /> Select Doctor
+                    </h3>
+                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                        <X className="h-5 w-5 text-gray-400" />
+                    </button>
+                </div>
+
+                <div className="p-4 overflow-y-auto space-y-3">
+                    {fetching ? (
+                        <div className="text-center py-10 text-gray-400 font-medium animate-pulse">Loading doctors...</div>
+                    ) : doctors.length === 0 ? (
+                        <div className="text-center py-10 text-gray-400 font-medium">No doctors available.</div>
+                    ) : doctors.map((doc: any) => (
+                        <button 
+                            key={doc.id}
+                            disabled={loading}
+                            onClick={() => onSelect(doc)}
+                            className="w-full text-left p-4 rounded-2xl border border-gray-100 hover:border-emerald-500 hover:bg-emerald-50/30 transition-all group flex items-center justify-between"
+                        >
+                            <div>
+                                <p className="font-black text-gray-900 group-hover:text-emerald-700">Dr. {doc.name}</p>
+                                <p className="text-xs text-gray-500 font-bold uppercase">{doc.specialty || 'General'}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-emerald-600 font-black text-sm">₹{doc.consultation_fee}</p>
+                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Consult Fee</p>
+                            </div>
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function PatientDashboard() {
     const { data, error, isLoading, isValidating, refresh } = usePatientDashboard();
     const { refreshing } = usePullToRefresh(refresh);
+    const [showDoctorModal, setShowDoctorModal] = useState(false);
+    const [requesting, setRequesting] = useState(false);
+    const toast = useToast();
 
     if (isLoading) {
         return (
@@ -137,7 +239,45 @@ export default function PatientDashboard() {
                     <h3 className="text-base font-black mb-0.5">My Prescriptions</h3>
                     <p className="text-purple-100 text-xs font-medium">Active medications</p>
                 </Link>
+                <button 
+                    onClick={() => setShowDoctorModal(true)}
+                    className="bg-gradient-to-br from-rose-500 to-pink-600 rounded-2xl p-5 text-left text-white hover:shadow-lg transition-shadow relative overflow-hidden group"
+                >
+                    <Video className="absolute right-[-10px] bottom-[-10px] h-20 w-20 text-white/10 group-hover:scale-110 transition-transform" />
+                    <h3 className="text-base font-black mb-0.5">Video Consult</h3>
+                    <p className="text-rose-100 text-xs font-medium">Talk to your doctor</p>
+                </button>
             </div>
+
+            {/* Video Call Status Banner */}
+            <VideoCallStatus />
+
+            <DoctorSelectionModal 
+                isOpen={showDoctorModal} 
+                onClose={() => setShowDoctorModal(false)}
+                loading={requesting}
+                onSelect={async (doctor: any) => {
+                    setRequesting(true);
+                    try {
+                        const res = await requestVideoCall({
+                            patientId: data.patient.patient_id,
+                            doctorId: doctor.id,
+                            reason: `Video consultation request for Dr. ${doctor.name}`
+                        });
+                        if (res.success) {
+                            toast.success(`Request sent to Dr. ${doctor.name} successfully!`);
+                            setShowDoctorModal(false);
+                            refresh();
+                        } else {
+                            toast.error(res.error || 'Failed to send request');
+                        }
+                    } catch (e: any) {
+                        toast.error('An error occurred. Please try again.');
+                    } finally {
+                        setRequesting(false);
+                    }
+                }}
+            />
 
             {/* Health Snapshot */}
             {vitals && (

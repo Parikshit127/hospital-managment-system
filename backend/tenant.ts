@@ -1,4 +1,4 @@
-import { getSession, type SessionData } from '@/app/lib/session';
+import { getSession, getPatientSession, type SessionData, type PatientSessionData } from '@/app/lib/session';
 import { getTenantPrisma } from '@/backend/db';
 
 export class AuthError extends Error {
@@ -16,7 +16,9 @@ export class ForbiddenError extends Error {
 }
 
 export async function getTenantDb() {
-    const session = await getSession();
+    let session: any = await getSession();
+    if (!session) session = await getPatientSession();
+    
     if (!session?.organization_id) {
         throw new Error('TENANT_SCOPE_ERROR: No organization in session');
     }
@@ -25,10 +27,14 @@ export async function getTenantDb() {
 
 export async function requireTenantContext(): Promise<{
     db: ReturnType<typeof getTenantPrisma>;
-    session: SessionData;
+    session: any;
     organizationId: string;
 }> {
-    const session = await getSession();
+    let session: any = await getSession();
+    if (!session) {
+        session = await getPatientSession();
+    }
+
     if (!session) throw new AuthError();
     if (!session.organization_id) throw new Error('TENANT_ERROR: No organization');
 

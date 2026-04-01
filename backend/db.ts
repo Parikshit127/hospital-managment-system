@@ -52,6 +52,7 @@ const TENANT_SCOPED_MODELS = new Set([
     // Zealthix insurance integration
     'ZealthixApiKey',
     'PillReminder',
+    'VideoCallRequest',
 ]);
 
 // Models where organizationId is nullable (audit logs, etc.)

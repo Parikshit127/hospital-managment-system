@@ -1,5 +1,6 @@
 import useSWR, { mutate } from 'swr';
 import { getPatientDashboardData, getPatientRecords } from '@/app/actions/patient-actions';
+import { getActiveCallRequests } from '@/app/actions/video-call-actions';
 import { getMyAppointments } from '@/app/patient/appointments/actions';
 
 // SWR keys
@@ -7,6 +8,7 @@ export const SWR_KEYS = {
     dashboard: 'patient-dashboard',
     appointments: 'patient-appointments',
     records: 'patient-records',
+    videoCalls: 'patient-video-calls',
 } as const;
 
 // SWR default options — stale-while-revalidate with background refresh
@@ -62,6 +64,26 @@ export function usePatientRecords() {
     return {
         data: data?.success ? data.data : null,
         error: data?.success === false ? data.error : error?.message,
+        isLoading,
+        isValidating,
+        refresh: () => revalidate(),
+    };
+}
+
+/** Video call requests & status */
+export function useVideoCalls() {
+    const { data: dashboardData } = usePatientDashboard();
+    const patientId = dashboardData?.patient?.patient_id;
+
+    const { data, error, isLoading, isValidating, mutate: revalidate } = useSWR(
+        patientId ? [SWR_KEYS.videoCalls, patientId] : null,
+        () => getActiveCallRequests(patientId!),
+        { ...defaultOpts, refreshInterval: 30_000 },
+    );
+
+    return {
+        requests: data?.success ? data.data ?? [] : [],
+        error: data?.success === false ? (data as any)?.error : error?.message,
         isLoading,
         isValidating,
         refresh: () => revalidate(),
