@@ -198,7 +198,7 @@ export default function ReceptionDashboard() {
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-gray-200">
-                                    {['Patient ID', 'Name', 'Age / Gender', 'Phone', 'Department', 'Registered', 'Status', 'Actions'].map(h => (
+                                    {['Patient ID', 'Name', 'Age / Gender', 'Phone', 'Department', 'Registered', 'Status', 'Balance', 'Actions'].map(h => (
                                         <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                                     ))}
                                 </tr>
@@ -208,9 +208,9 @@ export default function ReceptionDashboard() {
                                     <>
                                         {Array.from({ length: 6 }).map((_, i) => (
                                             <tr key={`skel-${i}`}>
-                                                {Array.from({ length: 8 }).map((_, c) => (
+                                                {Array.from({ length: 9 }).map((_, c) => (
                                                     <td key={c} className="px-4 py-3.5">
-                                                        <Skeleton height="0.625rem" width={c === 1 ? '70%' : c === 7 ? '2rem' : '60%'} />
+                                                        <Skeleton height="0.625rem" width={c === 1 ? '70%' : c === 8 ? '2rem' : '60%'} />
                                                     </td>
                                                 ))}
                                             </tr>
@@ -218,7 +218,7 @@ export default function ReceptionDashboard() {
                                     </>
                                 ) : patients.length === 0 ? (
                                     <tr>
-                                        <td colSpan={8} className="text-center py-16">
+                                        <td colSpan={9} className="text-center py-16">
                                             <Users className="h-8 w-8 text-gray-300 mx-auto mb-2" />
                                             <p className="text-gray-400 text-sm font-medium">No patients found</p>
                                             <p className="text-gray-300 text-xs mt-1">Try adjusting your search or filters</p>
@@ -252,6 +252,13 @@ export default function ReceptionDashboard() {
                                                 </span>
                                             ) : (
                                                 <span className="text-gray-300 text-xs">-</span>
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {patient.totalBalance > 0 ? (
+                                                <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">₹ {Number(patient.totalBalance).toFixed(2)}</span>
+                                            ) : (
+                                                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">₹ 0</span>
                                             )}
                                         </td>
                                         <td className="px-4 py-3">

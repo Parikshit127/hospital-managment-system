@@ -5,6 +5,7 @@ import { getTodayRange, getOrgTimezone } from '@/app/lib/timezone';
 import { revalidatePath } from 'next/cache';
 import { logAudit } from '@/app/lib/audit';
 import { notifyPatient } from '@/app/lib/notify-patient';
+import { getPatientBalances } from '@/app/actions/balance-actions';
 
 export async function getLabOrders(statusFilter: 'Pending' | 'Completed' | 'All' = 'Pending') {
     try {
@@ -23,22 +24,25 @@ export async function getLabOrders(statusFilter: 'Pending' | 'Completed' | 'All'
         });
 
         // Enrich with Patient Names
-        const patientIds = Array.from(new Set(orders.map((o: any) => o.patient_id)));
+        const patientIds = Array.from(new Set(orders.map((o: any) => o.patient_id))) as string[];
         const patients = await db.oPD_REG.findMany({
             where: { patient_id: { in: patientIds } },
             select: { patient_id: true, full_name: true }
         });
 
+        const balances = await getPatientBalances(patientIds);
         const patientMap = new Map(patients.map((p: any) => [p.patient_id, p.full_name]));
 
         const enrichedOrders = orders.map((order: any) => ({
             order_id: order.barcode,
+            patient_id: order.patient_id,
             patient_name: patientMap.get(order.patient_id) || 'Unknown',
             test_type: order.test_type,
             doctor_name: order.doctor_id,
             status: order.status,
             result_value: order.result_value,
-            created_at: order.created_at
+            created_at: order.created_at,
+            labBalance: balances[order.patient_id]?.labBalance || 0
         }));
 
         return { success: true, data: enrichedOrders };

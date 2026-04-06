@@ -72,7 +72,8 @@ export default function PharmacyOrdersPage() {
                                 <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Total Items</th>
                                 <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Stock</th>
                                 <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-4 font-bold text-xs right-align">Action</th>
+                                <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider text-right">Balance</th>
+                                <th className="px-6 py-4 font-bold text-xs right-align text-right">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
@@ -105,6 +106,17 @@ export default function PharmacyOrdersPage() {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
+                                        {order.pharmacyBalance && order.pharmacyBalance > 0 ? (
+                                            <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-md">
+                                                ₹ {Number(order.pharmacyBalance).toFixed(2)}
+                                            </span>
+                                        ) : (
+                                            <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
+                                                ₹ 0
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
                                         {order.status === 'Pending' ? (
                                             <Link
                                                 href={`/pharmacy/dispense/${order.id}`}
@@ -120,7 +132,7 @@ export default function PharmacyOrdersPage() {
                                 </tr>
                             )) : (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                                    <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                                         <Pill className="h-8 w-8 mx-auto text-gray-300 mb-2" />
                                         <p className="font-medium">No pending pharmacy orders.</p>
                                     </td>

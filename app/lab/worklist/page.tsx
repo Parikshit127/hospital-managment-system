@@ -101,7 +101,8 @@ export default function LabWorklistPage() {
                                 <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Test Type</th>
                                 <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Date / Time</th>
                                 <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-4 font-bold text-xs right-align">Action</th>
+                                <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider text-right">Balance</th>
+                                <th className="px-6 py-4 font-bold text-xs right-align text-right">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
@@ -123,6 +124,17 @@ export default function LabWorklistPage() {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
+                                        {order.labBalance && order.labBalance > 0 ? (
+                                            <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-md">
+                                                ₹ {Number(order.labBalance).toFixed(2)}
+                                            </span>
+                                        ) : (
+                                            <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
+                                                ₹ 0
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
                                         <Link
                                             href={`/lab/sample/${order.order_id}`}
                                             className="inline-flex items-center gap-1 text-teal-600 hover:text-teal-700 font-bold text-xs bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg transition-colors"
@@ -134,7 +146,7 @@ export default function LabWorklistPage() {
                                 </tr>
                             )) : (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                                         <FlaskConical className="h-8 w-8 mx-auto text-gray-300 mb-2" />
                                         <p className="font-medium">No lab orders found matching your criteria</p>
                                     </td>

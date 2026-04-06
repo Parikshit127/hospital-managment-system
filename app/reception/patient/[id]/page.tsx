@@ -265,6 +265,12 @@ export default function PatientProfilePage() {
                                     <span className="text-sm font-bold text-gray-900">{data.appointments?.length || 0}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
+                                    <span className="text-sm text-gray-500">Global Balance</span>
+                                    <span className={`text-sm font-bold ${patient.totalBalance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                        ₹{patient.totalBalance > 0 ? Number(patient.totalBalance).toFixed(2) : '0'}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between">
                                     <span className="text-sm text-gray-500">Triage Sessions</span>
                                     <span className="text-sm font-bold text-gray-900">{data.triageHistory?.length || 0}</span>
                                 </div>

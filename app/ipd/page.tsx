@@ -816,6 +816,9 @@ export default function IPDDashboard() {
                           <th className="text-right px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">
                             Est. Room
                           </th>
+                          <th className="text-right px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                            Balance
+                          </th>
                           <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">
                             Actions
                           </th>
@@ -825,7 +828,7 @@ export default function IPDDashboard() {
                         {admissions.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={7}
+                              colSpan={8}
                               className="px-5 py-16 text-center text-gray-300"
                             >
                               <Users className="h-8 w-8 mx-auto mb-2" />
@@ -866,6 +869,17 @@ export default function IPDDashboard() {
                                 {"\u20B9"}
                                 {adm.estimatedRoomCharge?.toLocaleString() ||
                                   "0"}
+                              </td>
+                              <td className="px-5 py-3.5 text-right">
+                                {adm.totalBalance > 0 ? (
+                                  <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">
+                                    {"\u20B9"}{Number(adm.totalBalance).toFixed(2)}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                                    {"\u20B9"}0
+                                  </span>
+                                )}
                               </td>
                               <td className="px-5 py-3.5 text-center">
                                 <div className="flex items-center justify-center gap-1.5">

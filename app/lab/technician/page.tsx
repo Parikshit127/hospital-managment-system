@@ -20,6 +20,7 @@ type LabOrder = {
     result_value?: string;
     created_at: Date;
     barcode?: string;
+    labBalance?: number;
 };
 
 export default function LabPage() {
@@ -172,7 +173,7 @@ export default function LabPage() {
                         <table className="w-full text-left">
                             <thead className="border-b border-gray-200">
                                 <tr>
-                                    {['Order ID', 'Patient Name', 'Test Type', 'Status', ...(activeTab === 'Completed' ? ['Result'] : []), 'Action'].map((head) => (
+                                    {['Order ID', 'Patient Name', 'Test Type', 'Status', ...(activeTab === 'Completed' ? ['Result'] : []), 'Balance', 'Action'].map((head) => (
                                         <th key={head} className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.15em] text-gray-400 first:pl-8 last:pr-8 last:text-right">
                                             {head}
                                         </th>
@@ -184,7 +185,7 @@ export default function LabPage() {
                                     <>
                                         {Array.from({ length: 5 }).map((_, i) => (
                                             <tr key={`sk-${i}`} className="border-b border-gray-50">
-                                                {Array.from({ length: 6 }).map((_, c) => (
+                                                {Array.from({ length: activeTab === 'Completed' ? 7 : 6 }).map((_, c) => (
                                                     <td key={c} className="px-4 py-3.5">
                                                         <Skeleton width={c === 0 ? '70%' : '55%'} height="0.625rem" />
                                                     </td>
@@ -194,7 +195,7 @@ export default function LabPage() {
                                     </>
                                 ) : orders.length === 0 ? (
                                     <tr>
-                                        <td colSpan={6} className="text-center py-20">
+                                        <td colSpan={activeTab === 'Completed' ? 7 : 6} className="text-center py-20">
                                             <div className="flex flex-col items-center justify-center">
                                                 <div className="h-16 w-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-4">
                                                     <FlaskConical className="h-8 w-8 text-gray-300" />
@@ -219,6 +220,17 @@ export default function LabPage() {
                                             {activeTab === 'Completed' && (
                                                 <td className="px-6 py-5 text-sm text-gray-500 font-mono font-medium">{order.result_value || '-'}</td>
                                             )}
+                                            <td className="px-6 py-5 text-right">
+                                                {order.labBalance && order.labBalance > 0 ? (
+                                                    <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-md">
+                                                        ₹ {Number(order.labBalance).toFixed(2)}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
+                                                        ₹ 0
+                                                    </span>
+                                                )}
+                                            </td>
                                             <td className="px-6 py-5 pr-8 text-right">
                                                 {activeTab === 'Pending' ? (
                                                     <button

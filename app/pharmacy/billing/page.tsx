@@ -266,6 +266,11 @@ export default function PharmacyPage() {
                                         <div className="text-right">
                                             <div className="text-2xl font-black text-transparent bg-gradient-to-r from-teal-400 to-emerald-400 bg-clip-text tracking-tight">₹{order.total_amount}</div>
                                             <div className="text-[10px] text-gray-400 font-bold uppercase mt-1">Total Bill</div>
+                                            {order.pharmacyBalance !== undefined && (
+                                                <div className={`mt-2 inline-flex border px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${order.pharmacyBalance > 0 ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
+                                                    Balance: ₹{Number(order.pharmacyBalance).toFixed(2)}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 pl-2">

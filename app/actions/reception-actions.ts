@@ -27,6 +27,7 @@ import type {
     AppointmentSlot,
     BookAppointmentInput,
 } from '@/app/types/reception';
+import { getPatientBalances } from '@/app/actions/balance-actions';
 
 // ========================================
 // LAZY EXPIRATION: STALE APPOINTMENTS
@@ -121,12 +122,16 @@ export async function getRegisteredPatients(options?: {
             db.oPD_REG.count({ where }),
         ]);
 
+        const patientIds = data.map((p: any) => p.patient_id);
+        const balances = await getPatientBalances(patientIds);
+
         return {
             success: true,
-            data: data.map((p: { appointments: Array<{ status?: string; appointment_date?: Date }>;[key: string]: unknown }) => ({
+            data: data.map((p: any) => ({
                 ...p,
                 lastAppointmentStatus: p.appointments[0]?.status || null,
                 lastAppointmentDate: p.appointments[0]?.appointment_date || null,
+                totalBalance: balances[p.patient_id]?.totalBalance || 0,
             })),
             total,
             totalPages: Math.ceil(total / limit),
@@ -206,10 +211,16 @@ export async function getPatientDetail(patientId: string) {
             }),
         ]);
 
+        const balances = await getPatientBalances([patientId]);
+        const patientWithBalance = {
+            ...patient,
+            totalBalance: balances[patientId]?.totalBalance || 0
+        };
+
         return {
             success: true,
             data: {
-                patient,
+                patient: patientWithBalance,
                 appointments: patient.appointments,
                 triageHistory,
                 vitals,

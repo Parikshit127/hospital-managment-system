@@ -4,6 +4,7 @@ import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { logAudit } from '@/app/lib/audit';
 import { checkDrugInteractions } from '@/app/lib/drug-safety';
+import { getPatientBalances } from '@/app/actions/balance-actions';
 
 export async function getInventory() {
     try {
@@ -80,10 +81,12 @@ export async function getPharmacyQueue() {
         });
 
         // Manual Join for Patient Details (since relation is missing in schema)
-        const patientIds = Array.from(new Set(orders.map((o: any) => o.patient_id)));
+        const patientIds = Array.from(new Set(orders.map((o: any) => o.patient_id))) as string[];
         const patients = await db.oPD_REG.findMany({
             where: { patient_id: { in: patientIds } }
         });
+        
+        const balances = await getPatientBalances(patientIds);
 
         // Collect all medicine names from order items to check stock
         const allMedicineNames = Array.from(new Set(
@@ -117,6 +120,7 @@ export async function getPharmacyQueue() {
                 items: itemsWithStock,
                 patient: patients.find((p: any) => p.patient_id === order.patient_id) || null,
                 stockWarning: hasOutOfStock ? 'Out of Stock' : hasLowStock ? 'Low Stock' : null,
+                pharmacyBalance: balances[order.patient_id]?.pharmacyBalance || 0,
             };
         });
 

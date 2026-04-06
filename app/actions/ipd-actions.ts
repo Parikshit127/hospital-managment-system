@@ -3,6 +3,7 @@
 import { requireTenantContext } from "@/backend/tenant";
 import { logAudit } from "@/app/lib/audit";
 import { revalidatePath } from "next/cache";
+import { getPatientBalances } from '@/app/actions/balance-actions';
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
 function serialize<T>(data: T): T {
@@ -233,6 +234,9 @@ export async function getIPDAdmissions(statusFilter?: string) {
       orderBy: { admission_date: "desc" },
     });
 
+    const patientIds = Array.from(new Set(admissions.map((a: any) => a.patient_id).filter(Boolean))) as string[];
+    const balances = await getPatientBalances(patientIds);
+
     const enriched = admissions.map((a: any) => {
       const daysAdmitted = Math.ceil(
         (new Date().getTime() - new Date(a.admission_date).getTime()) /
@@ -249,6 +253,7 @@ export async function getIPDAdmissions(statusFilter?: string) {
         estimatedRoomCharge:
           daysAdmitted *
           Number(a.ward?.cost_per_day || a.bed?.wards?.cost_per_day || 0),
+        totalBalance: balances[a.patient_id]?.totalBalance || 0,
       };
     });
 
