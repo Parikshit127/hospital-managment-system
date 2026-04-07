@@ -5,7 +5,7 @@ import { logAudit } from "@/app/lib/audit";
 import { revalidatePath } from "next/cache";
 import { getPatientBalances } from '@/app/actions/balance-actions';
 
-// Convert Prisma Decimal/Date objects to plain JS for client serialization
+
 function serialize<T>(data: T): T {
   return JSON.parse(
     JSON.stringify(data, (_, value) =>
@@ -18,44 +18,49 @@ function serialize<T>(data: T): T {
   );
 }
 
-// ============================================
-// BED & WARD MANAGEMENT
-// ============================================
 
-// Get all wards with bed counts
 export async function getWardsWithBeds() {
   try {
     const { db } = await requireTenantContext();
     const wards = await db.wards.findMany({
       include: {
-        beds: true,
+        beds: {
+          orderBy: { bed_id: "asc" },
+        },
       },
       orderBy: { ward_name: "asc" },
     });
 
     const wardData = wards.map((ward: any) => ({
-      ...ward,
+      id: ward.ward_id,
+      ward_id: ward.ward_id,
+      ward_name: ward.ward_name,
+      ward_type: ward.ward_type,
       cost_per_day: Number(ward.cost_per_day || 0),
       nursing_charge: Number(ward.nursing_charge || 0),
+      beds: ward.beds.map((b: any) => ({
+        bed_id: b.bed_id,
+        bed_type: b.bed_type,
+        status: b.status,
+        ward_id: b.ward_id,
+      })),
       totalBeds: ward.beds.length,
       available: ward.beds.filter((b: any) => b.status === "Available").length,
       occupied: ward.beds.filter((b: any) => b.status === "Occupied").length,
-      maintenance: ward.beds.filter((b: any) => b.status === "Maintenance")
-        .length,
+      maintenance: ward.beds.filter((b: any) => b.status === "Maintenance").length,
       reserved: ward.beds.filter((b: any) => b.status === "Reserved").length,
       cleaning: ward.beds.filter((b: any) => b.status === "Cleaning").length,
       isolation: ward.beds.filter((b: any) => b.status === "Isolation").length,
       blocked: ward.beds.filter((b: any) => b.status === "Blocked").length,
     }));
 
-    return { success: true, data: serialize(wardData) };
+    return { success: true, data: wardData };
   } catch (error: any) {
     console.error("getWardsWithBeds error:", error);
     return { success: false, error: error.message };
   }
 }
 
-// Get all beds with ward info and admission info
 export async function getAllBeds() {
   try {
     const { db } = await requireTenantContext();
@@ -81,7 +86,7 @@ export async function getAllBeds() {
   }
 }
 
-// Update bed status
+
 export async function updateBedStatus(bedId: string, newStatus: string) {
   try {
     const { db } = await requireTenantContext();
@@ -123,11 +128,7 @@ export async function updateBedStatus(bedId: string, newStatus: string) {
   }
 }
 
-// ============================================
-// IPD ADMISSION
-// ============================================
 
-// Admit a patient to a bed
 export async function admitPatientIPD(data: {
   patient_id: string;
   bed_id: string;
@@ -143,7 +144,7 @@ export async function admitPatientIPD(data: {
   try {
     const { db, organizationId } = await requireTenantContext();
     
-    // Use transaction for atomic bed locking and admission creation
+    
     const admission = await db.$transaction(async (tx: any) => {
         // Atomic update: only update if it is 'Available'
         const updatedBed = await tx.beds.updateMany({

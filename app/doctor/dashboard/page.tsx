@@ -44,6 +44,7 @@ import {
   scheduleFollowUp,
   getPatientFollowUps,
 } from "@/app/actions/doctor-actions";
+import { getWardsWithBeds } from "@/app/actions/ipd-actions";
 import { dischargePatient } from "@/app/actions/discharge-actions";
 import { registerPatient } from "@/app/actions/register-patient";
 import { getPatientTriageData } from "@/app/actions/triage-actions";
@@ -102,6 +103,10 @@ export default function DoctorDashboard() {
   const [loadingLabs, setLoadingLabs] = useState(false);
   const [showAdmitModal, setShowAdmitModal] = useState(false);
   const [admitDiagnosis, setAdmitDiagnosis] = useState("");
+  const [admitWards, setAdmitWards] = useState<any[]>([]);
+  const [admitSelectedWard, setAdmitSelectedWard] = useState("");
+  const [admitSelectedBed, setAdmitSelectedBed] = useState("");
+  const [admitAvailableBeds, setAdmitAvailableBeds] = useState<any[]>([]);
   const [medicines, setMedicines] = useState<any[]>([]);
   const [selectedMedicine, setSelectedMedicine] = useState("");
   const [medicineQty, setMedicineQty] = useState(1);
@@ -419,10 +424,32 @@ export default function DoctorDashboard() {
       fetchLabs(activePatient.patient_id);
     });
 
+  const handleOpenAdmitModal = async () => {
+    setAdmitDiagnosis("");
+    setAdmitSelectedWard("");
+    setAdmitSelectedBed("");
+    setAdmitAvailableBeds([]);
+    const res = await getWardsWithBeds();
+    if (res.success) setAdmitWards(res.data || []);
+    setShowAdmitModal(true);
+  };
+
   const handleAdmitSubmit = () =>
     withSubmission(async () => {
       if (!activePatient) return;
-      await admitPatient(activePatient.patient_id, doctorName, admitDiagnosis);
+      if (!admitSelectedBed || !admitSelectedWard) {
+        alert("Please select a ward and bed");
+        return;
+      }
+      const { admitPatientIPD } = await import("@/app/actions/ipd-actions");
+      const res = await admitPatientIPD({
+        patient_id: activePatient.patient_id,
+        bed_id: admitSelectedBed,
+        ward_id: Number(admitSelectedWard),
+        diagnosis: admitDiagnosis,
+        doctor_name: doctorName,
+      });
+      if (!res.success) { alert("Admission failed: " + res.error); return; }
       alert("Patient Admitted");
       setShowAdmitModal(false);
       handleStatusUpdate("Admitted");
@@ -874,14 +901,50 @@ export default function DoctorDashboard() {
               <textarea
                 autoFocus
                 className={inputCls}
-                rows={4}
+                rows={3}
                 placeholder="Provisional Diagnosis..."
                 value={admitDiagnosis}
                 onChange={(e) => setAdmitDiagnosis(e.target.value)}
               />
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1">Select Ward *</label>
+                <select
+                  className={inputCls}
+                  value={admitSelectedWard}
+                  onChange={(e) => {
+                    setAdmitSelectedWard(e.target.value);
+                    setAdmitSelectedBed("");
+                    const ward = admitWards.find((w: any) => String(w.id) === e.target.value);
+                    setAdmitAvailableBeds(ward?.beds?.filter((b: any) => b.status?.toLowerCase() === "available") || []);
+                  }}
+                >
+                  <option value="">-- Select Ward --</option>
+                  {admitWards.map((w: any) => (
+                    <option key={w.id} value={w.id}>{w.ward_name} (₹{w.cost_per_day}/day)</option>
+                  ))}
+                </select>
+              </div>
+              {admitSelectedWard && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1">Select Bed *</label>
+                  <select
+                    className={inputCls}
+                    value={admitSelectedBed}
+                    onChange={(e) => setAdmitSelectedBed(e.target.value)}
+                  >
+                    <option value="">-- Select Bed --</option>
+                    {admitAvailableBeds.map((b: any) => (
+                      <option key={b.bed_id} value={b.bed_id}>{b.bed_id} - {b.bed_type || "Standard"}</option>
+                    ))}
+                  </select>
+                  {admitAvailableBeds.length === 0 && (
+                    <p className="text-xs text-rose-500 mt-1">No available beds in this ward</p>
+                  )}
+                </div>
+              )}
               <button
                 onClick={handleAdmitSubmit}
-                disabled={!admitDiagnosis.trim() || isSubmitting}
+                disabled={!admitDiagnosis.trim() || !admitSelectedBed || isSubmitting}
                 className="w-full bg-gradient-to-r from-rose-500 to-rose-600 text-white font-bold py-3 rounded-xl hover:from-rose-400 hover:to-rose-500 disabled:opacity-50 flex justify-center items-center gap-2 shadow-lg shadow-rose-500/20"
               >
                 {isSubmitting ? (
@@ -1213,7 +1276,7 @@ export default function DoctorDashboard() {
                   </button>
                 ) : (
                   <button
-                    onClick={() => setShowAdmitModal(true)}
+                    onClick={() => handleOpenAdmitModal()}
                     disabled={isSubmitting}
                     className="px-5 py-2.5 bg-gradient-to-r from-rose-500 to-rose-600 text-white font-bold text-sm rounded-xl hover:from-rose-400 hover:to-rose-500 shadow-lg shadow-rose-500/20 flex items-center gap-2 disabled:opacity-50"
                   >

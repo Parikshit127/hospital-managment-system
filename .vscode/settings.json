@@ -1,3 +1,4 @@
 {
-    "claudeCode.initialPermissionMode": "bypassPermissions"
+    "claudeCode.initialPermissionMode": "bypassPermissions",
+    "kiroAgent.configureMCP": "Disabled"
 }

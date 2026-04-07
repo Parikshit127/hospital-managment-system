@@ -30,7 +30,7 @@ export async function dischargePatient(patientId: string) {
             });
         }
 
-        // Log audit event
+
         await db.system_audit_logs.create({
             data: {
                 action: 'DISCHARGE_PATIENT',
@@ -42,7 +42,6 @@ export async function dischargePatient(patientId: string) {
             }
         });
 
-        // Return success for client to download via local API
         return {
             success: true,
             pdfBase64: null
@@ -54,7 +53,6 @@ export async function dischargePatient(patientId: string) {
     }
 }
 
-// Get all admitted patients for discharge management
 export async function getAdmittedPatients() {
     try {
         const { db } = await requireTenantContext();
@@ -88,12 +86,12 @@ export async function getAdmittedPatients() {
     }
 }
 
-// Process discharge with summary generation
+
 export async function processDischarge(patientId: string, patientName: string, notes: string) {
     try {
         const { db, organizationId } = await requireTenantContext();
 
-        // Update admission status
+      
         const activeAdmission = await db.admissions.findFirst({
             where: { patient_id: patientId, status: 'Admitted' }
         });
@@ -107,7 +105,111 @@ export async function processDischarge(patientId: string, patientName: string, n
                 }
             });
 
-            // Create discharge summary record
+            
+            await db.appointments.updateMany({
+                where: { patient_id: patientId, status: 'Admitted' },
+                data: { status: 'Completed' }
+            });
+
+           
+            if (activeAdmission.bed_id) {
+                await db.beds.update({
+                    where: { bed_id: activeAdmission.bed_id },
+                    data: { status: 'Cleaning' }
+                });
+            }
+
+            
+            const ward = await db.wards.findUnique({ where: { ward_id: activeAdmission.ward_id ?? 0 } });
+            const daysAdmitted = Math.max(1, Math.ceil(
+                (new Date().getTime() - new Date(activeAdmission.admission_date).getTime()) / (1000 * 60 * 60 * 24)
+            ));
+            const roomRate = Number(ward?.cost_per_day || 0);
+            const roomCharge = roomRate * daysAdmitted;
+
+
+            let invoice = await db.invoices.findFirst({
+                where: { admission_id: activeAdmission.admission_id, status: { not: 'Cancelled' } }
+            });
+
+          
+            let resolvedWard = ward;
+            if (!resolvedWard && activeAdmission.bed_id) {
+                const bed = await db.beds.findUnique({
+                    where: { bed_id: activeAdmission.bed_id },
+                    include: { wards: true }
+                });
+                resolvedWard = bed?.wards ?? null;
+            }
+
+            const resolvedRoomRate = Number(resolvedWard?.cost_per_day || 500); 
+            const resolvedRoomCharge = resolvedRoomRate * daysAdmitted;
+
+            if (!invoice) {
+                const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
+                invoice = await db.invoices.create({
+                    data: {
+                        invoice_number: `INV-${dateStr}-${seq}`,
+                        patient_id: patientId,
+                        admission_id: activeAdmission.admission_id,
+                        invoice_type: 'IPD',
+                        status: 'Final',
+                        total_amount: resolvedRoomCharge,
+                        net_amount: resolvedRoomCharge,
+                        balance_due: resolvedRoomCharge,
+                        finalized_at: new Date(),
+                        organizationId,
+                    }
+                });
+
+                await db.invoice_items.create({
+                    data: {
+                        invoice_id: invoice.id,
+                        department: 'IPD',
+                        description: `Room charges - ${resolvedWard?.ward_name || 'General Ward'} (${daysAdmitted} day${daysAdmitted > 1 ? 's' : ''} × ₹${resolvedRoomRate}/day)`,
+                        quantity: daysAdmitted,
+                        unit_price: resolvedRoomRate,
+                        total_price: resolvedRoomCharge,
+                        net_price: resolvedRoomCharge,
+                        organizationId,
+                    }
+                });
+            } else {
+                
+                const resolvedRoomCharge2 = resolvedRoomRate * daysAdmitted;
+                if (resolvedRoomCharge2 > 0) {
+                    await db.invoice_items.create({
+                        data: {
+                            invoice_id: invoice.id,
+                            department: 'IPD',
+                            description: `Room charges - ${resolvedWard?.ward_name || 'General Ward'} (${daysAdmitted} day${daysAdmitted > 1 ? 's' : ''} × ₹${resolvedRoomRate}/day)`,
+                            quantity: daysAdmitted,
+                            unit_price: resolvedRoomRate,
+                            total_price: resolvedRoomCharge2,
+                            net_price: resolvedRoomCharge2,
+                            organizationId,
+                        }
+                    });
+                    await db.invoices.update({
+                        where: { id: invoice.id },
+                        data: {
+                            total_amount: resolvedRoomCharge2,
+                            net_amount: resolvedRoomCharge2,
+                            balance_due: resolvedRoomCharge2,
+                            status: 'Final',
+                            finalized_at: new Date(),
+                        }
+                    });
+                } else {
+                    await db.invoices.update({
+                        where: { id: invoice.id },
+                        data: { status: 'Final', finalized_at: new Date() }
+                    });
+                }
+            }
+
+            
             await db.discharge_summaries.create({
                 data: {
                     admission_id: activeAdmission.admission_id,
@@ -118,7 +220,7 @@ export async function processDischarge(patientId: string, patientName: string, n
             });
         }
 
-        // Log audit event
+       
         await db.system_audit_logs.create({
             data: {
                 action: 'PROCESS_DISCHARGE',
@@ -131,7 +233,6 @@ export async function processDischarge(patientId: string, patientName: string, n
         });
 
 
-        // Send discharge notification (email + WhatsApp, non-blocking)
         const patient = await db.oPD_REG.findFirst({ where: { patient_id: patientId }, select: { phone: true, email: true } });
         if (patient) {
             notifyPatient(
@@ -147,7 +248,7 @@ export async function processDischarge(patientId: string, patientName: string, n
     }
 }
 
-// Generate AI-powered discharge summary for doctor review
+
 export async function generateAISummary(admissionId: string) {
     try {
         const { db, organizationId } = await requireTenantContext();
