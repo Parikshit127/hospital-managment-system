@@ -110,7 +110,7 @@ export function mapPatientDetailsToZealthix(
         employeeId: patient.employee_id || '',
         insurerName: provider?.provider_name || '',
         payer: provider?.provider_name || '',
-        payerID: provider?.id?.toString() || '',
+        payerID: policy?.payer_id || '',
         insurerID: policy?.insurer_id || '0',
         corporateName: policy?.corporate_name || '',
         policyNumber: policy?.policy_number || '',
