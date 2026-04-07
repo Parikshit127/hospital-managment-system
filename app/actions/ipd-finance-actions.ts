@@ -610,3 +610,259 @@ export async function getChargePostingLog(admissionId?: string, date?: Date) {
         return { success: false, error: error.message };
     }
 }
+
+// ============================================
+// DISCHARGE SETTLEMENT
+// ============================================
+
+export async function settleAndDischarge(data: {
+    admission_id: string;
+    apply_deposits: boolean;
+    discount_amount?: number;
+    discount_reason?: string;
+    approved_by?: string;
+    splits?: Array<{
+        amount: number;
+        payment_method: string;
+        reference?: string;
+    }>;
+}) {
+    try {
+        const { db, session, organizationId } = await requireTenantContext();
+
+        const admission = await db.admissions.findUnique({
+            where: { admission_id: data.admission_id },
+            include: { patient: true, ward: true, bed: { include: { wards: true } } },
+        });
+        if (!admission) return { success: false, error: 'Admission not found' };
+        if (admission.status === 'Discharged') return { success: false, error: 'Patient already discharged' };
+
+        // 1. Accrue remaining daily charges (room + nursing)
+        const ward = admission.ward || admission.bed?.wards;
+        const daysAdmitted = Math.max(1, Math.ceil(
+            (new Date().getTime() - new Date(admission.admission_date).getTime()) / (1000 * 60 * 60 * 24)
+        ));
+
+        // Check if room charges already posted - count existing room charge postings
+        const existingRoomPostings = await db.ipdChargePosting.count({
+            where: { admission_id: data.admission_id, source_module: 'room' },
+        });
+
+        if (existingRoomPostings < daysAdmitted && ward) {
+            const roomDaysToPost = daysAdmitted - existingRoomPostings;
+            const roomRate = Number(ward.cost_per_day || 0);
+            const nursingRate = Number(ward.nursing_charge || 0);
+
+            if (roomRate > 0 && roomDaysToPost > 0) {
+                await postChargeToIpdBill({
+                    admission_id: data.admission_id,
+                    source_module: 'room',
+                    description: `Room Charges (${roomDaysToPost}d x ₹${roomRate})`,
+                    quantity: roomDaysToPost,
+                    unit_price: roomRate,
+                    service_category: 'Room',
+                    hsn_sac_code: '996311',
+                });
+            }
+            if (nursingRate > 0 && roomDaysToPost > 0) {
+                await postChargeToIpdBill({
+                    admission_id: data.admission_id,
+                    source_module: 'nursing',
+                    description: `Nursing Charges (${roomDaysToPost}d x ₹${nursingRate})`,
+                    quantity: roomDaysToPost,
+                    unit_price: nursingRate,
+                    service_category: 'Nursing',
+                    hsn_sac_code: '999312',
+                });
+            }
+        }
+
+        // Find the invoice
+        let invoice = await db.invoices.findFirst({
+            where: { admission_id: data.admission_id, status: { not: 'Cancelled' } },
+        });
+        if (!invoice) return { success: false, error: 'No active invoice found' };
+
+        // 2. Apply discount if specified
+        if (data.discount_amount && data.discount_amount > 0) {
+            // Add negative line item for discount
+            await db.invoice_items.create({
+                data: {
+                    invoice_id: invoice.id,
+                    department: 'Discount',
+                    description: data.discount_reason || 'Discharge Discount',
+                    quantity: 1,
+                    unit_price: 0,
+                    total_price: 0,
+                    discount: data.discount_amount,
+                    net_price: -data.discount_amount,
+                    organizationId,
+                },
+            });
+
+            // Update invoice with approved_by if discount given
+            if (data.approved_by) {
+                await db.invoices.update({
+                    where: { id: invoice.id },
+                    data: { approved_by: data.approved_by, approved_at: new Date() },
+                });
+            }
+
+            await recalculateInvoiceWithGst(invoice.id);
+            // Re-fetch after recalculation
+            invoice = await db.invoices.findUnique({ where: { id: invoice.id } });
+            if (!invoice) return { success: false, error: 'Invoice lost after recalculation' };
+        }
+
+        // 3. Apply deposits if requested
+        if (data.apply_deposits) {
+            const deposits = await db.patientDeposit.findMany({
+                where: { patient_id: admission.patient_id, status: 'Active' },
+            });
+
+            for (const deposit of deposits) {
+                const available = Number(deposit.amount) - Number(deposit.applied_amount) - Number(deposit.refunded_amount);
+                if (available <= 0) continue;
+
+                const currentInvoice = await db.invoices.findUnique({ where: { id: invoice.id } });
+                const currentBalance = Number(currentInvoice?.balance_due || 0);
+                if (currentBalance <= 0) break;
+
+                const applyAmount = Math.min(available, currentBalance);
+
+                // Create deposit payment
+                await db.payments.create({
+                    data: {
+                        receipt_number: `RCP-DEP-${Date.now()}-${deposit.id}`,
+                        invoice_id: invoice.id,
+                        amount: applyAmount,
+                        payment_method: 'Deposit',
+                        payment_type: 'Settlement',
+                        status: 'Completed',
+                        notes: `Applied from deposit ${deposit.deposit_number}`,
+                        organizationId,
+                    },
+                });
+
+                const newApplied = Number(deposit.applied_amount) + applyAmount;
+                await db.patientDeposit.update({
+                    where: { id: deposit.id },
+                    data: {
+                        applied_to_invoice: invoice.id,
+                        applied_amount: newApplied,
+                        status: newApplied >= Number(deposit.amount) ? 'Applied' : 'Active',
+                    },
+                });
+            }
+
+            // Recalculate after deposits
+            const allPayments = await db.payments.findMany({
+                where: { invoice_id: invoice.id, status: 'Completed' },
+            });
+            const totalPaid = allPayments.reduce((s: number, p: any) => s + Number(p.amount), 0);
+            const netAmount = Number(invoice.net_amount || 0);
+            const balance = netAmount - totalPaid;
+
+            await db.invoices.update({
+                where: { id: invoice.id },
+                data: {
+                    paid_amount: totalPaid,
+                    balance_due: balance > 0 ? balance : 0,
+                    status: balance <= 0 ? 'Paid' : totalPaid > 0 ? 'Partial' : invoice.status,
+                },
+            });
+        }
+
+        // 4. Record split payment for remaining balance
+        if (data.splits && data.splits.length > 0) {
+            const transactionGroupId = `TXN-DSC-${Date.now()}`;
+
+            for (const split of data.splits) {
+                if (split.amount <= 0) continue;
+                await db.payments.create({
+                    data: {
+                        receipt_number: `RCP-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        invoice_id: invoice.id,
+                        amount: split.amount,
+                        payment_method: split.payment_method,
+                        payment_type: 'Settlement',
+                        transaction_group_id: transactionGroupId,
+                        reference: split.reference || null,
+                        status: 'Completed',
+                        notes: 'Discharge settlement',
+                        organizationId,
+                    },
+                });
+            }
+
+            // Recalculate after final payment
+            const allPayments = await db.payments.findMany({
+                where: { invoice_id: invoice.id, status: 'Completed' },
+            });
+            const totalPaid = allPayments.reduce((s: number, p: any) => s + Number(p.amount), 0);
+            const netAmount = Number(invoice.net_amount || 0);
+            const balance = netAmount - totalPaid;
+
+            await db.invoices.update({
+                where: { id: invoice.id },
+                data: {
+                    paid_amount: totalPaid,
+                    balance_due: balance > 0 ? balance : 0,
+                    status: balance <= 0 ? 'Paid' : 'Partial',
+                },
+            });
+        }
+
+        // 5. Finalize invoice
+        await db.invoices.update({
+            where: { id: invoice.id },
+            data: { status: 'Paid', finalized_at: new Date() },
+        });
+
+        // 6. Discharge patient
+        await db.admissions.update({
+            where: { admission_id: data.admission_id },
+            data: { status: 'Discharged', discharge_date: new Date() },
+        });
+
+        // 7. Free the bed
+        if (admission.bed_id) {
+            await db.beds.update({
+                where: { bed_id: admission.bed_id },
+                data: { status: 'Cleaning' },
+            });
+        }
+
+        // 8. Audit log
+        await db.system_audit_logs.create({
+            data: {
+                action: 'DISCHARGE_SETTLEMENT',
+                module: 'ipd',
+                entity_type: 'admission',
+                entity_id: data.admission_id,
+                details: JSON.stringify({
+                    invoice_id: invoice.id,
+                    discount: data.discount_amount || 0,
+                    settled_by: session.username,
+                }),
+                organizationId,
+            },
+        });
+
+        // 9. Generate final bill data
+        const finalBill = await generateInterimBill(data.admission_id);
+
+        return {
+            success: true,
+            data: serialize({
+                admission_id: data.admission_id,
+                invoice_id: invoice.id,
+                discharge_date: new Date(),
+                bill: finalBill.success ? finalBill.data : null,
+            }),
+        };
+    } catch (error: any) {
+        console.error('settleAndDischarge error:', error);
+        return { success: false, error: error.message };
+    }
+}

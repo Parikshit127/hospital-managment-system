@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { getIPDAdmissions } from '@/app/actions/ipd-actions';
 import { generateInterimBill, postChargeToIpdBill, getGstSummary } from '@/app/actions/ipd-finance-actions';
-import { recordPayment } from '@/app/actions/finance-actions';
+import { recordPayment, recordSplitPayment } from '@/app/actions/finance-actions';
 import { collectDeposit, getPatientDeposits, applyDepositToInvoice } from '@/app/actions/deposit-actions';
 import { getIpdServices } from '@/app/actions/ipd-master-actions';
 
@@ -18,10 +18,9 @@ export default function IpdBillingPage() {
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [activeTab, setActiveTab] = useState<'summary' | 'charges' | 'payments' | 'deposits'>('summary');
 
-    // Payment modal state
+    // Split Payment modal state
     const [showPaymentModal, setShowPaymentModal] = useState(false);
-    const [paymentAmount, setPaymentAmount] = useState('');
-    const [paymentMethod, setPaymentMethod] = useState('Cash');
+    const [paymentSplits, setPaymentSplits] = useState<Array<{ amount: string; method: string; reference: string }>>([{ amount: '', method: 'Cash', reference: '' }]);
 
     // Charge entry state
     const [showChargeModal, setShowChargeModal] = useState(false);
@@ -78,22 +77,49 @@ export default function IpdBillingPage() {
     }
 
     async function handleRecordPayment() {
-        if (!billData || !paymentAmount) return;
+        if (!billData) return;
+        const validSplits = paymentSplits.filter(s => parseFloat(s.amount) > 0);
+        if (validSplits.length === 0) return;
+
         setActionLoading(true);
-        const res = await recordPayment({
-            invoice_id: billData.invoice.id,
-            amount: parseFloat(paymentAmount),
-            payment_method: paymentMethod,
-            payment_type: 'Settlement',
-        });
-        setActionLoading(false);
-        if (res.success) {
-            setShowPaymentModal(false);
-            setPaymentAmount('');
-            showToast(`Payment of ₹${parseFloat(paymentAmount).toLocaleString('en-IN')} recorded`);
-            await refreshBill();
+        const totalAmount = validSplits.reduce((sum, s) => sum + parseFloat(s.amount), 0);
+
+        if (validSplits.length === 1) {
+            // Single payment - use existing method
+            const res = await recordPayment({
+                invoice_id: billData.invoice.id,
+                amount: parseFloat(validSplits[0].amount),
+                payment_method: validSplits[0].method,
+                payment_type: 'Settlement',
+            });
+            setActionLoading(false);
+            if (res.success) {
+                setShowPaymentModal(false);
+                setPaymentSplits([{ amount: '', method: 'Cash', reference: '' }]);
+                showToast(`Payment of ₹${totalAmount.toLocaleString('en-IN')} recorded`);
+                await refreshBill();
+            } else {
+                showToast(res.error || 'Payment failed', 'error');
+            }
         } else {
-            showToast(res.error || 'Payment failed', 'error');
+            // Split payment
+            const res = await recordSplitPayment({
+                invoice_id: billData.invoice.id,
+                splits: validSplits.map(s => ({
+                    amount: parseFloat(s.amount),
+                    payment_method: s.method,
+                    reference: s.reference || undefined,
+                })),
+            });
+            setActionLoading(false);
+            if (res.success) {
+                setShowPaymentModal(false);
+                setPaymentSplits([{ amount: '', method: 'Cash', reference: '' }]);
+                showToast(`Split payment of ₹${totalAmount.toLocaleString('en-IN')} recorded (${validSplits.length} methods)`);
+                await refreshBill();
+            } else {
+                showToast(res.error || 'Split payment failed', 'error');
+            }
         }
     }
 
@@ -158,7 +184,7 @@ export default function IpdBillingPage() {
 
     function openPaymentModalWithBalance() {
         if (!billData) return;
-        setPaymentAmount(String(billData.invoice.balance_due || ''));
+        setPaymentSplits([{ amount: String(billData.invoice.balance_due || ''), method: 'Cash', reference: '' }]);
         setShowPaymentModal(true);
     }
 
@@ -576,50 +602,95 @@ export default function IpdBillingPage() {
                 </div>
             </div>
 
-            {/* Payment Modal */}
+            {/* Split Payment Modal */}
             {showPaymentModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 w-96">
-                        <h3 className="text-lg font-semibold mb-4">Record Payment</h3>
-                        <div className="space-y-3">
-                            <div>
-                                <label className="text-sm text-gray-600">Amount (₹)</label>
-                                <input
-                                    type="number"
-                                    value={paymentAmount}
-                                    onChange={(e) => setPaymentAmount(e.target.value)}
-                                    className="w-full px-3 py-2 border rounded-md"
-                                    placeholder={`Balance: ₹${billData?.invoice?.balance_due?.toLocaleString('en-IN')}`}
-                                />
-                            </div>
-                            <div>
-                                <label className="text-sm text-gray-600">Payment Method</label>
-                                <select
-                                    value={paymentMethod}
-                                    onChange={(e) => setPaymentMethod(e.target.value)}
-                                    className="w-full px-3 py-2 border rounded-md"
-                                >
-                                    <option>Cash</option>
-                                    <option>UPI</option>
-                                    <option>Card</option>
-                                    <option>BankTransfer</option>
-                                </select>
-                            </div>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={handleRecordPayment}
-                                    disabled={actionLoading}
-                                    className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-md text-sm disabled:opacity-50"
-                                >
-                                    {actionLoading ? 'Processing...' : 'Confirm'}
-                                </button>
-                                <button
-                                    onClick={() => setShowPaymentModal(false)}
-                                    className="flex-1 px-3 py-2 border rounded-md text-sm"
-                                >
-                                    Cancel
-                                </button>
-                            </div>
+                    <div className="bg-white rounded-lg p-6 w-[520px]">
+                        <h3 className="text-lg font-semibold mb-1">Record Payment</h3>
+                        <p className="text-xs text-gray-500 mb-4">Balance Due: ₹{(billData?.invoice?.balance_due || 0).toLocaleString('en-IN')}</p>
+                        <div className="space-y-2 mb-3">
+                            {paymentSplits.map((split, idx) => (
+                                <div key={idx} className="flex gap-2 items-center">
+                                    <input
+                                        type="number"
+                                        value={split.amount}
+                                        onChange={(e) => {
+                                            const updated = [...paymentSplits];
+                                            updated[idx].amount = e.target.value;
+                                            setPaymentSplits(updated);
+                                        }}
+                                        className="w-28 px-2 py-1.5 border rounded text-sm"
+                                        placeholder="Amount"
+                                    />
+                                    <select
+                                        value={split.method}
+                                        onChange={(e) => {
+                                            const updated = [...paymentSplits];
+                                            updated[idx].method = e.target.value;
+                                            setPaymentSplits(updated);
+                                        }}
+                                        className="flex-1 px-2 py-1.5 border rounded text-sm"
+                                    >
+                                        <option>Cash</option>
+                                        <option>UPI</option>
+                                        <option>Card</option>
+                                        <option>BankTransfer</option>
+                                        <option>Deposit</option>
+                                    </select>
+                                    <input
+                                        type="text"
+                                        value={split.reference}
+                                        onChange={(e) => {
+                                            const updated = [...paymentSplits];
+                                            updated[idx].reference = e.target.value;
+                                            setPaymentSplits(updated);
+                                        }}
+                                        className="w-32 px-2 py-1.5 border rounded text-sm"
+                                        placeholder="Ref / Txn ID"
+                                    />
+                                    {paymentSplits.length > 1 && (
+                                        <button
+                                            onClick={() => setPaymentSplits(paymentSplits.filter((_, i) => i !== idx))}
+                                            className="text-red-400 hover:text-red-600 text-lg leading-none"
+                                        >
+                                            &times;
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                        <button
+                            onClick={() => setPaymentSplits([...paymentSplits, { amount: '', method: 'Cash', reference: '' }])}
+                            className="text-sm text-blue-600 hover:underline mb-3"
+                        >
+                            + Add Payment Method
+                        </button>
+                        {/* Running total */}
+                        {(() => {
+                            const splitTotal = paymentSplits.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+                            const balanceDue = billData?.invoice?.balance_due || 0;
+                            const isBalanced = Math.abs(splitTotal - balanceDue) < 0.01;
+                            return (
+                                <div className={`flex justify-between items-center p-2 rounded text-sm font-medium mb-3 ${isBalanced ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                                    <span>Total: ₹{splitTotal.toLocaleString('en-IN')}</span>
+                                    <span>{isBalanced ? 'Balanced' : `Remaining: ₹${(balanceDue - splitTotal).toLocaleString('en-IN')}`}</span>
+                                </div>
+                            );
+                        })()}
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handleRecordPayment}
+                                disabled={actionLoading}
+                                className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-md text-sm disabled:opacity-50"
+                            >
+                                {actionLoading ? 'Processing...' : 'Confirm & Print Receipt'}
+                            </button>
+                            <button
+                                onClick={() => setShowPaymentModal(false)}
+                                className="flex-1 px-3 py-2 border rounded-md text-sm"
+                            >
+                                Cancel
+                            </button>
                         </div>
                     </div>
                 </div>

@@ -348,6 +348,7 @@ model User {
   working_hours    String   @default("09:00-17:00")
   slot_duration    Int      @default(20)
   consultation_fee Float    @default(500)
+  follow_up_fee    Float    @default(300)
   createdAt        DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
@@ -520,6 +521,8 @@ model lab_test_inventory {
   unit             String?
   category         String?
   sample_type      String?
+  hsn_sac_code     String?
+  tax_rate         Float?   @default(0)
   organizationId   String
 
   organization Organization @relation(fields: [organizationId], references: [id])
@@ -564,6 +567,8 @@ model pharmacy_medicine_master {
   manufacturer   String?
   price_per_unit Float
   min_threshold  Int     @default(10)
+  hsn_sac_code   String?
+  tax_rate       Float?  @default(0)
   organizationId String
 
   organization Organization             @relation(fields: [organizationId], references: [id])
@@ -828,18 +833,20 @@ model invoice_items {
 }
 
 model payments {
-  id                  Int      @id @default(autoincrement())
-  receipt_number      String   @unique
-  invoice_id          Int
-  amount              Decimal
-  payment_method      String
-  payment_type        String
-  razorpay_order_id   String?
-  razorpay_payment_id String?
-  status              String   @default("Completed")
-  notes               String?
-  organizationId      String
-  created_at          DateTime @default(now())
+  id                    Int      @id @default(autoincrement())
+  receipt_number        String   @unique
+  invoice_id            Int
+  amount                Decimal
+  payment_method        String
+  payment_type          String
+  razorpay_order_id     String?
+  razorpay_payment_id   String?
+  transaction_group_id  String?
+  reference             String?
+  status                String   @default("Completed")
+  notes                 String?
+  organizationId        String
+  created_at            DateTime @default(now())
 
   invoice      invoices     @relation(fields: [invoice_id], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id])
@@ -847,6 +854,7 @@ model payments {
   @@index([invoice_id])
   @@index([organizationId])
   @@index([status])
+  @@index([transaction_group_id])
 }
 
 model PaymentOrderIntent {

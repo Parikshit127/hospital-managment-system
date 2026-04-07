@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { logAudit } from '@/app/lib/audit';
 import { notifyPatient } from '@/app/lib/notify-patient';
 import { getPatientBalances } from '@/app/actions/balance-actions';
+import { postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
 
 export async function getLabOrders(statusFilter: 'Pending' | 'Completed' | 'All' = 'Pending') {
     try {
@@ -133,6 +134,29 @@ export async function uploadResult(barcode: string, resultValue: string, remarks
                 { email: patient.email, phone: patient.phone },
                 { type: 'lab_report', patientName: patient.full_name, testName: order.test_type },
             ).catch(err => console.warn('[Notify] Lab report notification failed:', err));
+        }
+
+        // IPD Integration: Post charge to IPD bill if patient has active admission
+        const activeAdmission = await db.admissions.findFirst({
+            where: { patient_id: order.patient_id, status: 'Admitted' },
+        });
+
+        if (activeAdmission) {
+            const testInfo = await db.lab_test_inventory.findFirst({
+                where: { test_name: order.test_type },
+            });
+
+            await postChargeToIpdBill({
+                admission_id: activeAdmission.admission_id,
+                source_module: 'lab',
+                source_ref_id: barcode,
+                description: `Lab: ${order.test_type}`,
+                quantity: 1,
+                unit_price: testInfo?.price || 0,
+                tax_rate: testInfo?.tax_rate || 0,
+                hsn_sac_code: testInfo?.hsn_sac_code || '998931',
+                service_category: 'Lab',
+            });
         }
 
         revalidatePath('/lab/technician');

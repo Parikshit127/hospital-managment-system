@@ -524,6 +524,113 @@ export async function recordPayment(data: {
     }
 }
 
+// Record a split payment (multiple methods in one transaction)
+export async function recordSplitPayment(data: {
+    invoice_id: number;
+    splits: Array<{
+        amount: number;
+        payment_method: string;
+        reference?: string;
+    }>;
+    notes?: string;
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        // Validate splits total
+        const totalSplit = data.splits.reduce((sum, s) => sum + s.amount, 0);
+        if (totalSplit <= 0) return { success: false, error: 'Total split amount must be greater than 0' };
+
+        // Validate each split has positive amount
+        for (const split of data.splits) {
+            if (split.amount <= 0) return { success: false, error: 'Each split must have a positive amount' };
+        }
+
+        const transactionGroupId = `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const payments: any[] = [];
+
+        // Create one payment record per split
+        for (const split of data.splits) {
+            const payment = await db.payments.create({
+                data: {
+                    receipt_number: generateReceiptNumber(),
+                    invoice_id: data.invoice_id,
+                    amount: split.amount,
+                    payment_method: split.payment_method,
+                    payment_type: 'Settlement',
+                    transaction_group_id: transactionGroupId,
+                    reference: split.reference || null,
+                    status: 'Completed',
+                    notes: data.notes || null,
+                    organizationId,
+                },
+            });
+            payments.push(payment);
+        }
+
+        // Recalculate invoice balance once after all splits
+        const allPayments = await db.payments.findMany({
+            where: { invoice_id: data.invoice_id, status: 'Completed' },
+        });
+        const totalPaid = allPayments.reduce((sum: any, p: any) => sum + Number(p.amount), 0);
+        const invoice = await db.invoices.findUnique({ where: { id: data.invoice_id } });
+        const netAmount = Number(invoice?.net_amount || 0);
+        const balance = netAmount - totalPaid;
+
+        let newStatus = invoice?.status || 'Draft';
+        if (balance <= 0) newStatus = 'Paid';
+        else if (totalPaid > 0) newStatus = 'Partial';
+
+        await db.invoices.update({
+            where: { id: data.invoice_id },
+            data: {
+                paid_amount: totalPaid,
+                balance_due: balance > 0 ? balance : 0,
+                status: newStatus,
+            },
+        });
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'SPLIT_PAYMENT',
+                module: 'finance',
+                entity_type: 'payment',
+                entity_id: transactionGroupId,
+                details: JSON.stringify({
+                    invoice_id: data.invoice_id,
+                    total: totalSplit,
+                    splits: data.splits.length,
+                    methods: data.splits.map(s => `${s.payment_method}:${s.amount}`),
+                }),
+                organizationId,
+            },
+        });
+
+        // WhatsApp: Payment receipt
+        const paymentPatient = await db.oPD_REG.findUnique({
+            where: { patient_id: invoice?.patient_id },
+            select: { phone: true, full_name: true }
+        });
+        if (paymentPatient?.phone) {
+            await sendWhatsAppMessage({
+                to: formatPhoneNumber(paymentPatient.phone),
+                message: paymentReceiptMsg({
+                    patientName: paymentPatient.full_name,
+                    amount: totalSplit,
+                    transactionId: transactionGroupId,
+                    date: new Date().toLocaleDateString("en-IN"),
+                    hospitalName: "Hospital"
+                })
+            }).catch(waErr => console.error('Split Payment WA failed:', waErr));
+        }
+
+        return { success: true, data: serialize({ transaction_group_id: transactionGroupId, payments }) };
+    } catch (error: any) {
+        console.error('recordSplitPayment error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 // Reverse a payment (refund)
 export async function reversePayment(paymentId: number, reason: string) {
     try {

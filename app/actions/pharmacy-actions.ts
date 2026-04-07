@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { logAudit } from '@/app/lib/audit';
 import { checkDrugInteractions } from '@/app/lib/drug-safety';
 import { getPatientBalances } from '@/app/actions/balance-actions';
+import { postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
 
 export async function getInventory() {
     try {
@@ -321,8 +322,33 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
 
         await logAudit({ action: 'MEDICINE_DISPENSED', module: 'Pharmacy', entity_type: 'pharmacy_order', entity_id: orderId.toString(), details: `Items: ${dispensedItems.length}, Total: ${totalAmount}` });
 
+        // IPD Integration: Post charges to IPD bill if order is linked to an admission
+        const order = await db.pharmacy_orders.findUnique({
+            where: { id: orderId },
+            include: { items: true },
+        });
+
+        if (order?.admission_id && order?.is_ipd_linked) {
+            for (const item of order.items) {
+                const medicine = await db.pharmacy_medicine_master.findFirst({
+                    where: { brand_name: item.medicine_name },
+                });
+                await postChargeToIpdBill({
+                    admission_id: order.admission_id,
+                    source_module: 'pharmacy',
+                    source_ref_id: `PHARM-${orderId}-${item.id}`,
+                    description: `Pharmacy: ${item.medicine_name} x${item.quantity_dispensed || item.quantity_requested}`,
+                    quantity: item.quantity_dispensed || item.quantity_requested,
+                    unit_price: item.unit_price || medicine?.price_per_unit || 0,
+                    tax_rate: medicine?.tax_rate || 0,
+                    hsn_sac_code: medicine?.hsn_sac_code || undefined,
+                    service_category: 'Pharmacy',
+                });
+            }
+        }
+
         revalidatePath('/pharmacy/orders');
-        return { success: true, total: totalAmount };
+        return { success: true, total: totalAmount, ipd_posted: !!(order?.admission_id && order?.is_ipd_linked) };
     } catch (error: any) {
         return { success: false, error: error.message };
     }

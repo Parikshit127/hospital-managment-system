@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Wallet, ShieldAlert, CheckCircle2, History } from 'lucide-react';
 import { performCashClosure, getCashClosures } from '@/app/actions/finance-actions';
+import { getExpenseDashboardStats } from '@/app/actions/expense-actions';
 import { useToast } from '@/app/components/ui/Toast';
 
 export default function CashClosurePage() {
@@ -12,11 +13,13 @@ export default function CashClosurePage() {
     const [loading, setLoading] = useState(true);
     const [closing, setClosing] = useState(false);
     const [notes, setNotes] = useState('');
+    const [expenseStats, setExpenseStats] = useState<any>(null);
 
     const loadData = async () => {
         setLoading(true);
-        const res = await getCashClosures();
+        const [res, expRes] = await Promise.all([getCashClosures(), getExpenseDashboardStats()]);
         if (res.success) setClosures(res.data);
+        if (expRes.success) setExpenseStats(expRes.data);
         setLoading(false);
     };
 
@@ -50,6 +53,25 @@ export default function CashClosurePage() {
 
                 {/* Left: Perform Closure */}
                 <div className="lg:col-span-1 border border-gray-200 rounded-3xl p-6 bg-white shadow-sm h-min sticky top-24">
+                    {/* Expense Summary for Closure */}
+                    {expenseStats && (
+                        <div className="mb-6 bg-amber-50 border border-amber-100 rounded-xl p-4 space-y-2">
+                            <h3 className="text-[10px] uppercase font-bold tracking-widest text-amber-700">Today's Cash Position</h3>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-600">Today's Expenses (Cash)</span>
+                                <span className="font-bold text-red-600">₹{Number(expenseStats.todayTotal || 0).toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-600">MTD Expenses</span>
+                                <span className="font-bold text-red-600">₹{Number(expenseStats.thisMonthTotal || 0).toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between text-sm border-t border-amber-200 pt-2 font-bold">
+                                <span className="text-amber-800">Pending Approvals</span>
+                                <span className="text-amber-700">{expenseStats.pendingApproval || 0}</span>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="flex items-center gap-3 mb-6 bg-rose-50 border border-rose-100 p-4 rounded-xl text-rose-700">
                         <ShieldAlert className="h-8 w-8" />
                         <div>

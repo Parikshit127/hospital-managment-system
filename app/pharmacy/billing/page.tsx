@@ -251,6 +251,9 @@ export default function PharmacyPage() {
                                         <div>
                                             <div className="flex items-center gap-2 mb-1">
                                                 <span className="bg-amber-500/10 text-amber-400 px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border border-amber-500/20">{order.status}</span>
+                                                {order.is_ipd_linked && (
+                                                    <span className="bg-blue-500/10 text-blue-500 px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border border-blue-500/20">IPD Linked</span>
+                                                )}
                                                 <span className="text-[10px] text-gray-300 font-mono">#{String(order.id).padStart(6, '0')}</span>
                                             </div>
                                             <h3 className="font-bold text-gray-700 text-lg flex items-center gap-2">
@@ -382,7 +385,7 @@ export default function PharmacyPage() {
                             disabled={cart.length === 0 || !patientId}
                             className="w-full bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white font-bold py-4 rounded-xl shadow-xl shadow-teal-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed active:scale-95"
                         >
-                            <Receipt className="h-5 w-5" /> Generate Invoice
+                            <Receipt className="h-5 w-5" /> {cart.length > 0 && (cart as any).is_ipd_linked ? 'Post to IPD Bill' : 'Generate Invoice'}
                         </button>
                     </div>
                 </aside>
