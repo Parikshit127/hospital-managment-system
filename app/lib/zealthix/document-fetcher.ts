@@ -24,6 +24,7 @@ async function fetchAsBase64(url: string): Promise<string> {
 async function generatePdfBase64(
     baseUrl: string,
     path: string,
+    apiKey: string,
     params?: Record<string, string>
 ): Promise<string> {
     try {
@@ -31,7 +32,12 @@ async function generatePdfBase64(
         if (params) {
             Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
         }
-        const response = await fetch(url.toString());
+        const response = await fetch(url.toString(), {
+            headers: {
+                'X-Internal-Request': 'true',
+                'X-Api-Key': apiKey,
+            },
+        });
         if (!response.ok) return '';
         const buffer = await response.arrayBuffer();
         return Buffer.from(buffer).toString('base64');
@@ -47,7 +53,8 @@ export async function getVisitDocuments(
     visitId: string,
     visitType: string,
     organizationId: string,
-    baseUrl: string
+    baseUrl: string,
+    apiKey: string
 ): Promise<ZealthixDocument[]> {
     const documents: ZealthixDocument[] = [];
 
@@ -67,7 +74,8 @@ export async function getVisitDocuments(
                 for (const invoice of admission.invoices || []) {
                     const base64 = await generatePdfBase64(
                         baseUrl,
-                        `/api/invoice/${invoice.id}/pdf`
+                        `/api/invoice/${invoice.id}/pdf`,
+                        apiKey
                     );
                     if (base64) {
                         documents.push({
@@ -84,7 +92,8 @@ export async function getVisitDocuments(
                 if (admission.summaries && admission.summaries.length > 0) {
                     const base64 = await generatePdfBase64(
                         baseUrl,
-                        `/api/discharge/${admission.admission_id}/pdf`
+                        `/api/discharge/${admission.admission_id}/pdf`,
+                        apiKey
                     );
                     if (base64) {
                         documents.push({
@@ -179,7 +188,8 @@ export async function getVisitDocuments(
                 for (const invoice of invoices) {
                     const base64 = await generatePdfBase64(
                         baseUrl,
-                        `/api/invoice/${invoice.id}/pdf`
+                        `/api/invoice/${invoice.id}/pdf`,
+                        apiKey
                     );
                     if (base64) {
                         documents.push({

@@ -1,23 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
+import { validateZealthixApiKey } from '@/app/lib/zealthix/auth'
 
 const ALLOWED_STAFF_ROLES = ['admin', 'doctor', 'ipd_manager', 'nurse', 'finance'];
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ admissionId: string }> }) {
     try {
-        const auth = await resolveRouteAuth({
-            allowPatient: true,
-            allowedStaffRoles: ALLOWED_STAFF_ROLES,
-        });
-        if (!auth.ok) return auth.response;
+        // Check for internal/Zealthix API access first
+        const internalHeader = req.headers.get('X-Internal-Request');
+        let organizationId: string | null = null;
+        let isInternalRequest = false;
+
+        if (internalHeader) {
+            const zealthixAuth = await validateZealthixApiKey(req);
+            if (!(zealthixAuth instanceof NextResponse)) {
+                organizationId = zealthixAuth.organizationId;
+                isInternalRequest = true;
+            }
+        }
+
+        // If not internal request, use regular authentication
+        if (!isInternalRequest) {
+            const auth = await resolveRouteAuth({
+                allowPatient: true,
+                allowedStaffRoles: ALLOWED_STAFF_ROLES,
+            });
+            if (!auth.ok) return auth.response;
+            organizationId = auth.context.organizationId;
+        }
 
         const { admissionId } = await params;
 
         const admission = await prisma.admissions.findFirst({
             where: {
                 admission_id: admissionId,
-                organizationId: auth.context.organizationId,
+                organizationId: organizationId!,
             },
             include: {
                 patient: { select: { full_name: true, patient_id: true, phone: true, age: true, gender: true } },
@@ -30,8 +48,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             return NextResponse.json({ error: 'Admission not found' }, { status: 404 })
         }
 
-        if (auth.context.kind === 'patient' && admission.patient_id !== auth.context.session.id) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        // Skip patient check for internal requests
+        if (!isInternalRequest) {
+            const auth = await resolveRouteAuth({
+                allowPatient: true,
+                allowedStaffRoles: ALLOWED_STAFF_ROLES,
+            });
+            if (auth.ok && auth.context.kind === 'patient' && admission.patient_id !== auth.context.session.id) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+            }
         }
 
         // Fetch related clinical data
@@ -39,7 +64,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             prisma.vital_signs.findMany({
                 where: {
                     patient_id: admission.patient_id,
-                    organizationId: auth.context.organizationId,
+                    organizationId: organizationId!,
                 },
                 orderBy: { created_at: 'desc' },
                 take: 5,
@@ -47,21 +72,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             prisma.clinical_EHR.findMany({
                 where: {
                     patient_id: admission.patient_id,
-                    organizationId: auth.context.organizationId,
+                    organizationId: organizationId!,
                 },
                 orderBy: { created_at: 'desc' },
             }),
             prisma.lab_orders.findMany({
                 where: {
                     patient_id: admission.patient_id,
-                    organizationId: auth.context.organizationId,
+                    organizationId: organizationId!,
                 },
                 orderBy: { created_at: 'desc' },
             }),
             prisma.discharge_summaries.findFirst({
                 where: {
                     admission_id: admissionId,
-                    organizationId: auth.context.organizationId,
+                    organizationId: organizationId!,
                 },
                 orderBy: { created_at: 'desc' },
             }),

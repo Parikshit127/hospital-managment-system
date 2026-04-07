@@ -1,16 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
+import { validateZealthixApiKey } from '@/app/lib/zealthix/auth'
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager'];
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
-        const auth = await resolveRouteAuth({
-            allowPatient: true,
-            allowedStaffRoles: ALLOWED_STAFF_ROLES,
-        });
-        if (!auth.ok) return auth.response;
+        // Check for internal/Zealthix API access first
+        const internalHeader = req.headers.get('X-Internal-Request');
+        let organizationId: string | null = null;
+        let isInternalRequest = false;
+
+        if (internalHeader) {
+            // Internal request from document fetcher - validate Zealthix API key
+            const zealthixAuth = await validateZealthixApiKey(req);
+            if (!(zealthixAuth instanceof NextResponse)) {
+                organizationId = zealthixAuth.organizationId;
+                isInternalRequest = true;
+            }
+        }
+
+        // If not internal request, use regular authentication
+        if (!isInternalRequest) {
+            const auth = await resolveRouteAuth({
+                allowPatient: true,
+                allowedStaffRoles: ALLOWED_STAFF_ROLES,
+            });
+            if (!auth.ok) return auth.response;
+            organizationId = auth.context.organizationId;
+        }
 
         const { id } = await params;
         const invoiceId = parseInt(id)
@@ -21,7 +40,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const invoice = await prisma.invoices.findFirst({
             where: {
                 id: invoiceId,
-                organizationId: auth.context.organizationId,
+                organizationId: organizationId!,
             },
             include: {
                 items: { orderBy: { created_at: 'asc' } },
@@ -38,13 +57,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
         }
 
-        if (auth.context.kind === 'patient' && invoice.patient_id !== auth.context.session.id) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        // Skip patient check for internal requests
+        if (!isInternalRequest) {
+            const auth = await resolveRouteAuth({
+                allowPatient: true,
+                allowedStaffRoles: ALLOWED_STAFF_ROLES,
+            });
+            if (auth.ok && auth.context.kind === 'patient' && invoice.patient_id !== auth.context.session.id) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+            }
         }
 
         // Fetch organization details
         const org = await prisma.organization.findUnique({
-            where: { id: auth.context.organizationId },
+            where: { id: organizationId! },
             include: { branding: true },
         });
 

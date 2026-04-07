@@ -30,11 +30,15 @@ export async function POST(request: NextRequest) {
         const host = request.headers.get('host') || 'localhost:3000';
         const baseUrl = `${protocol}://${host}`;
 
+        // Get the API key from the request header
+        const apiKey = request.headers.get('X-Api-Key') || '';
+
         const documents = await getVisitDocuments(
             visitId,
             visitType || 'INPATIENT',
             organizationId,
-            baseUrl
+            baseUrl,
+            apiKey
         );
 
         await logZealthixApiCall(organizationId, apiKeyId, '/claim/visit/documents', body, 200);
