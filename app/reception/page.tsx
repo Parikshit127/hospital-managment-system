@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     Users, UserPlus, Search, Filter, Calendar, Phone, Clock,
     ChevronLeft, ChevronRight, Eye, Zap, Loader2, Activity,
-    X, FileText, Thermometer
+    X, FileText, Thermometer, ArrowRight
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
@@ -441,6 +441,13 @@ export default function ReceptionDashboard() {
                                         </div>
                                     </div>
                                 )}
+
+                                <div className="pt-6 mt-6 border-t border-gray-100 flex justify-end">
+                                    <Link href={`/reception/patient/${patientDetail.patient.patient_id}`}
+                                        className="flex items-center gap-2 px-6 py-2.5 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 transition-colors shadow-sm hover:shadow">
+                                        Open Full Profile <ArrowRight className="h-4 w-4" />
+                                    </Link>
+                                </div>
                             </div>
                         ) : (
                             <div className="py-16 text-center text-gray-400 text-sm">Failed to load patient details</div>

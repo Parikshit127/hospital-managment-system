@@ -5,11 +5,11 @@ import { useParams, useRouter } from 'next/navigation';
 import {
     User, Calendar, Phone, Mail, MapPin, Activity, Loader2,
     FileText, Thermometer, Zap, ArrowLeft, Clock, Shield,
-    Pencil, Check, X, CalendarPlus, FlaskConical, History
+    Pencil, Check, X, CalendarPlus, FlaskConical, History, CreditCard, DollarSign
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { getPatientDetail, updatePatientField } from '@/app/actions/reception-actions';
+import { getPatientDetail, updatePatientField, addPatientDues, processPatientPayment } from '@/app/actions/reception-actions';
 import { useToast } from '@/app/components/ui/Toast';
 
 /** Inline editable field */
@@ -108,7 +108,14 @@ export default function PatientProfilePage() {
     const patientId = params.id as string;
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'triage' | 'vitals' | 'timeline'>('overview');
+    const [processLoading, setProcessLoading] = useState(false);
+    const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'triage' | 'vitals' | 'timeline' | 'billing'>('overview');
+    
+    // Billing Modals State
+    const [showDuesModal, setShowDuesModal] = useState(false);
+    const [showPaymentModal, setShowPaymentModal] = useState<number | null>(null);
+    const [dueForm, setDueForm] = useState({ amount: '', description: '', department: 'General' });
+    const [paymentForm, setPaymentForm] = useState({ amount: '', method: 'Cash' });
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -116,6 +123,47 @@ export default function PatientProfilePage() {
         if (res.success) setData(res.data);
         setLoading(false);
     }, [patientId]);
+
+    const handleAddDues = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setProcessLoading(true);
+        const res = await addPatientDues({
+            patient_id: patientId,
+            department: dueForm.department,
+            description: dueForm.description,
+            amount: Number(dueForm.amount)
+        });
+        setProcessLoading(false);
+        if (res.success) {
+            toast.success('Dues Added: New tag dues applied to patient');
+            setShowDuesModal(false);
+            setDueForm({ amount: '', description: '', department: 'General' });
+            loadData();
+        } else {
+            toast.error('Failed: ' + (res.error || 'Could not add dues'));
+        }
+    };
+
+    const handlePayment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!showPaymentModal) return;
+        setProcessLoading(true);
+        const res = await processPatientPayment({
+            patient_id: patientId,
+            invoice_id: showPaymentModal,
+            amount: Number(paymentForm.amount),
+            payment_method: paymentForm.method
+        });
+        setProcessLoading(false);
+        if (res.success) {
+            toast.success('Payment Recorded: Amount collected successfully');
+            setShowPaymentModal(null);
+            setPaymentForm({ amount: '', method: 'Cash' });
+            loadData();
+        } else {
+            toast.error('Payment Failed: ' + (res.error || 'Could not record payment'));
+        }
+    };
 
     useEffect(() => { loadData(); }, [loadData]);
 
@@ -244,6 +292,7 @@ export default function PatientProfilePage() {
                         { key: 'appointments', label: `Appointments (${data.appointments?.length || 0})`, icon: <Calendar className="h-3.5 w-3.5" /> },
                         { key: 'triage', label: `Triage (${data.triageHistory?.length || 0})`, icon: <Zap className="h-3.5 w-3.5" /> },
                         { key: 'vitals', label: `Vitals (${data.vitals?.length || 0})`, icon: <Thermometer className="h-3.5 w-3.5" /> },
+                        { key: 'billing', label: `Billing (${data.invoices?.length || 0})`, icon: <CreditCard className="h-3.5 w-3.5" /> },
                     ].map(tab => (
                         <button key={tab.key} onClick={() => setActiveTab(tab.key as typeof activeTab)}
                             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === tab.key
@@ -436,7 +485,121 @@ export default function PatientProfilePage() {
                         </table>
                     </div>
                 )}
+                {activeTab === 'billing' && (
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center bg-gray-50 p-4 border border-gray-200 rounded-2xl">
+                            <div>
+                                <p className="text-xs font-bold text-gray-500 uppercase">Outstanding Balance</p>
+                                <p className={`text-2xl font-black ${patient.totalBalance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                    ₹{patient.totalBalance > 0 ? Number(patient.totalBalance).toFixed(2) : '0'}
+                                </p>
+                            </div>
+                            <button onClick={() => setShowDuesModal(true)} disabled={processLoading}
+                                className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white text-sm font-bold rounded-xl hover:bg-gray-800">
+                                <DollarSign className="h-4 w-4" /> Add Dues
+                            </button>
+                        </div>
+
+                        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b border-gray-200">
+                                        {['Invoice No', 'Type', 'Date', 'Net Amount', 'Paid', 'Balance', 'Status', ''].map(h => (
+                                            <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase border-r border-gray-200/50 last:border-r-0">{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {(data.invoices || []).map((inv: any) => (
+                                        <tr key={inv.id} className="hover:bg-gray-50">
+                                            <td className="px-4 py-3 text-xs font-mono font-bold text-teal-600">{inv.invoice_number}</td>
+                                            <td className="px-4 py-3 text-xs text-gray-500">{inv.invoice_type}</td>
+                                            <td className="px-4 py-3 text-xs text-gray-500">{formatDate(inv.created_at)}</td>
+                                            <td className="px-4 py-3 text-gray-900">₹{Number(inv.net_amount).toFixed(2)}</td>
+                                            <td className="px-4 py-3 text-emerald-600">₹{Number(inv.paid_amount).toFixed(2)}</td>
+                                            <td className="px-4 py-3 font-bold text-rose-600">₹{Number(inv.balance_due).toFixed(2)}</td>
+                                            <td className="px-4 py-3">
+                                                <span className={`inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full border ${getStatusColor(inv.status)}`}>
+                                                    {inv.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                {inv.balance_due > 0 && (
+                                                    <button onClick={() => setShowPaymentModal(inv.id)} disabled={processLoading}
+                                                        className="px-3 py-1.5 bg-teal-50 text-teal-700 text-xs font-bold rounded-lg hover:bg-teal-100 transition-colors shadow-sm">
+                                                        Pay
+                                                    </button>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {(!data.invoices || data.invoices.length === 0) && (
+                                        <tr>
+                                            <td colSpan={8} className="text-center py-8 text-gray-400 text-sm">No invoices found</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
             </div>
+
+            {/* Modals outside tabs, inside AppShell wrapper */}
+            {showDuesModal && (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-xl">
+                        <h3 className="text-lg font-black text-gray-900 mb-4">Add Miscellaneous Dues</h3>
+                        <form onSubmit={handleAddDues} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Amount (₹)</label>
+                                <input type="number" required min="1" value={dueForm.amount} onChange={e => setDueForm({...dueForm, amount: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-gray-50 font-mono text-lg" placeholder="e.g. 500" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Description / Tag</label>
+                                <input type="text" required value={dueForm.description} onChange={e => setDueForm({...dueForm, description: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-gray-50" placeholder="e.g. Extra Consumables" />
+                            </div>
+                            <div className="flex gap-3 mt-6">
+                                <button type="button" onClick={() => setShowDuesModal(false)} className="flex-1 py-2 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
+                                <button type="submit" disabled={processLoading} className="flex-1 py-2 flex items-center justify-center gap-2 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800 disabled:opacity-50 transition-colors">
+                                    {processLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                                    Add Due
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {showPaymentModal !== null && (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-xl">
+                        <h3 className="text-lg font-black text-gray-900 mb-4">Record Payment</h3>
+                        <form onSubmit={handlePayment} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Amount to Collect (₹)</label>
+                                <input type="number" required min="1" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-gray-50 font-mono text-lg text-emerald-600" placeholder="Amount" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Payment Method</label>
+                                <select value={paymentForm.method} onChange={e => setPaymentForm({...paymentForm, method: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-gray-50 font-medium">
+                                    <option>Cash</option>
+                                    <option>Card</option>
+                                    <option>UPI</option>
+                                    <option>Bank Transfer</option>
+                                </select>
+                            </div>
+                            <div className="flex gap-3 mt-6">
+                                <button type="button" onClick={() => setShowPaymentModal(null)} className="flex-1 py-2 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
+                                <button type="submit" disabled={processLoading} className="flex-1 py-2 flex justify-center items-center gap-2 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 disabled:opacity-50 transition-colors">
+                                    {processLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                                    Collect
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </AppShell>
     );
 }

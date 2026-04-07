@@ -28,6 +28,7 @@ import type {
     BookAppointmentInput,
 } from '@/app/types/reception';
 import { getPatientBalances } from '@/app/actions/balance-actions';
+import { createInvoice, addInvoiceItem, recordPayment } from '@/app/actions/finance-actions';
 
 // ========================================
 // LAZY EXPIRATION: STALE APPOINTMENTS
@@ -198,7 +199,7 @@ export async function getPatientDetail(patientId: string) {
 
         if (!patient) return { success: false, data: null };
 
-        const [triageHistory, vitals] = await Promise.all([
+        const [triageHistory, vitals, invoices] = await Promise.all([
             db.triage_results.findMany({
                 where: { patient_id: patientId },
                 orderBy: { created_at: 'desc' },
@@ -208,6 +209,10 @@ export async function getPatientDetail(patientId: string) {
                 where: { patient_id: patientId },
                 orderBy: { created_at: 'desc' },
                 take: 5,
+            }),
+            db.invoices.findMany({
+                where: { patient_id: patientId },
+                orderBy: { created_at: 'desc' },
             }),
         ]);
 
@@ -224,6 +229,7 @@ export async function getPatientDetail(patientId: string) {
                 appointments: patient.appointments,
                 triageHistory,
                 vitals,
+                invoices,
             },
         };
     } catch (error) {
@@ -1061,5 +1067,69 @@ export async function skipPatient(appointmentId: string) {
     } catch (error) {
         console.error('Skip Patient Error:', error);
         return { success: false, error: 'Failed to skip' };
+    }
+}
+
+/**
+ * Creates an invoice and adds a line item for miscellaneous dues from Reception
+ */
+export async function addPatientDues(data: {
+    patient_id: string;
+    department: string;
+    description: string;
+    amount: number;
+}) {
+    try {
+        const invRes = await createInvoice({
+            patient_id: data.patient_id,
+            invoice_type: 'OPD',
+            notes: 'Generated from Reception Billing',
+        });
+
+        if (!invRes.success || !invRes.data) throw new Error(invRes.error || 'Failed to create invoice');
+
+        const newItem = await addInvoiceItem({
+            invoice_id: invRes.data.id,
+            department: data.department,
+            description: data.description,
+            quantity: 1,
+            unit_price: data.amount,
+        });
+
+        if (!newItem.success) throw new Error(newItem.error);
+
+        revalidatePath(`/reception/patient/${data.patient_id}`);
+        return { success: true };
+    } catch (error: any) {
+        console.error('addPatientDues Error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Wrapper for processing a payment from the Reception portal
+ */
+export async function processPatientPayment(data: {
+    patient_id: string;
+    invoice_id: number;
+    amount: number;
+    payment_method: string;
+}) {
+    try {
+        const res = await recordPayment({
+            invoice_id: data.invoice_id,
+            amount: data.amount,
+            payment_method: data.payment_method,
+            payment_type: 'Settlement',
+            notes: 'Collected at Reception',
+        });
+
+        if (!res.success) throw new Error(res.error);
+
+        revalidatePath(`/reception/patient/${data.patient_id}`);
+        return { success: true };
+    } catch (error: any) {
+        console.error('processPatientPayment Error:', error);
+        return { success: false, error: error.message };
     }
 }
