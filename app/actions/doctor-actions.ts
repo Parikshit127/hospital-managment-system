@@ -5,7 +5,8 @@ import { getTenantPrisma } from "@/backend/db";
 import { revalidatePath } from "next/cache";
 import { searchICD10 } from "@/app/lib/icd10";
 import { notifyPatient } from "@/app/lib/notify-patient";
-import { sendAdmissionMessage, sendPrescriptionMessage } from "@/app/lib/whatsapp";
+import { sendWhatsAppMessage, sendWhatsAppTemplate, formatPhoneNumber } from "@/app/lib/whatsapp";
+import { prescriptionReadyMsg, admissionConfirmedMsg, icuDailyUpdateMsg } from "@/app/lib/whatsapp-templates";
 import { getTodayRange, getOrgTimezone } from "@/app/lib/timezone";
 import { sendAdmissionEmail, sendPrescriptionEmail } from "@/backend/email";
 
@@ -193,12 +194,17 @@ export async function admitPatient(
       );
     }
     if (patient && patient.phone) {
-      sendAdmissionMessage(
-        patient.phone,
-        patient.full_name,
-        "Pending Ward Assignment",
-        doctorName,
-      ).catch((err) => console.warn("[WhatsApp] Failed to send admission message:", err));
+      await sendWhatsAppTemplate({
+        to: formatPhoneNumber(patient.phone),
+        templateName: "admission_confirmed",
+        userName: patient.full_name,
+        params: [
+          patient.full_name,
+          doctorName,
+          "Pending Ward Assignment",
+          "Hospital OS"
+        ]
+      }).catch((err) => console.warn("[WhatsApp] Failed to send admission template:", err));
     }
 
     revalidatePath("/doctor/dashboard");
@@ -322,20 +328,17 @@ export async function saveClinicalNotes(data: any) {
       );
     }
     if (patient && patient.phone) {
-      sendPrescriptionMessage(
-        patient.phone,
-        patient.full_name,
-        data.doctor_name,
-        data.diagnosis || "Pending",
-      ).catch((err) => console.warn("[WhatsApp] Failed to send prescription message:", err));
-    }
-    if (patient && patient.phone) {
-      sendPrescriptionMessage(
-        patient.phone,
-        patient.full_name,
-        data.doctor_name,
-        data.diagnosis || "Pending",
-      ).catch((err) => console.warn("[WhatsApp] Failed to send prescription message:", err));
+      await sendWhatsAppTemplate({
+        to: formatPhoneNumber(patient.phone),
+        templateName: "prescription_ready",
+        userName: patient.full_name,
+        params: [
+          patient.full_name,
+          data.doctor_name,
+          data.diagnosis || "Pending",
+          "Hospital OS"
+        ]
+      }).catch((err) => console.warn("[WhatsApp] Failed to send prescription template:", err));
     }
 
     revalidatePath("/doctor/dashboard");

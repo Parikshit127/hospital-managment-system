@@ -2,6 +2,8 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
+import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
+import { billingInvoiceMsg, paymentReceiptMsg } from '@/app/lib/whatsapp-templates';
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
 function serialize<T>(data: T): T {
@@ -79,6 +81,9 @@ export async function addInvoiceItem(data: {
     unit_price: number;
     discount?: number;
     ref_id?: string;
+    tax_rate?: number;
+    hsn_sac_code?: string;
+    service_category?: string;
 }) {
     try {
         const { db } = await requireTenantContext();
@@ -86,6 +91,8 @@ export async function addInvoiceItem(data: {
         const discount = data.discount || 0;
         const total_price = data.quantity * data.unit_price;
         const net_price = total_price - discount;
+        const taxRate = data.tax_rate || 0;
+        const tax_amount = net_price * taxRate / 100;
 
         const item = await db.invoice_items.create({
             data: {
@@ -97,6 +104,10 @@ export async function addInvoiceItem(data: {
                 total_price,
                 discount,
                 net_price,
+                tax_rate: taxRate,
+                tax_amount,
+                hsn_sac_code: data.hsn_sac_code || null,
+                service_category: data.service_category || null,
                 ref_id: data.ref_id || null,
             },
         });
@@ -121,10 +132,13 @@ async function recalculateInvoice(invoiceId: number) {
 
     const total_amount = items.reduce((sum: any, item: any) => sum + Number(item.total_price), 0);
     const total_discount = items.reduce((sum: any, item: any) => sum + Number(item.discount), 0);
-    const net_amount = items.reduce((sum: any, item: any) => sum + Number(item.net_price), 0);
+    const net_items = items.reduce((sum: any, item: any) => sum + Number(item.net_price), 0);
+    const total_tax = items.reduce((sum: any, item: any) => sum + Number(item.tax_amount || 0), 0);
 
     const invoice = await db.invoices.findUnique({ where: { id: invoiceId } });
+    const isInterState = invoice?.is_inter_state || false;
     const paid_amount = Number(invoice?.paid_amount || 0);
+    const net_amount = net_items + total_tax;
     const balance_due = net_amount - paid_amount;
 
     await db.invoices.update({
@@ -133,6 +147,10 @@ async function recalculateInvoice(invoiceId: number) {
             total_amount,
             total_discount,
             net_amount,
+            total_tax,
+            cgst_amount: isInterState ? 0 : total_tax / 2,
+            sgst_amount: isInterState ? 0 : total_tax / 2,
+            igst_amount: isInterState ? total_tax : 0,
             balance_due: balance_due > 0 ? balance_due : 0,
             status: balance_due <= 0 && net_amount > 0 ? 'Paid' : invoice?.status,
         },
@@ -359,6 +377,23 @@ export async function finalizeInvoice(invoiceId: number) {
             },
         });
 
+        // WhatsApp: Invoice notification
+        const patient = await db.oPD_REG.findUnique({
+            where: { patient_id: invoice.patient_id },
+            select: { phone: true, full_name: true }
+        });
+        if (patient?.phone) {
+            await sendWhatsAppMessage({
+                to: formatPhoneNumber(patient.phone),
+                message: billingInvoiceMsg({
+                    patientName: patient.full_name,
+                    invoiceNumber: invoice.invoice_number,
+                    amount: Number(invoice.net_amount),
+                    hospitalName: "Hospital"
+                })
+            }).catch(waErr => console.error('Invoice WA failed:', waErr));
+        }
+
         return { success: true, data: serialize(invoice) };
     } catch (error: any) {
         console.error('finalizeInvoice error:', error);
@@ -463,6 +498,24 @@ export async function recordPayment(data: {
                 organizationId,
             },
         });
+
+        // WhatsApp: Payment receipt
+        const paymentPatient = await db.oPD_REG.findUnique({
+            where: { patient_id: invoice?.patient_id },
+            select: { phone: true, full_name: true }
+        });
+        if (paymentPatient?.phone) {
+            await sendWhatsAppMessage({
+                to: formatPhoneNumber(paymentPatient.phone),
+                message: paymentReceiptMsg({
+                    patientName: paymentPatient.full_name,
+                    amount: Number(data.amount),
+                    transactionId: payment.receipt_number,
+                    date: new Date().toLocaleDateString("en-IN"),
+                    hospitalName: "Hospital"
+                })
+            }).catch(waErr => console.error('Payment Receipt WA failed:', waErr));
+        }
 
         return { success: true, data: serialize(payment) };
     } catch (error: any) {

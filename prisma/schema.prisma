@@ -99,6 +99,12 @@ model Organization {
   bank_transactions        BankTransaction[]
   dunning_rules            DunningRule[]
   dunning_logs             DunningLog[]
+  ipd_service_masters      IpdServiceMaster[]
+  ipd_tariff_rates         IpdTariffRate[]
+  ipd_packages             IpdPackage[]
+  ipd_admission_packages   IpdAdmissionPackage[]
+  ipd_estimates            IpdEstimate[]
+  ipd_charge_postings      IpdChargePosting[]
   branches                 Branch[]
   // Admin panel dynamic configuration
   module_configs           ModuleConfig[]
@@ -395,6 +401,7 @@ model OPD_REG {
   password_setup_tokens PatientPasswordSetupToken[]
   pill_reminders        PillReminder[]
   video_call_requests   VideoCallRequest[]
+  whatsapp_logs         whatsapp_log[]
 
   @@index([organizationId])
   @@index([organizationId, is_archived])
@@ -417,6 +424,8 @@ model appointments {
   queue_token          Int?
   checked_in_at        DateTime?
   appointment_date     DateTime @default(now())
+  reminder24Sent       Boolean  @default(false)
+  slot_id              String?  @unique
 
   organization Organization @relation(fields: [organizationId], references: [id])
   patient      OPD_REG      @relation(fields: [patient_id], references: [patient_id])
@@ -599,6 +608,8 @@ model pharmacy_orders {
   items_dispensed       Int?
   items_missing         Int?
   organizationId       String
+  admission_id         String?
+  is_ipd_linked        Boolean  @default(false)
   created_at           DateTime @default(now())
 
   organization Organization           @relation(fields: [organizationId], references: [id])
@@ -665,7 +676,8 @@ model admissions {
   bed_transfers    BedTransfer[]
   diet_plans       DietPlan[]
   ward_rounds      WardRound[]
-  nursing_tasks    NursingTask[]
+  nursing_tasks          NursingTask[]
+  ipd_admission_packages IpdAdmissionPackage[]
 
   @@index([organizationId])
   @@index([status])
@@ -764,6 +776,14 @@ model invoices {
   created_at     DateTime  @default(now())
   updated_at     DateTime  @updatedAt
   finalized_at   DateTime?
+  total_tax      Decimal   @default(0)
+  cgst_amount    Decimal   @default(0)
+  sgst_amount    Decimal   @default(0)
+  igst_amount    Decimal   @default(0)
+  is_inter_state Boolean   @default(false)
+  estimate_id    Int?
+  approved_by    String?
+  approved_at    DateTime?
 
   organization     Organization       @relation(fields: [organizationId], references: [id])
   patient          OPD_REG            @relation(fields: [patient_id], references: [patient_id])
@@ -791,9 +811,13 @@ model invoice_items {
   total_price    Decimal
   discount       Decimal  @default(0)
   net_price      Decimal
-  ref_id         String?
-  organizationId String
-  created_at     DateTime @default(now())
+  ref_id           String?
+  tax_rate         Decimal  @default(0)
+  tax_amount       Decimal  @default(0)
+  hsn_sac_code     String?
+  service_category String?
+  organizationId   String
+  created_at       DateTime @default(now())
 
   invoice      invoices     @relation(fields: [invoice_id], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id])
@@ -851,11 +875,14 @@ model charge_catalog {
   item_code      String   @unique
   item_name      String
   default_price  Decimal
-  department     String?
-  is_active      Boolean  @default(true)
-  organizationId String
-  created_at     DateTime @default(now())
-  updated_at     DateTime @updatedAt
+  department       String?
+  hsn_sac_code     String?
+  tax_rate         Decimal?
+  service_category String?
+  is_active        Boolean  @default(true)
+  organizationId   String
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -1370,6 +1397,8 @@ model WardRound {
   doctor_id      String
   observations   String?
   plan_changes   String?
+  charge_posted  Boolean  @default(false)
+  visit_fee      Decimal  @default(0)
   organizationId String
   created_at     DateTime @default(now())
 
@@ -2087,4 +2116,151 @@ model WhatsAppIncomingMessage {
 
   @@index([organizationId, from_phone])
   @@map("whatsapp_incoming_messages")
+}
+
+// ========================================
+// MODULE — IPD Finance: Service Master & Packages
+// ========================================
+
+model IpdServiceMaster {
+  id               Int      @id @default(autoincrement())
+  service_code     String
+  service_name     String
+  service_category String
+  default_rate     Decimal
+  hsn_sac_code     String?
+  tax_rate         Decimal  @default(0)
+  is_active        Boolean  @default(true)
+  organizationId   String
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  organization  Organization    @relation(fields: [organizationId], references: [id])
+  tariff_rates  IpdTariffRate[]
+
+  @@unique([service_code, organizationId])
+  @@index([organizationId])
+  @@index([service_category])
+  @@map("ipd_service_master")
+}
+
+model IpdTariffRate {
+  id               Int      @id @default(autoincrement())
+  service_id       Int
+  tariff_category  String
+  rate             Decimal
+  is_active        Boolean  @default(true)
+  organizationId   String
+  created_at       DateTime @default(now())
+
+  service      IpdServiceMaster @relation(fields: [service_id], references: [id])
+  organization Organization     @relation(fields: [organizationId], references: [id])
+
+  @@unique([service_id, tariff_category, organizationId])
+  @@index([organizationId])
+  @@map("ipd_tariff_rates")
+}
+
+model IpdPackage {
+  id              Int      @id @default(autoincrement())
+  package_code    String
+  package_name    String
+  description     String?
+  total_amount    Decimal
+  validity_days   Int      @default(7)
+  inclusions      Json     @default("[]")
+  exclusions      String?
+  is_active       Boolean  @default(true)
+  organizationId  String
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization         Organization          @relation(fields: [organizationId], references: [id])
+  admission_packages   IpdAdmissionPackage[]
+
+  @@unique([package_code, organizationId])
+  @@index([organizationId])
+  @@map("ipd_packages")
+}
+
+model IpdAdmissionPackage {
+  id              Int       @id @default(autoincrement())
+  admission_id    String
+  package_id      Int
+  applied_amount  Decimal
+  is_broken_open  Boolean   @default(false)
+  broken_at       DateTime?
+  applied_by      String?
+  organizationId  String
+  created_at      DateTime  @default(now())
+
+  admission    admissions   @relation(fields: [admission_id], references: [admission_id])
+  package      IpdPackage   @relation(fields: [package_id], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([admission_id])
+  @@index([organizationId])
+  @@map("ipd_admission_packages")
+}
+
+model IpdEstimate {
+  id                Int       @id @default(autoincrement())
+  estimate_number   String    @unique
+  patient_id        String
+  diagnosis         String?
+  expected_los_days Int       @default(3)
+  room_category     String?
+  package_id        Int?
+  items             Json      @default("[]")
+  total_estimate    Decimal   @default(0)
+  deposit_required  Decimal   @default(0)
+  status            String    @default("Draft")
+  valid_until       DateTime?
+  notes             String?
+  created_by        String?
+  organizationId    String
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([patient_id])
+  @@map("ipd_estimates")
+}
+
+model IpdChargePosting {
+  id               Int      @id @default(autoincrement())
+  admission_id     String
+  invoice_item_id  Int?
+  source_module    String
+  source_ref_id    String?
+  description      String
+  amount           Decimal
+  posted_by        String?
+  posted_at        DateTime @default(now())
+  organizationId   String
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([admission_id])
+  @@index([organizationId])
+  @@map("ipd_charge_postings")
+}
+
+// ========================================
+// MODULE — WhatsApp Integration (AiSensy/Combirds)
+// ========================================
+
+model whatsapp_log {
+  id          String   @id @default(uuid())
+  messageId   String?  @unique
+  to          String
+  type        String
+  patientId   String?
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  patient     OPD_REG? @relation(fields: [patientId], references: [patient_id])
 }

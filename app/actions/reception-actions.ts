@@ -3,14 +3,9 @@
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { getTodayRange, getOrgTimezone } from '@/app/lib/timezone';
-import {
-    sendQueueToken,
-    sendQueueUpdate,
-    sendYourTurnAlert,
-    sendAppointmentReminder,
-} from '@/app/lib/whatsapp';
-import { sendAppointmentConfirmationEmail } from '@/backend/email';
 import { notifyPatient } from '@/app/lib/notify-patient';
+import { sendWhatsAppMessage, sendWhatsAppTemplate, formatPhoneNumber } from '@/app/lib/whatsapp';
+import { appointmentConfirmationMsg, appointmentCancellationMsg } from '@/app/lib/whatsapp-templates';
 import type {
     ActionResponse,
     PaginatedResponse,
@@ -324,15 +319,10 @@ export async function checkInPatient(appointmentId: string) {
         // Send WhatsApp notification
         const orgName = session.organization_name || 'Hospital';
         if (appointment.patient?.phone) {
-            await sendQueueToken(
-                appointment.patient.phone,
-                appointment.patient.full_name,
-                tokenNumber,
-                appointment.doctor_name || 'Doctor',
-                aheadCount + 1,
-                estimatedWait,
-                orgName
-            );
+            await sendWhatsAppMessage({
+                to: formatPhoneNumber(appointment.patient.phone),
+                message: `*${orgName} — Queue Token*\n\nDear ${appointment.patient.full_name},\n\nYour token number is *#${tokenNumber}*.\nDoctor: *Dr. ${appointment.doctor_name || 'Doctor'}*\nQueue position: *${aheadCount + 1}*\nEstimated wait: *~${estimatedWait} min*\n\nYou will be notified when it's your turn.`
+            }).catch(err => console.warn('[WhatsApp] Queue token failed:', err));
         }
 
         revalidatePath('/reception');
@@ -402,13 +392,10 @@ export async function callNextPatient(doctorId: string) {
         // Send WhatsApp alert
         const orgName = session.organization_name || 'Hospital';
         if (next.patient?.phone) {
-            await sendYourTurnAlert(
-                next.patient.phone,
-                next.patient.full_name,
-                next.doctor_name || 'Doctor',
-                '',
-                orgName
-            );
+            await sendWhatsAppMessage({
+                to: formatPhoneNumber(next.patient.phone),
+                message: `*${orgName} — Your Turn!*\n\nDear ${next.patient.full_name},\n\nPlease proceed to *Dr. ${next.doctor_name || 'Doctor'}*'s consultation room.\n\nThank you for your patience.`
+            }).catch(err => console.warn('[WhatsApp] Your turn alert failed:', err));
         }
 
         // Notify the patient who is 2 spots away
@@ -426,13 +413,10 @@ export async function callNextPatient(doctorId: string) {
 
         if (upcoming.length >= 2 && upcoming[1]?.patient?.phone) {
             const position = 2;
-            await sendQueueUpdate(
-                upcoming[1].patient.phone,
-                upcoming[1].patient.full_name,
-                position,
-                position * AVG_CONSULT_MINUTES,
-                orgName
-            );
+            await sendWhatsAppMessage({
+                to: formatPhoneNumber(upcoming[1].patient.phone),
+                message: `*${orgName} — Queue Update*\n\nDear ${upcoming[1].patient.full_name},\n\nYour queue position: *${position}*\nEstimated wait: *~${position * AVG_CONSULT_MINUTES} min*`
+            }).catch(err => console.warn('[WhatsApp] Queue update failed:', err));
         }
 
         revalidatePath('/reception');
@@ -683,25 +667,38 @@ export async function bookAppointment(data: {
                 where: { patient_id: data.patientId },
                 select: { email: true, phone: true, full_name: true },
             });
-            if (patient?.email) {
+            if (patient) {
                 const formattedDate = appointmentDate.toLocaleDateString('en-IN', {
                     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
                 });
                 const formattedTime = appointmentDate.toLocaleTimeString('en-IN', {
                     hour: '2-digit', minute: '2-digit', hour12: true,
                 });
-                await sendAppointmentConfirmationEmail({
-                    to: patient.email,
-                    patientName: patient.full_name || 'Patient',
-                    doctorName: data.doctorName,
-                    department: data.department,
-                    date: formattedDate,
-                    time: formattedTime,
-                    hospitalName: session.organization_name || 'Hospital',
-                });
+                const hospitalName = session.organization_name || 'Hospital';
+
+                if (patient.phone) {
+                    await sendWhatsAppTemplate({
+                        to: formatPhoneNumber(patient.phone),
+                        templateName: 'appointment_confirmed',
+                        userName: patient.full_name || 'Patient',
+                        params: [
+                            hospitalName,
+                            patient.full_name || 'Patient',
+                            data.doctorName,
+                            data.department,
+                            formattedDate,
+                            formattedTime,
+                        ]
+                    }).catch(waErr => console.error('Appointment WA Template failed:', waErr));
+                }
+
+                notifyPatient(
+                    { email: patient.email, phone: patient.phone },
+                    { type: 'appointment', patientName: patient.full_name || 'Patient', doctorName: data.doctorName, department: data.department, date: formattedDate, time: formattedTime, hospitalName }
+                ).catch(err => console.error('[Notify] Book Appointment notification failed:', err));
             }
-        } catch (emailError) {
-            console.error('Appointment confirmation email failed:', emailError);
+        } catch (error) {
+            console.error('Appointment notifications failed:', error);
         }
 
         return { success: true, data: appointment };

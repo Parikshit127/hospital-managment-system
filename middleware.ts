@@ -280,6 +280,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/razorpay/webhook|api/session|api/org-lookup|api/health).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/razorpay/webhook|api/session|api/org-lookup|api/health|api/test-whatsapp|api/webhooks/whatsapp).*)",
   ],
 };

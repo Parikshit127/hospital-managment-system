@@ -51,3 +51,8 @@ next-env.d.ts
 
 # local db
 prisma/dev.db
+
+# AI tool configs
+.omc/
+.gemini/
+.claude/

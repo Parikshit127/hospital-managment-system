@@ -105,7 +105,7 @@ export async function requestPasswordResetOTP(patientId: string, phone: string) 
 
             // Send OTP via WhatsApp
             const message = `Your password reset OTP for Patient Portal is: ${otp}\n\nThis code expires in 5 minutes. Do not share this with anyone.`;
-            await sendWhatsAppMessage(`91${normalizedPhone}`, message);
+            await sendWhatsAppMessage({ to: `91${normalizedPhone}`, message });
 
             logResetAudit('PASSWORD_RESET_OTP_REQUESTED', patientId, patient.organizationId);
 

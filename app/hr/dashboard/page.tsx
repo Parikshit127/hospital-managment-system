@@ -3,20 +3,17 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
-    LayoutDashboard, Users, UserCheck, Clock, FileText,
+    LayoutDashboard, Users, UserCheck,
     UserPlus, CalendarCheck, ClipboardList, Loader2, AlertCircle,
-    TrendingUp, Briefcase
+    Briefcase
 } from 'lucide-react';
 import { getHRDashboard } from '@/app/actions/hr-actions';
 import Link from 'next/link';
 
 interface DashboardData {
-    totalEmployees: number;
-    activeEmployees: number;
-    todayPresent: number;
-    pendingLeaves: number;
-    recentHires: number;
-    departmentBreakdown: { dept: string; count: number }[];
+    totalStrength: number;
+    roleBreakdown: { role: string; count: number }[];
+    staffList: { id: string; name: string; role: string; code: string; phone: string | null; email: string | null }[];
 }
 
 export default function HRDashboard() {
@@ -67,14 +64,12 @@ export default function HRDashboard() {
         );
     }
 
-    const maxDeptCount = Math.max(...data.departmentBreakdown.map(d => d.count), 1);
+    const maxRoleCount = Math.max(...data.roleBreakdown.map(d => d.count), 1);
 
     const kpiCards = [
-        { label: 'Total Employees', value: data.totalEmployees, icon: Users, color: 'from-blue-500 to-indigo-600' },
-        { label: 'Active Employees', value: data.activeEmployees, icon: UserCheck, color: 'from-teal-500 to-emerald-600' },
-        { label: 'Present Today', value: data.todayPresent, icon: Clock, color: 'from-green-500 to-lime-600' },
-        { label: 'Pending Leaves', value: data.pendingLeaves, icon: FileText, color: 'from-amber-500 to-orange-600' },
-        { label: 'Recent Hires (30d)', value: data.recentHires, icon: TrendingUp, color: 'from-purple-500 to-fuchsia-600' },
+        { label: 'Total Staff', value: data.totalStrength, icon: Users, color: 'from-blue-500 to-indigo-600' },
+        { label: 'Roles', value: data.roleBreakdown.length, icon: Briefcase, color: 'from-teal-500 to-emerald-600' },
+        { label: 'Staff Listed', value: data.staffList.length, icon: UserCheck, color: 'from-green-500 to-lime-600' },
     ];
 
     return (
@@ -85,7 +80,7 @@ export default function HRDashboard() {
             refreshing={loading}
         >
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
                 {kpiCards.map((kpi) => (
                     <div key={kpi.label} className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5">
                         <div className="flex items-center justify-between mb-3">
@@ -124,28 +119,28 @@ export default function HRDashboard() {
                 </Link>
             </div>
 
-            {/* Department Breakdown */}
+            {/* Role Breakdown */}
             <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6">
                 <div className="flex items-center gap-2 mb-6">
                     <Briefcase className="h-5 w-5 text-teal-600" />
-                    <h2 className="text-lg font-black text-gray-900">Department Breakdown</h2>
+                    <h2 className="text-lg font-black text-gray-900">Role Breakdown</h2>
                 </div>
-                {data.departmentBreakdown.length === 0 ? (
+                {data.roleBreakdown.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-gray-400">
                         <Users className="h-10 w-10 mb-3" />
-                        <p className="text-sm font-medium">No department data available</p>
+                        <p className="text-sm font-medium">No role data available</p>
                     </div>
                 ) : (
                     <div className="space-y-3">
-                        {data.departmentBreakdown.map((dept) => (
-                            <div key={dept.dept} className="flex items-center gap-4">
-                                <div className="w-32 sm:w-48 text-sm font-semibold text-gray-700 truncate">{dept.dept}</div>
+                        {data.roleBreakdown.map((item) => (
+                            <div key={item.role} className="flex items-center gap-4">
+                                <div className="w-32 sm:w-48 text-sm font-semibold text-gray-700 truncate">{item.role}</div>
                                 <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden">
                                     <div
                                         className="h-full bg-gradient-to-r from-teal-500 to-emerald-500 rounded-full transition-all duration-500 flex items-center justify-end pr-2"
-                                        style={{ width: `${Math.max((dept.count / maxDeptCount) * 100, 8)}%` }}
+                                        style={{ width: `${Math.max((item.count / maxRoleCount) * 100, 8)}%` }}
                                     >
-                                        <span className="text-[10px] font-bold text-white">{dept.count}</span>
+                                        <span className="text-[10px] font-bold text-white">{item.count}</span>
                                     </div>
                                 </div>
                             </div>

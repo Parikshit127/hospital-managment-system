@@ -1,31 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendWhatsAppMessage } from '@/app/lib/whatsapp';
+import { sendWhatsAppMessage, sendWhatsAppTemplate, formatPhoneNumber } from '@/app/lib/whatsapp';
 
 /**
- * Test endpoint to verify WhatsApp API configuration
+ * Test endpoint to verify WhatsApp API configuration (AiSensy/Combirds)
  *
  * Usage:
  * POST /api/test-whatsapp
  * Body: { "phone": "9876543210", "message": "Test message" }
+ * OR for template: { "phone": "9876543210", "template": "welcome_msg", "params": ["Hospital", "Patient"] }
  */
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { phone, message } = body;
+        const { phone, message, template, params } = body;
 
-        if (!phone || !message) {
+        if (!phone) {
             return NextResponse.json({
                 success: false,
-                error: 'Phone and message are required'
+                error: 'Phone is required'
             }, { status: 400 });
         }
 
-        console.log('[Test WhatsApp] Testing with phone:', phone);
+        const formattedPhone = formatPhoneNumber(phone);
+        console.log('[Test WhatsApp] Testing with phone:', formattedPhone);
 
-        const result = await sendWhatsAppMessage(phone, message);
+        let result;
+        if (template) {
+            result = await sendWhatsAppTemplate({
+                to: formattedPhone,
+                templateName: template,
+                userName: 'Test Patient',
+                params: params || [],
+            });
+        } else {
+            result = await sendWhatsAppMessage({
+                to: formattedPhone,
+                message: message || 'Test message from Hospital OS',
+            });
+        }
 
         return NextResponse.json({
-            success: result.success !== false,
+            success: result.success,
             result,
             timestamp: new Date().toISOString()
         });
@@ -43,19 +58,16 @@ export async function POST(request: NextRequest) {
  * GET endpoint to check WhatsApp configuration
  */
 export async function GET() {
-    const hasToken = !!process.env.WHATSAPP_API_TOKEN;
-    const hasPhoneId = !!process.env.WHATSAPP_PHONE_NUMBER_ID;
-    const hasAppSecret = !!process.env.WHATSAPP_APP_SECRET;
-    const hasWebhookToken = !!process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
+    const hasApiKey = !!process.env.AISENSY_API_KEY;
+    const hasBaseUrl = !!process.env.COMBIRDS_BASE_URL;
 
     return NextResponse.json({
-        configured: hasToken && hasPhoneId,
+        configured: hasApiKey,
+        provider: 'AiSensy/Combirds',
         details: {
-            WHATSAPP_API_TOKEN: hasToken ? `Set (${process.env.WHATSAPP_API_TOKEN?.substring(0, 10)}...)` : 'Not set',
-            WHATSAPP_PHONE_NUMBER_ID: hasPhoneId ? process.env.WHATSAPP_PHONE_NUMBER_ID : 'Not set',
-            WHATSAPP_APP_SECRET: hasAppSecret ? 'Set' : 'Not set',
-            WHATSAPP_WEBHOOK_VERIFY_TOKEN: hasWebhookToken ? 'Set' : 'Not set',
+            AISENSY_API_KEY: hasApiKey ? 'Set' : 'Not set',
+            COMBIRDS_BASE_URL: process.env.COMBIRDS_BASE_URL || 'Using default',
+            HOSPITAL_NAME: process.env.HOSPITAL_NAME || 'Not set',
         },
-        apiUrl: `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`
     });
 }

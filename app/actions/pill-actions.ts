@@ -3,6 +3,8 @@
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
+import { pillReminderMsg } from '@/app/lib/whatsapp-templates';
 
 const pillReminderSchema = z.object({
   patient_id: z.string().min(1, 'Patient is required'),
@@ -49,6 +51,23 @@ export async function schedulePillReminder(formData: any) {
         organizationId,
       }
     });
+
+    // WhatsApp: Pill reminder notification
+    const patient = await db.oPD_REG.findUnique({
+      where: { patient_id: validated.patient_id },
+      select: { phone: true, full_name: true }
+    });
+    if (patient?.phone) {
+      await sendWhatsAppMessage({
+        to: formatPhoneNumber(patient.phone),
+        message: pillReminderMsg({
+          patientName: patient.full_name,
+          medicationName: validated.medication_name,
+          time: validated.schedule_times.join(", "),
+          hospitalName: "Hospital"
+        })
+      }).catch(waErr => console.error('Pill Reminder WA failed:', waErr));
+    }
 
     revalidatePath('/doctor/follow-ups');
     return { success: true, data: reminder };

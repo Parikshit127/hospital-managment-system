@@ -15,15 +15,14 @@ import {
     sendInvoiceEmail,
 } from '@/backend/email';
 
+import { sendWhatsAppMessage, sendWhatsAppTemplate, formatPhoneNumber } from '@/app/lib/whatsapp';
 import {
-    sendAppointmentReminder,
-    sendPrescriptionWhatsApp,
-    sendAdmissionWhatsApp,
-    sendPillReminderWhatsApp,
-    sendLabReportReady,
-    sendDischargeSummary,
-    sendInvoiceWhatsApp,
-} from '@/app/lib/whatsapp';
+    appointmentReminderMsg,
+    labReportReadyMsg,
+    billingInvoiceMsg,
+    dischargeSummaryMsg,
+    pillReminderMsg,
+} from '@/app/lib/whatsapp-templates';
 
 // ========================================
 // Event Types
@@ -183,33 +182,64 @@ async function sendEmailForEvent(email: string, event: NotifyEvent, hospitalName
 // ========================================
 
 async function sendWhatsAppForEvent(phone: string, event: NotifyEvent, hospitalName: string): Promise<void> {
+    const formattedPhone = formatPhoneNumber(phone);
+    if (!formattedPhone) return;
+
+    let customBody = '';
+
     switch (event.type) {
         case 'appointment':
-            await sendAppointmentReminder(phone, event.patientName, event.doctorName, `${event.date} at ${event.time}`, hospitalName);
-            break;
-
-        case 'prescription':
-            await sendPrescriptionWhatsApp(phone, event.patientName, event.doctorName, event.summaryText, hospitalName);
-            break;
-
-        case 'admission':
-            await sendAdmissionWhatsApp(phone, event.patientName, event.doctorName, event.bedDetails, hospitalName);
-            break;
+            await sendWhatsAppTemplate({
+                to: formattedPhone,
+                templateName: 'appointment_confirmed',
+                userName: event.patientName,
+                params: [
+                    hospitalName,
+                    event.patientName,
+                    event.doctorName,
+                    event.department,
+                    event.date,
+                    event.time,
+                ]
+            }).catch(e => console.error("[WA] Appt failed:", e));
+            return;
 
         case 'pill_reminder':
-            await sendPillReminderWhatsApp(phone, event.patientName, event.medicationName, event.dosage, hospitalName);
+            customBody = `It's time to take your medication: *${event.medicationName}* (${event.dosage}).${event.notes ? `\nNote: ${event.notes}` : ''}`;
             break;
 
         case 'lab_report':
-            await sendLabReportReady(phone, event.patientName, event.testName, hospitalName);
+            customBody = `Your lab report for *${event.testName}* is now ready for collection or viewing in the portal.`;
             break;
 
         case 'discharge':
-            await sendDischargeSummary(phone, event.patientName, hospitalName);
+            customBody = `You have been successfully discharged. Please follow the instructions provided in your discharge summary.`;
             break;
 
         case 'invoice':
-            await sendInvoiceWhatsApp(phone, event.patientName, event.invoiceNumber, event.amount, hospitalName);
+            customBody = `An invoice (#${event.invoiceNumber}) for ₹${event.amount} has been generated for your recent services.`;
             break;
+
+        case 'prescription':
+            customBody = `Your clinical summary and prescription by Dr. ${event.doctorName} are now available.\n\nDiagnosis: *${event.summaryText}*`;
+            break;
+
+        case 'admission':
+            customBody = `Your admission process is complete.\nAdmitting Doctor: Dr. ${event.doctorName}\nBed/Ward: ${event.bedDetails}`;
+            break;
+    }
+
+    if (customBody) {
+        await sendWhatsAppTemplate({
+            to: formattedPhone,
+            templateName: 'generic_hospital_update',
+            userName: event.patientName,
+            params: [
+                hospitalName,
+                event.patientName,
+                customBody,
+                hospitalName
+            ]
+        }).catch(e => console.error("[WA] Generic failed:", e));
     }
 }

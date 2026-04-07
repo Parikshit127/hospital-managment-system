@@ -1,6 +1,7 @@
 import { requireTenantContext } from './tenant';
 import { notifyPatient } from '@/app/lib/notify-patient';
-import { sendPillReminderMessage } from '@/app/lib/whatsapp';
+import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
+import { pillReminderMsg } from '@/app/lib/whatsapp-templates';
 
 export async function processPillReminders() {
     console.log('[Pill Scheduler] Starting check at:', new Date().toISOString());
@@ -71,13 +72,15 @@ export async function processPillReminders() {
 
             if (reminder.patient?.phone) {
                 try {
-                    await sendPillReminderMessage(
-                        reminder.patient.phone,
-                        reminder.patient.full_name,
-                        reminder.medication_name,
-                        reminder.dosage,
-                        reminder.notes
-                    );
+                    await sendWhatsAppMessage({
+                        to: formatPhoneNumber(reminder.patient.phone),
+                        message: pillReminderMsg({
+                            patientName: reminder.patient.full_name,
+                            medicationName: reminder.medication_name,
+                            time: currentTime,
+                            hospitalName: "Hospital"
+                        })
+                    });
                     console.log(`[Pill Scheduler] Sent WhatsApp for reminder ${reminder.id} to ${reminder.patient.phone}`);
                 } catch (err) {
                     console.error(`[Pill Scheduler] Failed to send WhatsApp for reminder ${reminder.id}:`, err);

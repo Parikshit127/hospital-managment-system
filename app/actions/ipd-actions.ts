@@ -134,6 +134,11 @@ export async function admitPatientIPD(data: {
   ward_id: number;
   diagnosis: string;
   doctor_name: string;
+  deposit_amount?: number;
+  deposit_payment_method?: string;
+  estimate_id?: number;
+  admission_type?: string;
+  line_of_treatment?: string;
 }) {
   try {
     const { db, organizationId } = await requireTenantContext();
@@ -172,16 +177,34 @@ export async function admitPatientIPD(data: {
         // Re-use dateStr and seq or generate new ones for invoice if preferred, but generating new seq:
         const invoiceSeq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0");
 
-        await tx.invoices.create({
+        const newInvoice = await tx.invoices.create({
             data: {
                 invoice_number: `INV-${dateStr}-${invoiceSeq}`,
                 patient_id: data.patient_id,
                 admission_id: newAdmission.admission_id,
                 invoice_type: "IPD",
                 status: "Draft",
+                estimate_id: data.estimate_id || null,
                 organizationId
             },
         });
+
+        // Collect deposit if provided
+        if (data.deposit_amount && data.deposit_amount > 0) {
+            const depDateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+            const depSeq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0");
+            await tx.patientDeposit.create({
+                data: {
+                    deposit_number: `DEP-${depDateStr}-${depSeq}`,
+                    patient_id: data.patient_id,
+                    admission_id: newAdmission.admission_id,
+                    amount: data.deposit_amount,
+                    payment_method: data.deposit_payment_method || "Cash",
+                    status: "Active",
+                    organizationId,
+                },
+            });
+        }
 
         await tx.system_audit_logs.create({
             data: {
@@ -488,6 +511,10 @@ export async function accrueIPDDailyCharges(admissionId: string) {
     const nursingRate = Number(ward.nursing_charge || 0) * multiplier;
     const today = new Date().toLocaleDateString("en-IN");
 
+    // Determine room GST: 0% if <=5000/day, 5% if >5000/day
+    const roomTaxRate = roomRate > 5000 ? 5 : 0;
+    const roomTaxAmount = roomRate * roomTaxRate / 100;
+
     // Add room charge
     if (roomRate > 0) {
       await db.invoice_items.create({
@@ -500,6 +527,10 @@ export async function accrueIPDDailyCharges(admissionId: string) {
           total_price: roomRate,
           discount: 0,
           net_price: roomRate,
+          tax_rate: roomTaxRate,
+          tax_amount: roomTaxAmount,
+          hsn_sac_code: roomRate > 5000 ? '9963' : '9993',
+          service_category: 'Room',
         },
       });
     }
@@ -516,6 +547,10 @@ export async function accrueIPDDailyCharges(admissionId: string) {
           total_price: nursingRate,
           discount: 0,
           net_price: nursingRate,
+          tax_rate: 0,
+          tax_amount: 0,
+          hsn_sac_code: '9993',
+          service_category: 'Nursing',
         },
       });
     }
@@ -524,18 +559,26 @@ export async function accrueIPDDailyCharges(admissionId: string) {
     const items = await db.invoice_items.findMany({
       where: { invoice_id: invoice.id },
     });
-    const total = items.reduce(
+    const totalItems = items.reduce(
       (sum: any, item: any) => sum + Number(item.net_price),
       0,
     );
+    const totalTax = items.reduce(
+      (sum: any, item: any) => sum + Number(item.tax_amount || 0),
+      0,
+    );
+    const netAmount = totalItems + totalTax;
     const paid = Number(invoice.paid_amount || 0);
 
     await db.invoices.update({
       where: { id: invoice.id },
       data: {
-        total_amount: total,
-        net_amount: total,
-        balance_due: total - paid,
+        total_amount: totalItems,
+        total_tax: totalTax,
+        net_amount: netAmount,
+        cgst_amount: totalTax / 2,
+        sgst_amount: totalTax / 2,
+        balance_due: netAmount - paid,
       },
     });
 
@@ -843,19 +886,40 @@ export async function recordWardRound(data: {
   admission_id: string;
   observations: string;
   plan_changes: string;
+  visit_fee?: number;
 }) {
   try {
     const { db, session, organizationId } = await requireTenantContext();
 
-    await db.wardRound.create({
+    const visitFee = data.visit_fee || 0;
+
+    const round = await db.wardRound.create({
       data: {
         admission_id: data.admission_id,
         doctor_id: session.id,
         observations: data.observations,
         plan_changes: data.plan_changes,
+        visit_fee: visitFee,
+        charge_posted: visitFee > 0,
         organizationId,
       },
     });
+
+    // Post doctor visit charge to IPD bill if fee > 0
+    if (visitFee > 0) {
+      const { postChargeToIpdBill } = await import('./ipd-finance-actions');
+      await postChargeToIpdBill({
+        admission_id: data.admission_id,
+        source_module: 'ward_round',
+        source_ref_id: String(round.id),
+        description: `Doctor Visit - Ward Round`,
+        quantity: 1,
+        unit_price: visitFee,
+        service_category: 'DoctorVisit',
+        hsn_sac_code: '9993',
+        tax_rate: 0,
+      });
+    }
 
     revalidatePath(`/ipd/admission/${data.admission_id}`);
     return { success: true };

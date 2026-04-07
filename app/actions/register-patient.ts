@@ -2,7 +2,8 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
-import { sendAppointmentReminder, sendWelcomeMessage } from '@/app/lib/whatsapp';
+import { sendWhatsAppTemplate, sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
+import { appointmentConfirmationMsg, newPatientCardMsg } from '@/app/lib/whatsapp-templates';
 import { notifyPatient } from '@/app/lib/notify-patient';
 import { sendWelcomeEmail } from '@/backend/email';
 import { createPatientPasswordSetupToken } from '@/app/lib/password-setup';
@@ -132,11 +133,21 @@ export async function registerPatient(formData: FormData) {
                 await sendWelcomeEmail(rawData.email, rawData.full_name, agentPatientId, setupLink);
             }
 
-            // 3c. Send WhatsApp with credentials (mirroring email)
+            // 3c. Send WhatsApp welcome via template
             if (rawData.phone) {
-                sendWelcomeMessage(rawData.phone, rawData.full_name, agentPatientId, setupLink).catch(err =>
-                    console.warn('[WhatsApp] Failed to send welcome message:', err)
-                );
+                const hospitalName = process.env.HOSPITAL_NAME || "Hospital";
+                await sendWhatsAppTemplate({
+                    to: formatPhoneNumber(rawData.phone),
+                    templateName: 'welcome_msg',
+                    userName: rawData.full_name,
+                    params: [
+                        hospitalName,
+                        rawData.full_name,
+                        agentPatientId,
+                        setupLink,
+                        hospitalName
+                    ]
+                }).catch(err => console.error("WA Welcome Template Error:", err));
             }
         }
 
