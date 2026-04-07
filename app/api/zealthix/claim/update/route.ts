@@ -10,7 +10,10 @@ function mapZealthixStatus(actionStatus: string, status: string): string {
     if (normalized.includes('APPROVED') || normalized.includes('DISCHARGE_APPROVED')) return 'Approved';
     if (normalized.includes('REJECTED')) return 'Rejected';
     if (normalized.includes('PARTIAL')) return 'PartiallyApproved';
-    if (normalized.includes('PREAUTH') || normalized.includes('INITIATED')) return 'UnderReview';
+    // Support PREAUTH and CLAIM as distinct statuses
+    if (normalized === 'PREAUTH' || normalized.includes('PRE_AUTH')) return 'Preauth';
+    if (normalized === 'CLAIM' || normalized.includes('CLAIM_INITIATED')) return 'ClaimInitiated';
+    if (normalized.includes('INITIATED')) return 'Initiated';
     if (normalized.includes('ENHANCEMENT') || normalized.includes('DISCHARGE')) return 'UnderReview';
 
     return 'UnderReview';
