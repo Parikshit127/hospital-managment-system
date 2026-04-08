@@ -272,3 +272,95 @@ export async function generateLabReportUrl(barcode: string) {
         return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
 }
+
+export async function getPatientIPDHistory() {
+    try {
+        const session = await getPatientSession();
+        if (!session) return { success: false, error: 'Not authenticated' };
+        const db = getTenantPrisma(session.organization_id);
+        const admissions = await db.admissions.findMany({
+            where: { patient_id: session.id },
+            orderBy: { admission_date: 'desc' },
+            include: {
+                ward: true,
+                bed: true,
+                medical_notes: { orderBy: { created_at: 'desc' } },
+                summaries: { orderBy: { created_at: 'desc' } },
+                ward_rounds: { orderBy: { created_at: 'desc' } },
+                nursing_tasks: { orderBy: { scheduled_at: 'desc' } },
+                diet_plans: { orderBy: { created_at: 'desc' } },
+            },
+        });
+        return { success: true, data: admissions };
+    } catch (error) {
+        console.error('IPD history error:', error);
+        return { success: false, error: 'Failed to load IPD history' };
+    }
+}
+
+export async function getExternalRecords() {
+    try {
+        const session = await getPatientSession();
+        if (!session) return { success: false, data: [] };
+        const db = getTenantPrisma(session.organization_id);
+        const records = await db.$queryRaw`
+            SELECT * FROM patient_external_records
+            WHERE patient_id = ${session.id}
+            ORDER BY created_at DESC
+        ` as any[];
+        return { success: true, data: records };
+    } catch (error) {
+        console.error('External records error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+export async function saveExternalRecord(data: {
+    title: string;
+    description?: string;
+    hospital_name?: string;
+    record_date?: string;
+    file_url?: string;
+    file_name?: string;
+    file_type?: string;
+}) {
+    try {
+        const session = await getPatientSession();
+        if (!session) return { success: false, error: 'Not authenticated' };
+        const db = getTenantPrisma(session.organization_id);
+        await db.$executeRaw`
+            INSERT INTO patient_external_records
+            (patient_id, "organizationId", title, description, hospital_name, record_date, file_url, file_name, file_type)
+            VALUES (
+                ${session.id},
+                ${session.organization_id},
+                ${data.title},
+                ${data.description || null},
+                ${data.hospital_name || null},
+                ${data.record_date ? new Date(data.record_date) : null},
+                ${data.file_url || null},
+                ${data.file_name || null},
+                ${data.file_type || null}
+            )
+        `;
+        return { success: true };
+    } catch (error) {
+        console.error('Save external record error:', error);
+        return { success: false, error: 'Failed to save record' };
+    }
+}
+
+export async function deleteExternalRecord(id: number) {
+    try {
+        const session = await getPatientSession();
+        if (!session) return { success: false, error: 'Not authenticated' };
+        const db = getTenantPrisma(session.organization_id);
+        await db.$executeRaw`
+            DELETE FROM patient_external_records
+            WHERE id = ${id} AND patient_id = ${session.id}
+        `;
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: 'Failed to delete' };
+    }
+}

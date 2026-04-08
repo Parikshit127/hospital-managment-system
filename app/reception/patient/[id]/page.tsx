@@ -5,11 +5,12 @@ import { useParams, useRouter } from 'next/navigation';
 import {
     User, Calendar, Phone, Mail, MapPin, Activity, Loader2,
     FileText, Thermometer, Zap, ArrowLeft, Clock, Shield,
-    Pencil, Check, X, CalendarPlus, FlaskConical, History, CreditCard, DollarSign
+    Pencil, Check, X, CalendarPlus, FlaskConical, History, CreditCard, DollarSign,
+    Upload, Plus, Trash2, ExternalLink
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { getPatientDetail, updatePatientField, addPatientDues, processPatientPayment } from '@/app/actions/reception-actions';
+import { getPatientDetail, updatePatientField, addPatientDues, processPatientPayment, getPatientExternalRecords, savePatientExternalRecord, deletePatientExternalRecord } from '@/app/actions/reception-actions';
 import { useToast } from '@/app/components/ui/Toast';
 
 /** Inline editable field */
@@ -109,7 +110,7 @@ export default function PatientProfilePage() {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [processLoading, setProcessLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'triage' | 'vitals' | 'timeline' | 'billing'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'triage' | 'vitals' | 'timeline' | 'billing' | 'records'>('overview');
     
     // Billing Modals State
     const [showDuesModal, setShowDuesModal] = useState(false);
@@ -117,10 +118,19 @@ export default function PatientProfilePage() {
     const [dueForm, setDueForm] = useState({ amount: '', description: '', department: 'General' });
     const [paymentForm, setPaymentForm] = useState({ amount: '', method: 'Cash' });
 
+    // External records state
+    const [externalRecords, setExternalRecords] = useState<any[]>([]);
+    const [showRecordModal, setShowRecordModal] = useState(false);
+    const [recordForm, setRecordForm] = useState({ title: '', description: '', hospital_name: '', record_date: '', file_url: '', file_name: '' });
+    const [savingRecord, setSavingRecord] = useState(false);
+    const [uploadingFile, setUploadingFile] = useState(false);
+
     const loadData = useCallback(async () => {
         setLoading(true);
         const res = await getPatientDetail(patientId);
         if (res.success) setData(res.data);
+        const extRes = await getPatientExternalRecords(patientId);
+        if (extRes.success) setExternalRecords(extRes.data || []);
         setLoading(false);
     }, [patientId]);
 
@@ -221,6 +231,34 @@ export default function PatientProfilePage() {
 
     const patient = data.patient;
 
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setUploadingFile(true);
+        const fd = new FormData();
+        fd.append('file', file);
+        try {
+            const res = await fetch('/api/upload/patient-record', { method: 'POST', body: fd });
+            const json = await res.json();
+            if (json.url) setRecordForm(f => ({ ...f, file_url: json.url, file_name: file.name }));
+        } catch { alert('Upload failed'); }
+        setUploadingFile(false);
+    };
+
+    const handleSaveRecord = async () => {
+        if (!recordForm.title.trim()) return alert('Title is required');
+        setSavingRecord(true);
+        const res = await savePatientExternalRecord(patientId, recordForm);
+        if (res.success) {
+            setShowRecordModal(false);
+            setRecordForm({ title: '', description: '', hospital_name: '', record_date: '', file_url: '', file_name: '' });
+            loadData();
+        } else alert(res.error);
+        setSavingRecord(false);
+    };
+
+    const fmtDate = (v?: string | null) => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+
     // Build timeline from all data sources
     const timelineEvents = [
         // Registration event
@@ -293,6 +331,7 @@ export default function PatientProfilePage() {
                         { key: 'triage', label: `Triage (${data.triageHistory?.length || 0})`, icon: <Zap className="h-3.5 w-3.5" /> },
                         { key: 'vitals', label: `Vitals (${data.vitals?.length || 0})`, icon: <Thermometer className="h-3.5 w-3.5" /> },
                         { key: 'billing', label: `Billing (${data.invoices?.length || 0})`, icon: <CreditCard className="h-3.5 w-3.5" /> },
+                        { key: 'records', label: 'External Records', icon: <Upload className="h-3.5 w-3.5" /> },
                     ].map(tab => (
                         <button key={tab.key} onClick={() => setActiveTab(tab.key as typeof activeTab)}
                             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === tab.key
@@ -544,6 +583,96 @@ export default function PatientProfilePage() {
                     </div>
                 )}
             </div>
+
+            {/* External Records Tab */}
+                {activeTab === 'records' && (
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-black text-gray-700 text-lg flex items-center gap-2">
+                                <Upload className="h-5 w-5 text-violet-500" /> External Records
+                            </h3>
+                            <button onClick={() => setShowRecordModal(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white text-sm font-bold rounded-xl hover:bg-violet-700 transition">
+                                <Plus className="h-4 w-4" /> Add Record
+                            </button>
+                        </div>
+                        {externalRecords.length === 0 ? (
+                            <div className="p-8 border border-dashed border-gray-300 rounded-2xl text-center text-gray-400 text-sm">
+                                No external records yet. Add records from other hospitals or previous treatments.
+                            </div>
+                        ) : externalRecords.map((rec: any) => (
+                            <div key={rec.id} className="bg-white border border-gray-200 rounded-2xl p-4 flex items-start justify-between gap-4">
+                                <div className="flex-1">
+                                    <p className="font-bold text-gray-900">{rec.title}</p>
+                                    {rec.hospital_name && <p className="text-xs text-gray-500 mt-0.5">{rec.hospital_name}</p>}
+                                    {rec.description && <p className="text-sm text-gray-600 mt-1">{rec.description}</p>}
+                                    {rec.record_date && <p className="text-xs text-gray-400 mt-1">{fmtDate(rec.record_date)}</p>}
+                                    {rec.file_url && (
+                                        <a href={rec.file_url} target="_blank" rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1.5 text-xs font-bold text-violet-600 bg-violet-50 px-3 py-1.5 rounded-lg mt-2">
+                                            <ExternalLink className="h-3.5 w-3.5" /> {rec.file_name || 'View File'}
+                                        </a>
+                                    )}
+                                </div>
+                                <button onClick={async () => { await deletePatientExternalRecord(rec.id); loadData(); }}
+                                    className="text-gray-300 hover:text-red-500 transition p-1">
+                                    <Trash2 className="h-4 w-4" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+            {/* External Record Modal */}
+            {showRecordModal && (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-2xl w-full max-w-md p-6 space-y-4 shadow-xl">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-black text-gray-900">Add External Record</h3>
+                            <button onClick={() => setShowRecordModal(false)}><X className="h-5 w-5 text-gray-400" /></button>
+                        </div>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Title *</label>
+                                <input type="text" value={recordForm.title} onChange={e => setRecordForm(f => ({ ...f, title: e.target.value }))}
+                                    placeholder="e.g. Blood Report - Apollo Hospital"
+                                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-violet-500" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Hospital / Clinic</label>
+                                <input type="text" value={recordForm.hospital_name} onChange={e => setRecordForm(f => ({ ...f, hospital_name: e.target.value }))}
+                                    placeholder="e.g. Apollo Hospital"
+                                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-violet-500" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Date</label>
+                                <input type="date" value={recordForm.record_date} onChange={e => setRecordForm(f => ({ ...f, record_date: e.target.value }))}
+                                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-violet-500" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Description</label>
+                                <textarea value={recordForm.description} onChange={e => setRecordForm(f => ({ ...f, description: e.target.value }))}
+                                    rows={2} placeholder="Brief description..."
+                                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-violet-500 resize-none" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Upload File (Image / PDF)</label>
+                                <input type="file" accept="image/*,.pdf" onChange={handleFileUpload}
+                                    className="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-violet-50 file:text-violet-700 file:font-bold" />
+                                {uploadingFile && <p className="text-xs text-violet-500 mt-1">Uploading...</p>}
+                                {recordForm.file_name && <p className="text-xs text-emerald-600 mt-1">✓ {recordForm.file_name}</p>}
+                            </div>
+                        </div>
+                        <div className="flex gap-3 pt-2">
+                            <button onClick={() => setShowRecordModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-bold text-gray-500">Cancel</button>
+                            <button onClick={handleSaveRecord} disabled={savingRecord || !recordForm.title.trim()}
+                                className="flex-1 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-bold disabled:opacity-50">
+                                {savingRecord ? 'Saving...' : 'Save Record'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modals outside tabs, inside AppShell wrapper */}
             {showDuesModal && (

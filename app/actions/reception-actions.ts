@@ -1130,3 +1130,59 @@ export async function processPatientPayment(data: {
         return { success: false, error: error.message };
     }
 }
+
+export async function getPatientExternalRecords(patientId: string) {
+    try {
+        const { db } = await requireTenantContext();
+        const records = await db.$queryRaw`
+            SELECT * FROM patient_external_records
+            WHERE patient_id = ${patientId}
+            ORDER BY created_at DESC
+        ` as any[];
+        return { success: true, data: records };
+    } catch (error) {
+        console.error('External records error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+export async function savePatientExternalRecord(patientId: string, data: {
+    title: string;
+    description?: string;
+    hospital_name?: string;
+    record_date?: string;
+    file_url?: string;
+    file_name?: string;
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        await db.$executeRaw`
+            INSERT INTO patient_external_records
+            (patient_id, "organizationId", title, description, hospital_name, record_date, file_url, file_name)
+            VALUES (
+                ${patientId},
+                ${organizationId},
+                ${data.title},
+                ${data.description || null},
+                ${data.hospital_name || null},
+                ${data.record_date ? new Date(data.record_date) : null},
+                ${data.file_url || null},
+                ${data.file_name || null}
+            )
+        `;
+        return { success: true };
+    } catch (error) {
+        console.error('Save external record error:', error);
+        return { success: false, error: 'Failed to save record' };
+    }
+}
+
+export async function deletePatientExternalRecord(id: number) {
+    try {
+        const { db } = await requireTenantContext();
+        await db.$executeRaw`DELETE FROM patient_external_records WHERE id = ${id}`;
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: 'Failed to delete' };
+    }
+}
