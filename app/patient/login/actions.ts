@@ -53,11 +53,14 @@ export async function patientLogin(prevState: any, formData: FormData) {
     const password = formData.get('password') as string;
 
     if (!patientId || !password) {
-        return { success: false, error: 'Patient ID and password are required' };
+        return { success: false, error: 'Patient ID / Email and password are required' };
     }
 
+    const isEmail = patientId.includes('@');
+    const rateLimitKey = patientId.toLowerCase();
+
     // Rate limiting check
-    const rateCheck = checkRateLimit(patientId);
+    const rateCheck = checkRateLimit(rateLimitKey);
     if (rateCheck.blocked) {
         const minutes = Math.ceil((rateCheck.remainingMs || 0) / 60000);
         logPatientAudit({
@@ -73,39 +76,39 @@ export async function patientLogin(prevState: any, formData: FormData) {
     }
 
     try {
-        const patient = await prisma.oPD_REG.findUnique({
-            where: { patient_id: patientId },
+        const patient = await prisma.oPD_REG.findFirst({
+            where: isEmail
+                ? { email: { equals: patientId, mode: 'insensitive' } }
+                : { patient_id: patientId },
             include: { organization: true },
         });
 
         if (!patient || !patient.password) {
-            recordFailedAttempt(patientId);
+            recordFailedAttempt(rateLimitKey);
             logPatientAudit({
                 action: 'PATIENT_LOGIN_FAILED',
                 entity_type: 'patient',
                 entity_id: patientId,
-                details: 'Invalid Patient ID or no password set',
+                details: 'Invalid credentials or no password set',
             });
-            return { success: false, error: 'Invalid Patient ID or Password' };
+            return { success: false, error: 'Invalid Patient ID / Email or Password' };
         }
 
         const isValid = await bcrypt.compare(password, patient.password);
 
         if (!isValid) {
-            recordFailedAttempt(patientId);
+            recordFailedAttempt(rateLimitKey);
             logPatientAudit({
                 action: 'PATIENT_LOGIN_FAILED',
                 entity_type: 'patient',
                 entity_id: patientId,
                 details: 'Invalid password',
             });
-            return { success: false, error: 'Invalid Patient ID or Password' };
+            return { success: false, error: 'Invalid Patient ID / Email or Password' };
         }
 
-        // Successful login — clear rate limit counter
-        clearFailedAttempts(patientId);
+        clearFailedAttempts(rateLimitKey);
 
-        // Create JWT patient session
         const sessionData: PatientSessionData = {
             id: patient.patient_id,
             name: patient.full_name,
@@ -117,11 +120,10 @@ export async function patientLogin(prevState: any, formData: FormData) {
 
         await createPatientSession(sessionData);
 
-        // Log successful login (non-blocking)
         logPatientAudit({
             action: 'PATIENT_LOGIN',
             entity_type: 'patient',
-            entity_id: patientId,
+            entity_id: patient.patient_id,
         });
     } catch (error) {
         if (error instanceof Error && error.message === 'NEXT_REDIRECT') {

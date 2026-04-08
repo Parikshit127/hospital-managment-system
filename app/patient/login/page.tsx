@@ -45,7 +45,7 @@ function PatientLoginForm() {
 
                     <form action={loginAction} className="space-y-5">
                         <div className="space-y-1.5">
-                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Patient ID</label>
+                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Patient ID or Email</label>
                             <div className="relative">
                                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400">
                                     <UserCircle className="h-5 w-5" />
@@ -54,7 +54,7 @@ function PatientLoginForm() {
                                     name="patientId"
                                     type="text"
                                     required
-                                    placeholder="e.g. AVN-2024-00001"
+                                    placeholder="e.g. AVN-2024-00001 or email"
                                     className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15 transition-all outline-none text-sm shadow-sm hover:border-gray-300"
                                 />
                             </div>
