@@ -2,26 +2,28 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { validateZealthixApiKey } from '@/app/lib/zealthix/auth'
+import { convertHtmlToPdf } from '@/app/lib/pdf-generator'
 
 const ALLOWED_STAFF_ROLES = ['admin', 'doctor', 'ipd_manager', 'nurse', 'finance'];
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ admissionId: string }> }) {
     try {
-        // Check for internal/Zealthix API access first
-        const internalHeader = req.headers.get('X-Internal-Request');
+        // Check for Zealthix API key first (for external access)
+        const apiKeyHeader = req.headers.get('X-Api-Key');
         let organizationId: string | null = null;
-        let isInternalRequest = false;
+        let isApiKeyAuth = false;
 
-        if (internalHeader) {
+        if (apiKeyHeader) {
+            // Zealthix API authentication
             const zealthixAuth = await validateZealthixApiKey(req);
             if (!(zealthixAuth instanceof NextResponse)) {
                 organizationId = zealthixAuth.organizationId;
-                isInternalRequest = true;
+                isApiKeyAuth = true;
             }
         }
 
-        // If not internal request, use regular authentication
-        if (!isInternalRequest) {
+        // If not API key auth, use regular authentication
+        if (!isApiKeyAuth) {
             const auth = await resolveRouteAuth({
                 allowPatient: true,
                 allowedStaffRoles: ALLOWED_STAFF_ROLES,
@@ -49,7 +51,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         }
 
         // Skip patient check for internal requests
-        if (!isInternalRequest) {
+        if (!isApiKeyAuth) {
             const auth = await resolveRouteAuth({
                 allowPatient: true,
                 allowedStaffRoles: ALLOWED_STAFF_ROLES,
@@ -254,6 +256,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 </body>
 </html>`
 
+        // If accessed via API key (Zealthix), return actual PDF
+        if (isApiKeyAuth) {
+            const pdfBuffer = await convertHtmlToPdf(html);
+            return new Response(new Uint8Array(pdfBuffer), {
+                headers: {
+                    'Content-Type': 'application/pdf',
+                    'Content-Disposition': `inline; filename="discharge-${admissionId}.pdf"`
+                }
+            });
+        }
+
+        // Otherwise return HTML for browser viewing
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' }
         })

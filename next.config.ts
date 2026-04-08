@@ -9,6 +9,16 @@ const nextConfig: NextConfig = {
     compiler: {
         removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error"] } : false,
     },
+    turbopack: {
+        // Turbopack config for Next.js 16+
+    },
+    webpack: (config, { isServer }) => {
+        if (isServer) {
+            // Externalize chromium for server-side rendering (used in production builds)
+            config.externals = [...(config.externals || []), '@sparticuz/chromium'];
+        }
+        return config;
+    },
     async headers() {
         return [
             {

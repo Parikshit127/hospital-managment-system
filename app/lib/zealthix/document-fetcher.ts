@@ -9,32 +9,31 @@ interface ZealthixDocument {
 }
 
 /**
- * Fetch a file from a URL and return as base64 string
+ * Fetch a URL and convert to base64
  */
 async function fetchAsBase64(url: string): Promise<string> {
-    const response = await fetch(url);
-    if (!response.ok) return '';
-    const buffer = await response.arrayBuffer();
-    return Buffer.from(buffer).toString('base64');
+    try {
+        const response = await fetch(url);
+        if (!response.ok) return '';
+        const buffer = await response.arrayBuffer();
+        return Buffer.from(buffer).toString('base64');
+    } catch {
+        return '';
+    }
 }
 
 /**
- * Generate a PDF from an internal API route and return as base64
+ * Fetch PDF from internal route and convert to base64
  */
-async function generatePdfBase64(
+async function fetchPdfAsBase64(
     baseUrl: string,
     path: string,
-    apiKey: string,
-    params?: Record<string, string>
+    apiKey: string
 ): Promise<string> {
     try {
         const url = new URL(path, baseUrl);
-        if (params) {
-            Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-        }
         const response = await fetch(url.toString(), {
             headers: {
-                'X-Internal-Request': 'true',
                 'X-Api-Key': apiKey,
             },
         });
@@ -47,7 +46,7 @@ async function generatePdfBase64(
 }
 
 /**
- * Get all documents for a visit, encoded as base64 for Zealthix
+ * Get all documents for a visit as base64 encoded PDFs for Zealthix
  */
 export async function getVisitDocuments(
     visitId: string,
@@ -72,7 +71,7 @@ export async function getVisitDocuments(
             if (admission) {
                 // Invoice PDFs
                 for (const invoice of admission.invoices || []) {
-                    const base64 = await generatePdfBase64(
+                    const base64 = await fetchPdfAsBase64(
                         baseUrl,
                         `/api/invoice/${invoice.id}/pdf`,
                         apiKey
@@ -90,7 +89,7 @@ export async function getVisitDocuments(
 
                 // Discharge summary PDF
                 if (admission.summaries && admission.summaries.length > 0) {
-                    const base64 = await generatePdfBase64(
+                    const base64 = await fetchPdfAsBase64(
                         baseUrl,
                         `/api/discharge/${admission.admission_id}/pdf`,
                         apiKey
@@ -186,7 +185,7 @@ export async function getVisitDocuments(
                 });
 
                 for (const invoice of invoices) {
-                    const base64 = await generatePdfBase64(
+                    const base64 = await fetchPdfAsBase64(
                         baseUrl,
                         `/api/invoice/${invoice.id}/pdf`,
                         apiKey
