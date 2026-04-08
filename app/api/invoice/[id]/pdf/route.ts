@@ -78,14 +78,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
         const html = generateInvoiceHTML(invoice, org)
 
-        // If accessed via API key (Zealthix), return the URL to view the invoice HTML
-        if (isApiKeyAuth) {
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
-            const invoiceUrl = `${baseUrl}/api/invoice/${id}/pdf`;
-            return NextResponse.json({ url: invoiceUrl, invoiceNumber: invoice.invoice_number });
-        }
-
-        // Otherwise return HTML for browser viewing
+        // Return HTML for browser viewing (works for both API key and regular auth)
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' }
         })

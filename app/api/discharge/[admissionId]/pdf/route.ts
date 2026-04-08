@@ -257,14 +257,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 </body>
 </html>`
 
-        // If accessed via API key (Zealthix), return the URL to view the discharge HTML
-        if (isApiKeyAuth) {
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
-            const dischargeUrl = `${baseUrl}/api/discharge/${admissionId}/pdf`;
-            return NextResponse.json({ url: dischargeUrl, admissionId });
-        }
-
-        // Otherwise return HTML for browser viewing
+        // Return HTML for browser viewing (works for both API key and regular auth)
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' }
         })

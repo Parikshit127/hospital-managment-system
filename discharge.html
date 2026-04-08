@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Discharge Summary - parikshit</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; background: #fff; font-size: 12px; }
+        @media print { body { margin: 0; } .no-print { display: none !important; } }
+        .section { margin-bottom: 16px; }
+        .section-title { font-size: 10px; font-weight: 800; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #f3f4f6; font-size: 11px; }
+        th { font-weight: 700; color: #6b7280; background: #f9fafb; font-size: 10px; text-transform: uppercase; }
+    </style>
+</head>
+<body>
+    <div class="no-print" style="background:#f3f4f6;padding:12px;text-align:center;">
+        <button onclick="window.print()" style="padding:8px 24px;background:#7c3aed;color:white;border:none;border-radius:6px;font-weight:bold;cursor:pointer;font-size:14px;">
+            Print / Download PDF
+        </button>
+    </div>
+
+    <div style="max-width:800px;margin:0 auto;padding:40px;">
+        <!-- Header -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;border-bottom:3px solid #7c3aed;padding-bottom:16px;">
+            <div>
+                <h1 style="font-size:22px;font-weight:900;color:#7c3aed;margin-bottom:2px;">Avani Hospital</h1>
+                <p style="font-size:10px;color:#6b7280;">Healthcare Excellence &bull; NABH Accredited</p>
+            </div>
+            <div style="text-align:right;">
+                <h2 style="font-size:18px;font-weight:800;color:#1f2937;">DISCHARGE SUMMARY</h2>
+                <p style="font-size:11px;color:#6b7280;">Admission: IPD-20260402-7929</p>
+            </div>
+        </div>
+
+        <!-- Patient Demographics -->
+        <div class="section">
+            <p class="section-title">Patient Details</p>
+            <div style="background:#f9fafb;border-radius:8px;padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                <p><strong>Name:</strong> parikshit</p>
+                <p><strong>Patient ID:</strong> AVN-2026-00043</p>
+                <p><strong>Age / Gender:</strong> 21 / Male</p>
+                <p><strong>Phone:</strong> 8569942414</p>
+                <p><strong>Ward:</strong> General Ward</p>
+                <p><strong>Bed:</strong> GEN-10</p>
+            </div>
+        </div>
+
+        <!-- Admission/Discharge Dates -->
+        <div class="section">
+            <p class="section-title">Admission Details</p>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+                <p><strong>Admitted:</strong> 02 Apr 2026</p>
+                <p><strong>Discharged:</strong> N/A</p>
+                <p><strong>Length of Stay:</strong> 7 day(s)</p>
+            </div>
+            <p style="margin-top:6px;"><strong>Diagnosis:</strong> injury </p>
+            <p><strong>Attending Doctor:</strong> dr. shah</p>
+        </div>
+
+        
+
+        
+
+        
+        <!-- Lab Results -->
+        <div class="section">
+            <p class="section-title">Laboratory Results</p>
+            <table>
+                <thead><tr><th>Test</th><th>Result</th><th>Status</th><th>Date</th></tr></thead>
+                <tbody>
+                    
+                        <tr>
+                            <td>Complete Blood Count (CBC)</td>
+                            <td>Pending</td>
+                            <td>Completed</td>
+                            <td>7/4/2026</td>
+                        </tr>
+                    
+                </tbody>
+            </table>
+        </div>
+
+        
+        <!-- AI/Manual Summary -->
+        <div class="section">
+            <p class="section-title">Discharge Summary Notes</p>
+            <div style="background:#f9fafb;border-radius:6px;padding:12px;font-size:12px;line-height:1.6;">
+                Patient admitted with respiratory symptoms. Treated successfully with antibiotics and supportive care. Discharged in stable condition with follow-up instructions. Final diagnosis: Acute respiratory infection, resolved.
+            </div>
+        </div>
+
+        <!-- Follow-up -->
+        <div class="section">
+            <p class="section-title">Follow-up Instructions</p>
+            <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:12px;font-size:11px;">
+                <p>1. Follow up with attending doctor within 7 days of discharge.</p>
+                <p>2. Continue prescribed medications as directed.</p>
+                <p>3. In case of emergency, visit the hospital emergency department immediately.</p>
+                <p>4. Bring this discharge summary for all follow-up visits.</p>
+            </div>
+        </div>
+
+        <!-- Signature -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:40px;padding-top:20px;border-top:1px solid #e5e7eb;">
+            <div>
+                <div style="border-bottom:1px solid #1f2937;width:200px;margin-bottom:4px;height:40px;"></div>
+                <p style="font-size:11px;font-weight:700;">Attending Physician</p>
+                <p style="font-size:10px;color:#6b7280;">dr. shah</p>
+            </div>
+            <div style="text-align:right;">
+                <div style="border-bottom:1px solid #1f2937;width:200px;margin-bottom:4px;margin-left:auto;height:40px;"></div>
+                <p style="font-size:11px;font-weight:700;">Medical Superintendent</p>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="border-top:1px solid #e5e7eb;padding-top:12px;margin-top:30px;text-align:center;">
+            <p style="font-size:9px;color:#9ca3af;">This is a computer-generated document. &bull; Avani Hospital &bull; For queries contact reception</p>
+        </div>
+    </div>
+</body>
+</html>
