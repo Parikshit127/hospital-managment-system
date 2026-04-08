@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { validateZealthixApiKey } from '@/app/lib/zealthix/auth'
-import { convertHtmlToPdf } from '@/app/lib/pdf-generator'
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager'];
 
@@ -79,15 +78,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
         const html = generateInvoiceHTML(invoice, org)
 
-        // If accessed via API key (Zealthix), return actual PDF
+        // If accessed via API key (Zealthix), return the URL to view the invoice HTML
         if (isApiKeyAuth) {
-            const pdfBuffer = await convertHtmlToPdf(html);
-            return new Response(new Uint8Array(pdfBuffer), {
-                headers: {
-                    'Content-Type': 'application/pdf',
-                    'Content-Disposition': `inline; filename="invoice-${invoice.invoice_number}.pdf"`
-                }
-            });
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+            const invoiceUrl = `${baseUrl}/api/invoice/${id}/pdf`;
+            return NextResponse.json({ url: invoiceUrl, invoiceNumber: invoice.invoice_number });
         }
 
         // Otherwise return HTML for browser viewing

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { validateZealthixApiKey } from '@/app/lib/zealthix/auth'
-import { convertHtmlToPdf } from '@/app/lib/pdf-generator'
 
 const ALLOWED_STAFF_ROLES = ['admin', 'doctor', 'ipd_manager', 'nurse', 'finance'];
 
@@ -258,15 +257,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 </body>
 </html>`
 
-        // If accessed via API key (Zealthix), return actual PDF
+        // If accessed via API key (Zealthix), return the URL to view the discharge HTML
         if (isApiKeyAuth) {
-            const pdfBuffer = await convertHtmlToPdf(html);
-            return new Response(new Uint8Array(pdfBuffer), {
-                headers: {
-                    'Content-Type': 'application/pdf',
-                    'Content-Disposition': `inline; filename="discharge-${admissionId}.pdf"`
-                }
-            });
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+            const dischargeUrl = `${baseUrl}/api/discharge/${admissionId}/pdf`;
+            return NextResponse.json({ url: dischargeUrl, admissionId });
         }
 
         // Otherwise return HTML for browser viewing
