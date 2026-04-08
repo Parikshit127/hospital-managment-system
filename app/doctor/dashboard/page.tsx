@@ -56,6 +56,7 @@ import {
 import { Sidebar } from "@/app/components/layout/Sidebar";
 import SOAPAssistant from "@/app/doctor/components/SOAPAssistant";
 import { Video } from "lucide-react";
+import IPDJourneyTab from "@/app/admin/patients/[patientId]/tabs/IPDJourneyTab";
 
 export default function DoctorDashboard() {
   // ─── SESSION STATE ───
@@ -99,6 +100,7 @@ export default function DoctorDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [history, setHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [ipdAdmissions, setIpdAdmissions] = useState<any[]>([]);
   const [labOrders, setLabOrders] = useState<any[]>([]);
   const [loadingLabs, setLoadingLabs] = useState(false);
   const [showAdmitModal, setShowAdmitModal] = useState(false);
@@ -297,6 +299,9 @@ export default function DoctorDashboard() {
         setLoadingHistory(true);
         const res = await getPatientHistory(activePatient!.patient_id);
         if (res.success) setHistory(res.data as any);
+        const { getAdminPatientFullDetails } = await import("@/app/actions/admin-actions");
+        const admRes = await getAdminPatientFullDetails(activePatient!.patient_id);
+        if (admRes.success) setIpdAdmissions(admRes.data?.admissions || []);
         setLoadingHistory(false);
       }
       loadHistory();
@@ -2031,6 +2036,14 @@ export default function DoctorDashboard() {
                             </div>
                           );
                         })}
+                      </div>
+                    )}
+                    {ipdAdmissions.length > 0 && (
+                      <div className="mt-6">
+                        <h3 className="font-black text-gray-700 mb-4 flex items-center gap-2 text-lg">
+                          <Stethoscope className="h-5 w-5 text-rose-400" /> IPD Journey
+                        </h3>
+                        <IPDJourneyTab admissions={ipdAdmissions} />
                       </div>
                     )}
                   </div>

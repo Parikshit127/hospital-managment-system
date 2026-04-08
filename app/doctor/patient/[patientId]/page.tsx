@@ -23,6 +23,7 @@ import {
 import Link from "next/link";
 import { Sidebar } from "@/app/components/layout/Sidebar";
 import { getPatientTimeline } from "@/app/actions/doctor-actions";
+import IPDJourneyTab from "@/app/admin/patients/[patientId]/tabs/IPDJourneyTab";
 
 type SessionType = {
   id: string;
@@ -76,6 +77,7 @@ export default function DoctorPatientDetailsPage() {
   const patient = timelineData?.patient;
   const timeline: any[] = timelineData?.timeline || [];
   const vitals: any[] = timelineData?.vitals || [];
+  const ipdAdmissions: any[] = timelineData?.admissions || [];
 
   const appointments = useMemo(
     () => timeline.filter((t) => t.type === "appointment"),
@@ -635,6 +637,15 @@ export default function DoctorPatientDetailsPage() {
                   </div>
                 )}
               </div>
+
+              {ipdAdmissions.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                  <h2 className="font-black text-gray-800 text-lg mb-4 flex items-center gap-2">
+                    <Stethoscope className="h-5 w-5 text-rose-600" /> IPD Journey
+                  </h2>
+                  <IPDJourneyTab admissions={ipdAdmissions} />
+                </div>
+              )}
             </>
           )}
         </div>

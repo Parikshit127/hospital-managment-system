@@ -860,7 +860,16 @@ export async function getPatientTimeline(patientId: string) {
       db.admissions.findMany({
         where: { patient_id: patientId },
         orderBy: { admission_date: "desc" },
-        include: { medical_notes: true },
+        include: {
+          bed: { include: { wards: true } },
+          ward: true,
+          medical_notes: { orderBy: { created_at: "desc" } },
+          summaries: { orderBy: { created_at: "desc" } },
+          bed_transfers: { orderBy: { created_at: "desc" } },
+          diet_plans: { orderBy: { created_at: "desc" } },
+          ward_rounds: { orderBy: { created_at: "desc" } },
+          nursing_tasks: { orderBy: { scheduled_at: "desc" } },
+        },
       }),
       db.vital_signs.findMany({
         where: { patient_id: patientId },
@@ -966,7 +975,7 @@ export async function getPatientTimeline(patientId: string) {
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
 
-    return { success: true, data: { patient, timeline, vitals } };
+    return { success: true, data: { patient, timeline, vitals, admissions } };
   } catch (error) {
     console.error("Patient Timeline Error:", error);
     return { success: false, data: null };
