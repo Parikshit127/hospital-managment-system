@@ -5,55 +5,17 @@ interface ZealthixDocument {
     title: string;
     contentType: string;
     attachmentType: string;
-    base64: string;
+    url: string;
 }
 
 /**
- * Fetch a URL and convert to base64
- */
-async function fetchAsBase64(url: string): Promise<string> {
-    try {
-        const response = await fetch(url);
-        if (!response.ok) return '';
-        const buffer = await response.arrayBuffer();
-        return Buffer.from(buffer).toString('base64');
-    } catch {
-        return '';
-    }
-}
-
-/**
- * Fetch PDF from internal route and convert to base64
- */
-async function fetchPdfAsBase64(
-    baseUrl: string,
-    path: string,
-    apiKey: string
-): Promise<string> {
-    try {
-        const url = new URL(path, baseUrl);
-        const response = await fetch(url.toString(), {
-            headers: {
-                'X-Api-Key': apiKey,
-            },
-        });
-        if (!response.ok) return '';
-        const buffer = await response.arrayBuffer();
-        return Buffer.from(buffer).toString('base64');
-    } catch {
-        return '';
-    }
-}
-
-/**
- * Get all documents for a visit as base64 encoded PDFs for Zealthix
+ * Get all documents for a visit as URLs for Zealthix
  */
 export async function getVisitDocuments(
     visitId: string,
     visitType: string,
     organizationId: string,
-    baseUrl: string,
-    apiKey: string
+    baseUrl: string
 ): Promise<ZealthixDocument[]> {
     const documents: ZealthixDocument[] = [];
 
@@ -71,66 +33,46 @@ export async function getVisitDocuments(
             if (admission) {
                 // Invoice PDFs
                 for (const invoice of admission.invoices || []) {
-                    const base64 = await fetchPdfAsBase64(
-                        baseUrl,
-                        `/api/invoice/${invoice.id}/pdf`,
-                        apiKey
-                    );
-                    if (base64) {
-                        documents.push({
-                            id: `INV-${invoice.id}`,
-                            title: `Invoice ${invoice.invoice_number}`,
-                            contentType: 'application/pdf',
-                            attachmentType: 'Bill',
-                            base64,
-                        });
-                    }
+                    documents.push({
+                        id: `INV-${invoice.id}`,
+                        title: `Invoice ${invoice.invoice_number}`,
+                        contentType: 'application/pdf',
+                        attachmentType: 'Bill',
+                        url: `${baseUrl}/api/invoice/${invoice.id}/pdf`,
+                    });
                 }
 
                 // Discharge summary PDF
                 if (admission.summaries && admission.summaries.length > 0) {
-                    const base64 = await fetchPdfAsBase64(
-                        baseUrl,
-                        `/api/discharge/${admission.admission_id}/pdf`,
-                        apiKey
-                    );
-                    if (base64) {
-                        documents.push({
-                            id: `DS-${admission.admission_id}`,
-                            title: 'Discharge Summary',
-                            contentType: 'application/pdf',
-                            attachmentType: 'DischargeSummary',
-                            base64,
-                        });
-                    }
+                    documents.push({
+                        id: `DS-${admission.admission_id}`,
+                        title: 'Discharge Summary',
+                        contentType: 'application/pdf',
+                        attachmentType: 'DischargeSummary',
+                        url: `${baseUrl}/api/discharge/${admission.admission_id}/pdf`,
+                    });
                 }
 
                 // Consent signature if available
                 if (admission.consent_signature_url) {
-                    const base64 = await fetchAsBase64(admission.consent_signature_url);
-                    if (base64) {
-                        documents.push({
-                            id: `CONSENT-${admission.admission_id}`,
-                            title: 'Patient Consent',
-                            contentType: 'image/png',
-                            attachmentType: 'Consent',
-                            base64,
-                        });
-                    }
+                    documents.push({
+                        id: `CONSENT-${admission.admission_id}`,
+                        title: 'Patient Consent',
+                        contentType: 'image/png',
+                        attachmentType: 'Consent',
+                        url: admission.consent_signature_url,
+                    });
                 }
 
                 // ID cards if available
                 if (admission.id_cards_url) {
-                    const base64 = await fetchAsBase64(admission.id_cards_url);
-                    if (base64) {
-                        documents.push({
-                            id: `ID-${admission.admission_id}`,
-                            title: 'ID Card',
-                            contentType: 'image/jpeg',
-                            attachmentType: 'Other',
-                            base64,
-                        });
-                    }
+                    documents.push({
+                        id: `ID-${admission.admission_id}`,
+                        title: 'ID Card',
+                        contentType: 'image/jpeg',
+                        attachmentType: 'Other',
+                        url: admission.id_cards_url,
+                    });
                 }
 
                 // Lab reports for this patient during admission
@@ -152,16 +94,13 @@ export async function getVisitDocuments(
 
                 for (const lab of labOrders) {
                     if (lab.report_url) {
-                        const base64 = await fetchAsBase64(lab.report_url);
-                        if (base64) {
-                            documents.push({
-                                id: `LAB-${lab.id}`,
-                                title: `Lab Report - ${lab.test_type}`,
-                                contentType: 'application/pdf',
-                                attachmentType: 'Investigation',
-                                base64,
-                            });
-                        }
+                        documents.push({
+                            id: `LAB-${lab.id}`,
+                            title: `Lab Report - ${lab.test_type}`,
+                            contentType: 'application/pdf',
+                            attachmentType: 'Investigation',
+                            url: lab.report_url,
+                        });
                     }
                 }
             }
@@ -185,20 +124,13 @@ export async function getVisitDocuments(
                 });
 
                 for (const invoice of invoices) {
-                    const base64 = await fetchPdfAsBase64(
-                        baseUrl,
-                        `/api/invoice/${invoice.id}/pdf`,
-                        apiKey
-                    );
-                    if (base64) {
-                        documents.push({
-                            id: `INV-${invoice.id}`,
-                            title: `OP Bill - ${invoice.invoice_number}`,
-                            contentType: 'application/pdf',
-                            attachmentType: 'Bill',
-                            base64,
-                        });
-                    }
+                    documents.push({
+                        id: `INV-${invoice.id}`,
+                        title: `OP Bill - ${invoice.invoice_number}`,
+                        contentType: 'application/pdf',
+                        attachmentType: 'Bill',
+                        url: `${baseUrl}/api/invoice/${invoice.id}/pdf`,
+                    });
                 }
             }
         }

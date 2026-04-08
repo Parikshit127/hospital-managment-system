@@ -25,20 +25,16 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Determine the base URL for internal PDF generation
+        // Determine the base URL for document URLs
         const protocol = request.headers.get('x-forwarded-proto') || 'https';
         const host = request.headers.get('host') || 'localhost:3000';
         const baseUrl = `${protocol}://${host}`;
-
-        // Get the API key from the request header
-        const apiKey = request.headers.get('X-Api-Key') || '';
 
         const documents = await getVisitDocuments(
             visitId,
             visitType || 'INPATIENT',
             organizationId,
-            baseUrl,
-            apiKey
+            baseUrl
         );
 
         await logZealthixApiCall(organizationId, apiKeyId, '/claim/visit/documents', body, 200);

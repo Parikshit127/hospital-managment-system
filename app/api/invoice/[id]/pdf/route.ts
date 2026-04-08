@@ -16,10 +16,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         if (apiKeyHeader) {
             // Zealthix API authentication
             const zealthixAuth = await validateZealthixApiKey(req);
-            if (!(zealthixAuth instanceof NextResponse)) {
-                organizationId = zealthixAuth.organizationId;
-                isApiKeyAuth = true;
+            if (zealthixAuth instanceof NextResponse) {
+                // API key provided but invalid - return error
+                return zealthixAuth;
             }
+            organizationId = zealthixAuth.organizationId;
+            isApiKeyAuth = true;
         }
 
         // If not API key auth, use regular authentication
