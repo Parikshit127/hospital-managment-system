@@ -2,15 +2,5 @@
     "framework": "nextjs",
     "buildCommand": "npx prisma generate && npx prisma db push --accept-data-loss && next build",
     "installCommand": "npm ci",
-    "regions": ["bom1"],
-    "functions": {
-        "app/api/invoice/[id]/pdf/route.ts": {
-            "maxDuration": 60,
-            "memory": 3008
-        },
-        "app/api/discharge/[admissionId]/pdf/route.ts": {
-            "maxDuration": 60,
-            "memory": 3008
-        }
-    }
+    "regions": ["bom1"]
 }
