@@ -20,4 +20,15 @@ ALTER TABLE "pharmacy_batch_inventory"
     ADD COLUMN IF NOT EXISTS "cost_price" DOUBLE PRECISION,
     ADD COLUMN IF NOT EXISTS "supplier_name" TEXT;
 
+-- Backfill legacy rows where new pricing fields are still at their default 0.
+UPDATE pharmacy_medicine_master
+SET
+  selling_price = price_per_unit,
+  mrp = price_per_unit,
+  purchase_price = price_per_unit * 0.8,
+  gst_percent = COALESCE(tax_rate, 0)
+WHERE selling_price = 0
+  AND mrp = 0
+  AND purchase_price = 0;
+
 COMMIT;
