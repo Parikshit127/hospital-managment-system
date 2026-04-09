@@ -1,0 +1,10 @@
+import { AppShell } from '@/app/components/layout/AppShell';
+import { BillingMasterDashboard } from '@/app/components/finance/BillingMasterDashboard';
+
+export default async function ReceptionMasterBillingPage() {
+    return (
+        <AppShell>
+            <BillingMasterDashboard role="reception" />
+        </AppShell>
+    );
+}

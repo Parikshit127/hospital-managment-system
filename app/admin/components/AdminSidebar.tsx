@@ -30,6 +30,7 @@ const NAV_SECTIONS = [
             { label: 'Lab', href: '/admin/lab', icon: FlaskConical },
             { label: 'Pharmacy', href: '/admin/pharmacy', icon: Pill },
             { label: 'Finance', href: '/admin/finance', icon: DollarSign },
+            { label: 'Master Billing', href: '/admin/billing', icon: FileText },
             { label: 'HR', href: '/admin/hr', icon: Briefcase },
         ],
     },
