@@ -47,6 +47,14 @@ function optNum(v: unknown): number | undefined {
   return isNaN(n) ? undefined : n;
 }
 
+function parseBool(v: unknown): boolean {
+  if (v === undefined || v === null || String(v).trim() === '') return true; // default active
+  const s = String(v).toLowerCase().trim();
+  if (s === 'true' || s === 'yes' || s === '1') return true;
+  if (s === 'false' || s === 'no' || s === '0') return false;
+  return true; // unrecognised — default to true, do not error (admin data, lenient)
+}
+
 // ---- per-type validators ----
 
 export interface DoctorRow {
@@ -54,7 +62,7 @@ export interface DoctorRow {
   doctor_registration_no?: string; qualifications?: string;
   email?: string; phone?: string;
   consultation_fee: number; follow_up_fee: number;
-  working_hours: string; slot_duration: number; is_active: boolean;
+  working_hours: string; slot_duration?: number; is_active: boolean;
 }
 
 export interface ServiceRow {
@@ -73,7 +81,7 @@ export interface LabTestRow {
 export interface PackageRow {
   package_code: string; package_name: string;
   description?: string; total_amount: number;
-  validity_days: number; exclusions?: string; is_active: boolean;
+  validity_days?: number; exclusions?: string; is_active: boolean;
 }
 
 export interface MedicineRow {
@@ -84,7 +92,7 @@ export interface MedicineRow {
   hsn_sac_code?: string; is_active: boolean;
 }
 
-const SERVICE_CATEGORIES = ['OPD Consultation', 'ICU', 'Procedure', 'Room', 'Nursing', 'Diet', 'Consumable', 'Misc'];
+export const SERVICE_CATEGORIES = ['OPD Consultation', 'ICU', 'Procedure', 'Room', 'Nursing', 'Diet', 'Consumable', 'Misc'] as const;
 
 export function validateDoctorRows(rows: Record<string, unknown>[]): ValidateResult<DoctorRow> {
   const valid: DoctorRow[] = [];
@@ -114,7 +122,7 @@ export function validateDoctorRows(rows: Record<string, unknown>[]): ValidateRes
       follow_up_fee: ffRaw as number,
       working_hours: str(r.working_hours) || '09:00-17:00',
       slot_duration: Math.round(sdRaw as number) || 20,
-      is_active: r.is_active !== undefined ? toBool(r.is_active) : true,
+      is_active: parseBool(r.is_active),
     });
   }
   return { valid, errors };
@@ -143,7 +151,7 @@ export function validateServiceRows(rows: Record<string, unknown>[]): ValidateRe
       default_rate: drRaw as number,
       hsn_sac_code: optStr(r.hsn_sac_code),
       tax_rate: optNum(r.tax_rate) ?? 0,
-      is_active: r.is_active !== undefined ? toBool(r.is_active) : true,
+      is_active: parseBool(r.is_active),
     });
   }
   return { valid, errors };
@@ -166,7 +174,7 @@ export function validateLabTestRows(rows: Record<string, unknown>[]): ValidateRe
       normal_range_min: optNum(r.normal_range_min), normal_range_max: optNum(r.normal_range_max),
       hsn_sac_code: optStr(r.hsn_sac_code),
       tax_rate: optNum(r.tax_rate) ?? 0,
-      is_available: r.is_available !== undefined ? toBool(r.is_available) : true,
+      is_available: parseBool(r.is_available),
     });
   }
   return { valid, errors };
@@ -192,7 +200,7 @@ export function validatePackageRows(rows: Record<string, unknown>[]): ValidateRe
       total_amount: taRaw as number,
       validity_days: Math.max(1, Math.round(vdRaw as number)),
       exclusions: optStr(r.exclusions),
-      is_active: r.is_active !== undefined ? toBool(r.is_active) : true,
+      is_active: parseBool(r.is_active),
     });
   }
   return { valid, errors };
@@ -221,7 +229,7 @@ export function validateMedicineRows(rows: Record<string, unknown>[]): ValidateR
       gst_percent: optNum(r.gst_percent) ?? 0,
       min_threshold: Math.round(optNum(r.min_threshold) ?? 10),
       hsn_sac_code: optStr(r.hsn_sac_code),
-      is_active: r.is_active !== undefined ? toBool(r.is_active) : true,
+      is_active: parseBool(r.is_active),
     });
   }
   return { valid, errors };
