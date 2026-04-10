@@ -12,11 +12,11 @@ const IMPORT_TYPES: { value: ImportType; label: string; icon: React.ElementType;
     { value: 'lab_results', label: 'Lab Results', icon: FlaskConical, description: 'Laboratory test orders and results' },
     { value: 'pharmacy', label: 'Pharmacy Inventory', icon: Pill, description: 'Medicine catalog and batch inventory' },
     { value: 'appointments', label: 'Appointments', icon: CalendarDays, description: 'Historical appointment records' },
-    { value: 'doctor_master' as ImportType, label: 'Doctor Master', icon: Database, description: 'Bulk import doctors with fees and specialization' },
-    { value: 'service_master' as ImportType, label: 'Service Master', icon: Database, description: 'Bulk import services (ICU, procedures, nursing)' },
-    { value: 'lab_test_master' as ImportType, label: 'Lab Test Master', icon: Database, description: 'Bulk import lab test catalog with prices' },
-    { value: 'package_master' as ImportType, label: 'Package Master', icon: Database, description: 'Bulk import treatment packages' },
-    { value: 'medicine_master' as ImportType, label: 'Medicine Master', icon: Database, description: 'Bulk import medicine catalog with pricing' },
+    { value: 'doctor_master', label: 'Doctor Master', icon: Database, description: 'Bulk import doctors with fees and specialization' },
+    { value: 'service_master', label: 'Service Master', icon: Database, description: 'Bulk import services (ICU, procedures, nursing)' },
+    { value: 'lab_test_master', label: 'Lab Test Master', icon: Database, description: 'Bulk import lab test catalog with prices' },
+    { value: 'package_master', label: 'Package Master', icon: Database, description: 'Bulk import treatment packages' },
+    { value: 'medicine_master', label: 'Medicine Master', icon: Database, description: 'Bulk import medicine catalog with pricing' },
 ];
 
 interface Props {

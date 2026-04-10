@@ -85,7 +85,7 @@ const doctorMasterColumns: ImportColumn[] = [
     { name: 'doctor_registration_no', required: false, type: 'string', description: 'Medical council registration number', example: 'MH-12345' },
     { name: 'qualifications', required: false, type: 'string', description: 'Degrees and qualifications', example: 'MBBS, MD' },
     { name: 'email', required: false, type: 'email', description: 'Email address', example: 'priya@hospital.com' },
-    { name: 'phone', required: false, type: 'string', description: 'Phone number', example: '9876543210' },
+    { name: 'phone', required: false, type: 'phone', description: 'Phone number', example: '9876543210' },
     { name: 'consultation_fee', required: true, type: 'number', description: 'Consultation fee (INR)', example: '500' },
     { name: 'follow_up_fee', required: true, type: 'number', description: 'Follow-up fee (INR)', example: '300' },
     { name: 'working_hours', required: false, type: 'string', description: 'Working hours range', example: '09:00-17:00' },
