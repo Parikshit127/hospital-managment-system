@@ -36,10 +36,10 @@ export async function getAvailableServicesList() {
     try {
         const { db, organizationId } = await requireTenantContext();
 
-        // 1. Doctors (First Visit Fee)
+        // 1. Doctors (Consultation + Follow-up)
         const dbDoctors = await db.user.findMany({
             where: { role: "doctor", organizationId },
-            select: { id: true, name: true, specialty: true, consultation_fee: true }
+            select: { id: true, name: true, specialty: true, consultation_fee: true, follow_up_fee: true }
         });
 
         // 2. Checkups
@@ -54,14 +54,25 @@ export async function getAvailableServicesList() {
             select: { id: true, brand_name: true, price_per_unit: true }
         });
 
-        const services: { label: string; price: number; type: string }[] = [];
+        const services: { label: string; price: number; type: string; doctor_id?: string; fee_type?: string }[] = [];
 
         dbDoctors.forEach((doc: any) => {
             if (doc.consultation_fee) {
                 services.push({
                     label: `Consultation - Dr. ${doc.name} (${doc.specialty || "Gen"})`,
                     price: Number(doc.consultation_fee),
-                    type: "Doctors"
+                    type: "Doctors",
+                    doctor_id: doc.id,
+                    fee_type: "consultation",
+                });
+            }
+            if (doc.follow_up_fee) {
+                services.push({
+                    label: `Follow-up - Dr. ${doc.name} (${doc.specialty || "Gen"})`,
+                    price: Number(doc.follow_up_fee),
+                    type: "Doctors",
+                    doctor_id: doc.id,
+                    fee_type: "follow_up",
                 });
             }
         });

@@ -15,7 +15,8 @@ type InventoryItem = {
     medicine_id?: number;
     expiry_date: Date;
     stock_count: number;
-    unit_price: number;
+    unit_price: number;  // selling_price
+    mrp: number;         // MRP from master
 };
 
 type CartItem = InventoryItem & { quantity: number };
@@ -60,7 +61,8 @@ export default function PharmacyPage() {
                 medicine_id: item.medicine_id,
                 expiry_date: item.expiry_date,
                 stock_count: item.current_stock,
-                unit_price: item.medicine?.price_per_unit || 0
+                unit_price: Number(item.medicine?.selling_price) || Number(item.medicine?.price_per_unit) || 0,
+                mrp: Number(item.medicine?.mrp) || Number(item.medicine?.price_per_unit) || 0
             }));
             setInventory(mappedData);
         }
@@ -316,7 +318,14 @@ export default function PharmacyPage() {
                                                     {item.stock_count}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-5 font-bold text-teal-400">₹{item.unit_price}</td>
+                                            <td className="px-6 py-5">
+                                                <div className="flex flex-col">
+                                                    <span className="font-bold text-teal-400">₹{item.unit_price}</span>
+                                                    {item.mrp > item.unit_price && (
+                                                        <span className="line-through text-gray-400 text-xs">MRP ₹{item.mrp}</span>
+                                                    )}
+                                                </div>
+                                            </td>
                                             <td className="px-6 py-5 text-right">
                                                 <button
                                                     onClick={() => addToCart(item)}
@@ -361,7 +370,12 @@ export default function PharmacyPage() {
                             <div key={item.batch_id} className="p-4 bg-gray-50 rounded-2xl border border-gray-200 flex justify-between items-center group hover:border-teal-500/20 transition-colors">
                                 <div>
                                     <h4 className="text-sm font-bold text-gray-700">{item.medicine_name}</h4>
-                                    <p className="text-xs text-gray-400 font-medium mt-0.5">₹{item.unit_price} x {item.quantity} units</p>
+                                    <p className="text-xs text-gray-400 font-medium mt-0.5">
+                                        {item.mrp > item.unit_price && (
+                                            <span className="line-through mr-1">₹{item.mrp}</span>
+                                        )}
+                                        ₹{item.unit_price} x {item.quantity} units
+                                    </p>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <div className="flex items-center bg-gray-100 rounded-lg border border-gray-200 p-1">

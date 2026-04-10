@@ -43,12 +43,15 @@ export async function generateInvoice(patientId: string, items: any[]) {
                     data: { current_stock: { decrement: item.quantity } }
                 });
 
-                const cost = batch.medicine.price_per_unit * item.quantity;
+                const unitPrice = Number(batch.medicine.selling_price) || Number(batch.medicine.price_per_unit) || 0;
+                const cost = unitPrice * item.quantity;
                 total += cost;
                 invoiceItems.push({
                     medicine_name: batch.medicine.brand_name,
                     qty: item.quantity,
                     price: cost,
+                    unit_price: unitPrice,
+                    mrp: Number(batch.medicine.mrp) || Number(batch.medicine.price_per_unit) || 0,
                     batch_no: item.batch_no
                 });
             }

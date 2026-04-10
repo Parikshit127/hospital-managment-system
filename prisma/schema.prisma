@@ -343,6 +343,7 @@ model User {
   phone            String?
   assigned_ward_id       Int?
   doctor_registration_no String?
+  qualifications         String?
   organizationId         String
   is_active        Boolean  @default(true)
   working_hours    String   @default("09:00-17:00")
@@ -565,10 +566,20 @@ model pharmacy_medicine_master {
   generic_name   String?
   category       String?
   manufacturer   String?
+  // legacy field retained for backward compat; mirrors selling_price
   price_per_unit Float
+  // NEW pricing fields
+  mrp            Float   @default(0)
+  purchase_price Float   @default(0)
+  selling_price  Float   @default(0)
+  gst_percent    Float   @default(0)
+  // formulation metadata
+  strength       String?
+  form           String? // tablet, syrup, injection, etc.
   min_threshold  Int     @default(10)
   hsn_sac_code   String?
-  tax_rate       Float?  @default(0)
+  tax_rate       Float?  @default(0) // keep for existing GST calc — sync with gst_percent on save
+  is_active      Boolean @default(true)
   organizationId String
 
   organization Organization             @relation(fields: [organizationId], references: [id])
@@ -578,12 +589,15 @@ model pharmacy_medicine_master {
 }
 
 model pharmacy_batch_inventory {
-  id            Int      @id @default(autoincrement())
-  medicine_id   Int
-  batch_no      String   @unique
-  current_stock Int
-  expiry_date   DateTime
-  rack_location String?
+  id               Int       @id @default(autoincrement())
+  medicine_id      Int
+  batch_no         String    @unique
+  current_stock    Int
+  manufacture_date DateTime?
+  expiry_date      DateTime
+  cost_price       Float? // purchase price at the time this batch was received
+  rack_location    String?
+  supplier_name    String?
 
   medicine pharmacy_medicine_master @relation(fields: [medicine_id], references: [id])
 }

@@ -25,10 +25,10 @@ export default function GenerateReceiptPage() {
 
     const [isSaving, setIsSaving] = useState(false);
 
-    const [items, setItems] = useState([{ id: 1, description: "", amount: "", quantity: "1" }]);
+    const [items, setItems] = useState([{ id: 1, description: "", amount: "", quantity: "1", isLocked: false }]);
     const [paymentMethod, setPaymentMethod] = useState("Cash");
 
-    const [availableServices, setAvailableServices] = useState<{ label: string, price: number, type: string }[]>([]);
+    const [availableServices, setAvailableServices] = useState<{ label: string, price: number, type: string, doctor_id?: string, fee_type?: string }[]>([]);
 
     useEffect(() => {
         getAvailableServicesList().then(res => {
@@ -57,7 +57,7 @@ export default function GenerateReceiptPage() {
     };
 
     const handleAddItem = () => {
-        setItems([...items, { id: Date.now(), description: "", amount: "", quantity: "1" }]);
+        setItems([...items, { id: Date.now(), description: "", amount: "", quantity: "1", isLocked: false }]);
     };
 
     const handleRemoveItem = (id: number) => {
@@ -78,6 +78,9 @@ export default function GenerateReceiptPage() {
             const match = availableServices.find(s => s.label === value);
             if (match) {
                 newItems[itemIdx].amount = match.price.toString();
+                newItems[itemIdx].isLocked = match.type === 'Doctors';
+            } else {
+                newItems[itemIdx].isLocked = false;
             }
         }
 
@@ -267,9 +270,10 @@ export default function GenerateReceiptPage() {
                                         <input
                                             type="number"
                                             value={item.amount}
-                                            onChange={(e) => handleItemChange(item.id, 'amount', e.target.value)}
+                                            onChange={(e) => !item.isLocked && handleItemChange(item.id, 'amount', e.target.value)}
+                                            readOnly={item.isLocked}
                                             placeholder="0.00"
-                                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 focus:bg-white rounded-xl text-sm focus:border-emerald-500 outline-none text-right font-mono transition-colors print:border-0 print:bg-white print:px-0"
+                                            className={`w-full px-4 py-2.5 border rounded-xl text-sm outline-none text-right font-mono transition-colors print:border-0 print:bg-white print:px-0 ${item.isLocked ? 'bg-gray-50 text-gray-600 cursor-not-allowed border-gray-200' : 'bg-gray-50 border-gray-200 focus:bg-white focus:border-emerald-500'}`}
                                         />
                                     </div>
                                     <button

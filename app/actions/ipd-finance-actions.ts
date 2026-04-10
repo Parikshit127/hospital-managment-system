@@ -168,6 +168,7 @@ export async function postChargeToIpdBill(data: {
     admission_id: string;
     source_module: string;
     source_ref_id?: string;
+    service_id?: string;
     description: string;
     quantity: number;
     unit_price: number;
@@ -179,6 +180,22 @@ export async function postChargeToIpdBill(data: {
 }) {
     try {
         const { db, session, organizationId } = await requireTenantContext();
+
+        // Look up master service if service_id provided
+        let masterService: any = null;
+        if (data.service_id) {
+            masterService = await db.ipdServiceMaster.findFirst({
+                where: { id: parseInt(data.service_id) },
+            });
+        }
+
+        // Use master values when available, else fall back to client-provided values
+        const description = masterService ? masterService.service_name : data.description;
+        const unitPrice = masterService ? Number(masterService.default_rate) : data.unit_price;
+        const taxRate = masterService ? Number(masterService.tax_rate || 0) : (data.tax_rate || 0);
+        const serviceCategory = masterService ? masterService.service_category : (data.service_category || null);
+        const hsnSacCode = masterService ? (masterService.hsn_sac_code || null) : (data.hsn_sac_code || null);
+        const refId = data.service_id || data.source_ref_id || null;
 
         // Find the active IPD invoice
         let invoice = await db.invoices.findFirst({
@@ -207,27 +224,26 @@ export async function postChargeToIpdBill(data: {
         }
 
         const discount = data.discount || 0;
-        const total_price = data.quantity * data.unit_price;
+        const total_price = data.quantity * unitPrice;
         const net_price = total_price - discount;
-        const taxRate = data.tax_rate || 0;
         const tax_amount = net_price * taxRate / 100;
 
         // Create invoice item with GST
         const item = await db.invoice_items.create({
             data: {
                 invoice_id: invoice.id,
-                department: data.service_category || data.source_module,
-                description: data.description,
+                department: serviceCategory || data.source_module,
+                description,
                 quantity: data.quantity,
-                unit_price: data.unit_price,
+                unit_price: unitPrice,
                 total_price,
                 discount,
                 net_price,
                 tax_rate: taxRate,
                 tax_amount,
-                hsn_sac_code: data.hsn_sac_code || null,
-                service_category: data.service_category || null,
-                ref_id: data.source_ref_id || null,
+                hsn_sac_code: hsnSacCode,
+                service_category: serviceCategory,
+                ref_id: refId,
                 organizationId,
             },
         });
@@ -241,8 +257,8 @@ export async function postChargeToIpdBill(data: {
                 admission_id: data.admission_id,
                 invoice_item_id: item.id,
                 source_module: data.source_module,
-                source_ref_id: data.source_ref_id || null,
-                description: data.description,
+                source_ref_id: refId,
+                description,
                 amount: net_price + tax_amount,
                 posted_by: data.posted_by || session.id,
                 organizationId,
