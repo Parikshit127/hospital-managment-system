@@ -24,6 +24,7 @@ export default function IpdBillingPage() {
 
     // Charge entry state
     const [showChargeModal, setShowChargeModal] = useState(false);
+    const [chargeServiceId, setChargeServiceId] = useState<number | null>(null);
     const [chargeDesc, setChargeDesc] = useState('');
     const [chargeQty, setChargeQty] = useState(1);
     const [chargeRate, setChargeRate] = useState('');
@@ -124,11 +125,12 @@ export default function IpdBillingPage() {
     }
 
     async function handleAddCharge() {
-        if (!selectedAdmission || !chargeDesc || !chargeRate) return;
+        if (!selectedAdmission || !chargeServiceId) return;
         setActionLoading(true);
         const res = await postChargeToIpdBill({
             admission_id: selectedAdmission.admission_id,
             source_module: 'manual',
+            source_ref_id: String(chargeServiceId),
             description: chargeDesc,
             quantity: chargeQty,
             unit_price: parseFloat(chargeRate),
@@ -138,6 +140,7 @@ export default function IpdBillingPage() {
         setActionLoading(false);
         if (res.success) {
             setShowChargeModal(false);
+            setChargeServiceId(null);
             setChargeDesc('');
             setChargeRate('');
             setChargeQty(1);
@@ -702,96 +705,68 @@ export default function IpdBillingPage() {
                     <div className="bg-white rounded-lg p-6 w-96">
                         <h3 className="text-lg font-semibold mb-4">Add Charge</h3>
                         <div className="space-y-3">
-                            {/* Quick select from service master */}
-                            {services.length > 0 && (
-                                <div>
-                                    <label className="text-sm text-gray-600">Quick Select Service</label>
-                                    <select
-                                        onChange={(e) => {
-                                            const svc = services.find((s: any) => s.id === parseInt(e.target.value));
-                                            if (svc) handleServiceSelect(svc);
-                                        }}
-                                        className="w-full px-3 py-2 border rounded-md text-sm"
-                                        defaultValue=""
-                                    >
-                                        <option value="" disabled>-- Select from service master --</option>
-                                        {services.map((s: any) => (
-                                            <option key={s.id} value={s.id}>
-                                                {s.service_name} - ₹{Number(s.default_rate).toLocaleString('en-IN')} ({s.service_category})
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
-                            <div className="border-t pt-2">
-                                <label className="text-sm text-gray-600">Category</label>
+                            {/* Service Picker */}
+                            <div className="col-span-2">
+                                <label className="text-sm text-gray-600">Service *</label>
                                 <select
-                                    value={chargeCategory}
-                                    onChange={(e) => setChargeCategory(e.target.value)}
+                                    value={chargeServiceId ?? ''}
+                                    onChange={e => {
+                                        const id = parseInt(e.target.value);
+                                        const svc = services.find((s: any) => s.id === id);
+                                        if (svc) {
+                                            setChargeServiceId(id);
+                                            setChargeDesc(svc.service_name);
+                                            setChargeRate(String(svc.default_rate));
+                                            setChargeCategory(svc.service_category);
+                                            setChargeTaxRate(Number(svc.tax_rate || 0));
+                                        } else {
+                                            setChargeServiceId(null);
+                                            setChargeDesc('');
+                                            setChargeRate('');
+                                            setChargeCategory('');
+                                            setChargeTaxRate(0);
+                                        }
+                                    }}
                                     className="w-full px-3 py-2 border rounded-md"
                                 >
-                                    <option value="">Select category</option>
-                                    <option value="Procedure">Procedure</option>
-                                    <option value="Consumable">Consumable</option>
-                                    <option value="DoctorVisit">Doctor Visit</option>
-                                    <option value="Lab">Lab</option>
-                                    <option value="Pharmacy">Pharmacy</option>
-                                    <option value="Diet">Diet</option>
-                                    <option value="Misc">Miscellaneous</option>
+                                    <option value="">— Select service —</option>
+                                    {services.filter((s: any) => s.is_active).map((s: any) => (
+                                        <option key={s.id} value={s.id}>
+                                            {s.service_name} ({s.service_category}) — ₹{Number(s.default_rate).toLocaleString('en-IN')}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
+
+                            {/* Read-only rate display once service is selected */}
+                            {chargeServiceId && (
+                                <div className="grid grid-cols-3 gap-2 text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                                    <div><span className="font-medium">Rate:</span> ₹{chargeRate}</div>
+                                    <div><span className="font-medium">Category:</span> {chargeCategory}</div>
+                                    <div><span className="font-medium">GST:</span> {chargeTaxRate}%</div>
+                                </div>
+                            )}
+
                             <div>
-                                <label className="text-sm text-gray-600">Description</label>
+                                <label className="text-sm text-gray-600">Qty</label>
                                 <input
-                                    type="text"
-                                    value={chargeDesc}
-                                    onChange={(e) => setChargeDesc(e.target.value)}
+                                    type="number"
+                                    value={chargeQty}
+                                    onChange={(e) => setChargeQty(parseInt(e.target.value) || 1)}
                                     className="w-full px-3 py-2 border rounded-md"
                                 />
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                    <label className="text-sm text-gray-600">Qty</label>
-                                    <input
-                                        type="number"
-                                        value={chargeQty}
-                                        onChange={(e) => setChargeQty(parseInt(e.target.value) || 1)}
-                                        className="w-full px-3 py-2 border rounded-md"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-sm text-gray-600">Rate (₹)</label>
-                                    <input
-                                        type="number"
-                                        value={chargeRate}
-                                        onChange={(e) => setChargeRate(e.target.value)}
-                                        className="w-full px-3 py-2 border rounded-md"
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="text-sm text-gray-600">GST Rate (%)</label>
-                                <select
-                                    value={chargeTaxRate}
-                                    onChange={(e) => setChargeTaxRate(parseFloat(e.target.value))}
-                                    className="w-full px-3 py-2 border rounded-md"
-                                >
-                                    <option value={0}>0% (Exempt)</option>
-                                    <option value={5}>5%</option>
-                                    <option value={12}>12%</option>
-                                    <option value={18}>18%</option>
-                                </select>
-                            </div>
+
                             <div className="flex gap-2">
                                 <button
                                     onClick={handleAddCharge}
-                                    disabled={actionLoading}
+                                    disabled={actionLoading || !chargeServiceId}
                                     className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-md text-sm disabled:opacity-50"
                                 >
                                     {actionLoading ? 'Adding...' : 'Add'}
                                 </button>
                                 <button
-                                    onClick={() => setShowChargeModal(false)}
+                                    onClick={() => { setShowChargeModal(false); setChargeServiceId(null); }}
                                     className="flex-1 px-3 py-2 border rounded-md text-sm"
                                 >
                                     Cancel
