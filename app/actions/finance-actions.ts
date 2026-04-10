@@ -1107,3 +1107,50 @@ export async function approveInvoice(id: string | number, source: string) {
         return { success: false, error: error.message };
     }
 }
+
+// Search patients specifically for Reception Billing Generator
+export async function searchPatientsForBilling(query: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        if (!query || query.length < 2) return { success: true, data: [] };
+
+        const patients = await db.oPD_REG.findMany({
+            where: {
+                organizationId,
+                OR: [
+                    { full_name: { contains: query, mode: 'insensitive' } },
+                    { patient_id: { contains: query, mode: 'insensitive' } },
+                    { phone: { contains: query } }
+                ]
+            },
+            take: 10,
+            select: {
+                patient_id: true,
+                full_name: true,
+                phone: true,
+                age: true,
+                gender: true
+            }
+        });
+
+        return { success: true, data: serialize(patients) };
+    } catch (error: any) {
+        console.error('searchPatientsForBilling error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Remove an invoice item
+export async function removeInvoiceItem(itemId: number, invoiceId: number) {
+    try {
+        const { db } = await requireTenantContext();
+        await db.invoice_items.delete({ where: { id: itemId } });
+        await recalculateInvoice(invoiceId);
+        return { success: true };
+    } catch (error: any) {
+        console.error('removeInvoiceItem error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+

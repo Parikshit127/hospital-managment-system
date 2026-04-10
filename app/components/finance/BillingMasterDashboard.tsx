@@ -143,6 +143,15 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                     <p className="text-sm text-gray-500 font-medium">Global patient financials and collection timeline</p>
                 </div>
                 
+                <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
+                    <a 
+                        href="/reception/billing/new"
+                        className="w-full md:w-auto px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-black rounded-xl text-sm transition-colors shadow-sm text-center flex items-center justify-center gap-2"
+                    >
+                        <FileText className="h-4 w-4" /> Generate New Bill
+                    </a>
+                </div>
+
                 <div className="flex items-center gap-3 w-full md:w-auto">
                     <div className="relative flex-1 md:w-64">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
