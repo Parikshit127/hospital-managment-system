@@ -76,6 +76,18 @@ export const patientRegistrationSchema = z.object({
     registration_consent: z
         .union([z.boolean(), z.literal('on'), z.literal('true')])
         .transform(val => val === 'on' || val === 'true' || val === true),
+    // Phase 1 — Patient Type Classification
+    patient_type: z
+        .enum(['cash', 'corporate', 'tpa_insurance'])
+        .default('cash'),
+    corporate_id: z.string().optional().or(z.literal('')),
+    corporate_card_number: z.string().optional().or(z.literal('')),
+    employee_id: z.string().optional().or(z.literal('')),
+    // TPA fields saved via insurance_policies — validated loosely here
+    tpa_provider_id: z.string().optional().or(z.literal('')),
+    insurance_policy_number: z.string().optional().or(z.literal('')),
+    insurance_validity_start: z.string().optional().or(z.literal('')),
+    insurance_validity_end: z.string().optional().or(z.literal('')),
 });
 
 export type PatientRegistrationInput = z.infer<typeof patientRegistrationSchema>;

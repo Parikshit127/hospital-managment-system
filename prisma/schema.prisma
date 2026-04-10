@@ -120,6 +120,14 @@ model Organization {
   message_delivery_logs    MessageDeliveryLog[]
   whatsapp_incoming_msgs   WhatsAppIncomingMessage[]
   video_call_requests      VideoCallRequest[]
+  // Phase 1 — Corporate & Pre-Authorization
+  corporate_masters        CorporateMaster[]
+  pre_authorizations       PreAuthorization[]
+  // Phase 2 — Payment Splits
+  payment_splits           PaymentSplit[]
+  // Phase 3 — EMR
+  clinical_encounters      ClinicalEncounter[]
+  patient_allergies        PatientAllergy[]
 
   // Extended hospital profile fields
   hospital_type            String?   // General, Multi-Specialty, Super-Specialty, Clinic, Nursing Home
@@ -394,7 +402,13 @@ model OPD_REG {
   archived_at              DateTime?
   created_at               DateTime @default(now())
 
+  // Phase 1 — Patient Type Classification
+  patient_type             String   @default("cash") // cash | corporate | tpa_insurance
+  corporate_id             String?
+  corporate_card_number    String?
+
   organization       Organization          @relation(fields: [organizationId], references: [id])
+  corporate          CorporateMaster?      @relation(fields: [corporate_id], references: [id])
   appointments       appointments[]
   admissions         admissions[]
   invoices           invoices[]
@@ -404,11 +418,16 @@ model OPD_REG {
   pill_reminders        PillReminder[]
   video_call_requests   VideoCallRequest[]
   whatsapp_logs         whatsapp_log[]
+  pre_authorizations    PreAuthorization[]
+  // Phase 3 — EMR
+  clinical_encounters   ClinicalEncounter[]
+  patient_allergies     PatientAllergy[]
 
   @@index([organizationId])
   @@index([organizationId, is_archived])
   @@index([created_at])
   @@index([organizationId, created_at])
+  @@index([patient_type])
 }
 
 model appointments {
@@ -425,6 +444,7 @@ model appointments {
   organizationId       String
   queue_token          Int?
   checked_in_at        DateTime?
+  called_at            DateTime?
   appointment_date     DateTime @default(now())
   reminder24Sent       Boolean  @default(false)
   slot_id              String?  @unique
@@ -804,18 +824,36 @@ model invoices {
   approved_by    String?
   approved_at    DateTime?
 
-  organization     Organization       @relation(fields: [organizationId], references: [id])
-  patient          OPD_REG            @relation(fields: [patient_id], references: [patient_id])
-  admission        admissions?        @relation(fields: [admission_id], references: [admission_id])
+  // Phase 2 — Billing Engine (patient type split)
+  billing_patient_type     String   @default("cash") // cash | corporate | tpa_insurance
+  corporate_id             String?
+  tpa_provider_id          Int?
+  pre_auth_id              String?
+  patient_payable          Decimal  @default(0)
+  corporate_payable        Decimal  @default(0)
+  tpa_payable              Decimal  @default(0)
+  tpa_claim_status         String   @default("not_submitted") // not_submitted | submitted | under_review | approved | rejected | settled | partially_settled
+  tpa_claim_number         String?
+  tpa_settled_amount       Decimal  @default(0)
+  corporate_invoice_number String?
+  concession_amount        Decimal  @default(0)
+  concession_reason        String?
+  concession_approved_by   String?
+
+  organization     Organization        @relation(fields: [organizationId], references: [id])
+  patient          OPD_REG             @relation(fields: [patient_id], references: [patient_id])
+  admission        admissions?         @relation(fields: [admission_id], references: [admission_id])
   items            invoice_items[]
   payments         payments[]
   payment_order_intents PaymentOrderIntent[]
   insurance_claims insurance_claims[]
   credit_notes     CreditNote[]
+  payment_splits   PaymentSplit[]
 
   @@index([organizationId])
   @@index([status])
   @@index([patient_id])
+  @@index([billing_patient_type])
   @@index([created_at])
   @@index([organizationId, is_archived])
 }
@@ -921,13 +959,24 @@ model insurance_providers {
   provider_code  String   @unique
   contact_email  String?
   contact_phone  String?
+  contact_person String?
   address        String?
   is_active      Boolean  @default(true)
   organizationId String
   created_at     DateTime @default(now())
 
-  organization Organization         @relation(fields: [organizationId], references: [id])
-  policies     insurance_policies[]
+  // Phase 1 — TPA/Insurance extended fields
+  tpa_type                   String?  // tpa | insurance_direct
+  pre_auth_required          Boolean  @default(true)
+  claim_submission_mode      String   @default("online") // online | manual | mixed
+  default_discount_percentage Decimal @default(0)
+  payment_terms_days         Int      @default(45)
+  covered_services           Json     @default("[]")
+  excluded_services          Json     @default("[]")
+
+  organization     Organization         @relation(fields: [organizationId], references: [id])
+  policies         insurance_policies[]
+  pre_authorizations PreAuthorization[]
 
   @@index([organizationId])
 }
@@ -988,6 +1037,152 @@ model insurance_claims {
   admission    admissions?         @relation(fields: [admission_id], references: [admission_id])
 
   @@index([organizationId])
+}
+
+// ========================================
+// MODULE — EMR / Clinical (Phase 3)
+// ========================================
+
+model ClinicalEncounter {
+  id             String   @id @default(uuid())
+  organizationId String
+  patient_id     String
+  appointment_id String?
+  doctor_id      String
+  encounter_date DateTime @default(now())
+
+  // SOAP structured as JSON
+  subjective     Json     @default("{}")
+  // { chief_complaint, hpi, ros, social_history, family_history }
+  objective      Json     @default("{}")
+  // { vitals, physical_exam, observations }
+  assessment     Json     @default("[]")
+  // [{ diagnosis_text, icd10_code, icd10_description, type, status }]
+  plan           Json     @default("{}")
+  // { medications, lab_orders, procedures, referrals, follow_up, instructions }
+
+  allergies_reviewed Boolean @default(false)
+  status         String   @default("in_progress") // in_progress | completed | amended
+  signed_at      DateTime?
+  signed_by      String?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  patient      OPD_REG      @relation(fields: [patient_id], references: [patient_id])
+
+  @@index([organizationId])
+  @@index([patient_id])
+  @@index([doctor_id])
+  @@map("clinical_encounters")
+}
+
+model PatientAllergy {
+  id             String   @id @default(uuid())
+  organizationId String
+  patient_id     String
+  allergen_name  String
+  allergen_type  String   @default("drug") // drug | food | environmental | other
+  reaction       String?
+  severity       String   @default("moderate") // mild | moderate | severe | life_threatening
+  status         String   @default("active") // active | inactive | resolved
+  reported_date  DateTime @default(now())
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  patient      OPD_REG      @relation(fields: [patient_id], references: [patient_id])
+
+  @@index([organizationId])
+  @@index([patient_id])
+  @@index([allergen_type])
+  @@map("patient_allergies")
+}
+
+// ========================================
+// MODULE — Payment Splits (Phase 2)
+// ========================================
+
+model PaymentSplit {
+  id               String   @id @default(uuid())
+  organizationId   String
+  invoice_id       Int
+  payer_type       String   // patient | corporate | tpa_insurance
+  payer_id         String?  // corporate_id or tpa_provider_id (as string) or null for patient
+  amount           Decimal
+  payment_method   String?  // cash | upi | card | bank_transfer | cheque
+  payment_reference String?
+  payment_date     DateTime @default(now())
+  received_by      String?
+  status           String   @default("received") // pending | received | bounced | refunded
+  created_at       DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  invoice      invoices     @relation(fields: [invoice_id], references: [id])
+
+  @@index([organizationId])
+  @@index([invoice_id])
+  @@map("payment_splits")
+}
+
+// ========================================
+// MODULE — Corporate & Pre-Authorization (Phase 1)
+// ========================================
+
+model CorporateMaster {
+  id                   String   @id @default(uuid())
+  organizationId       String
+  company_name         String
+  company_code         String
+  contact_person       String?
+  contact_phone        String?
+  contact_email        String?
+  credit_limit         Decimal  @default(0)
+  current_balance      Decimal  @default(0)
+  discount_percentage  Decimal  @default(0)
+  payment_terms_days   Int      @default(30)
+  contract_start       DateTime?
+  contract_end         DateTime?
+  is_active            Boolean  @default(true)
+  covered_services     Json     @default("[]")
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  organization       Organization       @relation(fields: [organizationId], references: [id])
+  patients           OPD_REG[]
+  pre_authorizations PreAuthorization[]
+
+  @@unique([organizationId, company_code])
+  @@index([organizationId])
+  @@map("corporate_masters")
+}
+
+model PreAuthorization {
+  id                String   @id @default(uuid())
+  organizationId    String
+  patient_id        String
+  provider_id       Int?
+  corporate_id      String?
+  appointment_id    String?
+  pre_auth_number   String?
+  requested_amount  Decimal?
+  approved_amount   Decimal?
+  status            String   @default("pending") // pending | approved | rejected | expired | partially_approved
+  requested_at      DateTime @default(now())
+  responded_at      DateTime?
+  valid_until       DateTime?
+  remarks           String?
+  documents         Json     @default("[]")
+  created_at        DateTime @default(now())
+
+  organization Organization         @relation(fields: [organizationId], references: [id])
+  patient      OPD_REG              @relation(fields: [patient_id], references: [patient_id])
+  provider     insurance_providers? @relation(fields: [provider_id], references: [id])
+  corporate    CorporateMaster?     @relation(fields: [corporate_id], references: [id])
+
+  @@index([organizationId])
+  @@index([patient_id])
+  @@index([status])
+  @@map("pre_authorizations")
 }
 
 // ========================================
@@ -1127,10 +1322,15 @@ model vital_signs {
   recorded_by      String?
   organizationId   String
   created_at       DateTime @default(now())
+  // Phase 3 — extended vitals
+  blood_sugar      Float?
+  pain_scale       Int?     // 0–10
+  encounter_id     String?  // link to ClinicalEncounter
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
+  @@index([patient_id])
 }
 
 // ========================================
@@ -2285,4 +2485,21 @@ model whatsapp_log {
   updatedAt   DateTime @updatedAt
 
   patient     OPD_REG? @relation(fields: [patientId], references: [patient_id])
+}
+
+model patient_external_records {
+  id              Int       @id @default(autoincrement())
+  patient_id      String
+  organizationId  String
+  title           String
+  description     String?
+  hospital_name   String?
+  record_date     DateTime?
+  file_url        String?
+  file_name       String?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  @@index([patient_id])
+  @@index([organizationId])
 }

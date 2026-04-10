@@ -119,8 +119,8 @@ export default function StaffManagement() {
             setError('Username, password, name, and role are required');
             return;
         }
-        if (form.password.length < 6) {
-            setError('Password must be at least 6 characters');
+        if (form.password.length < 8) {
+            setError('Password must be at least 8 characters long');
             return;
         }
         setSubmitting(true);
@@ -450,7 +450,7 @@ export default function StaffManagement() {
                                             type={showPassword ? 'text' : 'password'} value={form.password}
                                             onChange={e => setForm({ ...form, password: e.target.value })}
                                             className="w-full px-3 py-2.5 pr-10 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
-                                            placeholder="Min 6 chars"
+                                            placeholder="Min 8 chars, 1 uppercase, 1 num, 1 special"
                                         />
                                         <button type="button" onClick={() => setShowPassword(!showPassword)}
                                             className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -625,7 +625,7 @@ export default function StaffManagement() {
                                         value={resetPassword}
                                         onChange={e => setResetPassword(e.target.value)}
                                         className="w-full px-3 py-2.5 pr-10 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
-                                        placeholder="Min 6 characters"
+                                        placeholder="Min 8 chars, 1 uppercase, 1 num, 1 special"
                                     />
                                     <button type="button" onClick={() => setShowPassword(!showPassword)}
                                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">

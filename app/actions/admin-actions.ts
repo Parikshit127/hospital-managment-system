@@ -527,7 +527,11 @@ export async function addUser(data: {
     const { db, organizationId } = await requireTenantContext();
 
     // Validate input with Zod
-    const validated = addUserSchema.parse(data);
+    const validationResult = addUserSchema.safeParse(data);
+    if (!validationResult.success) {
+      return { success: false, error: validationResult.error.issues?.[0]?.message || "Validation failed" };
+    }
+    const validated = validationResult.data;
 
     const existing = await db.user.findUnique({
       where: { username: validated.username },

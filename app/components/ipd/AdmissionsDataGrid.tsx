@@ -159,17 +159,19 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                                     <tr key={adm.admission_id} className="hover:bg-teal-50/30 transition-colors group">
                                         {/* Identity */}
                                         <td className="px-5 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white font-bold shrink-0">
-                                                    {adm.patient?.full_name?.charAt(0) || 'P'}
+                                            <Link href={`/ipd/admission/${adm.admission_id}`}>
+                                                <div className="flex items-center gap-3 group/name cursor-pointer">
+                                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white font-bold shrink-0">
+                                                        {adm.patient?.full_name?.charAt(0) || 'P'}
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-black text-gray-800 group-hover/name:text-teal-700 transition-colors">{adm.patient?.full_name || 'Unknown'}</p>
+                                                        <p className="text-[10px] text-gray-500 font-mono mt-0.5 max-w-[150px] truncate" title={adm.admission_id}>
+                                                            {adm.admission_id}
+                                                        </p>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <p className="text-sm font-black text-gray-800">{adm.patient?.full_name || 'Unknown'}</p>
-                                                    <p className="text-[10px] text-gray-500 font-mono mt-0.5 max-w-[150px] truncate" title={adm.admission_id}>
-                                                        {adm.admission_id}
-                                                    </p>
-                                                </div>
-                                            </div>
+                                            </Link>
                                         </td>
                                         
                                         {/* Location */}

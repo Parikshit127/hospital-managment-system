@@ -37,6 +37,7 @@ export async function checkDuplicatePatient(phone: string) {
                 department: true,
                 date_of_birth: true,
                 created_at: true,
+                patient_type: true,
             },
             take: 5,
         });
@@ -64,6 +65,15 @@ export async function registerPatient(formData: FormData) {
         emergency_contact_phone: (formData.get('emergency_contact_phone') as string) || '',
         emergency_contact_relation: (formData.get('emergency_contact_relation') as string) || '',
         registration_consent: formData.get('registration_consent') === 'on' || formData.get('registration_consent') === 'true',
+        // Phase 1 — Patient Type
+        patient_type: (formData.get('patient_type') as string) || 'cash',
+        corporate_id: (formData.get('corporate_id') as string) || '',
+        corporate_card_number: (formData.get('corporate_card_number') as string) || '',
+        employee_id: (formData.get('employee_id') as string) || '',
+        tpa_provider_id: (formData.get('tpa_provider_id') as string) || '',
+        insurance_policy_number: (formData.get('insurance_policy_number') as string) || '',
+        insurance_validity_start: (formData.get('insurance_validity_start') as string) || '',
+        insurance_validity_end: (formData.get('insurance_validity_end') as string) || '',
     };
 
     // Server-side Zod validation
@@ -119,8 +129,31 @@ export async function registerPatient(formData: FormData) {
                     registration_consent: rawData.registration_consent,
                     password: null,
                     organizationId,
+                    // Phase 1 — Patient Type
+                    patient_type: rawData.patient_type || 'cash',
+                    corporate_id: rawData.corporate_id || null,
+                    corporate_card_number: rawData.corporate_card_number || null,
+                    employee_id: rawData.employee_id || null,
                 },
             });
+
+            // Phase 1 — Create insurance_policy record for TPA patients
+            if (rawData.patient_type === 'tpa_insurance' && rawData.tpa_provider_id && rawData.insurance_policy_number) {
+                const providerId = parseInt(rawData.tpa_provider_id, 10);
+                if (!isNaN(providerId)) {
+                    await db.insurance_policies.create({
+                        data: {
+                            patient_id: agentPatientId,
+                            provider_id: providerId,
+                            policy_number: rawData.insurance_policy_number,
+                            valid_from: rawData.insurance_validity_start ? new Date(rawData.insurance_validity_start) : null,
+                            valid_until: rawData.insurance_validity_end ? new Date(rawData.insurance_validity_end) : null,
+                            status: 'Active',
+                            organizationId,
+                        },
+                    }).catch((err: unknown) => console.error('Insurance policy create error:', err));
+                }
+            }
 
             const tokenResult = await createPatientPasswordSetupToken({
                 patientId: agentPatientId,
@@ -147,7 +180,7 @@ export async function registerPatient(formData: FormData) {
                         setupLink,
                         hospitalName
                     ]
-                }).catch(err => console.error("WA Welcome Template Error:", err));
+                }).catch((err: unknown) => console.error("WA Welcome Template Error:", err));
             }
         }
 

@@ -4,10 +4,12 @@ import React, { useState, useCallback, useEffect } from 'react';
 import {
     ClipboardList, UserPlus, CheckCircle, Phone, Activity,
     User, MapPin, Shield, Calendar, Hash, Loader2, Mail,
-    Search, AlertCircle, Heart, Users, ArrowRight, FileCheck
+    Search, AlertCircle, Heart, Users, ArrowRight, FileCheck,
+    Building2, CreditCard, FileText
 } from 'lucide-react';
 import { registerPatient, checkDuplicatePatient } from '@/app/actions/register-patient';
 import { getDepartmentList } from '@/app/actions/reception-actions';
+import { getCorporateMasters, getTpaProviders } from '@/app/actions/patient-type-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useToast } from '@/app/components/ui/Toast';
 import { FALLBACK_DEPARTMENTS } from '@/app/lib/constants/departments';
@@ -22,12 +24,45 @@ type DuplicatePatient = {
     department: string | null;
     date_of_birth: string | null;
     created_at: Date;
+    patient_type?: string | null;
+};
+
+const PATIENT_TYPE_BADGE: Record<string, string> = {
+    cash: 'bg-teal-100 text-teal-700',
+    corporate: 'bg-blue-100 text-blue-700',
+    tpa_insurance: 'bg-amber-100 text-amber-700',
+};
+const PATIENT_TYPE_LABEL: Record<string, string> = {
+    cash: 'Cash',
+    corporate: 'Corporate',
+    tpa_insurance: 'TPA',
 };
 
 type DepartmentItem = {
     id: string;
     name: string;
 };
+
+type CorporateItem = {
+    id: string;
+    company_name: string;
+    company_code: string;
+    discount_percentage: string | number;
+};
+
+type TpaProviderItem = {
+    id: number;
+    provider_name: string;
+    provider_code: string;
+    pre_auth_required: boolean;
+    default_discount_percentage: string | number;
+};
+
+const PATIENT_TYPES = [
+    { value: 'cash', label: 'Cash', color: 'teal' },
+    { value: 'corporate', label: 'Corporate', color: 'blue' },
+    { value: 'tpa_insurance', label: 'TPA / Insurance', color: 'amber' },
+] as const;
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 const RELATIONSHIPS = ['Spouse', 'Parent', 'Child', 'Sibling', 'Friend', 'Other'] as const;
@@ -52,6 +87,11 @@ export default function ReceptionPage() {
     const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
     const [dobValue, setDobValue] = useState('');
     const [ageValue, setAgeValue] = useState('');
+    // Phase 1 — Patient Type
+    const [patientType, setPatientType] = useState<'cash' | 'corporate' | 'tpa_insurance'>('cash');
+    const [corporates, setCorporates] = useState<CorporateItem[]>([]);
+    const [tpaProviders, setTpaProviders] = useState<TpaProviderItem[]>([]);
+    const [selectedCorporate, setSelectedCorporate] = useState<CorporateItem | null>(null);
     const [successData, setSuccessData] = useState<{
         patient_id: string;
         appointment_id?: string;
@@ -60,15 +100,20 @@ export default function ReceptionPage() {
         manual_password_setup_link?: string | null;
     } | null>(null);
 
-    // Load departments from DB on mount
+    // Load departments, corporates, TPA providers on mount
     useEffect(() => {
         getDepartmentList().then(result => {
             if (result.success && result.data && result.data.length > 0) {
                 setDepartments(result.data.map((d: { id: string; name: string }) => ({ id: d.id, name: d.name })));
             } else {
-                // Fallback to static list
                 setDepartments(FALLBACK_DEPARTMENTS.map(name => ({ id: name, name })));
             }
+        });
+        getCorporateMasters().then(r => {
+            if (r.success) setCorporates(r.data as CorporateItem[]);
+        });
+        getTpaProviders().then(r => {
+            if (r.success) setTpaProviders(r.data as TpaProviderItem[]);
         });
     }, []);
 
@@ -120,6 +165,8 @@ export default function ReceptionPage() {
             (event.target as HTMLFormElement).reset();
             setDobValue('');
             setAgeValue('');
+            setPatientType('cash');
+            setSelectedCorporate(null);
         } else {
             toast.error(result.error || 'Registration failed');
         }
@@ -292,7 +339,14 @@ export default function ReceptionPage() {
                                                 {duplicates.map((p) => (
                                                     <div key={p.patient_id} className="flex items-center justify-between bg-white border border-amber-100 rounded-lg px-4 py-3">
                                                         <div>
-                                                            <p className="text-sm font-bold text-gray-800">{p.full_name}</p>
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="text-sm font-bold text-gray-800">{p.full_name}</p>
+                                                                {p.patient_type && (
+                                                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide ${PATIENT_TYPE_BADGE[p.patient_type] || 'bg-gray-100 text-gray-600'}`}>
+                                                                        {PATIENT_TYPE_LABEL[p.patient_type] || p.patient_type}
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                             <p className="text-xs text-gray-500">
                                                                 {p.patient_id} · {p.phone} · {p.age ? `${p.age}y` : ''} {p.gender || ''} · {p.department || 'No dept'}
                                                             </p>
@@ -511,6 +565,124 @@ export default function ReceptionPage() {
                                                 </select>
                                             </div>
                                         </div>
+                                    </div>
+
+                                    {/* Patient Type Classification */}
+                                    <div className="mb-6 border-t border-gray-200 pt-6">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <CreditCard className="h-4 w-4 text-violet-400" />
+                                            <span className="text-xs font-black text-gray-500">Patient Type *</span>
+                                        </div>
+                                        <input type="hidden" name="patient_type" value={patientType} />
+                                        <div className="flex gap-3 flex-wrap mb-4">
+                                            {PATIENT_TYPES.map(pt => (
+                                                <button
+                                                    key={pt.value}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setPatientType(pt.value);
+                                                        setSelectedCorporate(null);
+                                                    }}
+                                                    className={`px-4 py-2.5 rounded-xl text-sm font-bold border transition-all ${
+                                                        patientType === pt.value
+                                                            ? pt.value === 'cash'
+                                                                ? 'bg-teal-500 border-teal-500 text-white shadow-md'
+                                                                : pt.value === 'corporate'
+                                                                    ? 'bg-blue-500 border-blue-500 text-white shadow-md'
+                                                                    : 'bg-amber-500 border-amber-500 text-white shadow-md'
+                                                            : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                                                    }`}
+                                                >
+                                                    {pt.label}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        {/* Corporate Fields */}
+                                        {patientType === 'corporate' && (
+                                            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-4">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <Building2 className="h-3.5 w-3.5 text-blue-500" />
+                                                    <span className="text-xs font-bold text-blue-700">Corporate Details</span>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="space-y-1.5">
+                                                        <label className={labelClass}>Company *</label>
+                                                        <select
+                                                            name="corporate_id"
+                                                            required={patientType === 'corporate'}
+                                                            className={selectClass}
+                                                            onChange={e => {
+                                                                const corp = corporates.find(c => c.id === e.target.value) || null;
+                                                                setSelectedCorporate(corp);
+                                                            }}
+                                                        >
+                                                            <option value="">Select Company</option>
+                                                            {corporates.map(c => (
+                                                                <option key={c.id} value={c.id}>{c.company_name} ({c.company_code})</option>
+                                                            ))}
+                                                        </select>
+                                                        {selectedCorporate && (
+                                                            <p className="text-[10px] text-blue-600 font-bold ml-1">
+                                                                Discount: {Number(selectedCorporate.discount_percentage)}%
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <label className={labelClass}>Employee ID</label>
+                                                        <input name="employee_id" className={inputClass} placeholder="EMP-001" />
+                                                    </div>
+                                                    <div className="space-y-1.5 md:col-span-2">
+                                                        <label className={labelClass}>Corporate Card Number (Optional)</label>
+                                                        <input name="corporate_card_number" className={inputClass} placeholder="Card / ID number" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* TPA / Insurance Fields */}
+                                        {patientType === 'tpa_insurance' && (
+                                            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 space-y-4">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <FileText className="h-3.5 w-3.5 text-amber-600" />
+                                                    <span className="text-xs font-bold text-amber-700">TPA / Insurance Details</span>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="space-y-1.5">
+                                                        <label className={labelClass}>TPA / Insurance Company *</label>
+                                                        <select
+                                                            name="tpa_provider_id"
+                                                            required={patientType === 'tpa_insurance'}
+                                                            className={selectClass}
+                                                        >
+                                                            <option value="">Select Provider</option>
+                                                            {tpaProviders.map(p => (
+                                                                <option key={p.id} value={p.id}>
+                                                                    {p.provider_name} ({p.provider_code})
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <label className={labelClass}>Policy Number *</label>
+                                                        <input
+                                                            name="insurance_policy_number"
+                                                            required={patientType === 'tpa_insurance'}
+                                                            className={inputClass}
+                                                            placeholder="Policy / Member ID"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <label className={labelClass}>Validity Start</label>
+                                                        <input type="date" name="insurance_validity_start" className={inputClass} />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <label className={labelClass}>Validity End</label>
+                                                        <input type="date" name="insurance_validity_end" className={inputClass} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Consent */}

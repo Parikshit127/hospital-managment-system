@@ -277,3 +277,139 @@ export async function getNoShowReport(days: number = 7) {
         return { success: false, data: [] };
     }
 }
+
+export async function getOPDConfig() {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const config = await db.oPDConfig.findFirst({ where: { organizationId } });
+        return {
+            success: true,
+            data: {
+                max_wait_minutes: config?.max_wait_minutes ?? 30,
+                escalation_threshold: config?.escalation_threshold ?? 45,
+                max_patients_per_doctor: config?.max_patients_per_doctor ?? 30,
+            },
+        };
+    } catch {
+        return { success: true, data: { max_wait_minutes: 30, escalation_threshold: 45, max_patients_per_doctor: 30 } };
+    }
+}
+
+// ── Phase 5 additions ──────────────────────────────────────────────────────
+
+export async function getSLABreachAlerts() {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        const [checkedIn, config] = await Promise.all([
+            db.appointments.findMany({
+                where: {
+                    organizationId,
+                    appointment_date: { gte: todayStart },
+                    status: { in: ['Checked In'] },
+                    checked_in_at: { not: null },
+                },
+                include: { patient: { select: { full_name: true } } },
+                orderBy: { checked_in_at: 'asc' },
+            }),
+            db.oPDConfig.findFirst({ where: { organizationId } }),
+        ]);
+
+        const maxWait = config?.max_wait_minutes ?? 30;
+        const now = Date.now();
+
+        const breaches = checkedIn
+            .map((a: { appointment_id: string; doctor_name: string | null; department: string | null; checked_in_at: Date | null; queue_token: number | null; patient: { full_name: string } | null }) => {
+                const waitMin = Math.floor((now - new Date(a.checked_in_at!).getTime()) / 60000);
+                return {
+                    appointment_id: a.appointment_id,
+                    patient_name: a.patient?.full_name ?? 'Unknown',
+                    doctor_name: a.doctor_name,
+                    department: a.department,
+                    queue_token: a.queue_token,
+                    wait_minutes: waitMin,
+                    sla_minutes: maxWait,
+                };
+            })
+            .filter((a: { wait_minutes: number; sla_minutes: number }) => a.wait_minutes > a.sla_minutes);
+
+        return { success: true, data: JSON.parse(JSON.stringify(breaches)), maxWait };
+    } catch (error) {
+        console.error('SLA Breach Error:', error);
+        return { success: false, data: [], maxWait: 30 };
+    }
+}
+
+export async function getPeakHoursAnalytics(days = 7) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const start = new Date();
+        start.setDate(start.getDate() - days);
+        start.setHours(0, 0, 0, 0);
+
+        const appointments = await db.appointments.findMany({
+            where: { organizationId, appointment_date: { gte: start } },
+            select: { appointment_date: true, status: true },
+        });
+
+        const hourCounts: number[] = Array(24).fill(0);
+        for (const a of appointments) {
+            const h = new Date(a.appointment_date).getHours();
+            hourCounts[h]++;
+        }
+
+        const data = hourCounts.map((count, hour) => ({
+            hour,
+            label: `${hour.toString().padStart(2, '0')}:00`,
+            count,
+        })).filter(h => h.count > 0 || (h.hour >= 8 && h.hour <= 20));
+
+        return { success: true, data };
+    } catch (error) {
+        console.error('Peak Hours Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+export async function markNoShow(appointmentId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        await db.appointments.update({
+            where: { appointment_id: appointmentId, organizationId },
+            data: { status: 'Cancelled', cancellation_reason: 'No Show' },
+        });
+        revalidatePath('/opd-manager');
+        return { success: true };
+    } catch (error) {
+        console.error('Mark No Show Error:', error);
+        return { success: false, error: 'Failed to mark no-show' };
+    }
+}
+
+export async function getTodayPendingNoShows() {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const now = new Date();
+
+        // Appointments that were scheduled in the past today and never checked in
+        const pending = await db.appointments.findMany({
+            where: {
+                organizationId,
+                appointment_date: { gte: todayStart, lte: now },
+                status: { in: ['Pending', 'Confirmed'] },
+                checked_in_at: null,
+            },
+            include: { patient: { select: { full_name: true, phone: true } } },
+            orderBy: { appointment_date: 'asc' },
+        });
+
+        return { success: true, data: JSON.parse(JSON.stringify(pending)) };
+    } catch (error) {
+        console.error('Pending No Shows Error:', error);
+        return { success: false, data: [] };
+    }
+}

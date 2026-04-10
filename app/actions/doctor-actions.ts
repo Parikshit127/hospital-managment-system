@@ -350,8 +350,6 @@ export async function saveClinicalNotes(data: any) {
 }
 
 export async function orderLabTest(data: any) {
-  console.log("--- orderLabTest Started ---");
-  console.log("Data:", data);
   try {
     const { db, organizationId } = await requireTenantContext();
 
@@ -442,9 +440,6 @@ export async function createPharmacyOrder(
   doctorId: string,
   items: { name: string; qty: number }[],
 ) {
-  console.log("--- createPharmacyOrder Started ---");
-  console.log("Patient:", patientId, "Doctor:", doctorId);
-  console.log("Items:", items);
   try {
     const { db, organizationId } = await requireTenantContext();
 

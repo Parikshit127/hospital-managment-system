@@ -4,10 +4,22 @@ import React, { useState, useEffect } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Search, Loader2, Plus, ArrowLeft, Receipt, CheckCircle } from 'lucide-react';
 import { searchPatientsForBilling, createInvoice, addInvoiceItem } from '@/app/actions/finance-actions';
+import { calculateBillSplit, createPaymentSplits, type BillSplit } from '@/app/actions/billing-engine';
 import { getIpdServices } from '@/app/actions/ipd-master-actions';
 import { useToast } from '@/app/components/ui/Toast';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+
+const PT_BADGE: Record<string, string> = {
+    cash: 'bg-teal-100 text-teal-700',
+    corporate: 'bg-blue-100 text-blue-700',
+    tpa_insurance: 'bg-amber-100 text-amber-700',
+};
+const PT_LABEL: Record<string, string> = {
+    cash: 'Cash',
+    corporate: 'Corporate',
+    tpa_insurance: 'TPA / Insurance',
+};
 
 export default function ReceptionGenerateBillPage() {
     const router = useRouter();
@@ -29,6 +41,12 @@ export default function ReceptionGenerateBillPage() {
     const [draftDiscount, setDraftDiscount] = useState(0);
 
     const [isSaving, setIsSaving] = useState(false);
+    // Phase 2 — bill split
+    const [billSplit, setBillSplit] = useState<BillSplit | null>(null);
+    const [isCalculating, setIsCalculating] = useState(false);
+    const [preAuthBlocked, setPreAuthBlocked] = useState(false);
+    const [concessionAmount, setConcessionAmount] = useState(0);
+    const [concessionReason, setConcessionReason] = useState('');
 
     useEffect(() => {
         getIpdServices().then(res => {
@@ -49,6 +67,31 @@ export default function ReceptionGenerateBillPage() {
         }, 400);
         return () => clearTimeout(timer);
     }, [searchQuery]);
+
+    // Recalculate bill split whenever patient or items change
+    useEffect(() => {
+        if (!selectedPatient || items.length === 0) {
+            setBillSplit(null);
+            setPreAuthBlocked(false);
+            return;
+        }
+        setIsCalculating(true);
+        calculateBillSplit(
+            selectedPatient.patient_id,
+            items.map(i => ({
+                department: i.department,
+                description: i.description,
+                quantity: i.quantity,
+                unit_price: i.unit_price,
+                discount: i.discount,
+                tax_rate: i.tax_rate,
+            }))
+        ).then(split => {
+            setBillSplit(split);
+            setPreAuthBlocked(split.warnings.some(w => w.startsWith('PRE_AUTH_REQUIRED')));
+            setIsCalculating(false);
+        });
+    }, [selectedPatient, items]);
 
     const handleAddService = () => {
         if (!selectedServiceId) return;
@@ -84,14 +127,27 @@ export default function ReceptionGenerateBillPage() {
     const handleGenerateBill = async () => {
         if (!selectedPatient) return toast.error('Please select a patient');
         if (items.length === 0) return toast.error('Please add at least one item');
-        
+        if (preAuthBlocked) return toast.error('Pre-authorization required. Obtain TPA approval before billing.');
+
         setIsSaving(true);
         try {
-            // 1. Create Invoice
+            const patientType = selectedPatient.patient_type || 'cash';
+            const activePolicy = selectedPatient.insurance_policies?.[0];
+            const split = billSplit;
+
+            // 1. Create Invoice with Phase 2 fields
             const invRes = await createInvoice({
                 patient_id: selectedPatient.patient_id,
                 invoice_type: 'OPD',
-                notes: 'Generated from Reception Master Billing'
+                notes: 'Generated from Reception Billing',
+                billing_patient_type: patientType,
+                corporate_id: patientType === 'corporate' ? selectedPatient.corporate_id : undefined,
+                tpa_provider_id: patientType === 'tpa_insurance' ? activePolicy?.provider?.id : undefined,
+                patient_payable: split?.patientPayable ?? totals.net,
+                corporate_payable: split?.corporatePayable ?? 0,
+                tpa_payable: split?.tpaPayable ?? 0,
+                concession_amount: concessionAmount,
+                concession_reason: concessionReason || undefined,
             });
 
             if (!invRes.success) {
@@ -115,11 +171,26 @@ export default function ReceptionGenerateBillPage() {
                 });
             }
 
+            // 3. Create payment splits
+            const splitsToCreate = [];
+            if ((split?.patientPayable ?? 0) > 0) {
+                splitsToCreate.push({ payer_type: 'patient' as const, amount: split!.patientPayable, payment_method: 'Cash' });
+            }
+            if ((split?.corporatePayable ?? 0) > 0) {
+                splitsToCreate.push({ payer_type: 'corporate' as const, payer_id: selectedPatient.corporate_id, amount: split!.corporatePayable });
+            }
+            if ((split?.tpaPayable ?? 0) > 0) {
+                splitsToCreate.push({ payer_type: 'tpa_insurance' as const, payer_id: String(activePolicy?.provider?.id || ''), amount: split!.tpaPayable });
+            }
+            if (splitsToCreate.length > 0) {
+                await createPaymentSplits(invoiceId, splitsToCreate);
+            }
+
             toast.success('Bill generated successfully!');
             router.push(`/finance/invoices/${invoiceId}`);
 
-        } catch (err: any) {
-            toast.error(err.message || 'An error occurred');
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : 'An error occurred');
         }
         setIsSaving(false);
     };
@@ -187,20 +258,59 @@ export default function ReceptionGenerateBillPage() {
                                     )}
                                 </div>
                             ) : (
-                                <div className="flex items-center justify-between p-4 bg-teal-50 border border-teal-100 rounded-xl">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center">
-                                            <CheckCircle className="h-6 w-6 text-teal-600" />
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between p-4 bg-teal-50 border border-teal-100 rounded-xl">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center">
+                                                <CheckCircle className="h-6 w-6 text-teal-600" />
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-bold text-teal-900">{selectedPatient.full_name}</p>
+                                                    {selectedPatient.patient_type && (
+                                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide ${PT_BADGE[selectedPatient.patient_type] || 'bg-gray-100 text-gray-600'}`}>
+                                                            {PT_LABEL[selectedPatient.patient_type] || selectedPatient.patient_type}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-teal-700">{selectedPatient.patient_id} · {selectedPatient.phone}</p>
+                                                {selectedPatient.patient_type === 'corporate' && selectedPatient.corporate && (
+                                                    <p className="text-xs text-blue-600 font-bold mt-0.5">
+                                                        {selectedPatient.corporate.company_name} · {Number(selectedPatient.corporate.discount_percentage)}% discount
+                                                    </p>
+                                                )}
+                                                {selectedPatient.patient_type === 'tpa_insurance' && selectedPatient.insurance_policies?.[0] && (
+                                                    <p className="text-xs text-amber-600 font-bold mt-0.5">
+                                                        {selectedPatient.insurance_policies[0].provider?.provider_name} · Policy: {selectedPatient.insurance_policies[0].policy_number}
+                                                        {selectedPatient.insurance_policies[0].provider?.pre_auth_required && (
+                                                            <span className="ml-2 text-red-600">⚠ Pre-auth required</span>
+                                                        )}
+                                                    </p>
+                                                )}
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="font-bold text-teal-900">{selectedPatient.full_name}</p>
-                                            <p className="text-xs text-teal-700">{selectedPatient.patient_id} · {selectedPatient.phone}</p>
-                                        </div>
+                                        <button
+                                            onClick={() => { setSelectedPatient(null); setSearchQuery(''); setBillSplit(null); setPreAuthBlocked(false); }}
+                                            className="text-xs font-bold text-teal-600 hover:text-teal-800 underline"
+                                        >Change Patient</button>
                                     </div>
-                                    <button 
-                                        onClick={() => { setSelectedPatient(null); setSearchQuery(''); }}
-                                        className="text-xs font-bold text-teal-600 hover:text-teal-800 underline"
-                                    >Change Patient</button>
+                                    {/* Pre-auth blocking warning */}
+                                    {preAuthBlocked && (
+                                        <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl">
+                                            <span className="text-red-600 font-black text-lg leading-none">⚠</span>
+                                            <div>
+                                                <p className="text-sm font-bold text-red-700">Pre-Authorization Required</p>
+                                                <p className="text-xs text-red-600 mt-0.5">Cannot generate bill without TPA approval. Obtain pre-authorization first.</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {/* Non-blocking warnings */}
+                                    {billSplit?.warnings.filter(w => !w.startsWith('PRE_AUTH_REQUIRED')).map((w, i) => (
+                                        <div key={i} className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                                            <span className="text-amber-600 font-black text-sm">⚠</span>
+                                            <p className="text-xs text-amber-700 font-medium">{w}</p>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                         </div>
@@ -320,7 +430,7 @@ export default function ReceptionGenerateBillPage() {
                                 </div>
                                 <div className="flex justify-between text-rose-400">
                                     <span>Discount</span>
-                                    <span>-₹{totals.discount.toFixed(2)}</span>
+                                    <span>-₹{(isCalculating ? totals.discount : (billSplit?.totalDiscount ?? totals.discount)).toFixed(2)}</span>
                                 </div>
                                 <div className="flex justify-between text-slate-300">
                                     <span>Estimated GST</span>
@@ -329,14 +439,68 @@ export default function ReceptionGenerateBillPage() {
                                 <div className="h-px bg-slate-700 my-4" />
                                 <div className="flex justify-between items-center">
                                     <span className="font-sans font-black uppercase tracking-wider text-slate-400 text-xs">Total Payable</span>
-                                    <span className="text-3xl font-black text-white">₹{totals.net.toFixed(2)}</span>
+                                    <span className="text-3xl font-black text-white">
+                                        ₹{(isCalculating ? totals.net : (billSplit?.grandTotal ?? totals.net)).toFixed(2)}
+                                    </span>
                                 </div>
+
+                                {/* Split breakdown for corporate/TPA */}
+                                {billSplit && selectedPatient?.patient_type !== 'cash' && (
+                                    <>
+                                        <div className="h-px bg-slate-700 my-2" />
+                                        <p className="font-sans text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Payment Split</p>
+                                        {billSplit.patientPayable > 0 && (
+                                            <div className="flex justify-between text-teal-400">
+                                                <span className="font-sans text-xs">Patient (Co-Pay)</span>
+                                                <span>₹{billSplit.patientPayable.toFixed(2)}</span>
+                                            </div>
+                                        )}
+                                        {billSplit.corporatePayable > 0 && (
+                                            <div className="flex justify-between text-blue-400">
+                                                <span className="font-sans text-xs">Corporate ({selectedPatient?.corporate?.company_name})</span>
+                                                <span>₹{billSplit.corporatePayable.toFixed(2)}</span>
+                                            </div>
+                                        )}
+                                        {billSplit.tpaPayable > 0 && (
+                                            <div className="flex justify-between text-amber-400">
+                                                <span className="font-sans text-xs">TPA / Insurance</span>
+                                                <span>₹{billSplit.tpaPayable.toFixed(2)}</span>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+
+                                {/* Cash concession field */}
+                                {selectedPatient?.patient_type === 'cash' && (
+                                    <>
+                                        <div className="h-px bg-slate-700 my-2" />
+                                        <div className="space-y-2">
+                                            <p className="font-sans text-[10px] font-black uppercase tracking-widest text-slate-400">Concession (Optional)</p>
+                                            <input
+                                                type="number" min="0" step="0.01"
+                                                value={concessionAmount}
+                                                onChange={e => setConcessionAmount(parseFloat(e.target.value) || 0)}
+                                                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm outline-none"
+                                                placeholder="₹ Amount"
+                                            />
+                                            {concessionAmount > 0 && (
+                                                <input
+                                                    type="text"
+                                                    value={concessionReason}
+                                                    onChange={e => setConcessionReason(e.target.value)}
+                                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm outline-none"
+                                                    placeholder="Reason for concession"
+                                                />
+                                            )}
+                                        </div>
+                                    </>
+                                )}
                             </div>
                             
                             <div className="p-6 pt-0">
                                 <button 
                                     onClick={handleGenerateBill}
-                                    disabled={!selectedPatient || items.length === 0 || isSaving}
+                                    disabled={!selectedPatient || items.length === 0 || isSaving || preAuthBlocked}
                                     className="w-full py-4 bg-teal-500 hover:bg-teal-400 text-slate-900 font-black uppercase tracking-wider rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
                                     {isSaving && <Loader2 className="h-5 w-5 animate-spin" />}

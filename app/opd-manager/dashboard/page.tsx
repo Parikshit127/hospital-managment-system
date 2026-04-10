@@ -10,6 +10,8 @@ import {
     getOPDManagerDashboard,
     getDoctorUtilization,
     getWaitTimeAnalytics,
+    getSLABreachAlerts,
+    getPeakHoursAnalytics,
 } from '@/app/actions/opd-manager-actions';
 import Link from 'next/link';
 
@@ -17,19 +19,25 @@ export default function OPDManagerDashboardPage() {
     const [dashboard, setDashboard] = useState<any>(null);
     const [utilization, setUtilization] = useState<any[]>([]);
     const [waitTimes, setWaitTimes] = useState<any[]>([]);
+    const [slaBreaches, setSlaBreaches] = useState<any[]>([]);
+    const [peakHours, setPeakHours] = useState<{ hour: number; label: string; count: number }[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
 
     const loadData = useCallback(async () => {
         setRefreshing(true);
-        const [dashRes, utilRes, waitRes] = await Promise.all([
+        const [dashRes, utilRes, waitRes, slaRes, peakRes] = await Promise.all([
             getOPDManagerDashboard(),
             getDoctorUtilization(),
             getWaitTimeAnalytics(),
+            getSLABreachAlerts(),
+            getPeakHoursAnalytics(),
         ]);
         if (dashRes.success) setDashboard(dashRes.data);
         if (utilRes.success) setUtilization(utilRes.data || []);
         if (waitRes.success) setWaitTimes(waitRes.data || []);
+        if (slaRes.success) setSlaBreaches(slaRes.data || []);
+        if (peakRes.success) setPeakHours(peakRes.data || []);
         setRefreshing(false);
         setLoading(false);
     }, []);
@@ -92,6 +100,36 @@ export default function OPDManagerDashboardPage() {
                 })}
             </div>
 
+            {/* SLA Breach Alert */}
+            {slaBreaches.length > 0 && (
+                <div className="mb-4 bg-red-50 border border-red-300 rounded-2xl p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="p-2 bg-red-100 rounded-xl">
+                            <AlertTriangle className="h-5 w-5 text-red-600" />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-sm font-black text-red-800">
+                                {slaBreaches.length} patient{slaBreaches.length !== 1 ? 's' : ''} waiting beyond SLA threshold
+                            </p>
+                            <p className="text-xs text-red-600">Immediate attention required</p>
+                        </div>
+                        <Link href="/reception/queue" className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 text-xs font-bold rounded-lg transition-colors">
+                            View Queue
+                        </Link>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {slaBreaches.slice(0, 5).map((b: { appointment_id: string; patient_name: string; wait_minutes: number; doctor_name: string | null; queue_token: number | null }) => (
+                            <span key={b.appointment_id} className="text-xs bg-red-100 text-red-700 font-bold px-2.5 py-1 rounded-lg border border-red-200">
+                                #{b.queue_token} {b.patient_name} — {b.wait_minutes}m wait
+                            </span>
+                        ))}
+                        {slaBreaches.length > 5 && (
+                            <span className="text-xs text-red-500 font-bold py-1">+{slaBreaches.length - 5} more</span>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* No-show alert banner */}
             {(dashboard?.noShowCount || 0) > 0 && (
                 <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3">
@@ -105,10 +143,10 @@ export default function OPDManagerDashboardPage() {
                         <p className="text-xs text-amber-600">Review the no-show report for details and follow-up actions.</p>
                     </div>
                     <Link
-                        href="/opd-manager/appointments"
+                        href="/opd-manager/no-shows"
                         className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold rounded-lg transition-colors"
                     >
-                        View Report
+                        Manage No-Shows
                     </Link>
                 </div>
             )}
@@ -204,6 +242,45 @@ export default function OPDManagerDashboardPage() {
                     )}
                 </div>
             </div>
+
+            {/* Peak Hours Chart */}
+            {peakHours.length > 0 && (
+                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6 mt-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                            <Activity className="h-4 w-4 text-teal-500" /> Peak Hours (Last 7 Days)
+                        </h3>
+                        <span className="text-xs text-gray-400">Appointment distribution by hour</span>
+                    </div>
+                    {(() => {
+                        const max = Math.max(...peakHours.map(h => h.count), 1);
+                        return (
+                            <div className="flex items-end gap-1.5 h-28">
+                                {peakHours.filter(h => h.hour >= 8 && h.hour <= 20).map(h => {
+                                    const pct = Math.round((h.count / max) * 100);
+                                    const isHigh = pct >= 70;
+                                    const isMed = pct >= 40 && pct < 70;
+                                    return (
+                                        <div key={h.hour} className="flex flex-col items-center gap-1 flex-1">
+                                            <span className="text-[9px] text-gray-500 font-bold">{h.count || ''}</span>
+                                            <div
+                                                className={`w-full rounded-t-md transition-all ${isHigh ? 'bg-red-400' : isMed ? 'bg-amber-400' : 'bg-teal-300'}`}
+                                                style={{ height: `${Math.max(pct, 4)}%` }}
+                                            />
+                                            <span className="text-[9px] text-gray-400 font-medium">{h.hour}h</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })()}
+                    <div className="flex items-center gap-4 mt-3 text-[10px] text-gray-400">
+                        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-400 inline-block" /> High load (≥70%)</span>
+                        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-400 inline-block" /> Medium load</span>
+                        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-teal-300 inline-block" /> Normal</span>
+                    </div>
+                </div>
+            )}
         </AppShell>
     );
 }

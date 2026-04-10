@@ -38,6 +38,17 @@ export async function createInvoice(data: {
     admission_id?: string;
     invoice_type: string;
     notes?: string;
+    // Phase 2 — billing engine fields
+    billing_patient_type?: string;
+    corporate_id?: string;
+    tpa_provider_id?: number;
+    pre_auth_id?: string;
+    patient_payable?: number;
+    corporate_payable?: number;
+    tpa_payable?: number;
+    concession_amount?: number;
+    concession_reason?: string;
+    concession_approved_by?: string;
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
@@ -51,6 +62,17 @@ export async function createInvoice(data: {
                 status: 'Draft',
                 notes: data.notes || null,
                 organizationId,
+                // Phase 2
+                billing_patient_type: data.billing_patient_type || 'cash',
+                corporate_id: data.corporate_id || null,
+                tpa_provider_id: data.tpa_provider_id || null,
+                pre_auth_id: data.pre_auth_id || null,
+                patient_payable: data.patient_payable ?? 0,
+                corporate_payable: data.corporate_payable ?? 0,
+                tpa_payable: data.tpa_payable ?? 0,
+                concession_amount: data.concession_amount ?? 0,
+                concession_reason: data.concession_reason || null,
+                concession_approved_by: data.concession_approved_by || null,
             },
         });
 
@@ -1129,7 +1151,36 @@ export async function searchPatientsForBilling(query: string) {
                 full_name: true,
                 phone: true,
                 age: true,
-                gender: true
+                gender: true,
+                patient_type: true,
+                corporate_id: true,
+                employee_id: true,
+                corporate: {
+                    select: {
+                        id: true,
+                        company_name: true,
+                        company_code: true,
+                        discount_percentage: true,
+                        credit_limit: true,
+                        current_balance: true,
+                    }
+                },
+                insurance_policies: {
+                    where: { status: 'Active' },
+                    orderBy: { created_at: 'desc' },
+                    take: 1,
+                    include: {
+                        provider: {
+                            select: {
+                                id: true,
+                                provider_name: true,
+                                provider_code: true,
+                                pre_auth_required: true,
+                                default_discount_percentage: true,
+                            }
+                        }
+                    }
+                }
             }
         });
 

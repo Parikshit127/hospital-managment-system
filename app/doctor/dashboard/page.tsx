@@ -57,6 +57,11 @@ import { Sidebar } from "@/app/components/layout/Sidebar";
 import SOAPAssistant from "@/app/doctor/components/SOAPAssistant";
 import { Video } from "lucide-react";
 import IPDJourneyTab from "@/app/admin/patients/[patientId]/tabs/IPDJourneyTab";
+import { PatientSummaryBar } from "@/app/components/clinical/PatientSummaryBar";
+import { SOAPNoteForm } from "@/app/components/clinical/SOAPNoteForm";
+import { getOrCreateEncounterForAppointment } from "@/app/actions/emr-actions";
+import { TemplatePicker } from "@/app/components/clinical/TemplatePicker";
+import { PrescriptionPrint, type PrescriptionData } from "@/app/components/clinical/PrescriptionPrint";
 
 export default function DoctorDashboard() {
   // ─── SESSION STATE ───
@@ -93,6 +98,10 @@ export default function DoctorDashboard() {
   const [soapO, setSoapO] = useState(""); // Objective
   const [soapA, setSoapA] = useState(""); // Assessment
   const [soapP, setSoapP] = useState(""); // Plan
+  const [encounterId, setEncounterId] = useState("");
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [showPrescriptionPrint, setShowPrescriptionPrint] = useState(false);
+  const [prescriptionData, setPrescriptionData] = useState<PrescriptionData | null>(null);
 
   const [selectedTest, setSelectedTest] = useState("");
   const [loading, setLoading] = useState(true);
@@ -357,6 +366,15 @@ export default function DoctorDashboard() {
       }
     }
   }, [activePatient, activeTab, followUpDate, fetchPatientFollowUps]);
+
+  // ─── ENCOUNTER: get-or-create when notes tab opens for OPD patient ───
+  useEffect(() => {
+    if (activeTab === "notes" && activePatient && activePatient.status !== "Admitted" && doctorId && activePatient.appointment_id) {
+      setEncounterId("");
+      getOrCreateEncounterForAppointment(activePatient.appointment_id, activePatient.patient_id, doctorId)
+        .then(r => { if (r.success) setEncounterId(r.data.id); });
+    }
+  }, [activeTab, activePatient?.appointment_id, doctorId]);
 
   async function fetchLabs(patientId: string) {
     setLoadingLabs(true);
@@ -1732,6 +1750,17 @@ export default function DoctorDashboard() {
                 {/* NOTES TAB */}
                 {activeTab === "notes" && (
                   <div className="w-full max-w-4xl space-y-6">
+                    {/* Patient summary bar — always visible in notes tab */}
+                    <PatientSummaryBar
+                      patient={{
+                        patient_id: activePatient.patient_id,
+                        full_name: activePatient.full_name,
+                        age: activePatient.age,
+                        gender: activePatient.gender,
+                        patient_type: activePatient.patient_type,
+                        department: activePatient.department,
+                      }}
+                    />
                     {activePatient.status === "Admitted" ? (
                       <>
                         <div className="bg-violet-500/5 border border-violet-500/10 p-4 rounded-xl flex items-center gap-3">
@@ -1780,25 +1809,60 @@ export default function DoctorDashboard() {
                             rows={8}
                           />
                         </div>
+                        <div className="flex justify-end pt-4">
+                          <button
+                            onClick={handleSaveNotes}
+                            disabled={isSubmitting}
+                            className="px-8 py-3 bg-gradient-to-r from-teal-500 to-emerald-600 text-white font-bold rounded-xl hover:from-teal-400 hover:to-emerald-500 flex items-center gap-2 shadow-lg shadow-teal-500/20 disabled:opacity-50"
+                          >
+                            {isSubmitting ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <Save className="h-4 w-4" /> Save Record
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </>
                     ) : (
                       <>
-                        <div className="bg-teal-500/5 border border-teal-500/10 p-4 rounded-xl flex items-center gap-3 mb-6">
-                          <div className="bg-teal-500/10 p-2 rounded-lg">
-                            <Stethoscope className="h-5 w-5 text-teal-400" />
-                          </div>
-                          <div>
-                            <span className="text-teal-700 text-sm font-bold block">
-                              Clinical SOAP Notes
-                            </span>
-                            <span className="text-teal-600/60 text-xs">
-                              Standardized documentation format for patient
-                              encounters.
-                            </span>
-                          </div>
+                        {/* Toolbar: Template picker + Print Rx */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={() => setShowTemplatePicker(true)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50"
+                          >
+                            <FileText className="h-3.5 w-3.5" /> Use Template
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (!activePatient) return;
+                              setPrescriptionData({
+                                patient: {
+                                  full_name: activePatient.full_name,
+                                  patient_id: activePatient.patient_id,
+                                  age: activePatient.age,
+                                  gender: activePatient.gender,
+                                  phone: activePatient.phone,
+                                },
+                                doctor: { name: doctorName, specialty: doctorSpecialty },
+                                org: { name: 'Hospital' },
+                                date: new Date().toISOString(),
+                                diagnoses: [],
+                                medications: soapP.split('\n').filter(Boolean),
+                                instructions: '',
+                                follow_up: '',
+                              });
+                              setShowPrescriptionPrint(true);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded-xl hover:bg-teal-100"
+                          >
+                            <Printer className="h-3.5 w-3.5" /> Print Rx
+                          </button>
                         </div>
 
-                        {/* AI SOAP Assistant — voice, auto-format, ICD-10, pre-brief */}
+                        {/* AI SOAP Assistant — voice, auto-format, pre-brief */}
                         <SOAPAssistant
                           patientId={activePatient.patient_id}
                           soapS={soapS}
@@ -1816,99 +1880,22 @@ export default function DoctorDashboard() {
                           disabled={isSubmitting}
                         />
 
-                        <div>
-                          <label className={labelCls}>Primary Diagnosis</label>
-                          <input
-                            value={diagnosis}
-                            onChange={(e) => setDiagnosis(e.target.value)}
-                            className={`${inputCls} border-teal-200 outline-none focus:border-teal-400 focus:ring-teal-400`}
-                            placeholder="E.g., Acute Bronchitis"
+                        {/* Structured SOAP form with ICD-10, vitals, allergy check */}
+                        {encounterId ? (
+                          <SOAPNoteForm
+                            patientId={activePatient.patient_id}
+                            encounterId={encounterId}
+                            doctorId={doctorId}
+                            appointmentId={activePatient.appointment_id}
                           />
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                          <div className="space-y-6">
-                            <div>
-                              <label className={labelCls}>
-                                <span className="text-teal-500 mr-1 opacity-70">
-                                  S
-                                </span>
-                                Subjective
-                              </label>
-                              <textarea
-                                value={soapS}
-                                onChange={(e) => setSoapS(e.target.value)}
-                                className={`${inputCls} resize-none`}
-                                placeholder="Patient's reported symptoms, complaints..."
-                                rows={4}
-                              />
-                            </div>
-                            <div>
-                              <label className={labelCls}>
-                                <span className="text-cyan-500 mr-1 opacity-70">
-                                  O
-                                </span>
-                                Objective
-                              </label>
-                              <textarea
-                                value={soapO}
-                                onChange={(e) => setSoapO(e.target.value)}
-                                className={`${inputCls} resize-none`}
-                                placeholder="Vitals, lab results, physical exam findings..."
-                                rows={4}
-                              />
-                            </div>
+                        ) : (
+                          <div className="flex items-center gap-2 py-6 text-gray-400 text-sm">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Loading encounter...
                           </div>
-                          <div className="space-y-6">
-                            <div>
-                              <label className={labelCls}>
-                                <span className="text-violet-500 mr-1 opacity-70">
-                                  A
-                                </span>
-                                Assessment
-                              </label>
-                              <textarea
-                                value={soapA}
-                                onChange={(e) => setSoapA(e.target.value)}
-                                className={`${inputCls} resize-none`}
-                                placeholder="Medical diagnosis, differential diagnosis..."
-                                rows={4}
-                              />
-                            </div>
-                            <div>
-                              <label className={labelCls}>
-                                <span className="text-amber-500 mr-1 opacity-70">
-                                  P
-                                </span>
-                                Plan
-                              </label>
-                              <textarea
-                                value={soapP}
-                                onChange={(e) => setSoapP(e.target.value)}
-                                className={`${inputCls} resize-none`}
-                                placeholder="Treatment plan, prescriptions, follow-up..."
-                                rows={4}
-                              />
-                            </div>
-                          </div>
-                        </div>
+                        )}
                       </>
                     )}
-                    <div className="flex justify-end pt-4">
-                      <button
-                        onClick={handleSaveNotes}
-                        disabled={isSubmitting}
-                        className="px-8 py-3 bg-gradient-to-r from-teal-500 to-emerald-600 text-white font-bold rounded-xl hover:from-teal-400 hover:to-emerald-500 flex items-center gap-2 shadow-lg shadow-teal-500/20 disabled:opacity-50"
-                      >
-                        {isSubmitting ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Save className="h-4 w-4" /> Save Record
-                          </>
-                        )}
-                      </button>
-                    </div>
                   </div>
                 )}
                 {/* HISTORY TAB */}
@@ -2559,6 +2546,34 @@ export default function DoctorDashboard() {
           </div>
         )}
       </main>
+
+      {/* Template Picker Modal */}
+      {showTemplatePicker && (
+        <TemplatePicker
+          doctorId={doctorId}
+          onSelect={(content) => {
+            try {
+              const parsed = JSON.parse(content);
+              if (parsed.subjective) setSoapS(parsed.subjective);
+              if (parsed.objective) setSoapO(parsed.objective);
+              if (parsed.assessment) setSoapA(parsed.assessment);
+              if (parsed.plan) setSoapP(parsed.plan);
+              if (parsed.diagnosis) setDiagnosis(parsed.diagnosis);
+            } catch {
+              setSoapS(content);
+            }
+          }}
+          onClose={() => setShowTemplatePicker(false)}
+        />
+      )}
+
+      {/* Prescription Print Modal */}
+      {showPrescriptionPrint && prescriptionData && (
+        <PrescriptionPrint
+          data={prescriptionData}
+          onClose={() => setShowPrescriptionPrint(false)}
+        />
+      )}
     </div>
   );
 }

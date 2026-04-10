@@ -10,7 +10,9 @@ import {
     CreditCard,
     Stethoscope,
     FileText,
-    Pill
+    Pill,
+    Filter,
+    X
 } from "lucide-react";
 import { getRecentPatientHistory } from "@/app/actions/patient-history-actions";
 
@@ -18,14 +20,17 @@ export default function PatientHistoryPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [historyData, setHistoryData] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [showFilter, setShowFilter] = useState(false);
+    const [dateFrom, setDateFrom] = useState("");
+    const [dateTo, setDateTo] = useState("");
 
     useEffect(() => {
         loadHistory();
     }, []);
 
-    const loadHistory = async (query?: string) => {
+    const loadHistory = async (query?: string, from?: string, to?: string) => {
         setIsLoading(true);
-        const res = await getRecentPatientHistory(query);
+        const res = await getRecentPatientHistory(query, from, to);
         if (res.success && res.data) {
             setHistoryData(res.data);
         }
@@ -35,10 +40,23 @@ export default function PatientHistoryPage() {
     const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value;
         setSearchQuery(val);
-        // Debounce search
-        const timeoutId = setTimeout(() => loadHistory(val), 500);
+        const timeoutId = setTimeout(() => loadHistory(val, dateFrom, dateTo), 500);
         return () => clearTimeout(timeoutId);
     };
+
+    const applyFilter = () => {
+        setShowFilter(false);
+        loadHistory(searchQuery, dateFrom, dateTo);
+    };
+
+    const clearFilter = () => {
+        setDateFrom("");
+        setDateTo("");
+        setShowFilter(false);
+        loadHistory(searchQuery, "", "");
+    };
+
+    const hasActiveFilter = !!(dateFrom || dateTo);
 
     const getServiceIcon = (service: string) => {
         const lower = service.toLowerCase();
@@ -69,20 +87,62 @@ export default function PatientHistoryPage() {
                 </div>
 
                 {/* Search Master Bar */}
-                <div className="bg-white p-2 border border-gray-200 shadow-sm rounded-2xl flex items-center gap-2 max-w-xl">
-                    <div className="pl-4 pr-2 text-gray-400">
-                        <Search className="h-5 w-5" />
+                <div className="relative max-w-xl">
+                    <div className="bg-white p-2 border border-gray-200 shadow-sm rounded-2xl flex items-center gap-2">
+                        <div className="pl-4 pr-2 text-gray-400">
+                            <Search className="h-5 w-5" />
+                        </div>
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={handleSearch}
+                            placeholder="Search by Patient Name, Phone or ID..."
+                            className="flex-1 bg-transparent border-none py-3 text-sm font-medium focus:ring-0 outline-none placeholder:text-gray-400"
+                        />
+                        {hasActiveFilter && (
+                            <button onClick={clearFilter} className="p-1.5 text-gray-400 hover:text-gray-600">
+                                <X className="h-4 w-4" />
+                            </button>
+                        )}
+                        <button
+                            onClick={() => setShowFilter(v => !v)}
+                            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl border transition-colors ${hasActiveFilter ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'}`}
+                        >
+                            <Filter className="h-3.5 w-3.5" />
+                            Filter{hasActiveFilter ? ' ✓' : ''}
+                        </button>
                     </div>
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={handleSearch}
-                        placeholder="Search by Patient Name, Phone or ID..."
-                        className="flex-1 bg-transparent border-none py-3 text-sm font-medium focus:ring-0 outline-none placeholder:text-gray-400"
-                    />
-                    <button className="px-6 py-2.5 bg-gray-50 text-gray-700 text-sm font-bold rounded-xl border border-gray-200 hover:bg-gray-100 transition-colors">
-                        Filter
-                    </button>
+
+                    {/* Filter dropdown */}
+                    {showFilter && (
+                        <div className="absolute top-full left-0 mt-2 z-20 bg-white border border-gray-200 rounded-2xl shadow-xl p-4 w-80 space-y-3">
+                            <p className="text-xs font-black text-gray-400 uppercase tracking-wider">Date Range</p>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">From</label>
+                                    <input
+                                        type="date"
+                                        value={dateFrom}
+                                        onChange={e => setDateFrom(e.target.value)}
+                                        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-blue-400"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">To</label>
+                                    <input
+                                        type="date"
+                                        value={dateTo}
+                                        onChange={e => setDateTo(e.target.value)}
+                                        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-blue-400"
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex gap-2 pt-1">
+                                <button onClick={applyFilter} className="flex-1 py-2 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700">Apply</button>
+                                <button onClick={clearFilter} className="flex-1 py-2 bg-gray-100 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-200">Clear</button>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Patient History Timeline / Table */}

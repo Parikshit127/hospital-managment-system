@@ -11,8 +11,6 @@ export async function dischargePatient(patientId: string) {
     try {
         const { db, organizationId } = await requireTenantContext();
 
-        console.log(`Initiating Discharge for Patient: ${patientId}`);
-
         const activeAdmission = await db.admissions.findFirst({
             where: {
                 patient_id: patientId,

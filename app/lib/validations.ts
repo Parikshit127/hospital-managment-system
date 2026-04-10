@@ -143,8 +143,8 @@ export const submitClaimSchema = z.object({
 export const createOrganizationSchema = z.object({
     // Step 1: Hospital Details
     name: z.string().min(2, 'Hospital name is required').max(200),
-    slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with dashes'),
-    code: z.string().min(2).max(10).toUpperCase(),
+    slug: z.string().min(2, 'Slug must be at least 2 characters').max(50).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with dashes'),
+    code: z.string().min(2, 'Organization code must be at least 2 characters').max(10).toUpperCase(),
     hospital_type: z.string().optional(),
     bed_capacity: z.string().optional(), // comes as string from FormData, parsed to int
     specialties: z.string().optional(), // comma-separated, parsed to array
@@ -167,12 +167,12 @@ export const createOrganizationSchema = z.object({
     accreditation_expiry: z.string().optional(),
     established_year: z.string().optional(),
     // Step 4: Admin User
-    admin_username: z.string().min(3).max(50),
+    admin_username: z.string().min(3, 'Admin username must be at least 3 characters').max(50),
     admin_password: z.string().min(8, 'Password must be at least 8 characters').max(100)
         .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
         .regex(/[0-9]/, 'Password must contain at least one number')
         .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
-    admin_name: z.string().min(2).max(200),
+    admin_name: z.string().min(2, 'Admin name must be at least 2 characters').max(200),
     admin_email: z.string().email(),
     // Step 5: Plan & Config
     plan: z.enum(['free', 'starter', 'pro', 'enterprise']).default('free'),
@@ -182,8 +182,8 @@ export const createOrganizationSchema = z.object({
 
 export const organizationProfileSchema = z.object({
     name: z.string().min(2, 'Hospital name is required').max(200),
-    slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with dashes'),
-    code: z.string().min(2).max(10),
+    slug: z.string().min(2, 'Slug must be at least 2 characters').max(50).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with dashes'),
+    code: z.string().min(2, 'Organization code must be at least 2 characters').max(10),
     address: z.string().optional().nullable(),
     phone: z.string().optional().nullable(),
     email: z.string().email().optional().or(z.literal('')).nullable(),

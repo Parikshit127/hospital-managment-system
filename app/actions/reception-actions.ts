@@ -219,13 +219,13 @@ export async function getPatientDetail(patientId: string) {
 
         return {
             success: true,
-            data: {
+            data: JSON.parse(JSON.stringify({
                 patient: patientWithBalance,
                 appointments: patient.appointments,
                 triageHistory,
                 vitals,
                 invoices,
-            },
+            })),
         };
     } catch (error) {
         console.error('Patient Detail Error:', error);
@@ -1185,4 +1185,93 @@ export async function deletePatientExternalRecord(id: number) {
     } catch (error) {
         return { success: false, error: 'Failed to delete' };
     }
+}
+
+// ── Phase 4: Queue & Check-in ──────────────────────────────────────────────
+
+export async function getTodayCheckInList() {
+    const { db, organizationId } = await requireTenantContext();
+    const { start, end } = getTodayRange();
+    const appointments = await db.appointments.findMany({
+        where: { organizationId, appointment_date: { gte: start, lte: end } },
+        include: { patient: { select: { full_name: true, phone: true, age: true, gender: true } } },
+        orderBy: [{ checked_in_at: 'asc' }, { appointment_date: 'asc' }],
+    });
+    return { success: true, data: JSON.parse(JSON.stringify(appointments)) };
+}
+
+export async function selfCheckInByPhone(phone: string) {
+    const { db, organizationId } = await requireTenantContext();
+    const { start, end } = getTodayRange();
+
+    const patient = await db.oPD_REG.findFirst({
+        where: { organizationId, phone },
+    });
+    if (!patient) return { success: false, error: 'No patient found with this phone number' };
+
+    const appointment = await db.appointments.findFirst({
+        where: {
+            organizationId,
+            patient_id: patient.patient_id,
+            appointment_date: { gte: start, lte: end },
+            status: { in: ['Pending', 'Confirmed'] },
+        },
+        orderBy: { appointment_date: 'asc' },
+    });
+    if (!appointment) return { success: false, error: 'No appointment found for today' };
+
+    return checkInPatient(appointment.appointment_id);
+}
+
+export async function getQueueWithSLA() {
+    const { db, organizationId } = await requireTenantContext();
+    const { start, end } = getTodayRange();
+
+    const [appointments, config] = await Promise.all([
+        db.appointments.findMany({
+            where: {
+                organizationId,
+                appointment_date: { gte: start, lte: end },
+                status: { in: ['Checked In', 'In Progress'] },
+                queue_token: { not: null },
+            },
+            include: { patient: { select: { full_name: true, patient_id: true } } },
+            orderBy: [{ doctor_id: 'asc' }, { queue_token: 'asc' }],
+        }),
+        db.oPDConfig.findFirst({ where: { organizationId } }),
+    ]);
+
+    const maxWait = config?.max_wait_minutes ?? 30;
+    const now = new Date();
+
+    const data = appointments.map((a: {
+        appointment_id: string;
+        queue_token: number | null;
+        status: string;
+        doctor_id: string | null;
+        doctor_name: string | null;
+        checked_in_at: Date | null;
+        called_at: Date | null;
+        patient: { full_name: string; patient_id: string } | null;
+    }) => {
+        const waitMinutes = a.checked_in_at
+            ? Math.floor((now.getTime() - new Date(a.checked_in_at).getTime()) / 60000)
+            : null;
+        return {
+            appointment_id: a.appointment_id,
+            queue_token: a.queue_token,
+            status: a.status,
+            doctor_id: a.doctor_id,
+            doctor_name: a.doctor_name,
+            patient_name: a.patient?.full_name ?? '',
+            patient_id: a.patient?.patient_id ?? '',
+            checked_in_at: a.checked_in_at,
+            called_at: a.called_at,
+            wait_minutes: waitMinutes,
+            sla_breached: waitMinutes !== null && waitMinutes > maxWait,
+            max_wait_minutes: maxWait,
+        };
+    });
+
+    return { success: true, data: JSON.parse(JSON.stringify(data)), maxWait };
 }
