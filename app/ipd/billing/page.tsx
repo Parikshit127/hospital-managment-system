@@ -130,6 +130,7 @@ export default function IpdBillingPage() {
         const res = await postChargeToIpdBill({
             admission_id: selectedAdmission.admission_id,
             source_module: 'manual',
+            service_id: String(chargeServiceId),
             source_ref_id: String(chargeServiceId),
             description: chargeDesc,
             quantity: chargeQty,
