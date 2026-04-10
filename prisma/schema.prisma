@@ -343,6 +343,7 @@ model User {
   phone            String?
   assigned_ward_id       Int?
   doctor_registration_no String?
+  qualifications         String?
   organizationId         String
   is_active        Boolean  @default(true)
   working_hours    String   @default("09:00-17:00")
