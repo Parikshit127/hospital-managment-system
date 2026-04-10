@@ -20,8 +20,20 @@ const createDoctorSchema = z.object({
   is_active: z.boolean().default(true),
 });
 
-const updateDoctorSchema = createDoctorSchema.partial().extend({
+const updateDoctorSchema = z.object({
+  name: z.string().min(2).max(200).optional(),
+  username: z.string().min(3).max(50).optional(),
   password: z.string().min(8).max(100).optional(),
+  specialty: z.string().min(1).optional(),
+  doctor_registration_no: z.string().optional(),
+  qualifications: z.string().optional(),
+  email: z.string().email().optional().or(z.literal('')),
+  phone: z.string().optional(),
+  consultation_fee: z.number().nonnegative().optional(),
+  follow_up_fee: z.number().nonnegative().optional(),
+  working_hours: z.string().optional(),
+  slot_duration: z.number().int().positive().optional(),
+  is_active: z.boolean().optional(),
 });
 
 function assertAdmin(session: { role: string }) {
@@ -35,7 +47,8 @@ export async function listDoctors(opts?: {
   limit?: number;
 }) {
   try {
-    const { db } = await requireTenantContext();
+    const { db, session } = await requireTenantContext();
+    assertAdmin(session);
     const page = opts?.page ?? 1;
     const limit = opts?.limit ?? 25;
     const where: any = { role: 'doctor' };
@@ -56,6 +69,7 @@ export async function listDoctors(opts?: {
           username: true,
           specialty: true,
           doctor_registration_no: true,
+          qualifications: true,
           email: true,
           phone: true,
           consultation_fee: true,
@@ -95,33 +109,39 @@ export async function createDoctor(input: unknown) {
     const { db, organizationId, session } = await requireTenantContext();
     assertAdmin(session);
     const data = createDoctorSchema.parse(input);
-    const dup = await db.user.findUnique({ where: { username: data.username } });
-    if (dup) return { success: false, error: 'Username already exists' };
     const hashed = await bcrypt.hash(data.password, 10);
-    const doctor = await db.user.create({
-      data: {
-        name: data.name,
-        username: data.username,
-        password: hashed,
-        role: 'doctor',
-        specialty: data.specialty,
-        doctor_registration_no: data.doctor_registration_no || null,
-        email: data.email || null,
-        phone: data.phone || null,
-        consultation_fee: data.consultation_fee,
-        follow_up_fee: data.follow_up_fee,
-        working_hours: data.working_hours,
-        slot_duration: data.slot_duration,
-        is_active: data.is_active,
-      },
-      select: {
-        id: true,
-        name: true,
-        specialty: true,
-        consultation_fee: true,
-        follow_up_fee: true,
-      },
-    });
+    let doctor;
+    try {
+      doctor = await db.user.create({
+        data: {
+          name: data.name,
+          username: data.username,
+          password: hashed,
+          role: 'doctor',
+          specialty: data.specialty,
+          doctor_registration_no: data.doctor_registration_no || null,
+          email: data.email || null,
+          phone: data.phone || null,
+          consultation_fee: data.consultation_fee,
+          follow_up_fee: data.follow_up_fee,
+          working_hours: data.working_hours,
+          slot_duration: data.slot_duration,
+          is_active: data.is_active,
+        },
+        select: {
+          id: true,
+          name: true,
+          specialty: true,
+          consultation_fee: true,
+          follow_up_fee: true,
+        },
+      });
+    } catch (e: any) {
+      if (e.code === 'P2002') {
+        return { success: false, error: 'Username already exists' };
+      }
+      throw e;
+    }
     await db.system_audit_logs.create({
       data: {
         action: 'CREATE_DOCTOR',
@@ -152,17 +172,25 @@ export async function updateDoctor(id: string, input: unknown) {
       delete patch.password;
     }
     if (data.email === '') patch.email = null;
-    const doctor = await db.user.update({
-      where: { id },
-      data: patch,
-      select: {
-        id: true,
-        name: true,
-        specialty: true,
-        consultation_fee: true,
-        follow_up_fee: true,
-      },
-    });
+    let doctor;
+    try {
+      doctor = await db.user.update({
+        where: { id },
+        data: patch,
+        select: {
+          id: true,
+          name: true,
+          specialty: true,
+          consultation_fee: true,
+          follow_up_fee: true,
+        },
+      });
+    } catch (e: any) {
+      if (e.code === 'P2002') {
+        return { success: false, error: 'Username already exists' };
+      }
+      throw e;
+    }
     await db.system_audit_logs.create({
       data: {
         action: 'UPDATE_DOCTOR',
@@ -185,6 +213,10 @@ export async function deactivateDoctor(id: string) {
   try {
     const { db, organizationId, session } = await requireTenantContext();
     assertAdmin(session);
+    const existing = await db.user.findUnique({ where: { id }, select: { role: true } });
+    if (!existing || existing.role !== 'doctor') {
+      return { success: false, error: 'Doctor not found' };
+    }
     const doctor = await db.user.update({
       where: { id },
       data: { is_active: false },
