@@ -20,10 +20,10 @@ const serviceSchema = z.object({
 
 export async function listServices(opts?: { search?: string; category?: string; page?: number; limit?: number }) {
   try {
-    const { db } = await requireTenantContext();
+    const { db, organizationId } = await requireTenantContext();
     const page = opts?.page ?? 1;
     const limit = opts?.limit ?? 25;
-    const where: any = {};
+    const where: any = { organizationId };
     if (opts?.category) where.service_category = opts.category;
     if (opts?.search?.trim()) where.OR = [
       { service_name: { contains: opts.search, mode: 'insensitive' } },
@@ -42,7 +42,7 @@ export async function createService(input: unknown) {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
     const data = serviceSchema.parse(input);
-    const row = await db.ipdServiceMaster.create({ data });
+    const row = await db.ipdServiceMaster.create({ data: { ...data, organizationId } });
     await db.system_audit_logs.create({ data: {
       action: 'CREATE_SERVICE', module: 'master-data',
       details: `Created service ${data.service_name}`,
@@ -154,10 +154,10 @@ const packageSchema = z.object({
 
 export async function listPackages(opts?: { search?: string; page?: number; limit?: number }) {
   try {
-    const { db } = await requireTenantContext();
+    const { db, organizationId } = await requireTenantContext();
     const page = opts?.page ?? 1;
     const limit = opts?.limit ?? 25;
-    const where: any = {};
+    const where: any = { organizationId };
     if (opts?.search?.trim()) where.package_name = { contains: opts.search, mode: 'insensitive' };
     const [rows, total] = await Promise.all([
       db.ipdPackage.findMany({ where, orderBy: { created_at: 'desc' }, skip: (page-1)*limit, take: limit }),
@@ -172,7 +172,7 @@ export async function createPackage(input: unknown) {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
     const data = packageSchema.parse(input);
-    const row = await db.ipdPackage.create({ data });
+    const row = await db.ipdPackage.create({ data: { ...data, organizationId } });
     await db.system_audit_logs.create({ data: {
       action: 'CREATE_PACKAGE', module: 'master-data',
       details: `Created package ${data.package_name}`, organizationId,
