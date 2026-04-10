@@ -19,6 +19,11 @@ const TYPE_LABELS: Record<ImportType, string> = {
     lab_results: 'Lab Results',
     pharmacy: 'Pharmacy Inventory',
     appointments: 'Appointments',
+    doctor_master: 'Doctor Master',
+    service_master: 'Service Master',
+    lab_test_master: 'Lab Test Master',
+    package_master: 'Package Master',
+    medicine_master: 'Medicine Master',
 };
 
 export default function StepResults({ jobId, importType, onStartOver }: Props) {

@@ -1,4 +1,15 @@
-export type ImportType = 'patients' | 'staff' | 'invoices' | 'lab_results' | 'pharmacy' | 'appointments';
+export type ImportType =
+  | 'patients'
+  | 'staff'
+  | 'invoices'
+  | 'lab_results'
+  | 'pharmacy'
+  | 'appointments'
+  | 'doctor_master'
+  | 'service_master'
+  | 'lab_test_master'
+  | 'package_master'
+  | 'medicine_master';
 
 export type ImportJobStatus =
     | 'uploaded'

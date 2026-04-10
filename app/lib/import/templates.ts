@@ -77,6 +77,71 @@ const appointmentColumns: ImportColumn[] = [
     { name: 'appointment_date', required: false, type: 'date', description: 'Appointment date (DD/MM/YYYY)', example: '15/06/2024' },
 ];
 
+const doctorMasterColumns: ImportColumn[] = [
+    { name: 'name', required: true, type: 'string', description: 'Doctor full name', example: 'Dr. Priya Sharma', maxLength: 200 },
+    { name: 'username', required: true, type: 'string', description: 'Login username (unique)', example: 'priya.sharma' },
+    { name: 'password', required: true, type: 'string', description: 'Initial password (min 8 chars)', example: 'Welcome@123' },
+    { name: 'specialty', required: true, type: 'string', description: 'Medical specialization', example: 'Cardiology' },
+    { name: 'doctor_registration_no', required: false, type: 'string', description: 'Medical council registration number', example: 'MH-12345' },
+    { name: 'qualifications', required: false, type: 'string', description: 'Degrees and qualifications', example: 'MBBS, MD' },
+    { name: 'email', required: false, type: 'email', description: 'Email address', example: 'priya@hospital.com' },
+    { name: 'phone', required: false, type: 'string', description: 'Phone number', example: '9876543210' },
+    { name: 'consultation_fee', required: true, type: 'number', description: 'Consultation fee (INR)', example: '500' },
+    { name: 'follow_up_fee', required: true, type: 'number', description: 'Follow-up fee (INR)', example: '300' },
+    { name: 'working_hours', required: false, type: 'string', description: 'Working hours range', example: '09:00-17:00' },
+    { name: 'slot_duration', required: false, type: 'number', description: 'Appointment slot duration (minutes)', example: '20' },
+    { name: 'is_active', required: false, type: 'boolean', description: 'Active status (true/false)', example: 'true' },
+];
+
+const serviceMasterColumns: ImportColumn[] = [
+    { name: 'service_code', required: true, type: 'string', description: 'Unique service code', example: 'SVC-001' },
+    { name: 'service_name', required: true, type: 'string', description: 'Service name', example: 'ICU Bed (General)' },
+    { name: 'service_category', required: true, type: 'enum', description: 'Category', example: 'ICU', values: ['OPD Consultation', 'ICU', 'Procedure', 'Room', 'Nursing', 'Diet', 'Consumable', 'Misc'] },
+    { name: 'default_rate', required: true, type: 'number', description: 'Default rate (INR)', example: '3500' },
+    { name: 'hsn_sac_code', required: false, type: 'string', description: 'HSN/SAC code for GST', example: '9993' },
+    { name: 'tax_rate', required: false, type: 'number', description: 'Tax rate (%)', example: '5' },
+    { name: 'is_active', required: false, type: 'boolean', description: 'Active status', example: 'true' },
+];
+
+const labTestMasterColumns: ImportColumn[] = [
+    { name: 'test_name', required: true, type: 'string', description: 'Lab test name', example: 'Complete Blood Count' },
+    { name: 'price', required: true, type: 'number', description: 'Test price (INR)', example: '350' },
+    { name: 'category', required: false, type: 'string', description: 'Test category', example: 'Haematology' },
+    { name: 'sample_type', required: false, type: 'string', description: 'Sample type required', example: 'Blood' },
+    { name: 'unit', required: false, type: 'string', description: 'Result unit', example: 'g/dL' },
+    { name: 'normal_range_min', required: false, type: 'number', description: 'Normal range minimum', example: '12' },
+    { name: 'normal_range_max', required: false, type: 'number', description: 'Normal range maximum', example: '17' },
+    { name: 'hsn_sac_code', required: false, type: 'string', description: 'HSN/SAC code', example: '9993' },
+    { name: 'tax_rate', required: false, type: 'number', description: 'Tax rate (%)', example: '0' },
+    { name: 'is_available', required: false, type: 'boolean', description: 'Available for order', example: 'true' },
+];
+
+const packageMasterColumns: ImportColumn[] = [
+    { name: 'package_code', required: true, type: 'string', description: 'Unique package code', example: 'PKG-001' },
+    { name: 'package_name', required: true, type: 'string', description: 'Package name', example: 'Appendectomy Package' },
+    { name: 'description', required: false, type: 'string', description: 'Package description', example: 'Includes surgery, 3-day stay, meals' },
+    { name: 'total_amount', required: true, type: 'number', description: 'Total package price (INR)', example: '35000' },
+    { name: 'validity_days', required: false, type: 'number', description: 'Package validity (days)', example: '7' },
+    { name: 'exclusions', required: false, type: 'string', description: 'What is excluded', example: 'Blood products, implants' },
+    { name: 'is_active', required: false, type: 'boolean', description: 'Active status', example: 'true' },
+];
+
+const medicineMasterColumns: ImportColumn[] = [
+    { name: 'brand_name', required: true, type: 'string', description: 'Medicine brand name (unique)', example: 'Paracetamol 500mg' },
+    { name: 'generic_name', required: false, type: 'string', description: 'Generic/salt name', example: 'Paracetamol' },
+    { name: 'category', required: false, type: 'string', description: 'Medicine category', example: 'Analgesic' },
+    { name: 'manufacturer', required: false, type: 'string', description: 'Manufacturer name', example: 'GSK' },
+    { name: 'form', required: false, type: 'string', description: 'Formulation (tablet/syrup/etc)', example: 'Tablet' },
+    { name: 'strength', required: false, type: 'string', description: 'Strength', example: '500mg' },
+    { name: 'mrp', required: true, type: 'number', description: 'Maximum retail price (INR)', example: '20' },
+    { name: 'purchase_price', required: true, type: 'number', description: 'Purchase/cost price (INR)', example: '8' },
+    { name: 'selling_price', required: true, type: 'number', description: 'Selling price (INR)', example: '15' },
+    { name: 'gst_percent', required: false, type: 'number', description: 'GST percentage', example: '12' },
+    { name: 'min_threshold', required: false, type: 'number', description: 'Minimum stock threshold', example: '10' },
+    { name: 'hsn_sac_code', required: false, type: 'string', description: 'HSN/SAC code', example: '3004' },
+    { name: 'is_active', required: false, type: 'boolean', description: 'Active status', example: 'true' },
+];
+
 const TEMPLATES: Record<ImportType, Omit<ImportTemplate, 'import_type'>> = {
     patients: {
         name: 'Patient Records',
@@ -107,6 +172,31 @@ const TEMPLATES: Record<ImportType, Omit<ImportTemplate, 'import_type'>> = {
         name: 'Appointments',
         description: 'Import historical appointment records',
         columns: appointmentColumns,
+    },
+    doctor_master: {
+        name: 'Doctor Master',
+        description: 'Bulk import doctors with fees, specialization, and working hours',
+        columns: doctorMasterColumns,
+    },
+    service_master: {
+        name: 'Service Master',
+        description: 'Bulk import hospital services (ICU, procedures, nursing, etc.)',
+        columns: serviceMasterColumns,
+    },
+    lab_test_master: {
+        name: 'Lab Test Master',
+        description: 'Bulk import lab test catalog with prices and reference ranges',
+        columns: labTestMasterColumns,
+    },
+    package_master: {
+        name: 'Package Master',
+        description: 'Bulk import treatment/surgery packages with prices (inclusions added manually)',
+        columns: packageMasterColumns,
+    },
+    medicine_master: {
+        name: 'Medicine Master',
+        description: 'Bulk import medicine catalog with MRP, purchase, and selling prices',
+        columns: medicineMasterColumns,
     },
 };
 
