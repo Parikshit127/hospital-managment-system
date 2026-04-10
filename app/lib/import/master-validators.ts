@@ -27,11 +27,6 @@ function toNum(v: unknown, fieldName: string): number | string {
   return n;
 }
 
-function toBool(v: unknown): boolean {
-  const s = String(v ?? '').toLowerCase().trim();
-  return s === 'true' || s === 'yes' || s === '1';
-}
-
 function str(v: unknown): string {
   return String(v ?? '').trim();
 }
@@ -62,7 +57,7 @@ export interface DoctorRow {
   doctor_registration_no?: string; qualifications?: string;
   email?: string; phone?: string;
   consultation_fee: number; follow_up_fee: number;
-  working_hours: string; slot_duration?: number; is_active: boolean;
+  working_hours: string; slot_duration: number; is_active: boolean;
 }
 
 export interface ServiceRow {
@@ -81,7 +76,7 @@ export interface LabTestRow {
 export interface PackageRow {
   package_code: string; package_name: string;
   description?: string; total_amount: number;
-  validity_days?: number; exclusions?: string; is_active: boolean;
+  validity_days: number; exclusions?: string; is_active: boolean;
 }
 
 export interface MedicineRow {

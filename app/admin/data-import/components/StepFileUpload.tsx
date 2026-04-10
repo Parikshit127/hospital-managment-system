@@ -5,18 +5,18 @@ import { Upload, FileSpreadsheet, Download, Loader2, Users, Stethoscope, Receipt
 import type { ImportType, ColumnMapping } from '@/app/types/import';
 import { createImportJob } from '@/app/actions/import-actions';
 
-const IMPORT_TYPES: { value: ImportType; label: string; icon: React.ElementType; description: string }[] = [
+const IMPORT_TYPES: { value: ImportType; label: string; icon: React.ElementType; description: string; disabled?: boolean }[] = [
     { value: 'patients', label: 'Patient Records', icon: Users, description: 'Demographics, contact info, medical history' },
     { value: 'staff', label: 'Staff & Doctors', icon: Stethoscope, description: 'Staff accounts with roles and specialties' },
     { value: 'invoices', label: 'Invoices & Billing', icon: Receipt, description: 'Historical invoices and payment records' },
     { value: 'lab_results', label: 'Lab Results', icon: FlaskConical, description: 'Laboratory test orders and results' },
     { value: 'pharmacy', label: 'Pharmacy Inventory', icon: Pill, description: 'Medicine catalog and batch inventory' },
     { value: 'appointments', label: 'Appointments', icon: CalendarDays, description: 'Historical appointment records' },
-    { value: 'doctor_master', label: 'Doctor Master', icon: Database, description: 'Bulk import doctors with fees and specialization' },
-    { value: 'service_master', label: 'Service Master', icon: Database, description: 'Bulk import services (ICU, procedures, nursing)' },
-    { value: 'lab_test_master', label: 'Lab Test Master', icon: Database, description: 'Bulk import lab test catalog with prices' },
-    { value: 'package_master', label: 'Package Master', icon: Database, description: 'Bulk import treatment packages' },
-    { value: 'medicine_master', label: 'Medicine Master', icon: Database, description: 'Bulk import medicine catalog with pricing' },
+    { value: 'doctor_master', label: 'Doctor Master', icon: Database, description: 'Use the Master Data page to import doctors', disabled: true },
+    { value: 'service_master', label: 'Service Master', icon: Database, description: 'Use the Master Data page to import services', disabled: true },
+    { value: 'lab_test_master', label: 'Lab Test Master', icon: Database, description: 'Use the Master Data page to import lab tests', disabled: true },
+    { value: 'package_master', label: 'Package Master', icon: Database, description: 'Use the Master Data page to import packages', disabled: true },
+    { value: 'medicine_master', label: 'Medicine Master', icon: Database, description: 'Use the Master Data page to import medicines', disabled: true },
 ];
 
 interface Props {
@@ -111,18 +111,21 @@ export default function StepFileUpload({ onComplete }: Props) {
                     {IMPORT_TYPES.map(type => {
                         const Icon = type.icon;
                         const isSelected = selectedType === type.value;
+                        const isDisabled = type.disabled === true;
                         return (
                             <button
                                 key={type.value}
-                                onClick={() => setSelectedType(type.value)}
+                                onClick={() => { if (isDisabled) return; setSelectedType(type.value); }}
                                 className={`p-4 rounded-xl border-2 text-left transition-all ${
-                                    isSelected
-                                        ? 'border-blue-500 bg-blue-50'
-                                        : 'border-gray-200 hover:border-gray-300 bg-white'
+                                    isDisabled
+                                        ? 'border-gray-200 bg-white opacity-50 cursor-not-allowed'
+                                        : isSelected
+                                            ? 'border-blue-500 bg-blue-50'
+                                            : 'border-gray-200 hover:border-gray-300 bg-white'
                                 }`}
                             >
-                                <Icon size={20} className={isSelected ? 'text-blue-600' : 'text-gray-400'} />
-                                <p className={`text-sm font-medium mt-2 ${isSelected ? 'text-blue-900' : 'text-gray-700'}`}>
+                                <Icon size={20} className={isSelected && !isDisabled ? 'text-blue-600' : 'text-gray-400'} />
+                                <p className={`text-sm font-medium mt-2 ${isSelected && !isDisabled ? 'text-blue-900' : 'text-gray-700'}`}>
                                     {type.label}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-0.5">{type.description}</p>

@@ -33,6 +33,7 @@ export default function MasterImportButton({ type, onImportComplete }: Props) {
   const [stage, setStage] = useState<Stage>('idle');
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [importResult, setImportResult] = useState<{ imported: number; failed: ImportRowFailure[] } | null>(null);
+  const [validationErrors, setValidationErrors] = useState<RowError[]>([]);
 
   function handleTemplateDownload() {
     try {
@@ -64,6 +65,7 @@ export default function MasterImportButton({ type, onImportComplete }: Props) {
         errors,
         validRows: valid as unknown as Record<string, unknown>[],
       });
+      setValidationErrors(errors);
       setStage('preview');
     } catch (e: any) {
       toast.error('Could not read file: ' + e.message);
@@ -116,10 +118,37 @@ export default function MasterImportButton({ type, onImportComplete }: Props) {
     URL.revokeObjectURL(url);
   }
 
+  function handleValidationErrorDownload() {
+    if (validationErrors.length === 0) return;
+    const firstRow = validationErrors[0]?.originalData ?? {};
+    const dataKeys = Object.keys(firstRow);
+    const headers = ['Row', 'Error', ...dataKeys];
+    const rows = validationErrors.map(e => ({
+      Row: e.rowIndex,
+      Error: e.reason,
+      ...e.originalData,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+    ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 15) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Validation Errors');
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${type}-validation-errors.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   function close() {
     setStage('idle');
     setPreview(null);
     setImportResult(null);
+    setValidationErrors([]);
   }
 
   return (
@@ -185,6 +214,17 @@ export default function MasterImportButton({ type, onImportComplete }: Props) {
                     </ul>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {preview.errors.length > 10 && stage === 'preview' && (
+              <div className="mb-4 flex justify-end">
+                <button
+                  onClick={handleValidationErrorDownload}
+                  className="flex items-center gap-1.5 text-xs text-amber-700 border border-amber-300 px-3 py-1.5 rounded-lg hover:bg-amber-50"
+                >
+                  <Download className="h-3.5 w-3.5" /> Download all {validationErrors.length} validation errors
+                </button>
               </div>
             )}
 

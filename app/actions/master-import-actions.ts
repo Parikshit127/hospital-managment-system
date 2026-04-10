@@ -30,7 +30,7 @@ export async function importMasterData(
   rows: Record<string, unknown>[],
 ): Promise<{ success: boolean; data?: ImportMasterResult; error?: string }> {
   try {
-    const { session, organizationId } = await requireTenantContext();
+    const { db, session, organizationId } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
     if (rows.length > MAX_ROWS) {
       return { success: false, error: `Maximum ${MAX_ROWS} rows per import (got ${rows.length})` };
@@ -43,16 +43,24 @@ export async function importMasterData(
       const row = rows[i];
       try {
         let result: { success: boolean; error?: string };
-        if (type === 'doctor_master') {
-          result = await createDoctor(row);
-        } else if (type === 'service_master') {
-          result = await createService(row);
-        } else if (type === 'lab_test_master') {
-          result = await createLabTest(row);
-        } else if (type === 'package_master') {
-          result = await createPackage({ ...(row as any), inclusions: [] });
-        } else {
-          result = await createMedicine(row);
+        switch (type) {
+          case 'doctor_master':
+            result = await createDoctor(row);
+            break;
+          case 'service_master':
+            result = await createService(row);
+            break;
+          case 'lab_test_master':
+            result = await createLabTest(row);
+            break;
+          case 'package_master':
+            result = await createPackage({ ...(row as any), inclusions: [] });
+            break;
+          case 'medicine_master':
+            result = await createMedicine(row);
+            break;
+          default:
+            throw new Error(`Unknown import type: ${type}`);
         }
         if (result.success) {
           imported++;
@@ -66,7 +74,6 @@ export async function importMasterData(
 
     // Single audit log entry for the bulk operation
     try {
-      const { db } = await requireTenantContext();
       await db.system_audit_logs.create({
         data: {
           action: `BULK_IMPORT_${type.toUpperCase()}`,
