@@ -51,6 +51,7 @@ export default function MasterImportButton({ type, onImportComplete }: Props) {
       if (parsed.totalRows > MAX_ROWS) {
         toast.error(`File has ${parsed.totalRows} rows. Maximum is ${MAX_ROWS}.`);
         setStage('idle');
+        if (fileRef.current) fileRef.current.value = '';
         return;
       }
 
@@ -191,7 +192,7 @@ export default function MasterImportButton({ type, onImportComplete }: Props) {
             {stage === 'done' && importResult && (
               <div className={`mb-4 p-3 rounded-xl border ${importResult.failed.length === 0 ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  <CheckCircle2 className={`h-4 w-4 ${importResult.failed.length > 0 ? 'text-amber-600' : 'text-green-600'}`} />
                   <p className="text-sm font-semibold text-green-800">
                     {importResult.imported} row{importResult.imported !== 1 ? 's' : ''} imported
                     {importResult.failed.length > 0 && `, ${importResult.failed.length} failed`}
