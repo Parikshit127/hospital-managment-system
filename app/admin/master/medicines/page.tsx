@@ -7,6 +7,7 @@ import {
   listMedicines, createMedicine, updateMedicine, deactivateMedicine,
   listBatches, addBatch, updateBatch,
 } from '@/app/actions/medicine-master-actions';
+import MasterImportButton from '@/app/components/master/MasterImportButton';
 
 const PAGE_LIMIT = 25;
 const EMPTY_MED = {
@@ -196,10 +197,13 @@ export default function MedicineMasterPage() {
             className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-blue-500"
           />
         </div>
-        <button onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">
-          <Plus className="h-4 w-4" /> Add Medicine
-        </button>
+        <div className="flex items-center gap-2">
+          <MasterImportButton type="medicine_master" onImportComplete={load} />
+          <button onClick={openCreate}
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">
+            <Plus className="h-4 w-4" /> Add Medicine
+          </button>
+        </div>
       </div>
 
       <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">

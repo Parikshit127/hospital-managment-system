@@ -8,6 +8,7 @@ import {
   listLabTests, createLabTest, updateLabTest,
   listPackages, createPackage, updatePackage,
 } from '@/app/actions/service-master-actions';
+import MasterImportButton from '@/app/components/master/MasterImportButton';
 
 const PAGE_LIMIT = 25;
 const SERVICE_CATEGORIES = ['OPD Consultation', 'ICU', 'Procedure', 'Room', 'Nursing', 'Diet', 'Consumable', 'Misc'] as const;
@@ -282,10 +283,13 @@ export default function ServiceMasterPage() {
                 className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-blue-500"
               />
             </div>
-            <button onClick={openCreateSvc}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">
-              <Plus className="h-4 w-4" /> Add Service
-            </button>
+            <div className="flex items-center gap-2">
+              <MasterImportButton type="service_master" onImportComplete={loadServices} />
+              <button onClick={openCreateSvc}
+                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">
+                <Plus className="h-4 w-4" /> Add Service
+              </button>
+            </div>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
@@ -412,10 +416,13 @@ export default function ServiceMasterPage() {
                 className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-blue-500"
               />
             </div>
-            <button onClick={openCreateLab}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">
-              <Plus className="h-4 w-4" /> Add Lab Test
-            </button>
+            <div className="flex items-center gap-2">
+              <MasterImportButton type="lab_test_master" onImportComplete={loadLabTests} />
+              <button onClick={openCreateLab}
+                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">
+                <Plus className="h-4 w-4" /> Add Lab Test
+              </button>
+            </div>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
@@ -554,10 +561,13 @@ export default function ServiceMasterPage() {
                 className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-blue-500"
               />
             </div>
-            <button onClick={openCreatePkg}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">
-              <Plus className="h-4 w-4" /> Add Package
-            </button>
+            <div className="flex items-center gap-2">
+              <MasterImportButton type="package_master" onImportComplete={loadPackages} />
+              <button onClick={openCreatePkg}
+                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">
+                <Plus className="h-4 w-4" /> Add Package
+              </button>
+            </div>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
