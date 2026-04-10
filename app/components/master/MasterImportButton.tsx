@@ -5,13 +5,11 @@ import { Upload, Download, Loader2, X, AlertCircle, CheckCircle2 } from 'lucide-
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { parseFile } from '@/app/lib/import/parser';
-import { validateMasterRows } from '@/app/lib/import/master-validators';
+import { validateMasterRows, MASTER_IMPORT_MAX_ROWS } from '@/app/lib/import/master-validators';
 import { downloadMasterTemplate } from '@/app/lib/import/master-templates';
 import { importMasterData } from '@/app/actions/master-import-actions';
 import type { MasterImportType, RowError } from '@/app/lib/import/master-validators';
 import type { ImportRowFailure } from '@/app/actions/master-import-actions';
-
-const MAX_ROWS = 500;
 
 interface Props {
   type: MasterImportType;
@@ -49,8 +47,8 @@ export default function MasterImportButton({ type, onImportComplete }: Props) {
       const buffer = await file.arrayBuffer();
       const parsed = parseFile(buffer, file.name);
 
-      if (parsed.totalRows > MAX_ROWS) {
-        toast.error(`File has ${parsed.totalRows} rows. Maximum is ${MAX_ROWS}.`);
+      if (parsed.totalRows > MASTER_IMPORT_MAX_ROWS) {
+        toast.error(`File has ${parsed.totalRows} rows. Maximum is ${MASTER_IMPORT_MAX_ROWS}.`);
         setStage('idle');
         if (fileRef.current) fileRef.current.value = '';
         return;

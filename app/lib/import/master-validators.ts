@@ -8,6 +8,8 @@ export type MasterImportType =
   | 'package_master'
   | 'medicine_master';
 
+export const MASTER_IMPORT_MAX_ROWS = 500;
+
 export interface RowError {
   rowIndex: number; // 1-based (row 1 = first data row)
   reason: string;

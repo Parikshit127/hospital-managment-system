@@ -11,6 +11,7 @@ import {
   createMedicine,
 } from './medicine-master-actions';
 import type { MasterImportType } from '@/app/lib/import/master-validators';
+import { MASTER_IMPORT_MAX_ROWS } from '@/app/lib/import/master-validators';
 
 export interface ImportRowFailure {
   rowIndex: number;
@@ -23,8 +24,6 @@ export interface ImportMasterResult {
   failed: ImportRowFailure[];
 }
 
-const MAX_ROWS = 500;
-
 export async function importMasterData(
   type: MasterImportType,
   rows: Record<string, unknown>[],
@@ -32,8 +31,8 @@ export async function importMasterData(
   try {
     const { db, session, organizationId } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
-    if (rows.length > MAX_ROWS) {
-      return { success: false, error: `Maximum ${MAX_ROWS} rows per import (got ${rows.length})` };
+    if (rows.length > MASTER_IMPORT_MAX_ROWS) {
+      return { success: false, error: `Maximum ${MASTER_IMPORT_MAX_ROWS} rows per import (got ${rows.length})` };
     }
 
     let imported = 0;

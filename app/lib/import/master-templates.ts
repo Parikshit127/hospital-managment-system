@@ -56,6 +56,6 @@ export function downloadMasterTemplate(type: MasterImportType) {
   const orderedSample: Record<string, string> = {};
   for (const h of headers) { orderedSample[h] = sampleRow[h] ?? ''; }
   const buffer = generateTemplateFile(headers, [orderedSample], 'xlsx');
-  const label = type.replace('_master', '').replace('_', '-');
+  const label = type.replace('_master', '').replaceAll('_', '-');
   triggerDownload(buffer, `${label}-master-template.xlsx`);
 }
