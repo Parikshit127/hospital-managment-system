@@ -11,7 +11,7 @@ import {
     Users, UserCog, Building2, ShieldCheck, UserRound,
     Settings, Palette, FileText, Bell, Plug, Clock, BarChart3, Lock,
     LogOut, ChevronLeft, ChevronRight, Workflow,
-    GitBranch, Menu, X, DatabaseBackup, BookOpen,
+    GitBranch, Menu, X, DatabaseBackup, BookOpen, Database,
 } from 'lucide-react';
 
 const NAV_SECTIONS = [
@@ -42,6 +42,12 @@ const NAV_SECTIONS = [
             { label: 'Departments', href: '/admin/departments', icon: Building2 },
             { label: 'Patients', href: '/admin/patients', icon: UserRound },
             { label: 'Roles & Permissions', href: '/admin/roles', icon: ShieldCheck },
+        ],
+    },
+    {
+        title: 'Master Data',
+        items: [
+            { label: 'Master Data', href: '/admin/master', icon: Database },
         ],
     },
     {
