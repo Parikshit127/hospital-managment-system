@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 import {
     getAdmissionFullDetails, createNursingTask, changeAdmissionDoctor,
-    recordWardRound, assignDietPlan, addMedicalNote, getWardsWithBeds, transferPatient
+    recordWardRound, assignDietPlan, addMedicalNote, getWardsWithBeds, transferPatient,
+    updateAdmissionDiagnosis
 } from '@/app/actions/ipd-actions';
 import { generateInterimBill, postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
 import { useToast } from '@/app/components/ui/Toast';
@@ -58,6 +59,14 @@ export default function AdmissionDetailPage() {
     const [taskTime, setTaskTime] = useState('');
     const [savingTask, setSavingTask] = useState(false);
 
+    // Clinical classification
+    const [showDiagnosisForm, setShowDiagnosisForm] = useState(false);
+    const [diagIcd, setDiagIcd] = useState('');
+    const [diagPatientClass, setDiagPatientClass] = useState('');
+    const [diagIsolationType, setDiagIsolationType] = useState('');
+    const [diagDischargeType, setDiagDischargeType] = useState('');
+    const [savingDiag, setSavingDiag] = useState(false);
+
     // Ward round
     const [roundObs, setRoundObs] = useState('');
     const [roundPlan, setRoundPlan] = useState('');
@@ -81,6 +90,11 @@ export default function AdmissionDetailPage() {
     const [dietType, setDietType] = useState('Normal');
     const [dietInstructions, setDietInstructions] = useState('');
     const [savingDiet, setSavingDiet] = useState(false);
+    const [dietCalories, setDietCalories] = useState('');
+    const [dietFluidRestriction, setDietFluidRestriction] = useState('');
+    const [dietReligious, setDietReligious] = useState('');
+    const [dietTexture, setDietTexture] = useState('Normal');
+    const [dietFeedingRoute, setDietFeedingRoute] = useState('Oral');
 
     // Billing
     const [bill, setBill] = useState<any>(null);
@@ -219,6 +233,25 @@ export default function AdmissionDetailPage() {
         getAdmissionConsultants(data.admission_id).then(res => { if (res.success) setConsultants(res.data as any[]); });
     };
 
+    const handleSaveDiagnosis = async () => {
+        setSavingDiag(true);
+        const res = await updateAdmissionDiagnosis({
+            admission_id: data.admission_id,
+            primary_diagnosis_icd: diagIcd || undefined,
+            patient_class: diagPatientClass || undefined,
+            isolation_type: diagIsolationType || undefined,
+            discharge_type: diagDischargeType || undefined,
+        });
+        setSavingDiag(false);
+        if (res.success) {
+            toast.success('Clinical classification updated');
+            setShowDiagnosisForm(false);
+            loadData();
+        } else {
+            toast.error(res.error || 'Failed');
+        }
+    };
+
     const openTransfer = async () => {
         setShowTransfer(true);
         setLoadingWards(true);
@@ -337,6 +370,11 @@ export default function AdmissionDetailPage() {
             admission_id: data.admission_id,
             diet_type: dietType,
             instructions: dietInstructions,
+            calorie_target: dietCalories ? Number(dietCalories) : undefined,
+            fluid_restriction_ml: dietFluidRestriction ? Number(dietFluidRestriction) : undefined,
+            religious_restrictions: dietReligious || undefined,
+            texture_modification: dietTexture !== 'Normal' ? dietTexture : undefined,
+            feeding_route: dietFeedingRoute !== 'Oral' ? dietFeedingRoute : undefined,
         });
         setSavingDiet(false);
         if (res.success) {
@@ -587,6 +625,70 @@ export default function AdmissionDetailPage() {
                                         {data.case_fir_number && <DetailRow label="FIR No." value={data.case_fir_number} />}
                                         {data.past_ailments && <DetailRow label="Past Ailments" value={data.past_ailments} />}
                                     </div>
+                                </div>
+
+                                {/* Clinical Classification */}
+                                <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Clinical Classification</h4>
+                                        {data.status === 'Admitted' && (
+                                            <button onClick={() => setShowDiagnosisForm(v => !v)}
+                                                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded-lg hover:bg-indigo-50">
+                                                {showDiagnosisForm ? 'Cancel' : 'Edit'}
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <DetailRow label="Primary ICD-10" value={data.primary_diagnosis_icd || 'Not set'} />
+                                        <DetailRow label="Patient Class" value={data.patient_class || 'General'} />
+                                        <DetailRow label="Isolation" value={data.isolation_type || 'None'} />
+                                    </div>
+                                    {showDiagnosisForm && data.status === 'Admitted' && (
+                                        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-3">
+                                            <p className="text-[10px] font-black text-indigo-700 uppercase tracking-widest">Update Clinical Classification</p>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-500">Primary ICD-10</label>
+                                                    <input value={diagIcd} onChange={e => setDiagIcd(e.target.value)} placeholder="e.g. J18.9"
+                                                        className="w-full mt-1 text-xs border border-indigo-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-500">Patient Class</label>
+                                                    <select value={diagPatientClass} onChange={e => setDiagPatientClass(e.target.value)}
+                                                        className="w-full mt-1 text-xs border border-indigo-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                                                        <option value="">— Select —</option>
+                                                        {['General', 'SemiPrivate', 'Private', 'Suite', 'ICU', 'NICU', 'PICU'].map(c => <option key={c}>{c}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-500">Isolation Type</label>
+                                                    <select value={diagIsolationType} onChange={e => setDiagIsolationType(e.target.value)}
+                                                        className="w-full mt-1 text-xs border border-indigo-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                                                        <option value="">None</option>
+                                                        {['Contact', 'Droplet', 'Airborne', 'Reverse'].map(c => <option key={c}>{c}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-500">Discharge Type (planned)</label>
+                                                    <select value={diagDischargeType} onChange={e => setDiagDischargeType(e.target.value)}
+                                                        className="w-full mt-1 text-xs border border-indigo-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                                                        <option value="">— Select —</option>
+                                                        {['Normal', 'LAMA', 'DAMA', 'Absconded', 'Death', 'Transfer'].map(c => <option key={c}>{c}</option>)}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={handleSaveDiagnosis} disabled={savingDiag}
+                                                    className="flex-1 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg disabled:opacity-50">
+                                                    {savingDiag ? 'Saving…' : 'Save'}
+                                                </button>
+                                                <button onClick={() => setShowDiagnosisForm(false)}
+                                                    className="px-4 py-2 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg">
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Active Diet Quick View */}
@@ -1150,6 +1252,14 @@ export default function AdmissionDetailPage() {
                                                     {d.is_active && <span className="text-[10px] px-2 py-0.5 bg-orange-200 text-orange-800 rounded-full font-bold uppercase">Active</span>}
                                                 </div>
                                                 {d.instructions && <p className="text-xs text-gray-600">{d.instructions}</p>}
+                                                {(d.feeding_route || d.texture_modification || d.calorie_target || d.fluid_restriction_ml) && (
+                                                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                                        {d.feeding_route && <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium">Route: {d.feeding_route}</span>}
+                                                        {d.texture_modification && <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded font-medium">Texture: {d.texture_modification}</span>}
+                                                        {d.calorie_target && <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded font-medium">{d.calorie_target} kcal</span>}
+                                                        {d.fluid_restriction_ml && <span className="text-[10px] px-1.5 py-0.5 bg-cyan-100 text-cyan-700 rounded font-medium">Fluid: {d.fluid_restriction_ml} ml/day</span>}
+                                                    </div>
+                                                )}
                                                 <p className="text-[10px] text-gray-400 mt-1.5">{new Date(d.created_at).toLocaleString()}</p>
                                             </div>
                                         ))
@@ -1190,6 +1300,40 @@ export default function AdmissionDetailPage() {
                                                 placeholder="Special instructions (optional)..."
                                                 className="w-full text-xs p-2.5 bg-white border border-orange-200 rounded-lg h-20 resize-none focus:outline-none focus:ring-2 focus:ring-orange-400"
                                             />
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-500 uppercase">Feeding Route</label>
+                                                    <select value={dietFeedingRoute} onChange={e => setDietFeedingRoute(e.target.value)}
+                                                        className="w-full mt-1 text-xs border border-green-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-green-400">
+                                                        {['Oral', 'NGTube', 'PEG', 'TPN', 'NPO'].map(r => <option key={r}>{r}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-500 uppercase">Texture</label>
+                                                    <select value={dietTexture} onChange={e => setDietTexture(e.target.value)}
+                                                        className="w-full mt-1 text-xs border border-green-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-green-400">
+                                                        {['Normal', 'Soft', 'Minced', 'Pureed'].map(t => <option key={t}>{t}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-500 uppercase">Calorie Target (kcal)</label>
+                                                    <input type="number" min={0} value={dietCalories} onChange={e => setDietCalories(e.target.value)}
+                                                        placeholder="e.g. 1800"
+                                                        className="w-full mt-1 text-xs border border-green-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-green-400" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-500 uppercase">Fluid Restriction (ml/day)</label>
+                                                    <input type="number" min={0} value={dietFluidRestriction} onChange={e => setDietFluidRestriction(e.target.value)}
+                                                        placeholder="e.g. 1500 (blank = none)"
+                                                        className="w-full mt-1 text-xs border border-green-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-green-400" />
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className="text-[10px] font-bold text-gray-500 uppercase">Religious / Dietary Restrictions</label>
+                                                    <input value={dietReligious} onChange={e => setDietReligious(e.target.value)}
+                                                        placeholder="e.g. Vegetarian, Halal, Kosher"
+                                                        className="w-full mt-1 text-xs border border-green-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-green-400" />
+                                                </div>
+                                            </div>
                                             <button
                                                 type="submit"
                                                 disabled={savingDiet}
