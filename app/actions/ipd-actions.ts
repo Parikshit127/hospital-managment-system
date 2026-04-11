@@ -855,6 +855,12 @@ export async function assignDietPlan(data: {
   admission_id: string;
   diet_type: string;
   instructions: string;
+  calorie_target?: number;
+  protein_target?: number;
+  fluid_restriction_ml?: number;
+  religious_restrictions?: string;
+  texture_modification?: string;
+  feeding_route?: string;
 }) {
   try {
     const { db, session, organizationId } = await requireTenantContext();
@@ -873,10 +879,48 @@ export async function assignDietPlan(data: {
         is_active: true,
         created_by: session.id,
         organizationId,
+        ...(data.calorie_target !== undefined && { calorie_target: data.calorie_target }),
+        ...(data.protein_target !== undefined && { protein_target: data.protein_target }),
+        ...(data.fluid_restriction_ml !== undefined && { fluid_restriction_ml: data.fluid_restriction_ml }),
+        ...(data.religious_restrictions !== undefined && { religious_restrictions: data.religious_restrictions }),
+        ...(data.texture_modification !== undefined && { texture_modification: data.texture_modification }),
+        ...(data.feeding_route !== undefined && { feeding_route: data.feeding_route }),
       },
     });
 
     revalidatePath(`/ipd/admission/${data.admission_id}`);
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function safeUpdateAdmission(admissionId: string, currentVersion: number, updateData: Record<string, any>) {
+  try {
+    const { db } = await requireTenantContext();
+
+    // Attempt update with version check
+    const result = await db.admissions.updateMany({
+      where: {
+        admission_id: admissionId,
+        version: currentVersion,
+      },
+      data: {
+        ...updateData,
+        version: { increment: 1 },
+      },
+    });
+
+    if (result.count === 0) {
+      // Version mismatch — someone else updated first
+      return {
+        success: false,
+        error: 'This record was updated by another user. Please refresh and try again.',
+        conflict: true,
+      };
+    }
+
+    revalidatePath(`/ipd/admission/${admissionId}`);
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
