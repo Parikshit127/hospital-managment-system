@@ -1128,3 +1128,120 @@ export async function createNursingTask(data: {
     return { success: false, error: "Failed" };
   }
 }
+
+export async function admitEmergency(data: {
+  patient_id: string;
+  bed_id: string;
+  ward_id: number;
+  chief_complaint: string;
+  doctor_name?: string;
+  attending_doctor_id?: string;
+  deposit_amount?: number;
+}) {
+  try {
+    const { db, session, organizationId } = await requireTenantContext();
+
+    // 1. Get bed details for room rate
+    const bed = await db.beds.findUnique({
+      where: { bed_id: data.bed_id },
+      include: { wards: true },
+    });
+    if (!bed) return { success: false, error: 'Bed not found' };
+    if (bed.status !== 'Available') return { success: false, error: 'Bed is not available' };
+
+    // 2. Get patient
+    const patient = await db.oPD_REG.findUnique({ where: { patient_id: data.patient_id } });
+    if (!patient) return { success: false, error: 'Patient not found' };
+
+    const result = await db.$transaction(async (tx: any) => {
+      // 3. Create admission
+      const admission = await tx.admissions.create({
+        data: {
+          patient_id: data.patient_id,
+          bed_id: data.bed_id,
+          ward_id: data.ward_id,
+          status: 'Admitted',
+          diagnosis: data.chief_complaint,
+          doctor_name: data.doctor_name,
+          attending_doctor_id: data.attending_doctor_id,
+          admission_category: 'Emergency',
+          admission_source: 'Emergency',
+          organizationId,
+        },
+      });
+
+      // 4. Mark bed Occupied
+      await tx.beds.update({
+        where: { bed_id: data.bed_id },
+        data: { status: 'Occupied' },
+      });
+
+      // 5. Create invoice
+      const invCount = await tx.invoices.count({ where: { organizationId } });
+      const invoice = await tx.invoices.create({
+        data: {
+          patient_id: data.patient_id,
+          admission_id: admission.admission_id,
+          invoice_number: `IPD-EMRG-${String(invCount + 1).padStart(5, '0')}`,
+          invoice_type: 'IPD',
+          status: 'Active',
+          total_amount: 0,
+          net_amount: 0,
+          organizationId,
+        },
+      });
+
+      // 6. Collect emergency deposit if provided
+      if (data.deposit_amount && data.deposit_amount > 0) {
+        await tx.patientDeposit.create({
+          data: {
+            patient_id: data.patient_id,
+            admission_id: admission.admission_id,
+            amount: data.deposit_amount,
+            payment_method: 'Cash',
+            deposit_type: 'Emergency',
+            collected_by: session.id,
+            organizationId,
+          },
+        });
+      }
+
+      return { admission, invoice };
+    });
+
+    revalidatePath('/ipd');
+    return { success: true, data: { admission_id: result.admission.admission_id } };
+  } catch (error: any) {
+    console.error('admitEmergency error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function updateAdmissionDiagnosis(data: {
+  admission_id: string;
+  primary_diagnosis_icd?: string;
+  secondary_diagnoses?: string[];
+  discharge_type?: string;
+  discharge_disposition?: string;
+  patient_class?: string;
+  isolation_type?: string;
+}) {
+  try {
+    const { db } = await requireTenantContext();
+    await db.admissions.update({
+      where: { admission_id: data.admission_id },
+      data: {
+        primary_diagnosis_icd: data.primary_diagnosis_icd,
+        secondary_diagnoses: data.secondary_diagnoses ?? undefined,
+        discharge_type: data.discharge_type,
+        discharge_disposition: data.discharge_disposition,
+        patient_class: data.patient_class,
+        isolation_type: data.isolation_type,
+      },
+    });
+    revalidatePath(`/ipd/admission/${data.admission_id}`);
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}

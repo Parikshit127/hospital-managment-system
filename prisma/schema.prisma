@@ -718,6 +718,18 @@ model admissions {
   pressure_ulcer_risk       Int?
   code_status               String?   // Full, DNR, DNI, ComfortOnly
   news_score_latest         Int?
+  attending_doctor_id       String?   // FK to doctor user
+  admission_source          String?   // OPD | Emergency | Transfer | DirectAdmit
+  discharge_type            String?   // Normal | LAMA | DAMA | Absconded | Death | Transfer
+  discharge_disposition     String?   // home, SNF, rehab, etc.
+  patient_class             String?   // General | SemiPrivate | Private | Suite | ICU | NICU | PICU
+  primary_diagnosis_icd     String?   // ICD-10 code
+  secondary_diagnoses       Json?     // array of ICD-10 codes
+  isolation_type            String?   // None | Contact | Droplet | Airborne | Reverse
+  medication_reconciliation Json?     // discharge meds reconciliation
+  discharge_instructions    String?   // patient instructions
+  allergy_alerts            Json?     // pulled from patient master
+  version                   Int       @default(0)
 
   organization     Organization          @relation(fields: [organizationId], references: [id])
   patient          OPD_REG               @relation(fields: [patient_id], references: [patient_id])
@@ -1625,6 +1637,17 @@ model DietPlan {
   created_by     String?
   organizationId String
   created_at     DateTime @default(now())
+
+  meal_schedule             Json?     // { breakfast: "07:00", lunch: "12:30", dinner: "19:30" }
+  calorie_target            Int?
+  protein_target            Int?
+  fluid_restriction_ml      Int?
+  allergens                 Json?
+  religious_restrictions    String?
+  texture_modification      String?   // pureed, minced, soft, regular
+  feeding_route             String?   // Oral | NGTube | PEG | TPN | NPO
+  reviewed_by_dietitian     Boolean   @default(false)
+  review_date               DateTime?
 
   organization Organization @relation(fields: [organizationId], references: [id])
   admission    admissions   @relation(fields: [admission_id], references: [admission_id])
