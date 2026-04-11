@@ -987,3 +987,90 @@ export async function applyApprovedDiscount(data: {
     return { success: false, error: error.message };
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GL JOURNAL (Double-Entry Stub)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface GLEntry {
+  account_code: string;
+  account_name: string;
+  debit: number;
+  credit: number;
+  narration: string;
+  reference_id: string;
+  reference_type: string;
+}
+
+export async function postToGL(entries: GLEntry[]) {
+  // Validate double-entry: total debits must equal total credits
+  const totalDebit = entries.reduce((s, e) => s + e.debit, 0);
+  const totalCredit = entries.reduce((s, e) => s + e.credit, 0);
+
+  if (Math.abs(totalDebit - totalCredit) > 0.01) {
+    return { success: false, error: `GL imbalance: debits ${totalDebit} ≠ credits ${totalCredit}` };
+  }
+
+  try {
+    // Store as audit log entries until a full GL model is built
+    for (const entry of entries) {
+      await logAudit({
+        action: 'gl_journal_entry',
+        module: 'gl',
+        entity_type: entry.reference_type,
+        entity_id: entry.reference_id,
+        details: JSON.stringify({
+          account_code: entry.account_code,
+          account_name: entry.account_name,
+          debit: entry.debit,
+          credit: entry.credit,
+          narration: entry.narration,
+        }),
+      });
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+// Hook: auto-post GL when a charge is posted to IPD bill
+export async function postChargeToGL(data: {
+  admission_id: string;
+  amount: number;
+  tax_amount: number;
+  description: string;
+  source_module: string;
+  ref_id: string;
+}) {
+  return postToGL([
+    {
+      account_code: '1100',
+      account_name: 'Patient Receivables',
+      debit: data.amount + data.tax_amount,
+      credit: 0,
+      narration: `IPD Charge: ${data.description}`,
+      reference_id: data.ref_id,
+      reference_type: `ipd_charge_${data.source_module}`,
+    },
+    {
+      account_code: data.source_module === 'room' ? '4100' : data.source_module === 'lab' ? '4200' : data.source_module === 'pharmacy' ? '4300' : '4900',
+      account_name: data.source_module === 'room' ? 'Room Revenue' : data.source_module === 'lab' ? 'Lab Revenue' : data.source_module === 'pharmacy' ? 'Pharmacy Revenue' : 'Other Revenue',
+      debit: 0,
+      credit: data.amount,
+      narration: `IPD Revenue: ${data.description}`,
+      reference_id: data.ref_id,
+      reference_type: `ipd_charge_${data.source_module}`,
+    },
+    ...(data.tax_amount > 0 ? [{
+      account_code: '2200',
+      account_name: 'GST Payable',
+      debit: 0,
+      credit: data.tax_amount,
+      narration: `GST on ${data.description}`,
+      reference_id: data.ref_id,
+      reference_type: `ipd_gst_${data.source_module}`,
+    }] : []),
+  ]);
+}
