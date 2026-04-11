@@ -71,7 +71,7 @@ export async function getRegisteredPatients(options?: {
         const limit = options?.limit || 25;
         const skip = (page - 1) * limit;
 
-        const where: Record<string, unknown> = {};
+        const where: Record<string, unknown> = { is_archived: false };
 
         // Search filter
         if (options?.search) {
@@ -1274,4 +1274,18 @@ export async function getQueueWithSLA() {
     });
 
     return { success: true, data: JSON.parse(JSON.stringify(data)), maxWait };
+}
+
+export async function archivePatient(patientId: string) {
+    try {
+        const { db } = await requireTenantContext();
+        await db.oPD_REG.update({
+            where: { patient_id: patientId },
+            data: { is_archived: true, archived_at: new Date() },
+        });
+        return { success: true };
+    } catch (error: any) {
+        console.error('archivePatient error:', error);
+        return { success: false, error: error.message };
+    }
 }

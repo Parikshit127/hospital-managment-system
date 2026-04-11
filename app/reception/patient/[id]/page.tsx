@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { getPatientDetail, updatePatientField, addPatientDues, processPatientPayment, getPatientExternalRecords, savePatientExternalRecord, deletePatientExternalRecord } from '@/app/actions/reception-actions';
+import { getPatientDetail, updatePatientField, addPatientDues, processPatientPayment, getPatientExternalRecords, savePatientExternalRecord, deletePatientExternalRecord, archivePatient } from '@/app/actions/reception-actions';
 import { useToast } from '@/app/components/ui/Toast';
 
 /** Inline editable field */
@@ -118,6 +118,20 @@ export default function PatientProfilePage() {
     const [dueForm, setDueForm] = useState({ amount: '', description: '', department: 'General' });
     const [paymentForm, setPaymentForm] = useState({ amount: '', method: 'Cash' });
 
+    const [archiving, setArchiving] = useState(false);
+
+    const handleArchive = async () => {
+        if (!window.confirm('Archive this patient? They will be hidden from the patient list but all records are preserved.')) return;
+        setArchiving(true);
+        const res = await archivePatient(patientId);
+        setArchiving(false);
+        if (res.success) {
+            router.push('/reception');
+        } else {
+            toast.error('Archive failed: ' + (res.error || 'Unknown error'));
+        }
+    };
+
     // External records state
     const [externalRecords, setExternalRecords] = useState<any[]>([]);
     const [showRecordModal, setShowRecordModal] = useState(false);
@@ -199,6 +213,10 @@ export default function PatientProfilePage() {
                 className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50">
                 <ArrowLeft className="h-3.5 w-3.5" /> Back
             </Link>
+            <button onClick={handleArchive} disabled={archiving}
+                className="flex items-center gap-2 px-3 py-2 bg-white border border-red-200 text-red-500 text-xs font-bold rounded-xl hover:bg-red-50 disabled:opacity-50">
+                <Trash2 className="h-3.5 w-3.5" /> {archiving ? 'Archiving…' : 'Archive Patient'}
+            </button>
             <button onClick={() => router.push('/reception/appointments')}
                 className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md">
                 <CalendarPlus className="h-3.5 w-3.5" /> Book Appointment
