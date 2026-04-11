@@ -885,21 +885,42 @@ export async function assignDietPlan(data: {
 
 export async function recordWardRound(data: {
   admission_id: string;
-  observations: string;
-  plan_changes: string;
+  // Legacy free-text
+  observations?: string;
+  plan_changes?: string;
+  // SOAP structured
+  subjective?: string;
+  objective?: string;
+  assessment?: string;
+  plan?: string;
+  icd_codes?: any[];
+  orders_placed?: any[];
+  round_type?: string;
+  next_review_in_hours?: number;
+  escalation_required?: boolean;
   visit_fee?: number;
 }) {
   try {
     const { db, session, organizationId } = await requireTenantContext();
 
     const visitFee = data.visit_fee || 0;
+    const roundType = data.round_type ?? 'Attending';
 
     const round = await db.wardRound.create({
       data: {
         admission_id: data.admission_id,
         doctor_id: session.id,
-        observations: data.observations,
-        plan_changes: data.plan_changes,
+        observations: data.observations ?? data.subjective,
+        plan_changes: data.plan_changes ?? data.plan,
+        subjective: data.subjective,
+        objective: data.objective,
+        assessment: data.assessment,
+        plan: data.plan,
+        icd_codes: data.icd_codes ?? undefined,
+        orders_placed: data.orders_placed ?? undefined,
+        round_type: roundType,
+        next_review_in_hours: data.next_review_in_hours,
+        escalation_required: data.escalation_required ?? false,
         visit_fee: visitFee,
         charge_posted: visitFee > 0,
         organizationId,
@@ -913,7 +934,7 @@ export async function recordWardRound(data: {
         admission_id: data.admission_id,
         source_module: 'ward_round',
         source_ref_id: String(round.id),
-        description: `Doctor Visit - Ward Round`,
+        description: `Doctor Visit - ${roundType} Round`,
         quantity: 1,
         unit_price: visitFee,
         service_category: 'DoctorVisit',

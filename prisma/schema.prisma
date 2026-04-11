@@ -128,6 +128,11 @@ model Organization {
   // Phase 3 — EMR
   clinical_encounters      ClinicalEncounter[]
   patient_allergies        PatientAllergy[]
+  // IPD Upgrade
+  ipd_vitals               IPDVitals[]
+  nursing_assessments      NursingAssessment[]
+  insurance_preauths       InsurancePreAuth[]
+  admission_consultants    AdmissionConsultant[]
 
   // Extended hospital profile fields
   hospital_type            String?   // General, Multi-Specialty, Super-Specialty, Clinic, Nursing Home
@@ -703,6 +708,16 @@ model admissions {
   archived_at    DateTime?
   admission_date DateTime  @default(now())
   discharge_date DateTime?
+  // IPD Upgrade fields
+  admission_category        String?   // Planned, Emergency, DayCare, Observation
+  expected_discharge_date   DateTime?
+  fit_for_discharge_at      DateTime?
+  fit_for_discharge_by      String?
+  discharge_checklist       Json?
+  fall_risk_score           Int?
+  pressure_ulcer_risk       Int?
+  code_status               String?   // Full, DNR, DNI, ComfortOnly
+  news_score_latest         Int?
 
   organization     Organization          @relation(fields: [organizationId], references: [id])
   patient          OPD_REG               @relation(fields: [patient_id], references: [patient_id])
@@ -717,6 +732,10 @@ model admissions {
   ward_rounds      WardRound[]
   nursing_tasks          NursingTask[]
   ipd_admission_packages IpdAdmissionPackage[]
+  ipd_vitals             IPDVitals[]
+  nursing_assessments    NursingAssessment[]
+  admission_consultants  AdmissionConsultant[]
+  insurance_preauths     InsurancePreAuth[]
 
   @@index([organizationId])
   @@index([status])
@@ -764,6 +783,11 @@ model beds {
   bed_category   String?
   pricing_tier   String?
   organizationId String
+  // IPD Upgrade fields
+  is_isolation          Boolean   @default(false)
+  cleaning_started_at   DateTime?
+  cleaning_completed_at DateTime?
+  last_occupied_by      String?
   admissions     admissions[]
 
   organization Organization @relation(fields: [organizationId], references: [id])
@@ -1614,15 +1638,27 @@ model DietPlan {
 // ========================================
 
 model WardRound {
-  id             Int      @id @default(autoincrement())
-  admission_id   String
-  doctor_id      String
-  observations   String?
-  plan_changes   String?
-  charge_posted  Boolean  @default(false)
-  visit_fee      Decimal  @default(0)
-  organizationId String
-  created_at     DateTime @default(now())
+  id                   Int      @id @default(autoincrement())
+  admission_id         String
+  doctor_id            String
+  // Legacy free-text (preserved for backward compat)
+  observations         String?
+  plan_changes         String?
+  // SOAP structured fields
+  subjective           String?
+  objective            String?
+  assessment           String?
+  plan                 String?
+  icd_codes            Json?
+  orders_placed        Json?
+  round_type           String   @default("Attending")
+  next_review_in_hours Int?
+  escalation_required  Boolean  @default(false)
+  // Billing
+  charge_posted        Boolean  @default(false)
+  visit_fee            Decimal  @default(0)
+  organizationId       String
+  created_at           DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
   admission    admissions   @relation(fields: [admission_id], references: [admission_id])
@@ -1749,6 +1785,12 @@ model MedicationAdministration {
   notes            String?
   organizationId   String
   created_at       DateTime  @default(now())
+  // IPD Upgrade fields
+  frequency        String?   // OD, BD, TDS, QID, SOS, STAT
+  is_prn           Boolean   @default(false)
+  prn_reason       String?
+  pain_score_before Int?
+  pain_score_after  Int?
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -1768,6 +1810,12 @@ model ShiftHandover {
   summary        String   // JSON string with patient summaries
   organizationId String
   created_at     DateTime @default(now())
+  // IPD Upgrade fields
+  shift_type       String?   // Day, Evening, Night
+  patients         Json?     // structured per-patient handover data
+  critical_alerts  Json?     // escalations, pending results
+  acknowledged_by  String?
+  acknowledged_at  DateTime?
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -2502,4 +2550,125 @@ model patient_external_records {
 
   @@index([patient_id])
   @@index([organizationId])
+}
+
+// ========================================
+// MODULE — IPD Upgrade: Vitals + NEWS
+// ========================================
+
+model IPDVitals {
+  id                  Int      @id @default(autoincrement())
+  admission_id        String
+  patient_id          String
+  organizationId      String
+  bp_systolic         Int?
+  bp_diastolic        Int?
+  heart_rate          Int?
+  temperature         Float?
+  respiratory_rate    Int?
+  spo2                Int?
+  pain_score          Int?     // 0-10
+  consciousness       String?  // Alert, Voice, Pain, Unresponsive (AVPU)
+  blood_sugar         Int?
+  urine_output_ml     Int?
+  news_score          Int?     // auto-calculated National Early Warning Score
+  news_level          String?  // Low, Medium, High, Critical
+  recorded_by         String?
+  created_at          DateTime @default(now())
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  admission     admissions   @relation(fields: [admission_id], references: [admission_id])
+
+  @@index([organizationId])
+  @@index([admission_id])
+  @@index([created_at])
+  @@map("ipd_vitals")
+}
+
+// ========================================
+// MODULE — IPD Upgrade: Nursing Assessment
+// ========================================
+
+model NursingAssessment {
+  id                Int      @id @default(autoincrement())
+  admission_id      String
+  organizationId    String
+  assessment_type   String   @default("initial") // initial, daily, reassessment
+  consciousness     String?  // AVPU or GCS score
+  pain_score        Int?
+  fall_risk_score   Int?     // Morse fall scale 0-125
+  braden_score      Int?     // Braden pressure ulcer risk 6-23
+  nutrition_screen  String?  // MUST score
+  mobility          String?  // Independent, Assisted, Bedbound
+  continence        String?
+  skin_assessment   Json?    // body map with wound/pressure areas
+  safety_measures   Json?    // bed rails, restraints, call bell
+  care_plan         Json?    // structured care plan items
+  assessed_by       String?
+  created_at        DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  admission    admissions   @relation(fields: [admission_id], references: [admission_id])
+
+  @@index([organizationId])
+  @@index([admission_id])
+  @@map("nursing_assessments")
+}
+
+// ========================================
+// MODULE — IPD Upgrade: Insurance Pre-Auth
+// ========================================
+
+model InsurancePreAuth {
+  id                 String   @id @default(uuid())
+  admission_id       String?
+  patient_id         String
+  organizationId     String
+  policy_id          String?
+  tpa_name           String?
+  pre_auth_number    String?
+  requested_amount   Decimal  @default(0)
+  approved_amount    Decimal?
+  status             String   @default("Submitted") // Submitted, Approved, PartiallyApproved, Denied, QueryRaised, Enhanced
+  submission_type    String   @default("Planned")   // Planned, Emergency
+  diagnosis_icd      String?
+  procedure_codes    Json?
+  documents          Json?
+  queries            Json?
+  enhancement_history Json?
+  tpa_remarks        String?
+  submitted_at       DateTime @default(now())
+  responded_at       DateTime?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  admission    admissions?  @relation(fields: [admission_id], references: [admission_id])
+
+  @@index([organizationId])
+  @@index([admission_id])
+  @@map("insurance_preauths")
+}
+
+// ========================================
+// MODULE — IPD Upgrade: Admission Consultants
+// ========================================
+
+model AdmissionConsultant {
+  id             String   @id @default(uuid())
+  admission_id   String
+  organizationId String
+  doctor_id      String?
+  doctor_name    String
+  specialty      String?
+  consulted_at   DateTime @default(now())
+  notes          String?
+  status         String   @default("Active") // Active, Completed
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  admission    admissions   @relation(fields: [admission_id], references: [admission_id])
+
+  @@index([organizationId])
+  @@index([admission_id])
+  @@map("admission_consultants")
 }

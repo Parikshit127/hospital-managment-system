@@ -17,11 +17,22 @@ import {
 } from '@/app/actions/ipd-actions';
 import { generateInterimBill, postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
 import { useToast } from '@/app/components/ui/Toast';
+import {
+    setExpectedDischargeDate, markFitForDischarge,
+    getIPDVitalsHistory, recordIPDVitals,
+    requestConsultation, getAdmissionConsultants,
+    getPreDischargeChecklist,
+    getAdmissionPreAuths,
+    submitTPAClaim, recordTPAQuery, recordTPASettlement,
+} from '@/app/actions/ipd-nursing-actions';
+import { NEWSScoreBadge } from '@/app/components/ipd/NEWSScoreBadge';
+import { PreDischargeChecklist } from '@/app/components/ipd/PreDischargeChecklist';
 
 const TABS = [
     { id: 'overview', label: 'Overview', icon: Activity },
     { id: 'clinical', label: 'Clinical', icon: Stethoscope },
     { id: 'nursing', label: 'Nursing', icon: HeartPulse },
+    { id: 'vitals', label: 'Vitals', icon: Activity },
     { id: 'diet', label: 'Diet', icon: Utensils },
     { id: 'billing', label: 'Billing', icon: Receipt },
     { id: 'discharge', label: 'Discharge', icon: LogOut },
@@ -52,6 +63,14 @@ export default function AdmissionDetailPage() {
     const [roundPlan, setRoundPlan] = useState('');
     const [roundFee, setRoundFee] = useState('');
     const [savingRound, setSavingRound] = useState(false);
+    const [soapMode, setSoapMode] = useState(false);
+    const [roundType, setRoundType] = useState('Attending');
+    const [roundSubjective, setRoundSubjective] = useState('');
+    const [roundObjective, setRoundObjective] = useState('');
+    const [roundAssessment, setRoundAssessment] = useState('');
+    const [roundPlanSoap, setRoundPlanSoap] = useState('');
+    const [roundEscalation, setRoundEscalation] = useState(false);
+    const [roundNextReview, setRoundNextReview] = useState('');
 
     // Medical note
     const [noteType, setNoteType] = useState('Progress Note');
@@ -81,6 +100,33 @@ export default function AdmissionDetailPage() {
     const [transferReason, setTransferReason] = useState('');
     const [transferring, setTransferring] = useState(false);
 
+    // EDD + vitals
+    const [eddValue, setEddValue] = useState('');
+    const [savingEdd, setSavingEdd] = useState(false);
+    const [vitalsHistory, setVitalsHistory] = useState<any[]>([]);
+    const [vitalsLoaded, setVitalsLoaded] = useState(false);
+    const [vitalsForm, setVitalsForm] = useState({
+        bp_systolic: '', bp_diastolic: '', heart_rate: '', temperature: '',
+        respiratory_rate: '', spo2: '', pain_score: '', consciousness: 'Alert',
+        blood_sugar: '', urine_output_ml: '', recorded_by: '',
+    });
+    const [savingVitals, setSavingVitals] = useState(false);
+    const [showVitalsForm, setShowVitalsForm] = useState(false);
+
+    // Consultants
+    const [consultants, setConsultants] = useState<any[]>([]);
+    const [showConsultForm, setShowConsultForm] = useState(false);
+    const [consultName, setConsultName] = useState('');
+    const [consultSpecialty, setConsultSpecialty] = useState('');
+
+    // Pre-discharge checklist
+    const [dischargeChecklist, setDischargeChecklist] = useState<any[]>([]);
+
+    // TPA / pre-auth
+    const [preauths, setPreauths] = useState<any[]>([]);
+    const [consultNotes, setConsultNotes] = useState('');
+    const [savingConsult, setSavingConsult] = useState(false);
+
     const loadData = useCallback(async () => {
         setLoading(true);
         const res = await getAdmissionFullDetails(params.id as string);
@@ -88,7 +134,15 @@ export default function AdmissionDetailPage() {
         setLoading(false);
     }, [params.id]);
 
+    const loadChecklist = useCallback(async () => {
+        const res = await getPreDischargeChecklist(params.id as string);
+        if (res.success && res.data) setDischargeChecklist(res.data.checklist);
+    }, [params.id]);
+
     useEffect(() => { loadData(); }, [loadData]);
+    useEffect(() => {
+        if (activeTab === 'discharge') loadChecklist();
+    }, [activeTab, loadChecklist]);
 
     const loadBill = useCallback(async () => {
         if (bill) return;
@@ -102,6 +156,68 @@ export default function AdmissionDetailPage() {
     useEffect(() => {
         if (activeTab === 'billing') loadBill();
     }, [activeTab, loadBill]);
+
+    useEffect(() => {
+        if (activeTab === 'vitals' && !vitalsLoaded && params.id) {
+            getIPDVitalsHistory(params.id as string).then(res => {
+                if (res.success) setVitalsHistory((res.data as any[]).reverse());
+                setVitalsLoaded(true);
+            });
+            getAdmissionConsultants(params.id as string).then(res => {
+                if (res.success) setConsultants(res.data as any[]);
+            });
+            getAdmissionPreAuths(params.id as string).then(res => {
+                if (res.success) setPreauths(res.data as any[]);
+            });
+        }
+    }, [activeTab, vitalsLoaded, params.id]);
+
+    const handleSaveEdd = async () => {
+        if (!eddValue) return;
+        setSavingEdd(true);
+        await setExpectedDischargeDate(data.admission_id, eddValue);
+        setSavingEdd(false);
+        setEddValue('');
+        loadData();
+    };
+
+    const handleSaveVitals = async () => {
+        setSavingVitals(true);
+        const res = await recordIPDVitals({
+            admission_id: data.admission_id,
+            patient_id: data.patient_id,
+            bp_systolic: vitalsForm.bp_systolic ? Number(vitalsForm.bp_systolic) : undefined,
+            bp_diastolic: vitalsForm.bp_diastolic ? Number(vitalsForm.bp_diastolic) : undefined,
+            heart_rate: vitalsForm.heart_rate ? Number(vitalsForm.heart_rate) : undefined,
+            temperature: vitalsForm.temperature ? Number(vitalsForm.temperature) : undefined,
+            respiratory_rate: vitalsForm.respiratory_rate ? Number(vitalsForm.respiratory_rate) : undefined,
+            spo2: vitalsForm.spo2 ? Number(vitalsForm.spo2) : undefined,
+            pain_score: vitalsForm.pain_score ? Number(vitalsForm.pain_score) : undefined,
+            consciousness: vitalsForm.consciousness,
+            blood_sugar: vitalsForm.blood_sugar ? Number(vitalsForm.blood_sugar) : undefined,
+            urine_output_ml: vitalsForm.urine_output_ml ? Number(vitalsForm.urine_output_ml) : undefined,
+            recorded_by: vitalsForm.recorded_by,
+        });
+        setSavingVitals(false);
+        if (res.success) {
+            toast.success('Vitals recorded');
+            setShowVitalsForm(false);
+            setVitalsLoaded(false); // force reload
+            setVitalsForm({ bp_systolic: '', bp_diastolic: '', heart_rate: '', temperature: '', respiratory_rate: '', spo2: '', pain_score: '', consciousness: 'Alert', blood_sugar: '', urine_output_ml: '', recorded_by: '' });
+        } else {
+            toast.error('Failed to record vitals');
+        }
+    };
+
+    const handleAddConsultant = async () => {
+        if (!consultName.trim()) return;
+        setSavingConsult(true);
+        await requestConsultation({ admission_id: data.admission_id, doctor_name: consultName, specialty: consultSpecialty, notes: consultNotes });
+        setSavingConsult(false);
+        setShowConsultForm(false);
+        setConsultName(''); setConsultSpecialty(''); setConsultNotes('');
+        getAdmissionConsultants(data.admission_id).then(res => { if (res.success) setConsultants(res.data as any[]); });
+    };
 
     const openTransfer = async () => {
         setShowTransfer(true);
@@ -167,20 +283,33 @@ export default function AdmissionDetailPage() {
 
     const handleRecordRound = async (e: React.SyntheticEvent) => {
         e.preventDefault();
-        if (!roundObs.trim()) { toast.error('Enter observations'); return; }
+        const hasContent = soapMode ? (roundSubjective.trim() || roundObjective.trim()) : roundObs.trim();
+        if (!hasContent) { toast.error('Enter observations or SOAP notes'); return; }
         setSavingRound(true);
         const res = await recordWardRound({
             admission_id: data.admission_id,
-            observations: roundObs,
-            plan_changes: roundPlan,
+            ...(soapMode ? {
+                subjective: roundSubjective,
+                objective: roundObjective,
+                assessment: roundAssessment,
+                plan: roundPlanSoap,
+                escalation_required: roundEscalation,
+                next_review_in_hours: roundNextReview ? Number(roundNextReview) : undefined,
+            } : {
+                observations: roundObs,
+                plan_changes: roundPlan,
+            }),
+            round_type: roundType,
             visit_fee: roundFee ? Number(roundFee) : 0,
         });
         setSavingRound(false);
         if (res.success) {
             toast.success('Ward round recorded');
             setRoundObs(''); setRoundPlan(''); setRoundFee('');
+            setRoundSubjective(''); setRoundObjective(''); setRoundAssessment('');
+            setRoundPlanSoap(''); setRoundEscalation(false); setRoundNextReview('');
             loadData();
-            setBill(null); // reset bill cache
+            setBill(null);
         } else {
             toast.error(res.error || 'Failed');
         }
@@ -309,6 +438,15 @@ export default function AdmissionDetailPage() {
                                 {data.status === 'Admitted' && (
                                     <span className="text-[10px] px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 font-bold flex items-center gap-1">
                                         <CalendarDays className="h-3 w-3" /> Day {daysAdmitted}
+                                    </span>
+                                )}
+                                {data.news_score_latest != null && (
+                                    <NEWSScoreBadge score={data.news_score_latest} size="sm" />
+                                )}
+                                {data.expected_discharge_date && (
+                                    <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1 ${new Date(data.expected_discharge_date) < new Date() ? 'bg-red-50 text-red-600' : 'bg-violet-50 text-violet-700'}`}>
+                                        <CalendarDays className="h-3 w-3" />
+                                        EDD: {new Date(data.expected_discharge_date).toLocaleDateString()}
                                     </span>
                                 )}
                             </div>
@@ -504,9 +642,28 @@ export default function AdmissionDetailPage() {
                                                     </span>
                                                     <p className="text-[10px] font-bold text-gray-400 uppercase">{event._date.toLocaleString()}</p>
                                                     <div className="bg-blue-50/50 rounded-xl p-4 mt-1 border border-blue-100">
-                                                        <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest mb-2">Ward Round</p>
-                                                        <p className="text-xs text-gray-700"><span className="font-bold text-gray-400">Obs: </span>{event.observations}</p>
-                                                        {event.plan_changes && <p className="text-xs text-gray-700 mt-1"><span className="font-bold text-gray-400">Plan: </span>{event.plan_changes}</p>}
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest">Ward Round</p>
+                                                            {event.round_type && event.round_type !== 'Attending' && (
+                                                                <span className="text-[9px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full">{event.round_type}</span>
+                                                            )}
+                                                            {event.escalation_required && (
+                                                                <span className="text-[9px] font-black px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full">⚠ Escalation</span>
+                                                            )}
+                                                        </div>
+                                                        {event.subjective ? (
+                                                            <div className="space-y-1 text-xs">
+                                                                {event.subjective && <p><span className="font-bold text-blue-500">S: </span><span className="text-gray-700">{event.subjective}</span></p>}
+                                                                {event.objective && <p><span className="font-bold text-green-600">O: </span><span className="text-gray-700">{event.objective}</span></p>}
+                                                                {event.assessment && <p><span className="font-bold text-orange-500">A: </span><span className="text-gray-700">{event.assessment}</span></p>}
+                                                                {event.plan && <p><span className="font-bold text-purple-600">P: </span><span className="text-gray-700">{event.plan}</span></p>}
+                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                <p className="text-xs text-gray-700"><span className="font-bold text-gray-400">Obs: </span>{event.observations}</p>
+                                                                {event.plan_changes && <p className="text-xs text-gray-700 mt-1"><span className="font-bold text-gray-400">Plan: </span>{event.plan_changes}</p>}
+                                                            </>
+                                                        )}
                                                         {Number(event.visit_fee) > 0 && <p className="text-[10px] text-blue-600 font-bold mt-1.5">Fee: ₹{Number(event.visit_fee).toLocaleString()}</p>}
                                                     </div>
                                                 </div>
@@ -554,32 +711,57 @@ export default function AdmissionDetailPage() {
                                             <h4 className="text-[10px] font-black text-blue-700 uppercase tracking-widest flex items-center gap-2">
                                                 <Stethoscope className="h-3.5 w-3.5" /> Record Ward Round
                                             </h4>
-                                            <textarea
-                                                required
-                                                value={roundObs}
-                                                onChange={e => setRoundObs(e.target.value)}
-                                                placeholder="Observations (symptoms, vitals, findings)..."
-                                                className="w-full text-xs p-2.5 bg-white border border-blue-200 rounded-lg h-20 resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
-                                            />
-                                            <textarea
-                                                value={roundPlan}
-                                                onChange={e => setRoundPlan(e.target.value)}
-                                                placeholder="Assessment & Plan (optional)..."
-                                                className="w-full text-xs p-2.5 bg-white border border-blue-200 rounded-lg h-16 resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
-                                            />
+                                            {/* Round type + SOAP toggle */}
+                                            <div className="flex items-center gap-3">
+                                                <select value={roundType} onChange={e => setRoundType(e.target.value)}
+                                                    className="text-xs border border-blue-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400">
+                                                    {['Attending', 'Consulting', 'Nursing', 'Specialist'].map(t => <option key={t}>{t}</option>)}
+                                                </select>
+                                                <label className="flex items-center gap-1.5 text-xs cursor-pointer font-semibold text-blue-700">
+                                                    <input type="checkbox" checked={soapMode} onChange={e => setSoapMode(e.target.checked)} className="rounded" />
+                                                    SOAP Mode
+                                                </label>
+                                            </div>
+                                            {soapMode ? (
+                                                <div className="space-y-2">
+                                                    <textarea rows={2} placeholder="S — Subjective (patient-reported symptoms, pain score)"
+                                                        className="w-full text-xs p-2.5 bg-white border border-blue-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                                        value={roundSubjective} onChange={e => setRoundSubjective(e.target.value)} />
+                                                    <textarea rows={2} placeholder="O — Objective (exam findings, vitals summary)"
+                                                        className="w-full text-xs p-2.5 bg-white border border-blue-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                                        value={roundObjective} onChange={e => setRoundObjective(e.target.value)} />
+                                                    <textarea rows={2} placeholder="A — Assessment (diagnosis update, differential)"
+                                                        className="w-full text-xs p-2.5 bg-white border border-blue-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                                        value={roundAssessment} onChange={e => setRoundAssessment(e.target.value)} />
+                                                    <textarea rows={2} placeholder="P — Plan (treatment changes, orders)"
+                                                        className="w-full text-xs p-2.5 bg-white border border-blue-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                                        value={roundPlanSoap} onChange={e => setRoundPlanSoap(e.target.value)} />
+                                                    <div className="flex items-center gap-3">
+                                                        <input type="number" min={1} max={48} placeholder="Review in (hours)"
+                                                            className="text-xs border border-blue-200 rounded-lg px-2 py-1.5 w-36 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                                            value={roundNextReview} onChange={e => setRoundNextReview(e.target.value)} />
+                                                        <label className="flex items-center gap-1.5 text-xs text-red-600 cursor-pointer font-semibold">
+                                                            <input type="checkbox" checked={roundEscalation} onChange={e => setRoundEscalation(e.target.checked)} />
+                                                            Escalation Required
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    <textarea rows={3} placeholder="Observations (symptoms, vitals, findings)..."
+                                                        className="w-full text-xs p-2.5 bg-white border border-blue-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                                        value={roundObs} onChange={e => setRoundObs(e.target.value)} />
+                                                    <textarea rows={2} placeholder="Assessment & Plan (optional)..."
+                                                        className="w-full text-xs p-2.5 bg-white border border-blue-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                                        value={roundPlan} onChange={e => setRoundPlan(e.target.value)} />
+                                                </div>
+                                            )}
                                             <div className="flex gap-2 items-center">
-                                                <input
-                                                    type="number"
-                                                    value={roundFee}
-                                                    onChange={e => setRoundFee(e.target.value)}
+                                                <input type="number" value={roundFee} onChange={e => setRoundFee(e.target.value)}
                                                     placeholder="Visit fee (₹)"
-                                                    className="flex-1 text-xs p-2.5 bg-white border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-                                                />
-                                                <button
-                                                    type="submit"
-                                                    disabled={savingRound}
-                                                    className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors"
-                                                >
+                                                    className="flex-1 text-xs p-2.5 bg-white border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                                                <button type="submit" disabled={savingRound}
+                                                    className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors">
                                                     {savingRound ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
                                                     Record
                                                 </button>
@@ -703,6 +885,249 @@ export default function AdmissionDetailPage() {
                                             <Link href={`/ipd/nursing-station/${data.admission_id}`} className="text-xs font-bold text-teal-700 hover:underline flex items-center justify-center gap-1">
                                                 Open Full Nursing Workspace <ChevronRight className="h-3.5 w-3.5" />
                                             </Link>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* ════════════════════════════ VITALS ════════════════════════════ */}
+                        {activeTab === 'vitals' && (
+                            <div className="space-y-6">
+                                {/* EDD setter */}
+                                <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 flex flex-wrap items-center gap-3">
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-bold text-violet-700">Expected Discharge Date (EDD)</p>
+                                        <p className="text-[10px] text-violet-500 mt-0.5">
+                                            {data.expected_discharge_date
+                                                ? `Currently: ${new Date(data.expected_discharge_date).toLocaleDateString()}`
+                                                : 'Not set — set within 24h of admission'}
+                                        </p>
+                                    </div>
+                                    <input type="date" value={eddValue} onChange={e => setEddValue(e.target.value)}
+                                        className="border border-violet-300 rounded-xl px-3 py-2 text-sm outline-none focus:border-violet-500 bg-white" />
+                                    <button onClick={handleSaveEdd} disabled={savingEdd || !eddValue}
+                                        className="px-4 py-2 bg-violet-600 text-white text-sm font-bold rounded-xl hover:bg-violet-700 disabled:opacity-50 transition-colors">
+                                        {savingEdd ? 'Saving...' : 'Set EDD'}
+                                    </button>
+                                </div>
+
+                                {/* Vitals entry */}
+                                <div className="flex justify-end">
+                                    <button onClick={() => setShowVitalsForm(v => !v)}
+                                        className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 transition-colors">
+                                        <Plus className="h-4 w-4" /> Record Vitals
+                                    </button>
+                                </div>
+
+                                {showVitalsForm && (
+                                    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
+                                        <h3 className="font-bold text-gray-900 text-sm">New Vitals Entry</h3>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                                            {[
+                                                { key: 'bp_systolic', label: 'Systolic BP', placeholder: '120' },
+                                                { key: 'bp_diastolic', label: 'Diastolic BP', placeholder: '80' },
+                                                { key: 'heart_rate', label: 'Heart Rate', placeholder: '72' },
+                                                { key: 'temperature', label: 'Temp (°C)', placeholder: '37.0' },
+                                                { key: 'respiratory_rate', label: 'RR (/min)', placeholder: '16' },
+                                                { key: 'spo2', label: 'SpO2 (%)', placeholder: '98' },
+                                                { key: 'pain_score', label: 'Pain (0-10)', placeholder: '0' },
+                                                { key: 'blood_sugar', label: 'Blood Sugar', placeholder: 'mg/dL' },
+                                                { key: 'urine_output_ml', label: 'Urine (ml)', placeholder: 'ml' },
+                                            ].map(({ key, label, placeholder }) => (
+                                                <div key={key}>
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">{label}</label>
+                                                    <input type="number" value={(vitalsForm as any)[key]} placeholder={placeholder}
+                                                        onChange={e => setVitalsForm(f => ({ ...f, [key]: e.target.value }))}
+                                                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-teal-400" />
+                                                </div>
+                                            ))}
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Consciousness</label>
+                                                <select value={vitalsForm.consciousness} onChange={e => setVitalsForm(f => ({ ...f, consciousness: e.target.value }))}
+                                                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-teal-400">
+                                                    {['Alert', 'Voice', 'Pain', 'Unresponsive'].map(c => <option key={c}>{c}</option>)}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Recorded By</label>
+                                                <input type="text" value={vitalsForm.recorded_by} placeholder="Nurse name"
+                                                    onChange={e => setVitalsForm(f => ({ ...f, recorded_by: e.target.value }))}
+                                                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-teal-400" />
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-3">
+                                            <button onClick={handleSaveVitals} disabled={savingVitals}
+                                                className="flex items-center gap-2 px-5 py-2 bg-teal-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 disabled:opacity-60 transition-colors">
+                                                {savingVitals ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Save Vitals
+                                            </button>
+                                            <button onClick={() => setShowVitalsForm(false)} className="px-4 py-2 text-gray-500 text-sm font-bold hover:bg-gray-100 rounded-xl">Cancel</button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Vitals history table */}
+                                <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                                    <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                                        <h3 className="font-bold text-gray-900 text-sm">Vitals History</h3>
+                                        <span className="text-xs text-gray-400">{vitalsHistory.length} entries</span>
+                                    </div>
+                                    {vitalsHistory.length === 0 ? (
+                                        <p className="text-center text-gray-400 text-sm py-10">No vitals recorded. Click "Record Vitals" to add.</p>
+                                    ) : (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm text-left">
+                                                <thead>
+                                                    <tr className="border-b border-gray-100">
+                                                        {['Time', 'BP', 'HR', 'SpO2', 'Temp', 'RR', 'Pain', 'GCS', 'NEWS', 'By'].map(h => (
+                                                            <th key={h} className="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-50">
+                                                    {vitalsHistory.map((v: any) => (
+                                                        <tr key={v.id} className="hover:bg-gray-50">
+                                                            <td className="px-4 py-3 whitespace-nowrap text-gray-500 text-xs">
+                                                                {new Date(v.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                            </td>
+                                                            <td className="px-4 py-3 font-mono text-xs">{v.bp_systolic ? `${v.bp_systolic}/${v.bp_diastolic}` : '—'}</td>
+                                                            <td className="px-4 py-3 font-mono text-xs">{v.heart_rate ?? '—'}</td>
+                                                            <td className="px-4 py-3 font-mono text-xs">{v.spo2 ? `${v.spo2}%` : '—'}</td>
+                                                            <td className="px-4 py-3 font-mono text-xs">{v.temperature ? `${v.temperature}°` : '—'}</td>
+                                                            <td className="px-4 py-3 font-mono text-xs">{v.respiratory_rate ?? '—'}</td>
+                                                            <td className="px-4 py-3 font-mono text-xs">{v.pain_score != null ? `${v.pain_score}/10` : '—'}</td>
+                                                            <td className="px-4 py-3 text-xs">{v.consciousness ?? '—'}</td>
+                                                            <td className="px-4 py-3">
+                                                                <NEWSScoreBadge score={v.news_score ?? 0} level={v.news_level} size="sm" />
+                                                            </td>
+                                                            <td className="px-4 py-3 text-xs text-gray-400">{v.recorded_by ?? '—'}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Consulting Doctors */}
+                                <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                                    <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                                        <h3 className="font-bold text-gray-900 text-sm">Consulting Doctors</h3>
+                                        <button onClick={() => setShowConsultForm(v => !v)}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-xs font-bold rounded-xl hover:bg-teal-700 transition-colors">
+                                            <Plus className="h-3 w-3" /> Request Consult
+                                        </button>
+                                    </div>
+                                    {showConsultForm && (
+                                        <div className="p-4 border-b border-gray-100 bg-teal-50 space-y-3">
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Doctor Name</label>
+                                                    <input type="text" value={consultName} onChange={e => setConsultName(e.target.value)} placeholder="Dr. Name"
+                                                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-teal-400 bg-white" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Specialty</label>
+                                                    <input type="text" value={consultSpecialty} onChange={e => setConsultSpecialty(e.target.value)} placeholder="e.g. Cardiology"
+                                                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-teal-400 bg-white" />
+                                                </div>
+                                            </div>
+                                            <input type="text" value={consultNotes} onChange={e => setConsultNotes(e.target.value)} placeholder="Reason for consultation"
+                                                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-teal-400 bg-white" />
+                                            <div className="flex gap-2">
+                                                <button onClick={handleAddConsultant} disabled={savingConsult}
+                                                    className="px-4 py-2 bg-teal-600 text-white text-xs font-bold rounded-xl hover:bg-teal-700 disabled:opacity-60 transition-colors">
+                                                    {savingConsult ? 'Saving...' : 'Request'}
+                                                </button>
+                                                <button onClick={() => setShowConsultForm(false)} className="px-3 py-2 text-gray-500 text-xs font-bold hover:bg-gray-100 rounded-xl">Cancel</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div className="divide-y divide-gray-50">
+                                        {consultants.length === 0 ? (
+                                            <p className="text-center text-gray-400 text-xs py-8">No consultations requested</p>
+                                        ) : consultants.map((c: any) => (
+                                            <div key={c.id} className="px-5 py-3 flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-sm font-bold text-gray-900">Dr. {c.doctor_name}</p>
+                                                    <p className="text-xs text-gray-400">{c.specialty ?? 'General'} · {new Date(c.consulted_at).toLocaleDateString()}</p>
+                                                    {c.notes && <p className="text-xs text-gray-500 mt-0.5 italic">{c.notes}</p>}
+                                                </div>
+                                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${c.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                                                    {c.status}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* TPA / Insurance Pre-Auth Lifecycle */}
+                                {preauths.length > 0 && (
+                                    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                                        <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/50">
+                                            <h3 className="font-bold text-gray-900 text-sm">TPA / Insurance</h3>
+                                        </div>
+                                        <div className="divide-y divide-gray-100">
+                                            {preauths.map((pa: any) => (
+                                                <div key={pa.id} className="px-5 py-4 space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <p className="text-xs font-black text-gray-800">{pa.tpa_name}</p>
+                                                            <p className="text-[10px] text-gray-400">{pa.submission_type} · {new Date(pa.submitted_at ?? pa.created_at).toLocaleDateString()}</p>
+                                                            <p className="text-[10px] text-gray-600 mt-0.5">
+                                                                Requested: ₹{Number(pa.requested_amount).toLocaleString('en-IN')}
+                                                                {pa.approved_amount ? ` · Approved: ₹${Number(pa.approved_amount).toLocaleString('en-IN')}` : ''}
+                                                            </p>
+                                                        </div>
+                                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                                            pa.status === 'Approved' ? 'bg-emerald-100 text-emerald-700' :
+                                                            pa.status === 'Denied' ? 'bg-red-100 text-red-700' :
+                                                            pa.status === 'Settled' ? 'bg-blue-100 text-blue-700' :
+                                                            pa.status === 'Claimed' ? 'bg-purple-100 text-purple-700' :
+                                                            pa.status === 'Query' || pa.status === 'QueryResponded' ? 'bg-amber-100 text-amber-700' :
+                                                            'bg-gray-100 text-gray-600'
+                                                        }`}>{pa.status}</span>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {pa.status === 'Approved' && (
+                                                            <button onClick={async () => {
+                                                                const amount = prompt('Enter final claimed amount (₹):');
+                                                                if (!amount) return;
+                                                                await submitTPAClaim(pa.id, { final_claimed_amount: Number(amount) });
+                                                                getAdmissionPreAuths(data.admission_id).then(r => { if (r.success) setPreauths(r.data as any[]); });
+                                                            }} className="text-[10px] font-bold px-2.5 py-1 bg-purple-600 text-white rounded-lg">
+                                                                Submit Claim
+                                                            </button>
+                                                        )}
+                                                        {(pa.status === 'Submitted' || pa.status === 'Claimed' || pa.status === 'QueryResponded') && (
+                                                            <button onClick={async () => {
+                                                                const q = prompt('Enter TPA query / note:');
+                                                                if (!q) return;
+                                                                await recordTPAQuery(pa.id, { query_text: q });
+                                                                getAdmissionPreAuths(data.admission_id).then(r => { if (r.success) setPreauths(r.data as any[]); });
+                                                            }} className="text-[10px] font-bold px-2.5 py-1 bg-amber-600 text-white rounded-lg">
+                                                                Log Query
+                                                            </button>
+                                                        )}
+                                                        {pa.status === 'Claimed' && (
+                                                            <button onClick={async () => {
+                                                                const amount = prompt('Enter settlement amount (₹):');
+                                                                if (!amount) return;
+                                                                await recordTPASettlement(pa.id, { settled_amount: Number(amount), settlement_date: new Date().toISOString() });
+                                                                getAdmissionPreAuths(data.admission_id).then(r => { if (r.success) setPreauths(r.data as any[]); });
+                                                            }} className="text-[10px] font-bold px-2.5 py-1 bg-emerald-600 text-white rounded-lg">
+                                                                Record Settlement
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    {pa.notes && (
+                                                        <details className="text-[10px] text-gray-500">
+                                                            <summary className="cursor-pointer font-semibold text-gray-600">History</summary>
+                                                            <pre className="mt-1 whitespace-pre-wrap font-mono text-[9px] bg-gray-50 p-2 rounded">{pa.notes}</pre>
+                                                        </details>
+                                                    )}
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
                                 )}
@@ -969,18 +1394,11 @@ export default function AdmissionDetailPage() {
                                             </Link>
                                         </div>
                                         <div className="space-y-2">
-                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Pre-discharge checklist</p>
-                                            {[
-                                                { label: 'Ward rounds documented', done: (data.ward_rounds?.length || 0) > 0 },
-                                                { label: 'Active diet plan assigned', done: !!activeDiet },
-                                                { label: 'Nursing tasks reviewed', done: (data.nursing_tasks?.length || 0) > 0 },
-                                                { label: 'Billing charges reviewed', done: false },
-                                            ].map(item => (
-                                                <div key={item.label} className={`flex items-center gap-3 p-3 rounded-xl border ${item.done ? 'border-emerald-100 bg-emerald-50' : 'border-gray-100 bg-gray-50'}`}>
-                                                    <CheckCircle2 className={`h-4 w-4 shrink-0 ${item.done ? 'text-emerald-500' : 'text-gray-300'}`} />
-                                                    <span className={`text-xs font-medium ${item.done ? 'text-emerald-700' : 'text-gray-500'}`}>{item.label}</span>
-                                                </div>
-                                            ))}
+                                            <PreDischargeChecklist
+                                                admissionId={data.admission_id}
+                                                items={dischargeChecklist}
+                                                onUpdate={loadChecklist}
+                                            />
                                         </div>
                                     </>
                                 ) : (

@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, Activity, BedDouble, Calendar, UserRound, ArrowRight, ShieldAlert, CheckCircle2, ArrowLeftRight, X, Loader2 } from 'lucide-react';
+import { Search, Filter, Activity, BedDouble, Calendar, UserRound, ArrowRight, ShieldAlert, CheckCircle2, ArrowLeftRight, X, Loader2, AlertTriangle, HeartPulse } from 'lucide-react';
+import { NEWSScoreBadge } from '@/app/components/ipd/NEWSScoreBadge';
 import { Input } from '@/app/components/ui/Input';
 import { Button } from '@/app/components/ui/Button';
 import { Select } from '@/app/components/ui/Select';
@@ -213,6 +214,18 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                                                     <Calendar className="h-3 w-3 text-teal-500" />
                                                     <span className="text-teal-600">In: {new Date(adm.admission_date).toLocaleDateString()}</span>
                                                 </div>
+                                                {adm.expected_discharge_date && adm.status === 'Admitted' && (
+                                                    <div className="flex items-center gap-1.5 text-[10px] font-bold">
+                                                        <Calendar className="h-3 w-3 text-violet-400" />
+                                                        <span className={new Date(adm.expected_discharge_date) < new Date() ? 'text-red-500' : 'text-violet-500'}>
+                                                            EDD: {new Date(adm.expected_discharge_date).toLocaleDateString()}
+                                                            {new Date(adm.expected_discharge_date) < new Date() && ' ⚠'}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {adm.news_score_latest != null && adm.status === 'Admitted' && (
+                                                    <NEWSScoreBadge score={adm.news_score_latest} size="sm" />
+                                                )}
                                                 {adm.status === 'Discharged' && adm.discharge_date && (
                                                     <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500">
                                                         <CheckCircle2 className="h-3 w-3 text-rose-400" />

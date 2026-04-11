@@ -6,6 +6,7 @@ import { generateInterimBill, postChargeToIpdBill, getGstSummary } from '@/app/a
 import { recordPayment, recordSplitPayment } from '@/app/actions/finance-actions';
 import { collectDeposit, getPatientDeposits, applyDepositToInvoice } from '@/app/actions/deposit-actions';
 import { getIpdServices } from '@/app/actions/ipd-master-actions';
+import { DepositTracker } from '@/app/components/ipd/DepositTracker';
 
 export default function IpdBillingPage() {
     const [admissions, setAdmissions] = useState<any[]>([]);
@@ -349,6 +350,27 @@ export default function IpdBillingPage() {
                                 <div className="p-4 max-h-[45vh] overflow-y-auto">
                                     {activeTab === 'summary' && (
                                         <div className="space-y-4">
+                                            {/* KPI Cards */}
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {[
+                                                    { label: 'Days', value: billData.admission?.days_admitted ?? 0, suffix: 'd', color: 'text-blue-700' },
+                                                    { label: 'Charges', value: `₹${Number(billData.invoice?.net_amount ?? 0).toLocaleString('en-IN')}`, color: 'text-gray-900' },
+                                                    { label: 'Paid', value: `₹${Number(billData.invoice?.paid_amount ?? 0).toLocaleString('en-IN')}`, color: 'text-emerald-700' },
+                                                    { label: 'Due', value: `₹${Number(billData.invoice?.balance_due ?? 0).toLocaleString('en-IN')}`, color: 'text-red-700' },
+                                                ].map(kpi => (
+                                                    <div key={kpi.label} className="bg-gray-50 border rounded-xl p-2.5 text-center">
+                                                        <p className="text-[10px] text-gray-400 font-medium">{kpi.label}</p>
+                                                        <p className={`text-sm font-black mt-0.5 ${kpi.color}`}>{kpi.value}{kpi.suffix ?? ''}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {/* Deposit Tracker */}
+                                            <DepositTracker
+                                                totalDeposit={deposits.reduce((s: number, d: any) => s + Number(d.amount || 0), 0)}
+                                                totalCharged={Number(billData.invoice?.net_amount ?? 0)}
+                                            />
+
                                             {/* Bill Overview */}
                                             <div>
                                                 <h3 className="font-semibold text-sm mb-2">Bill Overview</h3>
