@@ -1245,3 +1245,92 @@ export async function updateAdmissionDiagnosis(data: {
     return { success: false, error: error.message };
   }
 }
+
+export async function allocateBedByRules(data: {
+  patient_id: string;
+  patient_class?: string;    // General | SemiPrivate | Private | Suite | ICU
+  isolation_type?: string;   // None | Contact | Droplet | Airborne | Reverse
+  gender?: string;
+  ward_preference?: number;  // preferred ward_id
+  require_oxygen?: boolean;
+  require_monitor?: boolean;
+}) {
+  try {
+    const { db } = await requireTenantContext();
+
+    // Get all available beds with ward info
+    const availableBeds = await db.beds.findMany({
+      where: { status: 'Available' },
+      include: { wards: true },
+      orderBy: { bed_id: 'asc' },
+    });
+
+    if (availableBeds.length === 0) {
+      return { success: false, error: 'No available beds' };
+    }
+
+    // Score each bed — higher = better match
+    const scored = availableBeds.map((bed: any) => {
+      let score = 0;
+
+      // Rule 1: Isolation requirement — must be isolation room
+      const needsIsolation = data.isolation_type && data.isolation_type !== 'None';
+      if (needsIsolation && bed.is_isolation) score += 100;
+      if (needsIsolation && !bed.is_isolation) score -= 1000; // disqualify
+
+      // Rule 2: Patient class → ward type match
+      const classToWardType: Record<string, string[]> = {
+        ICU: ['ICU', 'MICU', 'SICU'],
+        NICU: ['NICU'],
+        PICU: ['PICU'],
+        Suite: ['Suite', 'Private'],
+        Private: ['Private', 'SemiPrivate'],
+        SemiPrivate: ['SemiPrivate', 'General'],
+        General: ['General'],
+      };
+      const preferredWardTypes = classToWardType[data.patient_class ?? 'General'] ?? ['General'];
+      if (preferredWardTypes.some((t: string) => bed.wards?.ward_type?.includes(t))) score += 50;
+
+      // Rule 3: Doctor/ward preference
+      if (data.ward_preference && bed.ward_id === data.ward_preference) score += 30;
+
+      // Rule 4: Equipment requirements
+      if (data.require_oxygen && bed.is_oxygen_port) score += 20;
+      if (data.require_monitor && bed.is_monitor_equipped) score += 20;
+
+      // Rule 5: Not isolation bed for non-isolation patient (preserve isolation beds)
+      if (!needsIsolation && bed.is_isolation) score -= 10;
+
+      return { bed, score };
+    });
+
+    // Filter disqualified beds, sort by score desc
+    const eligible = scored
+      .filter((s: any) => s.score > -500)
+      .sort((a: any, b: any) => b.score - a.score);
+
+    if (eligible.length === 0) {
+      return { success: false, error: 'No suitable bed found matching patient requirements' };
+    }
+
+    const best = eligible[0].bed;
+    return {
+      success: true,
+      data: {
+        bed_id: best.bed_id,
+        ward_id: best.ward_id,
+        ward_name: best.wards?.ward_name,
+        ward_type: best.wards?.ward_type,
+        is_isolation: best.is_isolation,
+        score: eligible[0].score,
+        alternatives: eligible.slice(1, 5).map((e: any) => ({
+          bed_id: e.bed.bed_id,
+          ward_name: e.bed.wards?.ward_name,
+          score: e.score,
+        })),
+      },
+    };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}

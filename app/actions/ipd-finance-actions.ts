@@ -882,3 +882,108 @@ export async function settleAndDischarge(data: {
         return { success: false, error: error.message };
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DISCOUNT APPROVAL WORKFLOW
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function requestDiscount(data: {
+  invoice_id: number;
+  discount_amount: number;
+  discount_percentage: number;
+  reason: string;
+}) {
+  try {
+    const { db } = await requireTenantContext();
+
+    const invoice = await db.invoices.findUnique({
+      where: { id: data.invoice_id },
+      select: { net_amount: true, total_discount: true },
+    });
+    if (!invoice) return { success: false, error: 'Invoice not found' };
+
+    // Determine required approval level
+    const pct = data.discount_percentage;
+    let approval_level = 'auto';
+    if (pct > 15) approval_level = 'cfo';
+    else if (pct > 5) approval_level = 'manager';
+
+    // For auto-approved discounts (≤5%), apply immediately
+    if (approval_level === 'auto') {
+      await db.invoices.update({
+        where: { id: data.invoice_id },
+        data: {
+          total_discount: (Number(invoice.total_discount) || 0) + data.discount_amount,
+          net_amount: Number(invoice.net_amount) - data.discount_amount,
+        },
+      });
+      await logAudit({
+        action: 'discount_applied',
+        module: 'ipd',
+        entity_type: 'invoice',
+        entity_id: String(data.invoice_id),
+        details: JSON.stringify({ amount: data.discount_amount, percentage: data.discount_percentage, reason: data.reason, auto_approved: true }),
+      });
+      return { success: true, data: { status: 'auto_approved' } };
+    }
+
+    // For manager/CFO, create a pending approval note in invoice notes
+    await logAudit({
+      action: 'discount_requested',
+      module: 'ipd',
+      entity_type: 'invoice',
+      entity_id: String(data.invoice_id),
+      details: JSON.stringify({ amount: data.discount_amount, percentage: data.discount_percentage, reason: data.reason, approval_level }),
+    });
+
+    return {
+      success: true,
+      data: {
+        status: 'pending_approval',
+        approval_level,
+        message: approval_level === 'cfo'
+          ? 'Discount >15% requires CFO approval'
+          : 'Discount >5% requires manager approval',
+      },
+    };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function applyApprovedDiscount(data: {
+  invoice_id: number;
+  discount_amount: number;
+  approved_by: string;
+  approval_notes?: string;
+}) {
+  try {
+    const { db } = await requireTenantContext();
+
+    const invoice = await db.invoices.findUnique({
+      where: { id: data.invoice_id },
+      select: { net_amount: true, total_discount: true },
+    });
+    if (!invoice) return { success: false, error: 'Invoice not found' };
+
+    await db.invoices.update({
+      where: { id: data.invoice_id },
+      data: {
+        total_discount: (Number(invoice.total_discount) || 0) + data.discount_amount,
+        net_amount: Number(invoice.net_amount) - data.discount_amount,
+      },
+    });
+
+    await logAudit({
+      action: 'discount_approved_applied',
+      module: 'ipd',
+      entity_type: 'invoice',
+      entity_id: String(data.invoice_id),
+      details: JSON.stringify({ amount: data.discount_amount, approved_by: data.approved_by, notes: data.approval_notes }),
+    });
+
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
