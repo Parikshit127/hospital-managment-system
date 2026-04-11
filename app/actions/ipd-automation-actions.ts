@@ -253,3 +253,65 @@ export async function completeBedCleaning(bedId: string) {
         return { success: false, error: error.message };
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BED CLEANING SLA ESCALATION
+// Finds all beds breaching SLA, logs escalation to audit trail.
+// Called by cron every 15 minutes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SLA_MINUTES = 45;
+
+export async function escalateBedCleaningSLA() {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const cleaningBeds = await db.beds.findMany({
+            where: { organizationId, status: 'Cleaning' },
+            include: { wards: true },
+        });
+
+        const now = Date.now();
+        let escalated = 0;
+
+        for (const bed of cleaningBeds) {
+            if (!bed.cleaning_started_at) continue;
+            const elapsedMinutes = Math.floor((now - new Date(bed.cleaning_started_at).getTime()) / 60000);
+            if (elapsedMinutes <= SLA_MINUTES) continue;
+
+            // Log escalation to audit trail
+            await db.system_audit_logs.create({
+                data: {
+                    user_id: 'system',
+                    username: 'cron',
+                    role: 'system',
+                    action: 'BED_CLEANING_SLA_BREACH',
+                    module: 'IPD',
+                    entity_type: 'bed',
+                    entity_id: bed.bed_id,
+                    details: JSON.stringify({
+                        bed_id: bed.bed_id,
+                        ward: bed.wards?.ward_name ?? 'Unknown',
+                        cleaning_started_at: bed.cleaning_started_at,
+                        elapsed_minutes: elapsedMinutes,
+                        sla_minutes: SLA_MINUTES,
+                    }),
+                    ip_address: null,
+                    organizationId,
+                    created_at: new Date(),
+                },
+            });
+
+            escalated++;
+        }
+
+        return {
+            success: true,
+            checked: cleaningBeds.length,
+            escalated,
+        };
+    } catch (error: any) {
+        console.error('escalateBedCleaningSLA error:', error);
+        return { success: false, error: error.message };
+    }
+}

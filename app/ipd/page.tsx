@@ -26,6 +26,9 @@ import {
   Thermometer,
   XCircle,
   LogOut,
+  Siren,
+  ClipboardCheck,
+  ScrollText,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -294,6 +297,15 @@ export default function IPDDashboard() {
                     IPD Inventory
                 </Link>
             )}
+            <Link href="/ipd/nursing-assessment" className="px-4 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl text-xs font-bold transition-all shadow-sm hidden md:flex items-center gap-1.5">
+                <ClipboardCheck className="h-3.5 w-3.5 text-teal-500" /> Nursing
+            </Link>
+            <Link href="/ipd/audit-trail" className="px-4 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl text-xs font-bold transition-all shadow-sm hidden md:flex items-center gap-1.5">
+                <ScrollText className="h-3.5 w-3.5 text-gray-500" /> Audit Trail
+            </Link>
+            <Link href="/ipd/emergency-admit" className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-rose-500/20 hidden sm:flex items-center gap-1.5">
+                <Siren className="h-3.5 w-3.5" /> Emergency
+            </Link>
             <button
               onClick={() => setAdmitModal(true)}
               className="px-4 py-2 bg-gradient-to-r from-violet-500 to-indigo-500 rounded-xl text-xs font-bold text-white shadow-lg shadow-violet-500/20 flex items-center gap-2"
@@ -573,6 +585,46 @@ export default function IPDDashboard() {
                   <ArrowUpRight className="h-3 w-3" /> All time
                 </div>
               </div>
+            </div>
+
+            {/* QUICK LINKS */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Link href="/ipd/emergency-admit" className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 rounded-2xl hover:bg-rose-100 transition-all group">
+                <div className="p-2 bg-rose-500/10 rounded-xl group-hover:bg-rose-500/20 transition-all">
+                  <Siren className="h-4 w-4 text-rose-500" />
+                </div>
+                <div>
+                  <p className="text-xs font-black text-rose-700">Emergency</p>
+                  <p className="text-[10px] text-rose-400">Fast-path admit</p>
+                </div>
+              </Link>
+              <Link href="/ipd/nursing-assessment" className="flex items-center gap-3 p-4 bg-teal-50 border border-teal-200 rounded-2xl hover:bg-teal-100 transition-all group">
+                <div className="p-2 bg-teal-500/10 rounded-xl group-hover:bg-teal-500/20 transition-all">
+                  <ClipboardCheck className="h-4 w-4 text-teal-500" />
+                </div>
+                <div>
+                  <p className="text-xs font-black text-teal-700">Nursing</p>
+                  <p className="text-[10px] text-teal-400">Assessments</p>
+                </div>
+              </Link>
+              <Link href="/ipd/billing" className="flex items-center gap-3 p-4 bg-violet-50 border border-violet-200 rounded-2xl hover:bg-violet-100 transition-all group">
+                <div className="p-2 bg-violet-500/10 rounded-xl group-hover:bg-violet-500/20 transition-all">
+                  <CircleDollarSign className="h-4 w-4 text-violet-500" />
+                </div>
+                <div>
+                  <p className="text-xs font-black text-violet-700">Billing</p>
+                  <p className="text-[10px] text-violet-400">IPD charges</p>
+                </div>
+              </Link>
+              <Link href="/ipd/audit-trail" className="flex items-center gap-3 p-4 bg-gray-50 border border-gray-200 rounded-2xl hover:bg-gray-100 transition-all group">
+                <div className="p-2 bg-gray-500/10 rounded-xl group-hover:bg-gray-500/20 transition-all">
+                  <ScrollText className="h-4 w-4 text-gray-500" />
+                </div>
+                <div>
+                  <p className="text-xs font-black text-gray-700">Audit Trail</p>
+                  <p className="text-[10px] text-gray-400">Activity log</p>
+                </div>
+              </Link>
             </div>
 
             {/* OVERVIEW TAB */}
