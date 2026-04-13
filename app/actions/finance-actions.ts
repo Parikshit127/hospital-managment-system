@@ -4,6 +4,8 @@ import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
 import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
 import { billingInvoiceMsg, paymentReceiptMsg } from '@/app/lib/whatsapp-templates';
+import { postInvoiceToGL, postPaymentToGL } from './gl-actions';
+
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
 function serialize<T>(data: T): T {
@@ -86,6 +88,12 @@ export async function createInvoice(data: {
                 organizationId,
             },
         });
+
+        // Auto-post to General Ledger
+        await postInvoiceToGL(invoice.id).catch(err => 
+            console.error("GL posting failed for invoice:", invoice.id, err)
+        );
+
 
         return { success: true, data: serialize(invoice) };
     } catch (error: any) {
@@ -538,6 +546,12 @@ export async function recordPayment(data: {
                 })
             }).catch(waErr => console.error('Payment Receipt WA failed:', waErr));
         }
+
+
+        // Auto-post to General Ledger
+        await postPaymentToGL(payment.id).catch(err => 
+            console.error("GL posting failed for payment:", payment.id, err)
+        );
 
         return { success: true, data: serialize(payment) };
     } catch (error: any) {

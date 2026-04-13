@@ -1,5 +1,8 @@
 'use server';
 
+import { postExpenseToGL } from './gl-actions';
+import { syncExpenseToBudget } from './budget-actions';
+
 import { requireTenantContext } from '@/backend/tenant';
 
 function serialize<T>(data: T): T {
@@ -251,8 +254,20 @@ export async function approveExpense(id: number) {
                 entity_id: expense.expense_number,
                 details: JSON.stringify({ approved_by: session.username }),
                 organizationId,
+
             },
         });
+
+
+        // Auto-post to General Ledger
+        await postExpenseToGL(expense.id).catch(err =>
+            console.error("GL posting failed for expense:", expense.id, err)
+        );
+
+        // Sync to budget tracking
+        await syncExpenseToBudget(expense.id, expense.organizationId).catch(err =>
+            console.error("Budget sync failed for expense:", expense.id, err)
+        );
 
         return { success: true, data: serialize(expense) };
     } catch (error: any) {

@@ -2,6 +2,8 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
+import { createJournalEntry } from './gl-actions';
+
 
 function serialize<T>(data: T): T {
     return JSON.parse(JSON.stringify(data, (_, value) =>
@@ -1001,6 +1003,9 @@ interface GLEntry {
   reference_id: string;
   reference_type: string;
 }
+  // TODO: Replace audit log approach with createJournalEntry from gl-actions.ts
+  // Requires account code mapping to GL account IDs
+
 
 export async function postToGL(entries: GLEntry[]) {
   // Validate double-entry: total debits must equal total credits
