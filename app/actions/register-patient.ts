@@ -23,7 +23,7 @@ export async function checkDuplicatePatient(phone: string) {
             return { success: true, data: [] };
         }
 
-        const matches = await db.oPD_REG.findMany({
+        const matches = await (db.oPD_REG.findMany as any)({
             where: {
                 organizationId,
                 phone: { contains: cleaned },
@@ -109,7 +109,7 @@ export async function registerPatient(formData: FormData) {
         let setupLink: string | null = null;
 
         if (!existingPatient) {
-            await db.oPD_REG.create({
+            await (db.oPD_REG.create as any)({
                 data: {
                     patient_id: agentPatientId,
                     full_name: rawData.full_name,
@@ -118,7 +118,6 @@ export async function registerPatient(formData: FormData) {
                     gender: rawData.gender,
                     department: rawData.department,
                     email: rawData.email,
-                    // @ts-ignore
                     address: rawData.address,
                     aadhar_card: rawData.aadhar,
                     date_of_birth: rawData.date_of_birth || null,
@@ -129,7 +128,6 @@ export async function registerPatient(formData: FormData) {
                     registration_consent: rawData.registration_consent,
                     password: null,
                     organizationId,
-                    // Phase 1 — Patient Type
                     patient_type: rawData.patient_type || 'cash',
                     corporate_id: rawData.corporate_id || null,
                     corporate_card_number: rawData.corporate_card_number || null,

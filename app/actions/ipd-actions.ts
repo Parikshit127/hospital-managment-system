@@ -1378,3 +1378,99 @@ export async function allocateBedByRules(data: {
     return { success: false, error: error.message };
   }
 }
+
+// ============================================
+// MARK BED AS AVAILABLE (after cleaning)
+// ============================================
+export async function markBedAvailable(bedId: string) {
+  try {
+    const { db, organizationId } = await requireTenantContext();
+
+    const bed = await db.beds.findUnique({ where: { bed_id: bedId } });
+    if (!bed) return { success: false, error: 'Bed not found' };
+    if (bed.status !== 'Cleaning') return { success: false, error: 'Bed is not in Cleaning status' };
+
+    await db.beds.update({
+      where: { bed_id: bedId },
+      data: { status: 'Available' },
+    });
+
+    await db.system_audit_logs.create({
+      data: {
+        action: 'BED_MARKED_AVAILABLE',
+        module: 'ipd',
+        entity_type: 'bed',
+        entity_id: bedId,
+        details: JSON.stringify({ bedId, markedAt: new Date() }),
+        organizationId,
+      },
+    });
+
+    revalidatePath('/ipd/bed-matrix');
+    return { success: true };
+  } catch (error: any) {
+    console.error('markBedAvailable error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================
+// CANCEL ADMISSION
+// ============================================
+export async function cancelAdmission(admissionId: string, reason: string) {
+  try {
+    const { db, organizationId } = await requireTenantContext();
+
+    const admission = await db.admissions.findUnique({
+      where: { admission_id: admissionId },
+    });
+
+    if (!admission) return { success: false, error: 'Admission not found' };
+    if (admission.status !== 'Admitted') return { success: false, error: 'Only active admissions can be cancelled' };
+
+    await db.$transaction(async (tx: any) => {
+      // 1. Mark admission as Cancelled
+      await tx.admissions.update({
+        where: { admission_id: admissionId },
+        data: {
+          status: 'Cancelled',
+          discharge_date: new Date(),
+          discharge_type: 'Cancelled',
+        },
+      });
+
+      // 2. Free the bed back to Available
+      if (admission.bed_id) {
+        await tx.beds.update({
+          where: { bed_id: admission.bed_id },
+          data: { status: 'Available' },
+        });
+      }
+
+      // 3. Cancel any active invoices
+      await tx.invoices.updateMany({
+        where: { admission_id: admissionId, status: { not: 'Paid' } },
+        data: { status: 'Cancelled' },
+      });
+
+      // 4. Audit log
+      await tx.system_audit_logs.create({
+        data: {
+          action: 'CANCEL_ADMISSION',
+          module: 'ipd',
+          entity_type: 'admission',
+          entity_id: admissionId,
+          details: JSON.stringify({ reason, bed_id: admission.bed_id }),
+          organizationId,
+        },
+      });
+    });
+
+    revalidatePath('/ipd/admissions-hub');
+    revalidatePath('/ipd/bed-matrix');
+    return { success: true };
+  } catch (error: any) {
+    console.error('cancelAdmission error:', error);
+    return { success: false, error: error.message };
+  }
+}

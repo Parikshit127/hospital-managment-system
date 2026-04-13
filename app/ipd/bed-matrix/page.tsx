@@ -6,7 +6,7 @@ import {
     AlertTriangle, Shield, CheckCircle, Wrench, Sparkles, Ban, Activity
 } from 'lucide-react';
 import Link from 'next/link';
-import { getWardsWithBeds, getAllBeds } from '@/app/actions/ipd-actions';
+import { getWardsWithBeds, getAllBeds, markBedAvailable } from '@/app/actions/ipd-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
 
 const statusConfig: Record<string, { color: string; bg: string; border: string; icon: any; label: string }> = {
@@ -24,6 +24,25 @@ export default function BedMatrixPage() {
     const [beds, setBeds] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+    const [markingAvailable, setMarkingAvailable] = useState<string | null>(null);
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3500);
+    };
+
+    const handleMarkAvailable = async (bedId: string) => {
+        setMarkingAvailable(bedId);
+        const res = await markBedAvailable(bedId);
+        if (res.success) {
+            showToast(`Bed ${bedId} marked as Available`);
+            await loadData();
+        } else {
+            showToast(res.error || 'Failed to update bed', 'error');
+        }
+        setMarkingAvailable(null);
+    };
 
     const loadData = async () => {
         setLoading(true);
@@ -74,6 +93,12 @@ export default function BedMatrixPage() {
             }
         >
             <div className="space-y-6">
+                {/* TOAST */}
+                {toast && (
+                    <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-bold text-white transition-all ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                        {toast.message}
+                    </div>
+                )}
                 {/* SUMMARY BAR */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                     {[
@@ -169,6 +194,22 @@ export default function BedMatrixPage() {
                                                                     </span>
                                                                 </div>
                                                             )}
+                                                        </div>
+                                                    ) : bed.status === 'Cleaning' ? (
+                                                        <div className="space-y-2 mt-1">
+                                                            <p className="text-[10px] font-bold text-amber-500">Cleaning in progress</p>
+                                                            <button
+                                                                onClick={() => handleMarkAvailable(bed.bed_id)}
+                                                                disabled={markingAvailable === bed.bed_id}
+                                                                className="w-full flex items-center justify-center gap-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white text-[9px] font-black py-1 px-2 rounded-lg transition-all"
+                                                            >
+                                                                {markingAvailable === bed.bed_id ? (
+                                                                    <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                                                ) : (
+                                                                    <CheckCircle className="h-2.5 w-2.5" />
+                                                                )}
+                                                                Mark Available
+                                                            </button>
                                                         </div>
                                                     ) : (
                                                         <p className={`text-[10px] font-bold ${cfg.color} opacity-60`}>

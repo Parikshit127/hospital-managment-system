@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, Activity, BedDouble, Calendar, UserRound, ArrowRight, ShieldAlert, CheckCircle2, ArrowLeftRight, X, Loader2, AlertTriangle, HeartPulse } from 'lucide-react';
+import { Search, Filter, Activity, BedDouble, Calendar, UserRound, ArrowRight, ShieldAlert, CheckCircle2, ArrowLeftRight, X, Loader2, AlertTriangle, HeartPulse, XCircle } from 'lucide-react';
 import { NEWSScoreBadge } from '@/app/components/ipd/NEWSScoreBadge';
 import { Input } from '@/app/components/ui/Input';
 import { Button } from '@/app/components/ui/Button';
 import { Select } from '@/app/components/ui/Select';
 import Link from 'next/link';
-import { getWardsWithBeds, transferPatient } from '@/app/actions/ipd-actions';
+import { getWardsWithBeds, transferPatient, cancelAdmission } from '@/app/actions/ipd-actions';
 import { useRouter } from 'next/navigation';
 
 export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[], wards: any[] }) {
@@ -22,7 +22,43 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
     const [loadingWards, setLoadingWards] = useState(false);
     const [transferring, setTransferring] = useState(false);
     const [transferError, setTransferError] = useState('');
+
+    // Cancel Admission State
+    const [cancelModal, setCancelModal] = useState<any | null>(null);
+    const [cancelReason, setCancelReason] = useState('');
+    const [cancelling, setCancelling] = useState(false);
+    const [cancelError, setCancelError] = useState('');
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
     const router = useRouter();
+
+    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3500);
+    };
+
+    const handleCancelAdmission = async () => {
+        if (!cancelReason.trim()) {
+            setCancelError('Please provide a reason for cancellation');
+            return;
+        }
+        setCancelling(true);
+        setCancelError('');
+        try {
+            const res = await cancelAdmission(cancelModal.admission_id, cancelReason);
+            if (res.success) {
+                setCancelModal(null);
+                setCancelReason('');
+                showToast('Admission cancelled successfully');
+                router.refresh();
+            } else {
+                setCancelError(res.error || 'Failed to cancel admission');
+            }
+        } catch (err: any) {
+            setCancelError(err.message || 'Unexpected error');
+        }
+        setCancelling(false);
+    };
 
     const openTransferModal = async (adm: any) => {
         setTransferModal(adm);
@@ -246,6 +282,13 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                                                     >
                                                         <ArrowLeftRight className="h-4 w-4" />
                                                     </button>
+                                                    <button
+                                                        onClick={() => { setCancelModal(adm); setCancelReason(''); setCancelError(''); }}
+                                                        className="p-2 bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-xl transition-all"
+                                                        title="Cancel Admission"
+                                                    >
+                                                        <XCircle className="h-4 w-4" />
+                                                    </button>
                                                     <Link href={`/ipd/nursing-station/${adm.admission_id}`}>
                                                         <button className="inline-flex items-center gap-2 bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm hover:shadow transition-all group-hover:scale-105 active:scale-95">
                                                             <Activity className="h-4 w-4" />
@@ -254,6 +297,10 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                                                         </button>
                                                     </Link>
                                                 </div>
+                                            ) : adm.status === 'Cancelled' ? (
+                                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-500 rounded-lg text-[10px] font-bold">
+                                                    <XCircle className="h-3 w-3" /> Cancelled
+                                                </span>
                                             ) : (
                                                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-500 rounded-lg text-[10px] font-bold">
                                                     <CheckCircle2 className="h-3 w-3" /> Discharged
@@ -277,6 +324,71 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                     </table>
                 </div>
             </div>
+
+            {/* Toast */}
+            {toast && (
+                <div className={`fixed top-4 right-4 z-[200] px-4 py-3 rounded-xl shadow-lg text-sm font-bold text-white transition-all ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                    {toast.message}
+                </div>
+            )}
+
+            {/* Cancel Admission Modal */}
+            {cancelModal && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl w-full max-w-md p-6 space-y-5">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                                <XCircle className="h-5 w-5 text-rose-500" />
+                                Cancel Admission
+                            </h3>
+                            <button onClick={() => setCancelModal(null)} className="text-gray-400 hover:text-gray-900">
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="bg-rose-50 border border-rose-200 p-3 rounded-xl space-y-1">
+                            <p className="text-sm font-bold text-gray-800">{cancelModal.patient?.full_name}</p>
+                            <p className="text-xs text-gray-500">
+                                Admitted: <span className="font-bold text-gray-700">{new Date(cancelModal.admission_date).toLocaleDateString()}</span>
+                                {cancelModal.bed_id && <> &bull; Bed <span className="font-bold text-gray-700">{cancelModal.bed_id}</span></>}
+                            </p>
+                            <p className="text-[10px] text-rose-600 font-bold mt-1">⚠ This will free the bed and cancel the invoice. This cannot be undone.</p>
+                        </div>
+
+                        <div>
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Reason for Cancellation *</label>
+                            <input
+                                type="text"
+                                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl text-sm"
+                                placeholder="e.g. Patient admitted by mistake, wrong patient..."
+                                value={cancelReason}
+                                onChange={(e) => { setCancelReason(e.target.value); setCancelError(''); }}
+                            />
+                        </div>
+
+                        {cancelError && (
+                            <p className="text-xs text-rose-500 font-bold">{cancelError}</p>
+                        )}
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setCancelModal(null)}
+                                className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all"
+                            >
+                                Keep Admission
+                            </button>
+                            <button
+                                onClick={handleCancelAdmission}
+                                disabled={cancelling}
+                                className="flex-1 py-2.5 bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
+                            >
+                                {cancelling && <Loader2 className="h-4 w-4 animate-spin" />}
+                                Cancel Admission
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Transfer/Assign Bed Modal */}
             {transferModal && (
