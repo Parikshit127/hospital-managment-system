@@ -29,6 +29,7 @@ import {
   Siren,
   ClipboardCheck,
   ScrollText,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -43,6 +44,8 @@ import {
   addMedicalNote,
   accrueIPDDailyCharges,
   findAssignedDoctorByPatientPhone,
+  cancelAdmission,
+  markBedAvailable,
 } from "@/app/actions/ipd-actions";
 import { AppShell } from "@/app/components/layout/AppShell";
 
@@ -74,6 +77,9 @@ export default function IPDDashboard() {
   const [dischargeModal, setDischargeModal] = useState<any>(null);
   const [dischargeNotes, setDischargeNotes] = useState("");
   const [dischargeLoading, setDischargeLoading] = useState(false);
+  const [cancelModal, setCancelModal] = useState<any>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   // Search assigned doctor by patient phone
   const [doctorLookupPhone, setDoctorLookupPhone] = useState("");
@@ -192,6 +198,22 @@ export default function IPDDashboard() {
       console.error(err);
     }
     setDischargeLoading(false);
+  };
+
+  const handleCancelAdmission = async () => {
+    if (!cancelModal || !cancelReason.trim()) return;
+    setCancelLoading(true);
+    try {
+      const res = await cancelAdmission(cancelModal.admission_id, cancelReason);
+      if (res.success) {
+        setCancelModal(null);
+        setCancelReason("");
+        loadData();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setCancelLoading(false);
   };
 
   const handleAddNote = async () => {
@@ -746,13 +768,22 @@ export default function IPDDashboard() {
                                   <ClipboardList className="h-3 w-3 text-gray-400 hover:text-gray-900" />
                                 </button>
                                 {adm.status === "Admitted" && (
-                                  <button
-                                    onClick={() => setDischargeModal(adm)}
-                                    className="p-1 hover:bg-rose-500/10 rounded transition-all"
-                                    title="Discharge"
-                                  >
-                                    <LogOut className="h-3 w-3 text-rose-400/50 hover:text-rose-400" />
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={() => setDischargeModal(adm)}
+                                      className="p-1 hover:bg-rose-500/10 rounded transition-all"
+                                      title="Discharge"
+                                    >
+                                      <LogOut className="h-3 w-3 text-rose-400/50 hover:text-rose-400" />
+                                    </button>
+                                    <button
+                                      onClick={() => setCancelModal(adm)}
+                                      className="p-1 hover:bg-gray-200 rounded transition-all"
+                                      title="Cancel Admission"
+                                    >
+                                      <X className="h-3 w-3 text-gray-300 hover:text-gray-600" />
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             </div>
@@ -1226,6 +1257,38 @@ export default function IPDDashboard() {
                 <CheckCircle className="h-4 w-4" />
               )}
               Confirm Discharge
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* NOTE MODAL */}
+      {cancelModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 shadow-sm rounded-2xl w-full max-w-md p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <X className="h-5 w-5 text-gray-500" /> Cancel Admission
+              </h3>
+              <button onClick={() => setCancelModal(null)} className="text-gray-400 hover:text-gray-900 text-xl">&times;</button>
+            </div>
+            <div className="bg-gray-100 rounded-xl p-3 text-xs space-y-1">
+              <p className="font-bold text-gray-700">{cancelModal.patient?.full_name}</p>
+              <p className="text-gray-400">{cancelModal.admission_id} &bull; {cancelModal.wardName} &bull; Bed: {cancelModal.bed_id}</p>
+            </div>
+            <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-xl p-3">
+              This will cancel the admission, free the bed, and cancel any draft invoices. This cannot be undone.
+            </p>
+            <div>
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Reason for Cancellation *</label>
+              <textarea value={cancelReason} onChange={e => setCancelReason(e.target.value)} rows={3}
+                className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:border-gray-500 focus:outline-none"
+                placeholder="e.g. Admitted by mistake, patient refused treatment..." />
+            </div>
+            <button onClick={handleCancelAdmission} disabled={cancelLoading || !cancelReason.trim()}
+              className="w-full py-3 bg-gray-800 text-white text-sm font-black rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
+              {cancelLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+              Cancel Admission
             </button>
           </div>
         </div>

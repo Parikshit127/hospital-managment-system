@@ -146,7 +146,15 @@ export async function admitPatientIPD(data: {
     
     
     const admission = await db.$transaction(async (tx: any) => {
-        // Atomic update: only update if it is 'Available'
+      
+        const existingAdmission = await tx.admissions.findFirst({
+            where: { patient_id: data.patient_id, status: 'Admitted', organizationId }
+        });
+        if (existingAdmission) {
+            throw new Error(`Patient already has an active admission: ${existingAdmission.admission_id}`);
+        }
+
+      
         const updatedBed = await tx.beds.updateMany({
             where: { bed_id: data.bed_id, status: "Available", organizationId },
             data: { status: "Occupied" }
@@ -160,7 +168,7 @@ export async function admitPatientIPD(data: {
         const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0");
         const ipdId = `IPD-${dateStr}-${seq}`;
 
-        // Create admission
+      
         const newAdmission = await tx.admissions.create({
             data: {
                 admission_id: ipdId,
@@ -174,8 +182,7 @@ export async function admitPatientIPD(data: {
             },
         });
 
-        // Create IPD invoice
-        // Re-use dateStr and seq or generate new ones for invoice if preferred, but generating new seq:
+      
         const invoiceSeq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0");
 
         const newInvoice = await tx.invoices.create({
@@ -190,7 +197,7 @@ export async function admitPatientIPD(data: {
             },
         });
 
-        // Collect deposit if provided
+      
         if (data.deposit_amount && data.deposit_amount > 0) {
             const depDateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
             const depSeq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0");
@@ -232,7 +239,7 @@ export async function admitPatientIPD(data: {
   }
 }
 
-// Get all current admissions (IPD Dashboard)
+
 export async function getIPDAdmissions(statusFilter?: string) {
   try {
     const { db } = await requireTenantContext();
@@ -288,7 +295,7 @@ export async function getIPDAdmissions(statusFilter?: string) {
   }
 }
 
-// Search IPD admissions by patient phone and return assigned doctor details
+
 export async function findAssignedDoctorByPatientPhone(phoneQuery: string) {
   try {
     const { db } = await requireTenantContext();
@@ -302,7 +309,7 @@ export async function findAssignedDoctorByPatientPhone(phoneQuery: string) {
       };
     }
 
-    // Search only CURRENT admissions so results match the IPD dashboard context.
+    
     const admissions = await db.admissions.findMany({
       where: { status: "Admitted" },
       include: {
@@ -313,7 +320,7 @@ export async function findAssignedDoctorByPatientPhone(phoneQuery: string) {
       take: 500,
     });
 
-    // Also resolve doctors by phone/name/username so search can work with doctor inputs.
+    
     const matchedDoctors = await db.user.findMany({
       where: {
         role: "doctor",
@@ -360,7 +367,7 @@ export async function findAssignedDoctorByPatientPhone(phoneQuery: string) {
 
         let score = -1;
 
-        // Strongest match: exact 10-digit mobile match.
+        
         if (queryLast10 && phoneLast10 === queryLast10) {
           score = 100;
         } else if (digitQuery && phoneDigits === digitQuery) {
@@ -440,7 +447,7 @@ export async function findAssignedDoctorByPatientPhone(phoneQuery: string) {
   }
 }
 
-// Get single admission detail
+
 export async function getAdmissionDetail(admissionId: string) {
   try {
     const { db } = await requireTenantContext();
@@ -467,7 +474,7 @@ export async function getAdmissionDetail(admissionId: string) {
   }
 }
 
-// Add daily charges (room + nursing) to an admission's invoice
+
 export async function accrueIPDDailyCharges(admissionId: string) {
   try {
     const { db } = await requireTenantContext();
@@ -481,7 +488,7 @@ export async function accrueIPDDailyCharges(admissionId: string) {
     const ward = admission.ward || admission.bed?.wards;
     if (!ward) return { success: false, error: "Ward info not found" };
 
-    // Find the IPD invoice
+  
     let invoice = await db.invoices.findFirst({
       where: { admission_id: admissionId, status: { not: "Cancelled" } },
     });
@@ -508,15 +515,15 @@ export async function accrueIPDDailyCharges(admissionId: string) {
     const baseRoomRate = Number(ward.cost_per_day || 0);
     const roomRate = baseRoomRate * multiplier;
     
-    // Nursing rate is also scaled or remains flat based on hospital policy. Let's scale it.
+
     const nursingRate = Number(ward.nursing_charge || 0) * multiplier;
     const today = new Date().toLocaleDateString("en-IN");
 
-    // Determine room GST: 0% if <=5000/day, 5% if >5000/day
+    
     const roomTaxRate = roomRate > 5000 ? 5 : 0;
     const roomTaxAmount = roomRate * roomTaxRate / 100;
 
-    // Add room charge
+ 
     if (roomRate > 0) {
       await db.invoice_items.create({
         data: {
@@ -536,7 +543,6 @@ export async function accrueIPDDailyCharges(admissionId: string) {
       });
     }
 
-    // Add nursing charge
     if (nursingRate > 0) {
       await db.invoice_items.create({
         data: {
@@ -556,7 +562,7 @@ export async function accrueIPDDailyCharges(admissionId: string) {
       });
     }
 
-    // Recalculate totals
+   
     const items = await db.invoice_items.findMany({
       where: { invoice_id: invoice.id },
     });
@@ -601,7 +607,7 @@ export async function accrueIPDDailyCharges(admissionId: string) {
   }
 }
 
-// Discharge a patient from IPD
+
 export async function dischargePatientIPD(admissionId: string, notes?: string) {
   try {
     const { db } = await requireTenantContext();
@@ -612,7 +618,7 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
 
     if (!admission) return { success: false, error: "Admission not found" };
 
-    // Calculate total room charges
+   
     const ward = admission.ward || admission.bed?.wards;
     const daysAdmitted = Math.max(
       1,
@@ -622,7 +628,7 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
       ),
     );
 
-    // Update admission status
+
     await db.admissions.update({
       where: { admission_id: admissionId },
       data: {
@@ -631,7 +637,7 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
       },
     });
 
-    // Free the bed (set to Cleaning first)
+    
     if (admission.bed_id) {
       await db.beds.update({
         where: { bed_id: admission.bed_id },
@@ -639,7 +645,7 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
       });
     }
 
-    // Finalize invoice
+  
     const invoice = await db.invoices.findFirst({
       where: { admission_id: admissionId, status: { not: "Cancelled" } },
     });
@@ -654,7 +660,7 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
       });
     }
 
-    // Create discharge summary
+    
     await db.discharge_summaries.create({
       data: {
         admission_id: admissionId,
@@ -690,7 +696,7 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
   }
 }
 
-// Add medical note during admission
+
 export async function addMedicalNote(
   admissionId: string,
   noteType: string,
@@ -721,7 +727,7 @@ export async function addMedicalNote(
   }
 }
 
-// Get IPD Stats
+
 export async function getIPDStats() {
   try {
     const { db, session } = await requireTenantContext();
@@ -758,7 +764,7 @@ export async function getIPDStats() {
   }
 }
 
-// Search patients for admission
+
 export async function searchPatientsForAdmission(query: string) {
   try {
     const { db } = await requireTenantContext();
@@ -780,9 +786,7 @@ export async function searchPatientsForAdmission(query: string) {
   }
 }
 
-// ============================================
-// PHASE 1.5 NEW IPD ACTIONS
-// ============================================
+
 
 export async function transferPatient(data: {
   admission_id: string;
@@ -803,7 +807,7 @@ export async function transferPatient(data: {
 
       const fromBedId = admission.bed_id;
 
-      // Mark old bed cleaning
+    
       if (fromBedId) {
         await tx.beds.update({
           where: { bed_id: fromBedId },
@@ -811,7 +815,7 @@ export async function transferPatient(data: {
         });
       }
 
-      // Check new bed
+    
       const toBed = await tx.beds.findUnique({
         where: { bed_id: data.to_bed_id },
       });
@@ -819,26 +823,26 @@ export async function transferPatient(data: {
         throw new Error("Destination bed is not available");
       }
 
-      // Update new bed
+     
       await tx.beds.update({
         where: { bed_id: data.to_bed_id },
         data: { status: "Occupied" },
       });
 
-      // Update admission
+      
       await tx.admissions.update({
         where: { admission_id: data.admission_id },
         data: { bed_id: data.to_bed_id, ward_id: toBed.ward_id },
       });
 
-      // Create Transfer Record
+      
       await tx.bedTransfer.create({
         data: {
           admission_id: data.admission_id,
           from_bed_id: fromBedId || "",
           to_bed_id: data.to_bed_id,
           reason: data.reason,
-          transferred_by: session.id, // Ensure your schema uses string or Int
+          transferred_by: session.id, 
           organizationId,
         },
       });
@@ -865,7 +869,7 @@ export async function assignDietPlan(data: {
   try {
     const { db, session, organizationId } = await requireTenantContext();
 
-    // Deactivate previous
+    
     await db.dietPlan.updateMany({
       where: { admission_id: data.admission_id, is_active: true },
       data: { is_active: false },
@@ -971,7 +975,7 @@ export async function recordWardRound(data: {
       },
     });
 
-    // Post doctor visit charge to IPD bill if fee > 0
+    
     if (visitFee > 0) {
       const { postChargeToIpdBill } = await import('./ipd-finance-actions');
       await postChargeToIpdBill({
@@ -1001,7 +1005,7 @@ export async function getNursingTasks(wardId?: number) {
     let whereClause: any = { status: "Pending" };
 
     if (wardId) {
-      // Need to join via admissions
+   
       const admissions = await db.admissions.findMany({
         where: { ward_id: wardId, status: "Admitted" },
         select: { admission_id: true },
@@ -1104,7 +1108,7 @@ export async function getAdmissionFullDetails(admissionId: string) {
   }
 }
 
-// Change the assigned doctor for an admission
+
 export async function changeAdmissionDoctor(
   admissionId: string,
   newDoctorName: string,
@@ -1290,6 +1294,51 @@ export async function updateAdmissionDiagnosis(data: {
   }
 }
 
+export async function cancelAdmission(admissionId: string, reason: string) {
+  try {
+    const { db, organizationId } = await requireTenantContext();
+    const admission = await db.admissions.findUnique({
+      where: { admission_id: admissionId },
+    });
+    if (!admission) return { success: false, error: "Admission not found" };
+    if (admission.status !== "Admitted") return { success: false, error: "Only active admissions can be cancelled" };
+
+    await db.$transaction(async (tx: any) => {
+      await tx.admissions.update({
+        where: { admission_id: admissionId },
+        data: { status: "Cancelled", discharge_date: new Date() },
+      });
+
+      if (admission.bed_id) {
+        await tx.beds.update({
+          where: { bed_id: admission.bed_id },
+          data: { status: "Available" },
+        });
+      }
+
+      await tx.invoices.updateMany({
+        where: { admission_id: admissionId, status: "Draft" },
+        data: { status: "Cancelled" },
+      });
+
+      await tx.system_audit_logs.create({
+        data: {
+          action: "CANCEL_ADMISSION",
+          module: "ipd",
+          entity_type: "admission",
+          entity_id: admissionId,
+          details: JSON.stringify({ reason }),
+          organizationId,
+        },
+      });
+    });
+
+    revalidatePath("/ipd");
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
 export async function allocateBedByRules(data: {
   patient_id: string;
   patient_class?: string;    // General | SemiPrivate | Private | Suite | ICU
@@ -1374,6 +1423,20 @@ export async function allocateBedByRules(data: {
         })),
       },
     };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function markBedAvailable(bedId: string) {
+  try {
+    const { db } = await requireTenantContext();
+    await db.beds.update({
+      where: { bed_id: bedId },
+      data: { status: "Available" },
+    });
+    revalidatePath("/ipd/bed-matrix");
+    return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
   }

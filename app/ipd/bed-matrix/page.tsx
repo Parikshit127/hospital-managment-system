@@ -6,7 +6,7 @@ import {
     AlertTriangle, Shield, CheckCircle, Wrench, Sparkles, Ban, Activity
 } from 'lucide-react';
 import Link from 'next/link';
-import { getWardsWithBeds, getAllBeds } from '@/app/actions/ipd-actions';
+import { getWardsWithBeds, getAllBeds, markBedAvailable, updateBedStatus } from '@/app/actions/ipd-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
 
 const statusConfig: Record<string, { color: string; bg: string; border: string; icon: any; label: string }> = {
@@ -171,9 +171,27 @@ export default function BedMatrixPage() {
                                                             )}
                                                         </div>
                                                     ) : (
+                                                        <div>
                                                         <p className={`text-[10px] font-bold ${cfg.color} opacity-60`}>
                                                             {bed.status}
                                                         </p>
+                                                        {bed.status === 'Cleaning' && (
+                                                            <button
+                                                                onClick={async () => { await markBedAvailable(bed.bed_id); loadData(); }}
+                                                                className="mt-1.5 text-[9px] font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg hover:bg-emerald-100 transition w-full"
+                                                            >
+                                                                ✓ Mark Available
+                                                            </button>
+                                                        )}
+                                                        {(bed.status === 'Maintenance' || bed.status === 'Blocked') && (
+                                                            <button
+                                                                onClick={async () => { await markBedAvailable(bed.bed_id); loadData(); }}
+                                                                className="mt-1.5 text-[9px] font-black text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg hover:bg-blue-100 transition w-full"
+                                                            >
+                                                                ✓ Set Available
+                                                            </button>
+                                                        )}
+                                                        </div>
                                                     )}
                                                 </div>
                                             );
