@@ -16,9 +16,14 @@ import {
   Bed,
   Loader2,
   BedDouble,
+  Trash2,
+  Clock,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { AdminPage } from "../../components/AdminPage";
 import { getAdminPatientFullDetails } from "@/app/actions/admin-actions";
+import { archivePatient, hardDeletePatient } from "@/app/actions/reception-actions";
+import { useToast } from "@/app/components/ui/Toast";
 
 import OverviewTab from "./tabs/OverviewTab";
 import OPDHistoryTab from "./tabs/OPDHistoryTab";
@@ -52,6 +57,37 @@ export default function AdminPatientDetailsPage() {
   const [error, setError] = useState("");
   const [data, setData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const [archiving, setArchiving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const router = useRouter();
+  const toast = useToast();
+
+  const handleArchive = async () => {
+    if (!window.confirm("Archive this patient? They will be hidden from patient lists but data is preserved.")) return;
+    setArchiving(true);
+    const res = await archivePatient(patientId);
+    setArchiving(false);
+    if (res.success) {
+      toast.success("Patient archived successfully");
+      router.push("/admin/patients");
+    } else {
+      toast.error(res.error || "Archive failed");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm("PERMANENTLY DELETE this patient? This action is ONLY for registration mistakes. If the patient has any medical or billing history, deletion will be blocked.")) return;
+    setDeleting(true);
+    const res = await hardDeletePatient(patientId);
+    setDeleting(false);
+    if (res.success) {
+      toast.success("Patient record deleted permanently");
+      router.push("/admin/patients");
+    } else {
+      toast.error(res.error || "Delete failed");
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -88,9 +124,19 @@ export default function AdminPatientDetailsPage() {
   };
 
   const headerActions = patient ? (
-    <span className="text-xs font-black uppercase tracking-wider bg-teal-500/10 text-teal-700 border border-teal-500/20 px-3 py-1 rounded-lg">
-      {patient.patient_id}
-    </span>
+    <div className="flex items-center gap-2">
+      <span className="text-xs font-black uppercase tracking-wider bg-teal-500/10 text-teal-700 border border-teal-500/20 px-3 py-1 rounded-lg">
+        {patient.patient_id}
+      </span>
+      <button onClick={handleArchive} disabled={archiving || deleting}
+        className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-500 text-[10px] font-bold rounded-lg hover:bg-gray-50 disabled:opacity-50">
+        <Clock className="h-3 w-3" /> {archiving ? 'Archiving…' : 'Archive'}
+      </button>
+      <button onClick={handleDelete} disabled={archiving || deleting}
+        className="flex items-center gap-2 px-3 py-1.5 bg-white border border-red-200 text-red-500 text-[10px] font-bold rounded-lg hover:bg-red-50 disabled:opacity-50">
+        <Trash2 className="h-3 w-3" /> {deleting ? 'Deleting…' : 'Delete Mistake'}
+      </button>
+    </div>
   ) : null;
 
   const quickStats = summary

@@ -1289,3 +1289,52 @@ export async function archivePatient(patientId: string) {
         return { success: false, error: error.message };
     }
 }
+
+/**
+ * Permanently delete a patient record if created by mistake.
+ * SAFETY CHECK: Blocks deletion if any clinical or financial records exist.
+ */
+export async function hardDeletePatient(patientId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        // 1. Check for primary dependencies
+        const [
+            appointments,
+            invoices,
+            admissions,
+            labOrders,
+            pharmacyOrders
+        ] = await Promise.all([
+            db.appointments.count({ where: { patient_id: patientId } }),
+            db.invoices.count({ where: { patient_id: patientId } }),
+            db.admissions.count({ where: { patient_id: patientId } }),
+            db.lab_orders.count({ where: { patient_id: patientId } }),
+            db.pharmacy_orders.count({ where: { patient_id: patientId } }),
+        ]);
+
+        if (appointments > 0 || invoices > 0 || admissions > 0 || labOrders > 0 || pharmacyOrders > 0) {
+            return { 
+                success: false, 
+                error: "Cannot delete patient with existing medical or billing history. Please use 'Archive' to hide this patient instead." 
+            };
+        }
+
+        // 2. Clear background registration metadata and tokens that block deletion
+        await db.$transaction([
+            db.patientPasswordSetupToken.deleteMany({ where: { patient_id: patientId } }),
+            db.whatsapp_log.deleteMany({ where: { patientId: patientId } }),
+            db.patient_external_records.deleteMany({ where: { patient_id: patientId } }),
+            db.followUp.deleteMany({ where: { patient_id: patientId } }),
+            db.triage_results.deleteMany({ where: { patient_id: patientId } }),
+            db.vital_signs.deleteMany({ where: { patient_id: patientId } }),
+            db.oPD_REG.delete({ where: { patient_id: patientId, organizationId } })
+        ]);
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('hardDeletePatient error:', error);
+        return { success: false, error: "Failed to delete patient. Ensure there are no active medical records." };
+    }
+}
+
