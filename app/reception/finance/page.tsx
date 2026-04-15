@@ -11,19 +11,70 @@ import {
     Trash2,
     Save,
     Inbox,
-    Loader2
+    Loader2,
+    Building2,
+    FileText,
+    Shield,
+    Edit2,
+    ToggleLeft,
+    ToggleRight,
+    X,
 } from "lucide-react";
 import { getFinanceConfig, saveFinanceConfig } from "@/app/actions/finance-config-actions";
+import {
+    getAllCorporateMasters, createCorporateMaster, updateCorporateMaster,
+    getAllTpaProviders, createTpaProvider, updateTpaProvider,
+} from "@/app/actions/patient-type-actions";
+
+// ─── Corporate types ───────────────────────────────────────────────────────
+type Corporate = {
+    id: string; company_name: string; company_code: string;
+    contact_person: string | null; contact_phone: string | null;
+    contact_email: string | null; credit_limit: string | number;
+    discount_percentage: string | number; payment_terms_days: number;
+    contract_start: string | Date | null; contract_end: string | Date | null;
+    is_active: boolean;
+};
+const EMPTY_CORP = { company_name: '', company_code: '', contact_person: '', contact_phone: '', contact_email: '', credit_limit: 0, discount_percentage: 0, payment_terms_days: 30, contract_start: '', contract_end: '' };
+
+// ─── TPA types ─────────────────────────────────────────────────────────────
+type TpaProvider = {
+    id: number; provider_name: string; provider_code: string;
+    tpa_type: string | null; contact_person: string | null;
+    contact_phone: string | null; contact_email: string | null;
+    pre_auth_required: boolean; claim_submission_mode: string;
+    default_discount_percentage: string | number; payment_terms_days: number;
+    is_active: boolean;
+};
+const EMPTY_TPA = { provider_name: '', provider_code: '', tpa_type: 'tpa', contact_person: '', contact_phone: '', contact_email: '', pre_auth_required: true, claim_submission_mode: 'online', default_discount_percentage: 0, payment_terms_days: 45 };
 
 export default function ReceptionFinancePage() {
     const [activeTab, setActiveTab] = useState("doctors");
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
-    // Dynamic State for User Input
+    // Finance config state
     const [doctors, setDoctors] = useState<any[]>([]);
     const [checkups, setCheckups] = useState<any[]>([]);
     const [medicines, setMedicines] = useState<any[]>([]);
+
+    // Corporate state
+    const [corporates, setCorporates] = useState<Corporate[]>([]);
+    const [corpLoading, setCorpLoading] = useState(false);
+    const [corpModal, setCorpModal] = useState(false);
+    const [corpEditId, setCorpEditId] = useState<string | null>(null);
+    const [corpForm, setCorpForm] = useState(EMPTY_CORP);
+    const [corpSaving, setCorpSaving] = useState(false);
+    const [corpError, setCorpError] = useState('');
+
+    // TPA state
+    const [tpaProviders, setTpaProviders] = useState<TpaProvider[]>([]);
+    const [tpaLoading, setTpaLoading] = useState(false);
+    const [tpaModal, setTpaModal] = useState(false);
+    const [tpaEditId, setTpaEditId] = useState<number | null>(null);
+    const [tpaForm, setTpaForm] = useState(EMPTY_TPA);
+    const [tpaSaving, setTpaSaving] = useState(false);
+    const [tpaError, setTpaError] = useState('');
 
     useEffect(() => {
         loadData();
@@ -51,6 +102,56 @@ export default function ReceptionFinancePage() {
         }
         setIsSaving(false);
     };
+
+    // ── Corporate helpers ──────────────────────────────────────────────────
+    const loadCorporates = async () => {
+        setCorpLoading(true);
+        const r = await getAllCorporateMasters();
+        if (r.success) setCorporates(r.data as Corporate[]);
+        setCorpLoading(false);
+    };
+    const openCorpCreate = () => { setCorpEditId(null); setCorpForm(EMPTY_CORP); setCorpError(''); setCorpModal(true); };
+    const openCorpEdit = (c: Corporate) => {
+        setCorpEditId(c.id);
+        setCorpForm({ company_name: c.company_name, company_code: c.company_code, contact_person: c.contact_person || '', contact_phone: c.contact_phone || '', contact_email: c.contact_email || '', credit_limit: Number(c.credit_limit), discount_percentage: Number(c.discount_percentage), payment_terms_days: c.payment_terms_days, contract_start: c.contract_start ? new Date(c.contract_start).toISOString().split('T')[0] : '', contract_end: c.contract_end ? new Date(c.contract_end).toISOString().split('T')[0] : '' });
+        setCorpError(''); setCorpModal(true);
+    };
+    const saveCorpForm = async () => {
+        if (!corpForm.company_name || !corpForm.company_code) { setCorpError('Company name and code are required'); return; }
+        setCorpSaving(true); setCorpError('');
+        const r = corpEditId ? await updateCorporateMaster(corpEditId, corpForm) : await createCorporateMaster(corpForm);
+        if (r.success) { setCorpModal(false); await loadCorporates(); } else { setCorpError(r.error || 'Failed to save'); }
+        setCorpSaving(false);
+    };
+    const toggleCorp = async (c: Corporate) => { await updateCorporateMaster(c.id, { is_active: !c.is_active }); await loadCorporates(); };
+
+    // ── TPA helpers ────────────────────────────────────────────────────────
+    const loadTpa = async () => {
+        setTpaLoading(true);
+        const r = await getAllTpaProviders();
+        if (r.success) setTpaProviders(r.data as TpaProvider[]);
+        setTpaLoading(false);
+    };
+    const openTpaCreate = () => { setTpaEditId(null); setTpaForm(EMPTY_TPA); setTpaError(''); setTpaModal(true); };
+    const openTpaEdit = (p: TpaProvider) => {
+        setTpaEditId(p.id);
+        setTpaForm({ provider_name: p.provider_name, provider_code: p.provider_code, tpa_type: p.tpa_type || 'tpa', contact_person: p.contact_person || '', contact_phone: p.contact_phone || '', contact_email: p.contact_email || '', pre_auth_required: p.pre_auth_required, claim_submission_mode: p.claim_submission_mode, default_discount_percentage: Number(p.default_discount_percentage), payment_terms_days: p.payment_terms_days });
+        setTpaError(''); setTpaModal(true);
+    };
+    const saveTpaForm = async () => {
+        if (!tpaForm.provider_name || !tpaForm.provider_code) { setTpaError('Provider name and code are required'); return; }
+        setTpaSaving(true); setTpaError('');
+        const r = tpaEditId ? await updateTpaProvider(tpaEditId, tpaForm) : await createTpaProvider(tpaForm);
+        if (r.success) { setTpaModal(false); await loadTpa(); } else { setTpaError(r.error || 'Failed to save'); }
+        setTpaSaving(false);
+    };
+    const toggleTpa = async (p: TpaProvider) => { await updateTpaProvider(p.id, { is_active: !p.is_active }); await loadTpa(); };
+
+    // Load corporate/TPA when tab switches
+    useEffect(() => {
+        if (activeTab === 'corporates' && corporates.length === 0) loadCorporates();
+        if (activeTab === 'tpa' && tpaProviders.length === 0) loadTpa();
+    }, [activeTab]);
 
     const addCheckupRow = () => {
         setCheckups([{ id: "temp_" + Date.now(), name: "", code: "", price: "" }, ...checkups]);
@@ -123,6 +224,18 @@ export default function ReceptionFinancePage() {
                             className={`flex items-center gap-2 px-6 py-4 text-sm font-bold transition-colors whitespace-nowrap border-b-[3px] ${activeTab === "medicines" ? "border-emerald-500 text-emerald-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-200"}`}
                         >
                             <Pill className="h-4 w-4" /> Pharmacy Pricing
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("corporates")}
+                            className={`flex items-center gap-2 px-6 py-4 text-sm font-bold transition-colors whitespace-nowrap border-b-[3px] ${activeTab === "corporates" ? "border-blue-500 text-blue-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-200"}`}
+                        >
+                            <Building2 className="h-4 w-4" /> Corporates
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("tpa")}
+                            className={`flex items-center gap-2 px-6 py-4 text-sm font-bold transition-colors whitespace-nowrap border-b-[3px] ${activeTab === "tpa" ? "border-amber-500 text-amber-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-200"}`}
+                        >
+                            <FileText className="h-4 w-4" /> TPA / Insurance
                         </button>
                     </div>
 
@@ -278,11 +391,242 @@ export default function ReceptionFinancePage() {
                                         )}
                                     </div>
                                 )}
+                                {/* CORPORATES TAB */}
+                                {activeTab === "corporates" && (
+                                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h3 className="text-lg font-bold text-gray-900">Corporate Companies</h3>
+                                                <p className="text-xs text-gray-500 mt-1">Manage corporate billing agreements and discounts</p>
+                                            </div>
+                                            <button onClick={openCorpCreate} className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-all">
+                                                <Plus className="h-4 w-4" /> Add Corporate
+                                            </button>
+                                        </div>
+                                        {corpLoading ? (
+                                            <div className="py-16 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+                                        ) : corporates.length === 0 ? (
+                                            <div className="py-16 text-center border-2 border-dashed border-gray-100 rounded-2xl flex flex-col items-center">
+                                                <Building2 className="h-10 w-10 text-gray-300 mb-3" />
+                                                <p className="text-gray-500 font-medium text-sm">No corporate companies yet</p>
+                                                <button onClick={openCorpCreate} className="mt-4 text-sm font-bold text-blue-600 hover:underline">Add your first corporate</button>
+                                            </div>
+                                        ) : (
+                                            <div className="overflow-x-auto rounded-xl border border-gray-200">
+                                                <table className="w-full text-sm bg-white">
+                                                    <thead className="bg-gray-50 border-b border-gray-200">
+                                                        <tr>{['Company', 'Code', 'Contact', 'Credit Limit', 'Discount', 'Terms', 'Status', ''].map(h => <th key={h} className="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-wider">{h}</th>)}</tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100">
+                                                        {corporates.map(c => (
+                                                            <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                                                                <td className="px-4 py-3 font-bold text-gray-900">{c.company_name}</td>
+                                                                <td className="px-4 py-3 font-mono text-xs text-gray-500">{c.company_code}</td>
+                                                                <td className="px-4 py-3 text-gray-600">{c.contact_person || '—'}{c.contact_phone && <span className="block text-xs text-gray-400">{c.contact_phone}</span>}</td>
+                                                                <td className="px-4 py-3 text-gray-700">₹{Number(c.credit_limit).toLocaleString('en-IN')}</td>
+                                                                <td className="px-4 py-3"><span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">{Number(c.discount_percentage)}%</span></td>
+                                                                <td className="px-4 py-3 text-gray-600">{c.payment_terms_days}d</td>
+                                                                <td className="px-4 py-3"><button onClick={() => toggleCorp(c)}>{c.is_active ? <ToggleRight className="h-5 w-5 text-teal-500" /> : <ToggleLeft className="h-5 w-5 text-gray-300" />}</button></td>
+                                                                <td className="px-4 py-3"><button onClick={() => openCorpEdit(c)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-all"><Edit2 className="h-3.5 w-3.5" /></button></td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* TPA / INSURANCE TAB */}
+                                {activeTab === "tpa" && (
+                                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h3 className="text-lg font-bold text-gray-900">TPA / Insurance Providers</h3>
+                                                <p className="text-xs text-gray-500 mt-1">Manage TPA and insurance provider agreements</p>
+                                            </div>
+                                            <button onClick={openTpaCreate} className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 text-white text-sm font-bold rounded-xl hover:bg-amber-600 transition-all">
+                                                <Plus className="h-4 w-4" /> Add Provider
+                                            </button>
+                                        </div>
+                                        {tpaLoading ? (
+                                            <div className="py-16 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+                                        ) : tpaProviders.length === 0 ? (
+                                            <div className="py-16 text-center border-2 border-dashed border-gray-100 rounded-2xl flex flex-col items-center">
+                                                <FileText className="h-10 w-10 text-gray-300 mb-3" />
+                                                <p className="text-gray-500 font-medium text-sm">No TPA / Insurance providers yet</p>
+                                                <button onClick={openTpaCreate} className="mt-4 text-sm font-bold text-amber-600 hover:underline">Add your first provider</button>
+                                            </div>
+                                        ) : (
+                                            <div className="overflow-x-auto rounded-xl border border-gray-200">
+                                                <table className="w-full text-sm bg-white">
+                                                    <thead className="bg-gray-50 border-b border-gray-200">
+                                                        <tr>{['Provider', 'Code', 'Type', 'Pre-Auth', 'Claim Mode', 'Discount', 'Terms', 'Status', ''].map(h => <th key={h} className="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-wider">{h}</th>)}</tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100">
+                                                        {tpaProviders.map(p => (
+                                                            <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                                                                <td className="px-4 py-3 font-bold text-gray-900">{p.provider_name}</td>
+                                                                <td className="px-4 py-3 font-mono text-xs text-gray-500">{p.provider_code}</td>
+                                                                <td className="px-4 py-3"><span className="text-xs font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 capitalize">{p.tpa_type?.replace('_', ' ') || 'TPA'}</span></td>
+                                                                <td className="px-4 py-3">{p.pre_auth_required ? <span className="flex items-center gap-1 text-xs font-bold text-red-600"><Shield className="h-3 w-3" />Required</span> : <span className="text-xs text-gray-400">Not required</span>}</td>
+                                                                <td className="px-4 py-3 capitalize text-gray-600 text-xs">{p.claim_submission_mode}</td>
+                                                                <td className="px-4 py-3"><span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{Number(p.default_discount_percentage)}%</span></td>
+                                                                <td className="px-4 py-3 text-gray-600">{p.payment_terms_days}d</td>
+                                                                <td className="px-4 py-3"><button onClick={() => toggleTpa(p)}>{p.is_active ? <ToggleRight className="h-5 w-5 text-teal-500" /> : <ToggleLeft className="h-5 w-5 text-gray-300" />}</button></td>
+                                                                <td className="px-4 py-3"><button onClick={() => openTpaEdit(p)} className="p-1.5 text-gray-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition-all"><Edit2 className="h-3.5 w-3.5" /></button></td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                             </>
                         )}
                     </div>
                 </div>
             </div>
+
+            {/* ── Corporate Modal ─────────────────────────────────────────────── */}
+            {corpModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                            <h3 className="font-black text-gray-900">{corpEditId ? 'Edit Corporate' : 'Add Corporate'}</h3>
+                            <button onClick={() => setCorpModal(false)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg"><X className="h-4 w-4" /></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {corpError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{corpError}</p>}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="col-span-2 space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Company Name *</label>
+                                    <input className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500" value={corpForm.company_name} onChange={e => setCorpForm(f => ({ ...f, company_name: e.target.value }))} placeholder="Tata Consultancy Services" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Company Code *</label>
+                                    <input className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500" value={corpForm.company_code} onChange={e => setCorpForm(f => ({ ...f, company_code: e.target.value.toUpperCase() }))} placeholder="TCS" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Payment Terms (days)</label>
+                                    <input type="number" className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500" value={corpForm.payment_terms_days} onChange={e => setCorpForm(f => ({ ...f, payment_terms_days: parseInt(e.target.value) || 30 }))} />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Credit Limit (₹)</label>
+                                    <input type="number" className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500" value={corpForm.credit_limit as number} onChange={e => setCorpForm(f => ({ ...f, credit_limit: parseFloat(e.target.value) || 0 }))} />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Discount %</label>
+                                    <input type="number" min="0" max="100" step="0.5" className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500" value={corpForm.discount_percentage as number} onChange={e => setCorpForm(f => ({ ...f, discount_percentage: parseFloat(e.target.value) || 0 }))} />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Contact Person</label>
+                                    <input className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500" value={corpForm.contact_person} onChange={e => setCorpForm(f => ({ ...f, contact_person: e.target.value }))} />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Contact Phone</label>
+                                    <input className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500" value={corpForm.contact_phone} onChange={e => setCorpForm(f => ({ ...f, contact_phone: e.target.value }))} />
+                                </div>
+                                <div className="col-span-2 space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Contact Email</label>
+                                    <input type="email" className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500" value={corpForm.contact_email} onChange={e => setCorpForm(f => ({ ...f, contact_email: e.target.value }))} />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Contract Start</label>
+                                    <input type="date" className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500" value={corpForm.contract_start} onChange={e => setCorpForm(f => ({ ...f, contract_start: e.target.value }))} />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Contract End</label>
+                                    <input type="date" className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500" value={corpForm.contract_end} onChange={e => setCorpForm(f => ({ ...f, contract_end: e.target.value }))} />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200">
+                            <button onClick={() => setCorpModal(false)} className="px-4 py-2 text-sm font-bold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">Cancel</button>
+                            <button onClick={saveCorpForm} disabled={corpSaving} className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-50">
+                                {corpSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                {corpEditId ? 'Update' : 'Create'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── TPA Modal ───────────────────────────────────────────────────── */}
+            {tpaModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 sticky top-0 bg-white">
+                            <h3 className="font-black text-gray-900">{tpaEditId ? 'Edit Provider' : 'Add TPA / Insurance'}</h3>
+                            <button onClick={() => setTpaModal(false)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg"><X className="h-4 w-4" /></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {tpaError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{tpaError}</p>}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="col-span-2 space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Provider Name *</label>
+                                    <input className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500" value={tpaForm.provider_name} onChange={e => setTpaForm(f => ({ ...f, provider_name: e.target.value }))} placeholder="Star Health Insurance" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Provider Code *</label>
+                                    <input className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500" value={tpaForm.provider_code} onChange={e => setTpaForm(f => ({ ...f, provider_code: e.target.value.toUpperCase() }))} placeholder="STAR" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Type</label>
+                                    <select className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500" value={tpaForm.tpa_type} onChange={e => setTpaForm(f => ({ ...f, tpa_type: e.target.value }))}>
+                                        <option value="tpa">TPA</option>
+                                        <option value="insurance_direct">Insurance Direct</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Claim Submission</label>
+                                    <select className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500" value={tpaForm.claim_submission_mode} onChange={e => setTpaForm(f => ({ ...f, claim_submission_mode: e.target.value }))}>
+                                        <option value="online">Online</option>
+                                        <option value="manual">Manual</option>
+                                        <option value="mixed">Mixed</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Pre-Auth Required</label>
+                                    <select className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500" value={tpaForm.pre_auth_required ? 'yes' : 'no'} onChange={e => setTpaForm(f => ({ ...f, pre_auth_required: e.target.value === 'yes' }))}>
+                                        <option value="yes">Yes</option>
+                                        <option value="no">No</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Default Discount %</label>
+                                    <input type="number" min="0" max="100" step="0.5" className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500" value={tpaForm.default_discount_percentage as number} onChange={e => setTpaForm(f => ({ ...f, default_discount_percentage: parseFloat(e.target.value) || 0 }))} />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Payment Terms (days)</label>
+                                    <input type="number" className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500" value={tpaForm.payment_terms_days} onChange={e => setTpaForm(f => ({ ...f, payment_terms_days: parseInt(e.target.value) || 45 }))} />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Contact Person</label>
+                                    <input className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500" value={tpaForm.contact_person} onChange={e => setTpaForm(f => ({ ...f, contact_person: e.target.value }))} />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Contact Phone</label>
+                                    <input className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500" value={tpaForm.contact_phone} onChange={e => setTpaForm(f => ({ ...f, contact_phone: e.target.value }))} />
+                                </div>
+                                <div className="col-span-2 space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Contact Email</label>
+                                    <input type="email" className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-amber-500" value={tpaForm.contact_email} onChange={e => setTpaForm(f => ({ ...f, contact_email: e.target.value }))} />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200">
+                            <button onClick={() => setTpaModal(false)} className="px-4 py-2 text-sm font-bold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">Cancel</button>
+                            <button onClick={saveTpaForm} disabled={tpaSaving} className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-amber-500 rounded-xl hover:bg-amber-600 disabled:opacity-50">
+                                {tpaSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                {tpaEditId ? 'Update' : 'Create'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AppShell>
     );
 }
