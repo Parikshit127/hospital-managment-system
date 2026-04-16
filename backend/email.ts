@@ -9,11 +9,21 @@ function escapeHtml(str: string): string {
         .replace(/'/g, '&#39;');
 }
 
+function normalizeBaseUrl(raw: string): string {
+    let url = raw.trim();
+    url = url.replace(/\/+$/, '');
+    if (!/^https?:\/\//i.test(url)) {
+        url = 'https://' + url.replace(/^\/*(https?:?\/*)?/i, '');
+    }
+    return url;
+}
+
 function getAppBaseUrl() {
-    return process.env.APP_BASE_URL
-        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-        || (process.env.NEXT_PUBLIC_APP_URL)
+    const raw = process.env.APP_BASE_URL
+        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
+        || process.env.NEXT_PUBLIC_APP_URL
         || 'http://localhost:3000';
+    return normalizeBaseUrl(raw);
 }
 
 // Create a singleton transporter instance

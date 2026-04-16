@@ -7,8 +7,24 @@ function hashToken(token: string): string {
     return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+function normalizeBaseUrl(raw: string): string {
+    let url = raw.trim();
+    // Strip trailing slashes to avoid `//patient/...` concatenation artifacts.
+    url = url.replace(/\/+$/, '');
+    // If scheme missing or malformed (e.g. `https//host` or `host.com`), force https://.
+    if (!/^https?:\/\//i.test(url)) {
+        url = 'https://' + url.replace(/^\/*(https?:?\/*)?/i, '');
+    }
+    return url;
+}
+
 function getAppBaseUrl(): string {
-    return process.env.APP_BASE_URL || 'http://localhost:3000';
+    const raw =
+        process.env.APP_BASE_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
+        process.env.NEXT_PUBLIC_APP_URL ||
+        'http://localhost:3000';
+    return normalizeBaseUrl(raw);
 }
 
 export async function createPatientPasswordSetupToken(params: {
