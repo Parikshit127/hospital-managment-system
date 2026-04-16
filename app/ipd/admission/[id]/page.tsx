@@ -17,6 +17,12 @@ import {
     updateAdmissionDiagnosis
 } from '@/app/actions/ipd-actions';
 import { generateInterimBill, postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
+import {
+    searchDoctorsForIPD,
+    getIPDServiceCatalog,
+    ensureIPDRoomChargesAccrued,
+    ensureIPDDemoMasterData,
+} from '@/app/actions/ipd-billing-helpers';
 import { useToast } from '@/app/components/ui/Toast';
 import {
     setExpectedDischargeDate, markFitForDischarge,
@@ -48,10 +54,20 @@ export default function AdmissionDetailPage() {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
 
-    // Doctor change
+    // Doctor change (searchable autocomplete)
     const [showDoctorForm, setShowDoctorForm] = useState(false);
     const [newDoctorName, setNewDoctorName] = useState('');
     const [savingDoctor, setSavingDoctor] = useState(false);
+    const [doctorSuggestions, setDoctorSuggestions] = useState<any[]>([]);
+    const [showDoctorSuggestions, setShowDoctorSuggestions] = useState(false);
+    const [doctorSearchLoading, setDoctorSearchLoading] = useState(false);
+
+    // Service catalog picker (for manual charge posting)
+    const [catalogQuery, setCatalogQuery] = useState('');
+    const [catalogResults, setCatalogResults] = useState<any[]>([]);
+    const [showCatalogResults, setShowCatalogResults] = useState(false);
+    const [catalogLoading, setCatalogLoading] = useState(false);
+    const [demoSeeded, setDemoSeeded] = useState(false);
 
     // Nursing task
     const [taskType, setTaskType] = useState('Vitals');
@@ -161,15 +177,52 @@ export default function AdmissionDetailPage() {
     const loadBill = useCallback(async () => {
         if (bill) return;
         setLoadingBill(true);
+        // Ensure demo master data exists (no-op if already seeded) + accrue today's
+        // room/nursing charges BEFORE fetching the interim bill so the UI reflects them.
+        if (!demoSeeded) {
+            await ensureIPDDemoMasterData().catch(() => null);
+            setDemoSeeded(true);
+        }
+        const accrual = await ensureIPDRoomChargesAccrued(params.id as string);
+        if (accrual.success && accrual.data && 'added' in accrual.data && accrual.data.added > 0) {
+            toast.success(`Auto-accrued ${accrual.data.added} room/nursing line(s)`);
+        } else if (!accrual.success && accrual.error) {
+            // Non-fatal — show a soft warning so finance staff know why bed charges may be missing
+            toast.error(accrual.error);
+        }
         const res = await generateInterimBill(params.id as string);
         if (res.success) setBill(res.data);
         else toast.error('Failed to load bill');
         setLoadingBill(false);
-    }, [params.id, bill]);
+    }, [params.id, bill, demoSeeded, toast]);
 
     useEffect(() => {
         if (activeTab === 'billing') loadBill();
     }, [activeTab, loadBill]);
+
+    // Debounced doctor search
+    useEffect(() => {
+        if (!showDoctorForm) { setDoctorSuggestions([]); return; }
+        const handle = setTimeout(async () => {
+            setDoctorSearchLoading(true);
+            const res = await searchDoctorsForIPD(newDoctorName, 10);
+            setDoctorSearchLoading(false);
+            if (res.success) setDoctorSuggestions(res.data as any[]);
+        }, 200);
+        return () => clearTimeout(handle);
+    }, [newDoctorName, showDoctorForm]);
+
+    // Debounced charge-catalog search
+    useEffect(() => {
+        if (activeTab !== 'billing') return;
+        const handle = setTimeout(async () => {
+            setCatalogLoading(true);
+            const res = await getIPDServiceCatalog(catalogQuery, undefined, 20);
+            setCatalogLoading(false);
+            if (res.success) setCatalogResults(res.data as any[]);
+        }, 200);
+        return () => clearTimeout(handle);
+    }, [catalogQuery, activeTab]);
 
     useEffect(() => {
         if (activeTab === 'vitals' && !vitalsLoaded && params.id) {
@@ -536,31 +589,65 @@ export default function AdmissionDetailPage() {
                         </div>
                     </div>
 
-                    {/* Change Doctor Inline */}
+                    {/* Change Doctor — searchable autocomplete */}
                     {showDoctorForm && (
                         <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap items-center gap-3 pl-2">
                             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">New Doctor:</label>
-                            <input
-                                type="text"
-                                value={newDoctorName}
-                                onChange={e => setNewDoctorName(e.target.value)}
-                                placeholder="Enter doctor name"
-                                className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 w-52"
-                                autoFocus
-                                onKeyDown={e => {
-                                    if (e.key === 'Enter') handleChangeDoctor();
-                                    if (e.key === 'Escape') { setShowDoctorForm(false); setNewDoctorName(''); }
-                                }}
-                            />
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    value={newDoctorName}
+                                    onChange={e => { setNewDoctorName(e.target.value); setShowDoctorSuggestions(true); }}
+                                    onFocus={() => setShowDoctorSuggestions(true)}
+                                    onBlur={() => setTimeout(() => setShowDoctorSuggestions(false), 150)}
+                                    placeholder="Type to search doctors..."
+                                    className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 w-64"
+                                    autoFocus
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') { e.preventDefault(); handleChangeDoctor(); }
+                                        if (e.key === 'Escape') { setShowDoctorForm(false); setNewDoctorName(''); setShowDoctorSuggestions(false); }
+                                    }}
+                                />
+                                {showDoctorSuggestions && (
+                                    <div className="absolute top-full left-0 mt-1 w-72 max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                                        {doctorSearchLoading && (
+                                            <div className="px-3 py-2 text-xs text-gray-400 flex items-center gap-2">
+                                                <Loader2 className="h-3 w-3 animate-spin" /> Searching...
+                                            </div>
+                                        )}
+                                        {!doctorSearchLoading && doctorSuggestions.length === 0 && (
+                                            <div className="px-3 py-2 text-xs text-gray-400">No matching doctors</div>
+                                        )}
+                                        {doctorSuggestions.map(d => (
+                                            <button
+                                                key={d.id}
+                                                type="button"
+                                                onMouseDown={e => e.preventDefault()}
+                                                onClick={() => {
+                                                    setNewDoctorName(d.name);
+                                                    setShowDoctorSuggestions(false);
+                                                }}
+                                                className="w-full text-left px-3 py-2 hover:bg-teal-50 border-b border-gray-100 last:border-b-0"
+                                            >
+                                                <p className="text-xs font-bold text-gray-800">Dr. {d.name}</p>
+                                                <p className="text-[10px] text-gray-500">
+                                                    {d.specialty || 'General'}
+                                                    {d.consultation_fee != null && <> · ₹{d.consultation_fee}</>}
+                                                </p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                             <button
                                 onClick={handleChangeDoctor}
-                                disabled={savingDoctor}
+                                disabled={savingDoctor || !newDoctorName.trim()}
                                 className="px-4 py-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors"
                             >
                                 {savingDoctor ? 'Saving...' : 'Save'}
                             </button>
                             <button
-                                onClick={() => { setShowDoctorForm(false); setNewDoctorName(''); }}
+                                onClick={() => { setShowDoctorForm(false); setNewDoctorName(''); setShowDoctorSuggestions(false); }}
                                 className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded-lg"
                             >
                                 Cancel
@@ -1458,13 +1545,62 @@ export default function AdmissionDetailPage() {
                                     </div>
                                 )}
 
-                                {/* Manual Charge Posting */}
+                                {/* Manual Charge Posting (with catalog picker) */}
                                 {data.status === 'Admitted' && (
                                     <div className="border-t border-gray-200 pt-6">
                                         <form onSubmit={handlePostCharge} className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-3">
                                             <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-2">
                                                 <Plus className="h-3.5 w-3.5" /> Post Manual Charge
                                             </h4>
+
+                                            {/* Catalog picker */}
+                                            <div className="relative">
+                                                <input
+                                                    type="text"
+                                                    value={catalogQuery}
+                                                    onChange={e => { setCatalogQuery(e.target.value); setShowCatalogResults(true); }}
+                                                    onFocus={() => setShowCatalogResults(true)}
+                                                    onBlur={() => setTimeout(() => setShowCatalogResults(false), 150)}
+                                                    placeholder="Search service master (e.g. 'CBC', 'dressing', 'X-Ray')..."
+                                                    className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                                />
+                                                {showCatalogResults && (
+                                                    <div className="absolute top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-40">
+                                                        {catalogLoading && (
+                                                            <div className="px-3 py-2 text-xs text-gray-400 flex items-center gap-2">
+                                                                <Loader2 className="h-3 w-3 animate-spin" /> Searching catalog...
+                                                            </div>
+                                                        )}
+                                                        {!catalogLoading && catalogResults.length === 0 && (
+                                                            <div className="px-3 py-2 text-xs text-gray-400">No matching services</div>
+                                                        )}
+                                                        {catalogResults.map((s: any) => (
+                                                            <button
+                                                                key={s.id}
+                                                                type="button"
+                                                                onMouseDown={e => e.preventDefault()}
+                                                                onClick={() => {
+                                                                    setChargeDesc(s.item_name);
+                                                                    setChargeRate(String(s.default_price ?? 0));
+                                                                    setChargeCategory(s.service_category || s.category || 'Miscellaneous');
+                                                                    setCatalogQuery('');
+                                                                    setShowCatalogResults(false);
+                                                                }}
+                                                                className="w-full text-left px-3 py-2 hover:bg-teal-50 border-b border-gray-100 last:border-b-0"
+                                                            >
+                                                                <div className="flex items-center justify-between gap-2">
+                                                                    <div className="min-w-0">
+                                                                        <p className="text-xs font-bold text-gray-800 truncate">{s.item_name}</p>
+                                                                        <p className="text-[10px] text-gray-500 font-mono">{s.item_code} · {s.service_category || s.category}</p>
+                                                                    </div>
+                                                                    <p className="text-xs font-black text-teal-700 whitespace-nowrap">₹{Number(s.default_price).toLocaleString()}</p>
+                                                                </div>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+
                                             <div className="grid grid-cols-2 gap-3">
                                                 <input
                                                     type="text"
@@ -1496,7 +1632,7 @@ export default function AdmissionDetailPage() {
                                                     onChange={e => setChargeCategory(e.target.value)}
                                                     className="col-span-2 text-xs p-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
                                                 >
-                                                    {['Miscellaneous', 'Pharmacy', 'Lab', 'Radiology', 'Procedure', 'DoctorVisit', 'Room', 'Nursing'].map(c => (
+                                                    {['Miscellaneous', 'Pharmacy', 'Lab', 'Radiology', 'Procedure', 'DoctorVisit', 'Consultation', 'Room', 'Nursing'].map(c => (
                                                         <option key={c}>{c}</option>
                                                     ))}
                                                 </select>
