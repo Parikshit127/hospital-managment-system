@@ -12,7 +12,8 @@ import {
     FileText,
     Pill,
     Filter,
-    X
+    X,
+    Printer
 } from "lucide-react";
 import { getRecentPatientHistory } from "@/app/actions/patient-history-actions";
 
@@ -23,6 +24,7 @@ export default function PatientHistoryPage() {
     const [showFilter, setShowFilter] = useState(false);
     const [dateFrom, setDateFrom] = useState("");
     const [dateTo, setDateTo] = useState("");
+    const [printingRecord, setPrintingRecord] = useState<any>(null);
 
     useEffect(() => {
         loadHistory();
@@ -64,6 +66,14 @@ export default function PatientHistoryPage() {
         if (lower.includes('x-ray') || lower.includes('test') || lower.includes('blood')) return <Activity className="h-4 w-4 text-blue-600" />;
         if (lower.includes('medicine') || lower.includes('pill')) return <Pill className="h-4 w-4 text-orange-600" />;
         return <FileText className="h-4 w-4 text-gray-500" />;
+    };
+
+    const handlePrintRecord = (record: any) => {
+        setPrintingRecord(record);
+        setTimeout(() => {
+            window.print();
+            setPrintingRecord(null);
+        }, 100);
     };
 
     return (
@@ -206,11 +216,18 @@ export default function PatientHistoryPage() {
                                             </td>
                                             <td className="py-5 px-6 align-top text-right space-y-2">
                                                 <p className="text-lg font-black font-mono text-gray-900">₹{Number(record.total_amount).toFixed(0)}</p>
-                                                <div className="flex flex-col items-end gap-1">
+                                                <div className="flex flex-col items-end gap-1.5">
                                                     <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] uppercase tracking-widest font-black rounded-md flex items-center gap-1">
                                                         <CreditCard className="h-3 w-3" /> {record.status}
                                                     </span>
                                                     <span className="text-[10px] text-gray-400 font-mono">Invoice: {record.invoice_number}</span>
+                                                    <button 
+                                                        onClick={() => handlePrintRecord(record)}
+                                                        className="mt-1 p-2 text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-200 rounded-lg transition-all no-print flex items-center gap-1.5"
+                                                    >
+                                                        <Printer className="h-3.5 w-3.5" />
+                                                        <span className="text-[10px] font-black uppercase tracking-wider">Print</span>
+                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -221,6 +238,75 @@ export default function PatientHistoryPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Hidden Printing Area for History */}
+            {printingRecord && (
+                <div className="hidden print:block fixed inset-0 bg-white p-10 z-[100] text-black">
+                    <div className="max-w-3xl mx-auto space-y-8">
+                        {/* Hospital Header */}
+                        <div className="flex justify-between items-start border-b-2 border-black pb-8">
+                            <div className="space-y-2">
+                                <h1 className="text-3xl font-black uppercase tracking-tighter">HOSPITAL RECEIPT</h1>
+                                <div className="space-y-0.5 text-sm font-medium">
+                                    <p>Medical Center Address Line 1</p>
+                                    <p>City, State, PIN - 000000</p>
+                                    <p>Contact: +91 00000 00000</p>
+                                </div>
+                            </div>
+                            <div className="text-right space-y-1">
+                                <p className="text-xl font-bold">{printingRecord.invoice_number}</p>
+                                <p className="text-sm font-medium">{new Date(printingRecord.date).toLocaleDateString()} {new Date(printingRecord.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                            </div>
+                        </div>
+
+                        {/* Patient Info */}
+                        <div className="grid grid-cols-2 gap-8 py-4">
+                            <div className="space-y-1">
+                                <p className="text-xs font-bold text-gray-400 uppercase">Patient Name</p>
+                                <p className="text-lg font-bold">{printingRecord.patient.name}</p>
+                                <p className="text-sm font-mono text-gray-500">{printingRecord.patient.id}</p>
+                            </div>
+                            <div className="space-y-1 text-right">
+                                <p className="text-xs font-bold text-gray-400 uppercase">Contact</p>
+                                <p className="text-lg font-bold">{printingRecord.patient.phone || "N/A"}</p>
+                            </div>
+                        </div>
+
+                        {/* Services List */}
+                        <div className="space-y-4">
+                            <h3 className="text-sm font-black uppercase tracking-widest border-b border-gray-100 pb-2">Services Availed</h3>
+                            <div className="space-y-3">
+                                {printingRecord.services.map((srv: string, i: number) => (
+                                    <div key={i} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0 text-sm">
+                                        <span className="font-bold text-gray-800">{srv}</span>
+                                        <span className="font-bold">1</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Totals Section */}
+                        <div className="border-t-2 border-black pt-6">
+                            <div className="flex justify-between items-center">
+                                <span className="text-lg font-black uppercase tracking-widest">Total Amount</span>
+                                <span className="text-2xl font-black font-mono">₹{Number(printingRecord.total_amount).toFixed(2)}</span>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="pt-24 flex justify-between items-end">
+                            <div className="space-y-1 text-xs font-bold text-gray-400">
+                                <p>Status: {printingRecord.status}</p>
+                                <p>Payment: {printingRecord.payment_method || "Paid"}</p>
+                            </div>
+                            <div className="text-center w-64 border-t-2 border-dashed border-gray-900 pt-3">
+                                <p className="text-sm font-black uppercase tracking-widest text-gray-900">Authorized Signatory</p>
+                                <p className="text-[10px] font-medium text-gray-500 mt-1">Computer Generated Digital Receipt</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AppShell>
     );
 }

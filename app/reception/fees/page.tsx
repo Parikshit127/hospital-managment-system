@@ -11,7 +11,9 @@ import {
     User,
     CreditCard,
     DollarSign,
-    Loader2
+    Loader2,
+    CheckCircle2,
+    X
 } from "lucide-react";
 import { searchPatientsForReceipt, getAvailableServicesList, saveFeeReceipt } from "@/app/actions/fee-receipt-actions";
 
@@ -29,6 +31,8 @@ export default function GenerateReceiptPage() {
     const [paymentMethod, setPaymentMethod] = useState("Cash");
 
     const [availableServices, setAvailableServices] = useState<{ label: string, price: number, type: string, doctor_id?: string, fee_type?: string }[]>([]);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [lastReceipt, setLastReceipt] = useState<any>(null);
 
     useEffect(() => {
         getAvailableServicesList().then(res => {
@@ -108,13 +112,28 @@ export default function GenerateReceiptPage() {
         });
 
         setIsSaving(false);
-
         if (res.success) {
-            alert("Record correctly logged inside Patient History.");
-            window.location.href = "/reception/history";
+            setLastReceipt({
+                id: res.receipt_number,
+                invoice: res.invoice_number,
+                name: patientName,
+                phone: patientPhone,
+                method: paymentMethod,
+                amount: totalAmount,
+                items: items.map(i => ({
+                    desc: i.description || "Misc Fee",
+                    qty: Number(i.quantity) || 1,
+                    amt: Number(i.amount) || 0
+                }))
+            });
+            setShowSuccessModal(true);
         } else {
             alert("Failed to save receipt to Database: " + res.error);
         }
+    };
+
+    const handlePrint = () => {
+        window.print();
     };
 
     return (
@@ -307,6 +326,137 @@ export default function GenerateReceiptPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Success & Print Modal */}
+            {showSuccessModal && lastReceipt && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col no-print">
+                        <div className="p-6 bg-emerald-600 text-white flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <CheckCircle2 className="h-8 w-8 text-emerald-100" />
+                                <div>
+                                    <h2 className="text-xl font-bold">Receipt Generated</h2>
+                                    <p className="text-emerald-100/80 text-xs font-medium">Internal Record: {lastReceipt.id}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => window.location.href = "/reception/history"} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-8 flex-1 space-y-6">
+                            <div className="text-center space-y-1">
+                                <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">Amount Collected</p>
+                                <h3 className="text-5xl font-black text-gray-900 font-mono">₹{lastReceipt.amount.toLocaleString()}</h3>
+                                <p className="text-emerald-600 text-[10px] font-black uppercase tracking-widest bg-emerald-50 inline-block px-3 py-1 rounded-full mt-2">Paid via {lastReceipt.method}</p>
+                            </div>
+
+                            <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 space-y-3">
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-500 font-medium">Patient</span>
+                                    <span className="text-gray-900 font-bold">{lastReceipt.name}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-500 font-medium">Invoice No</span>
+                                    <span className="text-gray-900 font-mono font-bold">{lastReceipt.invoice}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-500 font-medium">Date</span>
+                                    <span className="text-gray-900 font-bold">{new Date().toLocaleDateString()}</span>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={handlePrint}
+                                    className="flex-1 flex items-center justify-center gap-2 py-4 bg-gray-900 text-white font-bold rounded-2xl hover:bg-black transition-all active:scale-[0.98] shadow-lg shadow-gray-200"
+                                >
+                                    <Printer className="h-5 w-5 text-emerald-400" />
+                                    Print Receipt
+                                </button>
+                                <button
+                                    onClick={() => window.location.href = "/reception/history"}
+                                    className="px-8 py-4 bg-gray-100 text-gray-700 font-bold rounded-2xl hover:bg-gray-200 transition-all active:scale-[0.98]"
+                                >
+                                    Done
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Hidden Printable Area */}
+                    <div className="hidden print:block fixed inset-0 bg-white p-10 z-[100] text-black">
+                        <div className="max-w-3xl mx-auto space-y-10">
+                            {/* Hospital Header */}
+                            <div className="flex justify-between items-start border-b-2 border-black pb-8">
+                                <div className="space-y-2">
+                                    <h1 className="text-3xl font-black uppercase tracking-tighter">HOSPITAL RECEIPT</h1>
+                                    <div className="space-y-0.5 text-sm font-medium">
+                                        <p>Medical Center Address Line 1</p>
+                                        <p>City, State, PIN - 000000</p>
+                                        <p>Contact: +91 00000 00000</p>
+                                    </div>
+                                </div>
+                                <div className="text-right space-y-1">
+                                    <p className="text-xl font-bold">{lastReceipt.invoice}</p>
+                                    <p className="text-sm font-bold text-gray-600">Receipt No: {lastReceipt.id}</p>
+                                    <p className="text-sm font-medium">{new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                </div>
+                            </div>
+
+                            {/* Patient Info */}
+                            <div className="grid grid-cols-2 gap-8 py-4">
+                                <div className="space-y-1">
+                                    <p className="text-xs font-bold text-gray-500 uppercase">Patient Name</p>
+                                    <p className="text-lg font-bold">{lastReceipt.name}</p>
+                                </div>
+                                <div className="space-y-1 text-right">
+                                    <p className="text-xs font-bold text-gray-500 uppercase">Contact</p>
+                                    <p className="text-lg font-bold">{lastReceipt.phone || "N/A"}</p>
+                                </div>
+                            </div>
+
+                            {/* Bill Items */}
+                            <table className="w-full border-collapse">
+                                <thead>
+                                    <tr className="border-y-2 border-black">
+                                        <th className="py-3 text-left font-black uppercase tracking-widest text-sm">Description of Services</th>
+                                        <th className="py-3 text-center font-black uppercase tracking-widest text-sm w-24">Qty</th>
+                                        <th className="py-3 text-right font-black uppercase tracking-widest text-sm w-32">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200">
+                                    {lastReceipt.items.map((srv: any, i: number) => (
+                                        <tr key={i}>
+                                            <td className="py-4 font-bold text-gray-800">{srv.desc}</td>
+                                            <td className="py-4 text-center font-mono font-bold">{srv.qty}</td>
+                                            <td className="py-4 text-right font-mono font-bold text-lg">₹{srv.amt.toFixed(2)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot>
+                                    <tr className="border-t-2 border-black">
+                                        <td colSpan={2} className="py-6 text-right font-black uppercase tracking-widest text-lg">Total Payable</td>
+                                        <td className="py-6 text-right font-black text-2xl font-mono">₹{lastReceipt.amount.toFixed(2)}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+
+                            {/* Footer */}
+                            <div className="pt-20 flex justify-between items-end">
+                                <div className="space-y-1 text-xs font-bold text-gray-400">
+                                    <p>Payment Method: {lastReceipt.method}</p>
+                                    <p>Status: FULLY PAID</p>
+                                </div>
+                                <div className="text-center w-64 border-t-2 border-dashed border-gray-900 pt-3">
+                                    <p className="text-sm font-black uppercase tracking-widest">Authorized Signatory</p>
+                                    <p className="text-[10px] font-medium text-gray-500 mt-1">Computer Generated Digital Receipt</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AppShell>
     );
 }

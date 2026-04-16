@@ -395,6 +395,9 @@ input[type="number"] {
     background: white;
     color: black;
   }
+  .no-print {
+    display: none !important;
+  }
 }
 
 /* ─── Responsive table container ─── */
