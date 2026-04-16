@@ -128,7 +128,6 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Dashboard", href: "/reception/dashboard", icon: LayoutDashboard },
         { label: "Patient List", href: "/reception", icon: Users },
         { label: "Register Patient", href: "/reception/register", icon: UserPlus },
-        { label: "Finance & Config", href: "/reception/finance", icon: DollarSign },
         { label: "Generate Receipt", href: "/reception/fees", icon: FileText },
         { label: "Master Billing", href: "/reception/billing", icon: CreditCard },
         { label: "Patient History", href: "/reception/history", icon: Clock },

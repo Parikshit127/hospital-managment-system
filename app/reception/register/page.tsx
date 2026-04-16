@@ -8,6 +8,7 @@ import {
     Building2, CreditCard, FileText
 } from 'lucide-react';
 import { registerPatient, checkDuplicatePatient } from '@/app/actions/register-patient';
+import { lookupInsuranceByPhone } from '@/app/actions/insurance-lookup';
 import { getDepartmentList } from '@/app/actions/reception-actions';
 import { getCorporateMasters, getTpaProviders } from '@/app/actions/patient-type-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
@@ -99,6 +100,8 @@ export default function ReceptionPage() {
         password_setup_required?: boolean;
         manual_password_setup_link?: string | null;
     } | null>(null);
+    const [isLookingUpInsurance, setIsLookingUpInsurance] = useState(false);
+    const [insuranceFoundAlert, setInsuranceFoundAlert] = useState<string | null>(null);
 
     // Load departments, corporates, TPA providers on mount
     useEffect(() => {
@@ -136,8 +139,93 @@ export default function ReceptionPage() {
         } else {
             setDuplicates([]);
             setShowDuplicateWarning(false);
+            
+            // NEW: If no duplicate found, check for insurance auto-discovery
+            setIsLookingUpInsurance(true);
+            const insResult = await lookupInsuranceByPhone(phone);
+            setIsLookingUpInsurance(false);
+
+            if (insResult.success && insResult.data) {
+                const data = insResult.data;
+                // Auto-fill form fields
+                setPatientType('tpa_insurance');
+                setInsuranceFoundAlert(data.message || 'Insurance record found');
+                
+                // We use setTimeout to ensure states are updated before we potentially trigger other effects
+                setTimeout(() => {
+                    const form = document.querySelector('form');
+                    if (form) {
+                        const nameInput = form.querySelector('input[name="full_name"]') as HTMLInputElement;
+                        const policyInput = form.querySelector('input[name="insurance_policy_number"]') as HTMLInputElement;
+                        const tpaSelect = form.querySelector('select[name="tpa_provider_id"]') as HTMLSelectElement;
+
+                        if (nameInput && !nameInput.value) nameInput.value = data.full_name || '';
+                        if (policyInput) policyInput.value = data.insurance_policy_number || '';
+                        if (tpaSelect) tpaSelect.value = String(data.tpa_provider_id);
+                    }
+                }, 100);
+            }
         }
-    }, []);
+    }, [lookupInsuranceByPhone]);
+
+    const triggerInsuranceLookup = useCallback(async () => {
+        const form = document.querySelector('form');
+        const phoneInput = form?.querySelector('input[name="phone"]') as HTMLInputElement;
+        if (!phoneInput) return;
+
+        const val = phoneInput.value.replace(/\D/g, '');
+        if (val.length < 10) {
+            toast.error('Please enter a valid 10-digit phone number');
+            return;
+        }
+
+        setIsLookingUpInsurance(true);
+        const insResult = await lookupInsuranceByPhone(val);
+        setIsLookingUpInsurance(false);
+
+        if (insResult.success && insResult.data) {
+            const data = insResult.data;
+            setPatientType('tpa_insurance');
+            setInsuranceFoundAlert(data.message || 'Insurance record found');
+            
+            setTimeout(() => {
+                const nameInput = form?.querySelector('input[name="full_name"]') as HTMLInputElement;
+                const policyInput = form?.querySelector('input[name="insurance_policy_number"]') as HTMLInputElement;
+                const tpaSelect = form?.querySelector('select[name="tpa_provider_id"]') as HTMLSelectElement;
+
+                if (nameInput && !nameInput.value) nameInput.value = data.full_name || '';
+                if (policyInput) policyInput.value = data.insurance_policy_number || '';
+                if (tpaSelect) tpaSelect.value = String(data.tpa_provider_id);
+            }, 100);
+        } else {
+            toast.error(insResult.message || 'No insurance record found');
+        }
+    }, [lookupInsuranceByPhone, toast]);
+
+    const handlePhoneChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+        let val = e.target.value.replace(/\D/g, '').slice(0, 10);
+        e.target.value = val;
+
+        if (val.length === 10) {
+            setIsCheckingDuplicate(true);
+            const result = await checkDuplicatePatient(val);
+            setIsCheckingDuplicate(false);
+
+            if (result.success && result.data.length > 0) {
+                setDuplicates(result.data);
+                setShowDuplicateWarning(true);
+            } else {
+                setDuplicates([]);
+                setShowDuplicateWarning(false);
+            }
+        } else {
+            if (val.length < 10) {
+                setDuplicates([]);
+                setShowDuplicateWarning(false);
+                setInsuranceFoundAlert(null);
+            }
+        }
+    }, [checkDuplicatePatient]);
 
     // DOB → Age auto-calc
     const handleDobChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -326,6 +414,30 @@ export default function ReceptionPage() {
                                         </div>
                                     </div>
 
+                                    {/* Insurance Discovery Alert */}
+                                    {insuranceFoundAlert && (
+                                        <div className="mb-6 bg-emerald-50 border border-emerald-200 rounded-xl p-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <Shield className="h-4 w-4 text-emerald-500" />
+                                                    <span className="text-sm font-bold text-emerald-700">
+                                                        {insuranceFoundAlert}
+                                                    </span>
+                                                </div>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setInsuranceFoundAlert(null)}
+                                                    className="text-[10px] font-black text-emerald-600 uppercase tracking-widest hover:text-emerald-700"
+                                                >
+                                                    Dismiss
+                                                </button>
+                                            </div>
+                                            <p className="text-[10px] text-emerald-600 font-medium mt-1 ml-6">
+                                                TPA details and Policy Number have been auto-filled for you.
+                                            </p>
+                                        </div>
+                                    )}
+
                                     {/* Duplicate Warning */}
                                     {showDuplicateWarning && duplicates.length > 0 && (
                                         <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
@@ -391,6 +503,9 @@ export default function ReceptionPage() {
                                             <label className={labelClass}>
                                                 Phone *
                                                 {isCheckingDuplicate && <span className="ml-2 text-teal-400 normal-case">checking...</span>}
+                                                {isLookingUpInsurance && <span className="ml-2 text-violet-400 normal-case flex items-center gap-1 inline-flex">
+                                                    <Loader2 className="h-3 w-3 animate-spin" /> looking up insurance...
+                                                </span>}
                                             </label>
                                             <div className="relative flex">
                                                 <span className="inline-flex items-center px-3 py-3.5 bg-gray-100 border border-r-0 border-gray-300 rounded-l-xl text-sm font-bold text-gray-500">
@@ -403,12 +518,19 @@ export default function ReceptionPage() {
                                                         required
                                                         maxLength={10}
                                                         onBlur={handlePhoneBlur}
-                                                        className="w-full bg-white border border-gray-300 rounded-r-xl pl-10 pr-4 py-3.5 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/10 outline-none transition-all"
+                                                        className="w-full bg-white border border-gray-300 rounded-r-xl pl-10 pr-24 py-3.5 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/10 outline-none transition-all"
                                                         placeholder="10-digit mobile"
-                                                        onChange={(e) => {
-                                                            e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
-                                                        }}
+                                                        onChange={handlePhoneChange}
                                                     />
+                                                    <button
+                                                        type="button"
+                                                        onClick={triggerInsuranceLookup}
+                                                        disabled={isLookingUpInsurance}
+                                                        className="absolute right-2 top-1.5 bottom-1.5 px-3 bg-violet-500 hover:bg-violet-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
+                                                    >
+                                                        {isLookingUpInsurance ? <Loader2 className="h-3 w-3 animate-spin" /> : <Shield className="h-3 w-3" />}
+                                                        {isLookingUpInsurance ? 'Verifying...' : 'Verify'}
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
