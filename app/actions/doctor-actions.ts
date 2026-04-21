@@ -453,6 +453,7 @@ export async function createPharmacyOrder(
         organizationId,
         items: {
           create: items.map((i: any) => ({
+            medicine_id: i.medicine_id || null,
             medicine_name: i.name,
             quantity_requested: i.qty,
             status: "Pending",

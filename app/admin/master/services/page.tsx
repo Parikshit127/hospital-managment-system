@@ -8,6 +8,7 @@ import {
   listLabTests, createLabTest, updateLabTest,
   listPackages, createPackage, updatePackage,
 } from '@/app/actions/service-master-actions';
+import { ensureIPDDemoMasterData } from '@/app/actions/ipd-billing-helpers';
 import MasterImportButton from '@/app/components/master/MasterImportButton';
 
 const PAGE_LIMIT = 25;
@@ -73,6 +74,28 @@ export default function ServiceMasterPage() {
   const [pkgEditingId, setPkgEditingId] = useState<number | null>(null);
   const [pkgForm, setPkgForm] = useState<any>(EMPTY_PACKAGE);
   const [pkgSubmitting, setPkgSubmitting] = useState(false);
+
+  const [seeding, setSeeding] = useState(false);
+  const handleSeedDemo = async () => {
+    setSeeding(true);
+    const res = await ensureIPDDemoMasterData();
+    if (res.success) {
+      const d = res.data;
+      const parts: string[] = [];
+      if (d.wards) parts.push(`${d.wards} wards`);
+      if (d.beds) parts.push(`${d.beds} beds`);
+      if (d.services) parts.push(`${d.services} services`);
+      if (parts.length > 0) {
+        toast.success(`Seeded: ${parts.join(', ')}`);
+        loadServices();
+      } else {
+        toast.success('Demo data already exists — nothing added');
+      }
+    } else {
+      toast.error(res.error || 'Seed failed');
+    }
+    setSeeding(false);
+  };
 
   // ---- Load functions ----
   const loadServices = useCallback(async () => {
@@ -284,6 +307,10 @@ export default function ServiceMasterPage() {
               />
             </div>
             <div className="flex items-center gap-2">
+              <button onClick={handleSeedDemo} disabled={seeding}
+                className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 text-white text-sm font-semibold rounded-xl hover:bg-amber-600 disabled:opacity-50">
+                {seeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Seed Demo Data
+              </button>
               <MasterImportButton type="service_master" onImportComplete={loadServices} />
               <button onClick={openCreateSvc}
                 className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">

@@ -69,7 +69,10 @@ model Organization {
   lab_reagent_inventory         LabReagentInventory[]
   pharmacy_suppliers            PharmacySupplier[]
   purchase_orders               PurchaseOrder[]
+  goods_receipt_notes           GoodsReceiptNote[]
   pharmacy_returns              PharmacyReturn[]
+  ward_stock                    WardStock[]
+  ward_stock_transactions       WardStockTransaction[]
   bed_transfers                 BedTransfer[]
   diet_plans                    DietPlan[]
   ward_rounds                   WardRound[]
@@ -626,12 +629,19 @@ model pharmacy_medicine_master {
   form           String? // tablet, syrup, injection, etc.
   min_threshold  Int     @default(10)
   hsn_sac_code   String?
+  ndc_code       String? // National Drug Code
   tax_rate       Float?  @default(0) // keep for existing GST calc — sync with gst_percent on save
   is_active      Boolean @default(true)
+  // Drug classification & safety flags
+  drug_schedule    String?  // H, H1, X, NDPS, OTC
+  is_narcotic      Boolean  @default(false)
+  is_refrigerated  Boolean  @default(false)
   organizationId String
 
   organization Organization               @relation(fields: [organizationId], references: [id])
   batches      pharmacy_batch_inventory[]
+  order_items  pharmacy_order_items[]
+  ward_stock   WardStock[]
 
   @@index([organizationId])
 }
@@ -639,15 +649,20 @@ model pharmacy_medicine_master {
 model pharmacy_batch_inventory {
   id               Int       @id @default(autoincrement())
   medicine_id      Int
-  batch_no         String    @unique
+  batch_no         String
   current_stock    Int
   manufacture_date DateTime?
   expiry_date      DateTime
   cost_price       Float? // purchase price at the time this batch was received
   rack_location    String?
   supplier_name    String?
+  grn_id           Int?
 
   medicine pharmacy_medicine_master @relation(fields: [medicine_id], references: [id])
+  grn      GoodsReceiptNote?        @relation(fields: [grn_id], references: [id])
+
+  @@unique([medicine_id, batch_no])
+  @@index([grn_id])
 }
 
 model pharmacy_sales_audit {
@@ -677,26 +692,36 @@ model pharmacy_orders {
   organizationId        String
   admission_id          String?
   is_ipd_linked         Boolean  @default(false)
+  invoice_id            Int?
   created_at            DateTime @default(now())
 
   organization Organization           @relation(fields: [organizationId], references: [id])
+  invoice      invoices?              @relation(fields: [invoice_id], references: [id])
   items        pharmacy_order_items[]
 
   @@index([organizationId])
+  @@index([invoice_id])
 }
 
 model pharmacy_order_items {
-  id                 Int     @id @default(autoincrement())
+  id                 Int      @id @default(autoincrement())
   order_id           Int
-  medicine_name      String
+  medicine_id        Int?
+  medicine_name      String // kept for display / backward compat
   quantity_requested Int
-  quantity_dispensed Int?
+  quantity_dispensed  Int?
   unit_price         Float?
   total_price        Float?
   batch_id           String?
-  status             String  @default("Pending")
+  status             String   @default("Pending")
+  tax_rate           Float?   @default(0)
+  tax_amount         Float?   @default(0)
+  hsn_sac_code       String?
 
-  order pharmacy_orders @relation(fields: [order_id], references: [id])
+  order    pharmacy_orders          @relation(fields: [order_id], references: [id])
+  medicine pharmacy_medicine_master? @relation(fields: [medicine_id], references: [id])
+
+  @@index([medicine_id])
 }
 
 // ========================================
@@ -853,6 +878,7 @@ model wards {
   organizationId String
   beds           beds[]
   admissions     admissions[]
+  ward_stock     WardStock[]
 
   organization Organization @relation(fields: [organizationId], references: [id])
   department   Department?  @relation(fields: [department_id], references: [id])
@@ -917,6 +943,7 @@ model invoices {
   insurance_claims      insurance_claims[]
   credit_notes          CreditNote[]
   payment_splits        PaymentSplit[]
+  pharmacy_orders       pharmacy_orders[]
 
   @@index([organizationId])
   @@index([status])
@@ -1569,8 +1596,9 @@ model PharmacySupplier {
   organizationId String
   created_at     DateTime @default(now())
 
-  organization    Organization    @relation(fields: [organizationId], references: [id])
+  organization    Organization       @relation(fields: [organizationId], references: [id])
   purchase_orders PurchaseOrder[]
+  grns            GoodsReceiptNote[]
 
   @@index([organizationId])
   @@map("pharmacy_suppliers")
@@ -1594,6 +1622,7 @@ model PurchaseOrder {
   organization Organization        @relation(fields: [organizationId], references: [id])
   supplier     PharmacySupplier    @relation(fields: [supplier_id], references: [id])
   items        PurchaseOrderItem[]
+  grns         GoodsReceiptNote[]
 
   @@index([organizationId])
   @@map("purchase_orders")
@@ -1611,6 +1640,32 @@ model PurchaseOrderItem {
 
   @@index([po_id])
   @@map("purchase_order_items")
+}
+
+// ========================================
+// MODULE — Goods Receipt Notes (GRN)
+// ========================================
+
+model GoodsReceiptNote {
+  id               Int       @id @default(autoincrement())
+  grn_number       String    @unique
+  po_id            Int?
+  supplier_id      Int?
+  received_by      String?
+  remarks          String?
+  total_amount     Float     @default(0)
+  organizationId   String
+  received_at      DateTime  @default(now())
+  created_at       DateTime  @default(now())
+
+  organization     Organization             @relation(fields: [organizationId], references: [id])
+  purchase_order   PurchaseOrder?           @relation(fields: [po_id], references: [id])
+  supplier         PharmacySupplier?        @relation(fields: [supplier_id], references: [id])
+  batches          pharmacy_batch_inventory[]
+
+  @@index([organizationId])
+  @@index([po_id])
+  @@map("goods_receipt_notes")
 }
 
 // ========================================
@@ -1632,6 +1687,48 @@ model PharmacyReturn {
 
   @@index([organizationId])
   @@map("pharmacy_returns")
+}
+
+// ========================================
+// MODULE — Ward Stock Management
+// ========================================
+
+model WardStock {
+  id             Int     @id @default(autoincrement())
+  ward_id        Int
+  medicine_id    Int
+  par_level      Int     @default(0) // auto-indent when stock < par
+  current_stock  Int     @default(0)
+  reorder_point  Int     @default(0) // trigger level for auto-indent
+  organizationId String
+
+  ward         wards                    @relation(fields: [ward_id], references: [ward_id])
+  medicine     pharmacy_medicine_master @relation(fields: [medicine_id], references: [id])
+  organization Organization             @relation(fields: [organizationId], references: [id])
+  transactions WardStockTransaction[]
+
+  @@unique([ward_id, medicine_id])
+  @@index([organizationId])
+  @@map("ward_stock")
+}
+
+model WardStockTransaction {
+  id              Int      @id @default(autoincrement())
+  ward_stock_id   Int
+  transaction_type String  // ISSUE, RETURN, TOP_UP, ADJUSTMENT
+  quantity         Int
+  batch_no         String?
+  performed_by     String?
+  notes            String?
+  organizationId   String
+  created_at       DateTime @default(now())
+
+  ward_stock   WardStock    @relation(fields: [ward_stock_id], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([ward_stock_id])
+  @@index([organizationId])
+  @@map("ward_stock_transactions")
 }
 
 // ========================================

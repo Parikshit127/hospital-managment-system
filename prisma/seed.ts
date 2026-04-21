@@ -182,7 +182,12 @@ async function main() {
         });
 
         await prisma.pharmacy_batch_inventory.upsert({
-            where: { batch_no: `BATCH-${m.brand_name.substring(0, 3).toUpperCase()}-001` },
+            where: {
+                medicine_id_batch_no: {
+                    medicine_id: med.id,
+                    batch_no: `BATCH-${m.brand_name.substring(0, 3).toUpperCase()}-001`,
+                }
+            },
             update: {},
             create: {
                 medicine_id: med.id,

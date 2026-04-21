@@ -393,6 +393,50 @@ export async function ensureIPDDemoMasterData() {
             result.services = defaults.length;
         }
 
+        // Seed ipdServiceMaster if empty (used by /admin/master/services page)
+        const svcMasterCount = await db.ipdServiceMaster.count({ where: { organizationId } });
+        if (svcMasterCount === 0) {
+            const ipdDefaults = [
+                { service_code: 'SVC-CONS-GEN', service_name: 'General Consultation', service_category: 'OPD Consultation', default_rate: 500, hsn_sac_code: '9993', tax_rate: 0 },
+                { service_code: 'SVC-CONS-SPEC', service_name: 'Specialist Consultation', service_category: 'OPD Consultation', default_rate: 1000, hsn_sac_code: '9993', tax_rate: 0 },
+                { service_code: 'SVC-ROUND', service_name: 'Doctor Round Visit', service_category: 'OPD Consultation', default_rate: 300, hsn_sac_code: '9993', tax_rate: 0 },
+                { service_code: 'SVC-EMERG-VISIT', service_name: 'Emergency Doctor Visit', service_category: 'ICU', default_rate: 800, hsn_sac_code: '9993', tax_rate: 0 },
+                { service_code: 'SVC-ICU-MONITOR', service_name: 'ICU Monitoring (per day)', service_category: 'ICU', default_rate: 3000, hsn_sac_code: '9993', tax_rate: 5 },
+                { service_code: 'SVC-VENTILATOR', service_name: 'Ventilator Support (per day)', service_category: 'ICU', default_rate: 5000, hsn_sac_code: '9993', tax_rate: 5 },
+                { service_code: 'SVC-PROC-MINOR', service_name: 'Minor Procedure', service_category: 'Procedure', default_rate: 2000, hsn_sac_code: '9993', tax_rate: 5 },
+                { service_code: 'SVC-PROC-MAJOR', service_name: 'Major Procedure', service_category: 'Procedure', default_rate: 10000, hsn_sac_code: '9993', tax_rate: 5 },
+                { service_code: 'SVC-DRESS', service_name: 'Dressing Change', service_category: 'Procedure', default_rate: 200, hsn_sac_code: '9993', tax_rate: 0 },
+                { service_code: 'SVC-IV-LINE', service_name: 'IV Line Insertion', service_category: 'Procedure', default_rate: 250, hsn_sac_code: '9993', tax_rate: 0 },
+                { service_code: 'SVC-CATH', service_name: 'Urinary Catheterization', service_category: 'Procedure', default_rate: 800, hsn_sac_code: '9993', tax_rate: 5 },
+                { service_code: 'SVC-OXYGEN', service_name: 'Oxygen Therapy (per hour)', service_category: 'Procedure', default_rate: 150, hsn_sac_code: '9993', tax_rate: 0 },
+                { service_code: 'SVC-SUTURE', service_name: 'Suture / Wound Closure', service_category: 'Procedure', default_rate: 500, hsn_sac_code: '9993', tax_rate: 0 },
+                { service_code: 'SVC-ROOM-GEN', service_name: 'General Ward Room (per day)', service_category: 'Room', default_rate: 500, hsn_sac_code: '9993', tax_rate: 0 },
+                { service_code: 'SVC-ROOM-PVT', service_name: 'Private Room (per day)', service_category: 'Room', default_rate: 3000, hsn_sac_code: '9963', tax_rate: 5 },
+                { service_code: 'SVC-ROOM-ICU', service_name: 'ICU Bed (per day)', service_category: 'Room', default_rate: 5000, hsn_sac_code: '9963', tax_rate: 5 },
+                { service_code: 'SVC-ROOM-DLX', service_name: 'Deluxe Suite (per day)', service_category: 'Room', default_rate: 6000, hsn_sac_code: '9963', tax_rate: 5 },
+                { service_code: 'SVC-NURS-INJ', service_name: 'Injection Administration', service_category: 'Nursing', default_rate: 100, hsn_sac_code: '9993', tax_rate: 0 },
+                { service_code: 'SVC-NURS-NEB', service_name: 'Nebulization', service_category: 'Nursing', default_rate: 200, hsn_sac_code: '9993', tax_rate: 0 },
+                { service_code: 'SVC-NURS-CARE', service_name: 'General Nursing Care (per day)', service_category: 'Nursing', default_rate: 500, hsn_sac_code: '9993', tax_rate: 0 },
+                { service_code: 'SVC-NURS-SPEC', service_name: 'Special Nursing (per shift)', service_category: 'Nursing', default_rate: 1200, hsn_sac_code: '9993', tax_rate: 0 },
+                { service_code: 'SVC-DIET-STD', service_name: 'Standard Diet (per day)', service_category: 'Diet', default_rate: 250, hsn_sac_code: '9963', tax_rate: 5 },
+                { service_code: 'SVC-DIET-SPL', service_name: 'Special Diet (per day)', service_category: 'Diet', default_rate: 400, hsn_sac_code: '9963', tax_rate: 5 },
+                { service_code: 'SVC-DIET-TPN', service_name: 'TPN / Parenteral Nutrition', service_category: 'Diet', default_rate: 1500, hsn_sac_code: '9963', tax_rate: 5 },
+                { service_code: 'SVC-CON-GLOVES', service_name: 'Sterile Gloves (pair)', service_category: 'Consumable', default_rate: 50, hsn_sac_code: '4015', tax_rate: 12 },
+                { service_code: 'SVC-CON-SYRINGE', service_name: 'Disposable Syringe', service_category: 'Consumable', default_rate: 20, hsn_sac_code: '9018', tax_rate: 12 },
+                { service_code: 'SVC-CON-CANNULA', service_name: 'IV Cannula', service_category: 'Consumable', default_rate: 80, hsn_sac_code: '9018', tax_rate: 12 },
+                { service_code: 'SVC-CON-CATHSET', service_name: 'Catheter Set', service_category: 'Consumable', default_rate: 350, hsn_sac_code: '9018', tax_rate: 12 },
+                { service_code: 'SVC-MISC-REG', service_name: 'Registration Fee', service_category: 'Misc', default_rate: 100, hsn_sac_code: '9993', tax_rate: 0 },
+                { service_code: 'SVC-MISC-AMB', service_name: 'Ambulance Service', service_category: 'Misc', default_rate: 1500, hsn_sac_code: '9993', tax_rate: 0 },
+                { service_code: 'SVC-MISC-CERT', service_name: 'Medical Certificate', service_category: 'Misc', default_rate: 200, hsn_sac_code: '9993', tax_rate: 0 },
+            ];
+            await db.$transaction(
+                ipdDefaults.map((s) =>
+                    db.ipdServiceMaster.create({ data: { ...s, is_active: true, organizationId } }),
+                ),
+            );
+            result.services = (result.services || 0) + ipdDefaults.length;
+        }
+
         return { success: true as const, data: result };
     } catch (error: any) {
         console.error('ensureIPDDemoMasterData error:', error);
