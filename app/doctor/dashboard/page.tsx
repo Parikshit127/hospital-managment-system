@@ -43,7 +43,10 @@ import {
   saveMedicalNote,
   scheduleFollowUp,
   getPatientFollowUps,
+  getPrescriptionStatus,
+  validateDischargeChecklist,
 } from "@/app/actions/doctor-actions";
+import { getDoctorMorningSummary } from "@/app/actions/reception-actions";
 import { getWardsWithBeds } from "@/app/actions/ipd-actions";
 import { dischargePatient } from "@/app/actions/discharge-actions";
 import { registerPatient } from "@/app/actions/register-patient";
@@ -153,6 +156,11 @@ export default function DoctorDashboard() {
   const [allVideoRequests, setAllVideoRequests] = useState<any[]>([]);
   const [loadingVideoRequests, setLoadingVideoRequests] = useState(false);
 
+  // ─── MORNING BRIEFING STATE ───
+  const [morningSummary, setMorningSummary] = useState<any>(null);
+  const [showMorningSummary, setShowMorningSummary] = useState(true);
+  const [prescriptionStatuses, setPrescriptionStatuses] = useState<any[]>([]);
+
   const refreshVideoRequests = useCallback(async () => {
     if (!doctorId) return;
     const res = await getPendingCallRequests(doctorId);
@@ -197,6 +205,13 @@ export default function DoctorDashboard() {
           setDoctorName(data.name || data.username || "Doctor");
           setDoctorId(data.id || "");
           setDoctorSpecialty(data.specialty || "");
+
+          // Load morning summary once we have the doctor ID
+          if (data.id) {
+            getDoctorMorningSummary(data.id).then(res => {
+              if (res.success) setMorningSummary(res.data);
+            }).catch(() => {/* non-critical */});
+          }
         }
       } catch (e) {
         console.error("Failed to fetch session", e);
@@ -2531,8 +2546,113 @@ export default function DoctorDashboard() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-400 relative">
-            <div className="z-10 flex flex-col items-center">
+          <div className="flex-1 overflow-y-auto p-6">
+            {/* ── MORNING BRIEFING CARD ── */}
+            {morningSummary && showMorningSummary && (
+              <div className="mb-6 bg-gradient-to-br from-teal-50 to-emerald-50 border border-teal-200 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-black text-teal-800 flex items-center gap-2">
+                      <Activity className="h-4 w-4" />
+                      Good morning, Dr. {doctorName.split(' ')[0]} — Here&apos;s your day
+                    </h3>
+                    <p className="text-xs text-teal-600 mt-0.5">
+                      {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowMorningSummary(false)}
+                    className="p-1.5 hover:bg-teal-100 rounded-lg text-teal-400 transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Stats row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                  <div className="bg-white rounded-xl p-3 border border-teal-100">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase">Today&apos;s Patients</p>
+                    <p className="text-2xl font-black text-gray-900">{morningSummary.today.total}</p>
+                    <p className="text-[10px] text-gray-400">{morningSummary.today.checkedIn} checked in · {morningSummary.today.completed} done</p>
+                  </div>
+                  <div className={`bg-white rounded-xl p-3 border ${morningSummary.labResults.critical > 0 ? 'border-rose-200 bg-rose-50' : 'border-teal-100'}`}>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase">Lab Results</p>
+                    <p className={`text-2xl font-black ${morningSummary.labResults.critical > 0 ? 'text-rose-600' : 'text-gray-900'}`}>
+                      {morningSummary.labResults.total}
+                    </p>
+                    {morningSummary.labResults.critical > 0 && (
+                      <p className="text-[10px] text-rose-600 font-bold">⚠️ {morningSummary.labResults.critical} CRITICAL</p>
+                    )}
+                  </div>
+                  <div className="bg-white rounded-xl p-3 border border-teal-100">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase">Pending Rx</p>
+                    <p className="text-2xl font-black text-gray-900">{morningSummary.pendingPharmacyOrders}</p>
+                    <p className="text-[10px] text-gray-400">pharmacy orders</p>
+                  </div>
+                  <div className="bg-white rounded-xl p-3 border border-teal-100">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase">Follow-ups</p>
+                    <p className="text-2xl font-black text-gray-900">{morningSummary.followUps.length}</p>
+                    <p className="text-[10px] text-gray-400">due today</p>
+                  </div>
+                </div>
+
+                {/* Critical lab alerts */}
+                {morningSummary.labResults.criticalAlerts.length > 0 && (
+                  <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 mb-3">
+                    <p className="text-xs font-black text-rose-700 mb-2 flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5" /> Critical Lab Results — Immediate Review Required
+                    </p>
+                    <div className="space-y-1.5">
+                      {morningSummary.labResults.criticalAlerts.map((alert: any) => (
+                        <div key={alert.barcode} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-rose-100">
+                          <div>
+                            <span className="text-xs font-bold text-gray-900">{alert.test_type}</span>
+                            <span className="text-xs text-gray-500 ml-2">Patient: {alert.patient_id}</span>
+                          </div>
+                          <span className="text-xs font-black text-rose-600">{alert.result_value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Today's schedule preview */}
+                {morningSummary.today.appointments.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-black text-teal-700 uppercase tracking-wide mb-2">Today&apos;s Schedule</p>
+                    <div className="space-y-1.5">
+                      {morningSummary.today.appointments.slice(0, 5).map((appt: any) => (
+                        <div key={appt.appointment_id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-teal-100">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${appt.status === 'Checked In' ? 'bg-teal-500' : appt.status === 'Completed' ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                            <span className="text-xs font-semibold text-gray-900">{appt.patient_name}</span>
+                            {appt.reason && <span className="text-[10px] text-gray-400">· {appt.reason}</span>}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-gray-400">
+                              {new Date(appt.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                            </span>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                              appt.status === 'Checked In' ? 'bg-teal-50 text-teal-700' :
+                              appt.status === 'Completed' ? 'bg-emerald-50 text-emerald-700' :
+                              'bg-gray-100 text-gray-500'
+                            }`}>{appt.status}</span>
+                          </div>
+                        </div>
+                      ))}
+                      {morningSummary.today.appointments.length > 5 && (
+                        <p className="text-[10px] text-teal-600 text-center font-semibold">
+                          +{morningSummary.today.appointments.length - 5} more appointments
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Empty state when no patient selected */}
+            <div className="flex flex-col items-center justify-center text-gray-400 py-16">
               <div className="h-24 w-24 bg-gray-100 rounded-full mb-6 border border-gray-200 flex items-center justify-center">
                 <Users className="h-10 w-10 text-gray-200" />
               </div>

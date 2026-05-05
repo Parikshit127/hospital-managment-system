@@ -104,9 +104,16 @@ export async function getLabStats() {
     }
 }
 
-export async function uploadResult(barcode: string, resultValue: string, remarks: string) {
+export async function uploadResult(barcode: string, resultValue: string, remarks: string, isCritical?: boolean) {
     try {
         const { db } = await requireTenantContext();
+
+        // Determine if result is critical based on flag or remarks keywords
+        const criticalKeywords = ['critical', 'panic', 'urgent', 'stat', 'life-threatening', 'dangerously']
+        const autoDetectCritical = criticalKeywords.some(k =>
+            remarks?.toLowerCase().includes(k) || resultValue?.toLowerCase().includes(k)
+        )
+        const markCritical = isCritical || autoDetectCritical
 
         // 1. Update Local DB
         const order = await db.lab_orders.update({
@@ -115,25 +122,72 @@ export async function uploadResult(barcode: string, resultValue: string, remarks
                 status: 'Completed',
                 result_value: resultValue,
                 technician_remarks: remarks,
+                ...(markCritical ? { is_critical: true, critical_notified_at: new Date() } : {}),
             },
         });
-
 
         await logAudit({
             action: 'LAB_RESULT_ENTERED',
             module: 'Lab',
             entity_type: 'lab_order',
             entity_id: barcode,
-            details: JSON.stringify({ resultValue, remarks }),
+            details: JSON.stringify({ resultValue, remarks, isCritical: markCritical }),
         });
 
-        // Send notification (email + WhatsApp, non-blocking)
-        const patient = await db.oPD_REG.findFirst({ where: { patient_id: order.patient_id }, select: { phone: true, email: true, full_name: true } });
+        // 2. Notify patient (email + WhatsApp, non-blocking)
+        const patient = await db.oPD_REG.findFirst({
+            where: { patient_id: order.patient_id },
+            select: { phone: true, email: true, full_name: true }
+        });
         if (patient) {
             notifyPatient(
                 { email: patient.email, phone: patient.phone },
                 { type: 'lab_report', patientName: patient.full_name, testName: order.test_type },
             ).catch(err => console.warn('[Notify] Lab report notification failed:', err));
+        }
+
+        // 3. CRITICAL RESULT: Notify the ordering doctor immediately
+        if (markCritical && order.doctor_id) {
+            try {
+                const doctor = await db.user.findUnique({
+                    where: { id: order.doctor_id },
+                    select: { name: true, phone: true, email: true },
+                });
+
+                if (doctor) {
+                    // Create in-app notification for doctor
+                    await db.notification.create({
+                        data: {
+                            user_id: order.doctor_id,
+                            title: '🚨 Critical Lab Result',
+                            message: `CRITICAL result for patient ${order.patient_id}: ${order.test_type} — ${resultValue}. ${remarks ? `Remarks: ${remarks}` : ''}`,
+                            type: 'critical_lab',
+                            is_read: false,
+                            entity_type: 'lab_order',
+                            entity_id: barcode,
+                        },
+                    }).catch(() => {/* notification table may not exist in all orgs */});
+
+                    // WhatsApp alert to doctor
+                    const { sendWhatsAppMessage, formatPhoneNumber } = await import('@/app/lib/whatsapp');
+                    if (doctor.phone) {
+                        sendWhatsAppMessage({
+                            to: formatPhoneNumber(doctor.phone),
+                            message: `🚨 *CRITICAL LAB RESULT*\n\nDoctor: ${doctor.name}\nPatient ID: ${order.patient_id}\nTest: ${order.test_type}\nResult: *${resultValue}*\n${remarks ? `Remarks: ${remarks}` : ''}\n\nImmediate review required.`,
+                        }).catch(err => console.warn('[WhatsApp] Critical lab doctor alert failed:', err));
+                    }
+
+                    await logAudit({
+                        action: 'CRITICAL_RESULT_DOCTOR_NOTIFIED',
+                        module: 'Lab',
+                        entity_type: 'lab_order',
+                        entity_id: barcode,
+                        details: `Doctor ${doctor.name} notified of critical result`,
+                    });
+                }
+            } catch (notifyErr) {
+                console.error('[Critical Lab] Doctor notification failed:', notifyErr);
+            }
         }
 
         // IPD Integration: Post charge to IPD bill if patient has active admission

@@ -4,12 +4,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     Users, UserPlus, Search, Filter, Calendar, Phone, Clock,
     ChevronLeft, ChevronRight, Eye, Zap, Loader2, Activity,
-    X, FileText, Thermometer, ArrowRight
+    X, FileText, Thermometer, ArrowRight, AlertCircle, CheckCircle2, Bell
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Skeleton, SkeletonCard } from '@/app/components/ui/Skeleton';
-import { getRegisteredPatients, getReceptionStats, getPatientDetail } from '@/app/actions/reception-actions';
+import { getRegisteredPatients, getReceptionStats, getPatientDetail, getExpectedArrivals, checkInPatient } from '@/app/actions/reception-actions';
 
 export default function ReceptionDashboard() {
     const [patients, setPatients] = useState<any[]>([]);
@@ -21,6 +21,12 @@ export default function ReceptionDashboard() {
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(0);
     const [total, setTotal] = useState(0);
+
+    // Expected arrivals
+    const [expectedArrivals, setExpectedArrivals] = useState<any[]>([]);
+    const [arrivalsLoading, setArrivalsLoading] = useState(true);
+    const [checkingIn, setCheckingIn] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<'patients' | 'arrivals'>('arrivals');
 
     // Patient detail modal
     const [selectedPatient, setSelectedPatient] = useState<any>(null);
@@ -46,7 +52,33 @@ export default function ReceptionDashboard() {
         setLoading(false);
     }, [search, department, page, dateRange]);
 
+    const loadArrivals = useCallback(async () => {
+        setArrivalsLoading(true);
+        try {
+            const res = await getExpectedArrivals();
+            if (res.success) setExpectedArrivals(res.data || []);
+        } catch (err) {
+            console.error('Expected arrivals error:', err);
+        }
+        setArrivalsLoading(false);
+    }, []);
+
     useEffect(() => { loadData(); }, [loadData]);
+    useEffect(() => { loadArrivals(); }, [loadArrivals]);
+
+    const handleCheckIn = async (appointmentId: string) => {
+        setCheckingIn(appointmentId);
+        try {
+            const res = await checkInPatient(appointmentId);
+            if (res.success) {
+                setExpectedArrivals(prev => prev.filter(a => a.appointment_id !== appointmentId));
+                loadData();
+            }
+        } catch (err) {
+            console.error('Check-in error:', err);
+        }
+        setCheckingIn(null);
+    };
 
     // Debounced search
     const [searchInput, setSearchInput] = useState('');
@@ -150,7 +182,113 @@ export default function ReceptionDashboard() {
                     </div>
                 </div>
 
-                {/* SEARCH & FILTERS */}
+                {/* TAB SWITCHER */}
+                <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+                    <button
+                        onClick={() => setActiveTab('arrivals')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'arrivals' ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <Bell className="h-3.5 w-3.5" />
+                        Expected Today
+                        {expectedArrivals.length > 0 && (
+                            <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">
+                                {expectedArrivals.length}
+                            </span>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('patients')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'patients' ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <Users className="h-3.5 w-3.5" />
+                        All Patients
+                    </button>
+                </div>
+
+                {/* EXPECTED ARRIVALS PANEL */}
+                {activeTab === 'arrivals' && (
+                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-sm font-bold text-gray-900">Expected Today — Not Yet Checked In</h3>
+                                <p className="text-xs text-gray-400 mt-0.5">Patients with appointments today who haven&apos;t arrived yet</p>
+                            </div>
+                            <button onClick={loadArrivals} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-teal-600 transition-colors">
+                                <Activity className="h-4 w-4" />
+                            </button>
+                        </div>
+                        {arrivalsLoading ? (
+                            <div className="flex items-center justify-center py-12">
+                                <Loader2 className="h-5 w-5 animate-spin text-teal-500" />
+                            </div>
+                        ) : expectedArrivals.length === 0 ? (
+                            <div className="text-center py-12">
+                                <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto mb-2" />
+                                <p className="text-sm font-medium text-gray-500">All patients checked in</p>
+                                <p className="text-xs text-gray-300 mt-1">No pending arrivals for today</p>
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-gray-50">
+                                {expectedArrivals.map((arrival: any) => {
+                                    const isOverdue = arrival.minutes_overdue > 0;
+                                    const isLate = arrival.minutes_overdue > 15;
+                                    return (
+                                        <div key={arrival.appointment_id} className={`flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors ${isLate ? 'bg-rose-50/30' : ''}`}>
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isLate ? 'bg-rose-500' : isOverdue ? 'bg-amber-500' : 'bg-teal-500'}`} />
+                                                <div>
+                                                    <p className="text-sm font-semibold text-gray-900">{arrival.patient_name}</p>
+                                                    <p className="text-xs text-gray-400">
+                                                        {arrival.doctor_name} · {arrival.department}
+                                                        {arrival.reason && ` · ${arrival.reason}`}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <div className="text-right">
+                                                    <p className="text-xs font-bold text-gray-700">
+                                                        {new Date(arrival.appointment_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                                    </p>
+                                                    {isLate ? (
+                                                        <p className="text-[10px] text-rose-600 font-semibold">{arrival.minutes_overdue}m overdue</p>
+                                                    ) : isOverdue ? (
+                                                        <p className="text-[10px] text-amber-600 font-semibold">{arrival.minutes_overdue}m late</p>
+                                                    ) : (
+                                                        <p className="text-[10px] text-teal-600 font-semibold">
+                                                            in {Math.abs(arrival.minutes_overdue)}m
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                {arrival.patient_phone && (
+                                                    <a href={`tel:${arrival.patient_phone}`}
+                                                        className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-teal-600 transition-colors"
+                                                        title="Call patient">
+                                                        <Phone className="h-3.5 w-3.5" />
+                                                    </a>
+                                                )}
+                                                <button
+                                                    onClick={() => handleCheckIn(arrival.appointment_id)}
+                                                    disabled={checkingIn === arrival.appointment_id}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-xs font-bold rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50"
+                                                >
+                                                    {checkingIn === arrival.appointment_id ? (
+                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                    ) : (
+                                                        <CheckCircle2 className="h-3 w-3" />
+                                                    )}
+                                                    Check In
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* SEARCH & FILTERS — only shown in patients tab */}
+                {activeTab === 'patients' && <>
                 <div className="flex flex-wrap items-center gap-3">
                     <div className="relative flex-1 min-w-[240px]">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -193,8 +331,7 @@ export default function ReceptionDashboard() {
                 </div>
 
                 {/* PATIENT TABLE */}
-                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
-                    <div className="overflow-x-auto">
+                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">                    <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-gray-200">
@@ -302,7 +439,7 @@ export default function ReceptionDashboard() {
                         </div>
                     )}
                 </div>
-            </div>
+            </>}
 
             {/* PATIENT DETAIL MODAL */}
             {selectedPatient && (
@@ -455,6 +592,7 @@ export default function ReceptionDashboard() {
                     </div>
                 </div>
             )}
+            </div>
         </AppShell>
     );
 }

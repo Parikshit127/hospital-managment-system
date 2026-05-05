@@ -1185,3 +1185,138 @@ export async function getPatientFollowUps(
     };
   }
 }
+
+// ========================================
+// PRESCRIPTION STATUS FEEDBACK
+// Lets doctors see if their pharmacy orders were dispensed
+// ========================================
+
+export async function getPrescriptionStatus(patientId: string) {
+  try {
+    const { db } = await requireTenantContext();
+
+    const orders = await db.pharmacy_orders.findMany({
+      where: { patient_id: patientId },
+      include: { items: true },
+      orderBy: { created_at: 'desc' },
+      take: 10,
+    });
+
+    return {
+      success: true,
+      data: orders.map((o: any) => ({
+        order_id: o.id,
+        status: o.status,
+        created_at: o.created_at,
+        dispensed_at: o.dispensed_at ?? null,
+        items: (o.items || []).map((i: any) => ({
+          medicine_name: i.medicine_name,
+          quantity_requested: i.quantity_requested,
+          quantity_dispensed: i.quantity_dispensed ?? null,
+          status: i.status,
+        })),
+        // Human-readable status label
+        statusLabel: (() => {
+          switch (o.status) {
+            case 'Dispensed': return { label: 'Dispensed ✓', color: 'emerald' }
+            case 'Pending': return { label: 'Pending ⏳', color: 'amber' }
+            case 'Partial': return { label: 'Partially Dispensed', color: 'blue' }
+            case 'Out of Stock': return { label: 'Out of Stock ⚠️', color: 'rose' }
+            case 'Cancelled': return { label: 'Cancelled', color: 'gray' }
+            default: return { label: o.status, color: 'gray' }
+          }
+        })(),
+      })),
+    };
+  } catch (error) {
+    console.error('getPrescriptionStatus Error:', error);
+    return { success: false, data: [] };
+  }
+}
+
+// ========================================
+// DISCHARGE CHECKLIST VALIDATION
+// Ensures all prerequisites are met before discharge
+// ========================================
+
+export async function validateDischargeChecklist(admissionId: string) {
+  try {
+    const { db } = await requireTenantContext();
+
+    const admission = await db.admissions.findUnique({
+      where: { admission_id: admissionId },
+      include: {
+        medical_notes: { orderBy: { created_at: 'desc' }, take: 1 },
+        summaries: { take: 1 },
+      },
+    });
+
+    if (!admission) return { success: false, error: 'Admission not found' };
+
+    const patientId = admission.patient_id;
+
+    const [
+      pendingLabOrders,
+      pendingPharmacyOrders,
+      hasDischargeSummary,
+      pendingBill,
+    ] = await Promise.all([
+      db.lab_orders.count({
+        where: { patient_id: patientId, status: { in: ['Pending', 'Processing'] } },
+      }),
+      db.pharmacy_orders.count({
+        where: { patient_id: patientId, status: 'Pending' },
+      }),
+      db.admissions.findFirst({
+        where: { admission_id: admissionId },
+        select: { summaries: true },
+      }).then((a: { summaries: any[] } | null) => (a?.summaries?.length ?? 0) > 0),
+      db.invoices.findFirst({
+        where: { patient_id: patientId, status: { in: ['Pending', 'Partial'] } },
+      }),
+    ]);
+
+    const checklist = [
+      {
+        item: 'Discharge Summary Written',
+        done: hasDischargeSummary,
+        required: true,
+        message: hasDischargeSummary ? null : 'Discharge summary must be completed before discharge.',
+      },
+      {
+        item: 'Pending Lab Orders',
+        done: pendingLabOrders === 0,
+        required: false,
+        message: pendingLabOrders > 0 ? `${pendingLabOrders} lab order(s) still pending.` : null,
+      },
+      {
+        item: 'Pending Pharmacy Orders',
+        done: pendingPharmacyOrders === 0,
+        required: false,
+        message: pendingPharmacyOrders > 0 ? `${pendingPharmacyOrders} pharmacy order(s) still pending.` : null,
+      },
+      {
+        item: 'Billing Cleared',
+        done: !pendingBill,
+        required: true,
+        message: pendingBill ? 'Outstanding bill must be settled before discharge.' : null,
+      },
+    ];
+
+    const blockers = checklist.filter(c => c.required && !c.done);
+    const warnings = checklist.filter(c => !c.required && !c.done);
+
+    return {
+      success: true,
+      data: {
+        checklist,
+        canDischarge: blockers.length === 0,
+        blockers: blockers.map(b => b.message),
+        warnings: warnings.map(w => w.message),
+      },
+    };
+  } catch (error) {
+    console.error('validateDischargeChecklist Error:', error);
+    return { success: false, data: null };
+  }
+}

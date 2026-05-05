@@ -1338,3 +1338,170 @@ export async function hardDeletePatient(patientId: string) {
     }
 }
 
+
+// ========================================
+// EXPECTED ARRIVALS — "Who has appointments today and hasn't checked in yet?"
+// ========================================
+
+export async function getExpectedArrivals() {
+    try {
+        const { db } = await requireTenantContext();
+
+        const tz = await getOrgTimezone();
+        const { start: todayStart, end: todayEnd } = getTodayRange(tz);
+
+        const appointments = await db.appointments.findMany({
+            where: {
+                appointment_date: { gte: todayStart, lte: todayEnd },
+                status: { in: ['Scheduled', 'Pending'] },
+            },
+            include: { patient: true },
+            orderBy: { appointment_date: 'asc' },
+        });
+
+        return {
+            success: true,
+            data: appointments.map((a: any) => ({
+                appointment_id: a.appointment_id,
+                patient_id: a.patient_id,
+                patient_name: a.patient?.full_name || 'Unknown',
+                patient_phone: a.patient?.phone || null,
+                doctor_name: a.doctor_name || 'Unknown',
+                department: a.department || 'General',
+                appointment_time: a.appointment_date,
+                reason: a.reason_for_visit || null,
+                status: a.status,
+                // How many minutes overdue (negative = still upcoming)
+                minutes_overdue: Math.floor((Date.now() - new Date(a.appointment_date).getTime()) / 60000),
+            })),
+        };
+    } catch (error) {
+        console.error('getExpectedArrivals Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+// ========================================
+// DOCTOR MORNING SUMMARY
+// Gives a doctor their day-at-a-glance on login
+// ========================================
+
+export async function getDoctorMorningSummary(doctorId: string) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const tz = await getOrgTimezone();
+        const { start: todayStart, end: todayEnd } = getTodayRange(tz);
+
+        const [
+            todayAppointments,
+            pendingLabResults,
+            pendingPharmacyOrders,
+            criticalLabAlerts,
+            pendingFollowUps,
+        ] = await Promise.all([
+            // Today's appointments for this doctor
+            db.appointments.findMany({
+                where: {
+                    doctor_id: doctorId,
+                    appointment_date: { gte: todayStart, lte: todayEnd },
+                },
+                include: { patient: true },
+                orderBy: { appointment_date: 'asc' },
+            }),
+            // Lab results ordered by this doctor that are now completed (unacknowledged)
+            db.lab_orders.findMany({
+                where: {
+                    doctor_id: doctorId,
+                    status: 'Completed',
+                    // Only show results from last 48 hours
+                    created_at: { gte: new Date(Date.now() - 48 * 60 * 60 * 1000) },
+                },
+                orderBy: { created_at: 'desc' },
+                take: 10,
+            }),
+            // Pending pharmacy orders from this doctor
+            db.pharmacy_orders.count({
+                where: {
+                    doctor_id: doctorId,
+                    status: 'Pending',
+                },
+            }),
+            // Critical lab results needing attention
+            db.lab_orders.findMany({
+                where: {
+                    doctor_id: doctorId,
+                    is_critical: true,
+                    status: 'Completed',
+                },
+                orderBy: { critical_notified_at: 'desc' },
+                take: 5,
+            }),
+            // Follow-ups due today
+            db.followUp.findMany({
+                where: {
+                    doctor_id: doctorId,
+                    scheduled_date: { gte: todayStart, lte: todayEnd },
+                    status: { in: ['Pending', 'Scheduled'] },
+                },
+                include: { patient: true },
+                take: 10,
+            }).catch(() => []), // followUp table may not exist in all orgs
+        ]);
+
+        const checkedIn = todayAppointments.filter((a: any) => a.status === 'Checked In').length;
+        const completed = todayAppointments.filter((a: any) => a.status === 'Completed').length;
+        const scheduled = todayAppointments.filter((a: any) => ['Scheduled', 'Pending'].includes(a.status)).length;
+
+        return {
+            success: true,
+            data: {
+                today: {
+                    total: todayAppointments.length,
+                    checkedIn,
+                    completed,
+                    scheduled,
+                    appointments: todayAppointments.map((a: any) => ({
+                        appointment_id: a.appointment_id,
+                        patient_name: a.patient?.full_name || 'Unknown',
+                        patient_id: a.patient_id,
+                        time: a.appointment_date,
+                        status: a.status,
+                        reason: a.reason_for_visit,
+                        queue_token: a.queue_token,
+                    })),
+                },
+                labResults: {
+                    total: pendingLabResults.length,
+                    critical: criticalLabAlerts.length,
+                    results: pendingLabResults.map((l: any) => ({
+                        barcode: l.barcode,
+                        patient_id: l.patient_id,
+                        test_type: l.test_type,
+                        result_value: l.result_value,
+                        is_critical: l.is_critical,
+                        created_at: l.created_at,
+                    })),
+                    criticalAlerts: criticalLabAlerts.map((l: any) => ({
+                        barcode: l.barcode,
+                        patient_id: l.patient_id,
+                        test_type: l.test_type,
+                        result_value: l.result_value,
+                        critical_notified_at: l.critical_notified_at,
+                    })),
+                },
+                pendingPharmacyOrders,
+                followUps: (pendingFollowUps as any[]).map((f: any) => ({
+                    id: f.id,
+                    patient_name: f.patient?.full_name || 'Unknown',
+                    patient_id: f.patient_id,
+                    scheduled_date: f.scheduled_date,
+                    notes: f.notes,
+                })),
+            },
+        };
+    } catch (error) {
+        console.error('getDoctorMorningSummary Error:', error);
+        return { success: false, data: null };
+    }
+}
