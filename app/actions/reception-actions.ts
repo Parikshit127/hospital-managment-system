@@ -615,6 +615,10 @@ export async function bookAppointment(data: {
     date: string;
     slotId?: string;
     reasonForVisit?: string;
+    // GAP 14 — Appointment Multi-Mode Differentiation + PAV Flow
+    booking_channel?: 'call_center' | 'patient_app' | 'patient_portal' | 'walk_in';
+    payment_mode?: 'cash' | 'online' | 'pav' | 'insurance';
+    is_pav?: boolean;
 }) {
     try {
         const { db, session } = await requireTenantContext();
@@ -637,6 +641,8 @@ export async function bookAppointment(data: {
             }
         }
 
+        const isPav = data.is_pav || data.payment_mode === 'pav';
+
         const appointment = await db.appointments.create({
             data: {
                 appointment_id: appointmentId,
@@ -647,6 +653,9 @@ export async function bookAppointment(data: {
                 reason_for_visit: data.reasonForVisit,
                 status: 'Scheduled',
                 appointment_date: appointmentDate,
+                booking_channel: data.booking_channel || 'walk_in',
+                payment_mode: data.payment_mode || 'cash',
+                is_pav: isPav,
             },
         });
 
@@ -696,6 +705,19 @@ export async function bookAppointment(data: {
                     { email: patient.email, phone: patient.phone },
                     { type: 'appointment', patientName: patient.full_name || 'Patient', doctorName: data.doctorName, department: data.department, date: formattedDate, time: formattedTime, hospitalName }
                 ).catch(err => console.error('[Notify] Book Appointment notification failed:', err));
+
+                // GAP 14 — PAV (Pay at Visit) SMS flow
+                if (isPav && patient.phone) {
+                    const pavMessage = `Dear ${patient.full_name || 'Patient'}, your appointment at ${hospitalName} is confirmed for ${formattedDate} at ${formattedTime}. You have selected Pay at Visit. Please pay it now or at the time of your visit. Thank you.`;
+                    sendWhatsAppMessage({ to: formatPhoneNumber(patient.phone), message: pavMessage })
+                        .catch(err => console.error('[PAV SMS] Failed:', err));
+
+                    // Mark PAV SMS as sent
+                    await db.appointments.update({
+                        where: { appointment_id: appointmentId },
+                        data: { pav_sms_sent: true },
+                    }).catch(() => {});
+                }
             }
         } catch (error) {
             console.error('Appointment notifications failed:', error);

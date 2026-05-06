@@ -157,6 +157,19 @@ model Organization {
   budget_revisions              BudgetRevision[]
   budget_alerts                 BudgetAlert[]
 
+  // GAP 5 — 2-Hour Assessment Alerts
+  nursing_assessment_alerts     NursingAssessmentAlert[]
+  // GAP 6 — 14-Tab IPD EMR
+  clinical_orders               ClinicalOrder[]
+  physician_orders              PhysicianOrder[]
+  active_medications            ActiveMedication[]
+  // GAP 8 — Order Sets
+  order_sets                    OrderSet[]
+  // GAP 9 — Investigation My List
+  doctor_investigation_favorites DoctorInvestigationFavorite[]
+  // GAP 16 — Referral Orders
+  referral_orders               ReferralOrder[]
+
 
   // Extended hospital profile fields
   hospital_type          String? // General, Multi-Specialty, Super-Specialty, Clinic, Nursing Home
@@ -375,7 +388,7 @@ model User {
   id                     String   @id @default(uuid())
   username               String   @unique
   password               String
-  role                   String // admin, doctor, receptionist, lab_technician, pharmacist, finance, ipd_manager, nurse, opd_manager, hr
+  role                   String // admin, doctor, receptionist, lab_technician, pharmacist, finance, ipd_manager, nurse, opd_manager, hr, coordinator
   name                   String?
   specialty              String?
   email                  String?
@@ -391,10 +404,16 @@ model User {
   follow_up_fee          Float    @default(300)
   createdAt              DateTime @default(now())
 
+  // GAP 3 — Doctor Group Hierarchy — Senior/Junior Access
+  supervisor_id          String? // Senior doctor ID
+  doctor_group_id        String? // Group identifier
+  is_group_lead          Boolean @default(false)
+
   organization      Organization      @relation(fields: [organizationId], references: [id])
   appointment_slots AppointmentSlot[]
 
   @@index([organizationId])
+  @@index([doctor_group_id])
   @@map("users")
 }
 
@@ -438,6 +457,28 @@ model OPD_REG {
   corporate_id          String?
   corporate_card_number String?
 
+  // GAP 1 — UHID Merging / Unmerging
+  parent_patient_id String?  // Primary UHID if this is secondary
+  is_secondary      Boolean @default(false)
+  merged_into       String? // Tracks merge history
+  merged_at         DateTime?
+  merged_by         String?
+
+  // GAP 13 — Registration Fields Missing
+  title                      String? // Baby, Dr, Mrs, Mr, Ms
+  is_vip                     Boolean @default(false)
+  marital_status             String? // Single, Married, Divorced, Widowed
+  preferred_language         String? @default("en") // en, hi, ar, etc.
+  lead_source                String? // Hospital, Doctor, Website, Social Media, Referral
+  race                       String? // For Arab nation patients
+  patient_category           String? // Antenatal, BPL, General, Govt Employee, Postnatal
+  frro_number                String? // Required for international patients
+  is_senior_citizen          Boolean @default(false)
+  age_in_days                Int? // For newborns
+  registration_remarks       String?
+  distance_from_hospital_km  Float?
+  registration_form_url      String? // Signed form upload
+
   organization          Organization                @relation(fields: [organizationId], references: [id])
   corporate             CorporateMaster?            @relation(fields: [corporate_id], references: [id])
   appointments          appointments[]
@@ -480,6 +521,12 @@ model appointments {
   reminder24Sent      Boolean   @default(false)
   slot_id             String?   @unique
 
+  // GAP 14 — Appointment Multi-Mode Differentiation + PAV Flow
+  booking_channel     String?   @default("walk_in") // call_center, patient_app, patient_portal, walk_in
+  payment_mode        String?   @default("cash") // cash, online, pav (Pay at Visit), insurance
+  is_pav              Boolean   @default(false)
+  pav_sms_sent        Boolean   @default(false)
+
   organization Organization @relation(fields: [organizationId], references: [id])
   patient      OPD_REG      @relation(fields: [patient_id], references: [patient_id])
 
@@ -488,6 +535,7 @@ model appointments {
   @@index([patient_id])
   @@index([appointment_date])
   @@index([doctor_id])
+  @@index([booking_channel])
 }
 
 // ========================================
@@ -576,6 +624,9 @@ model lab_test_inventory {
   hsn_sac_code     String?
   tax_rate         Float?  @default(0)
   organizationId   String
+
+  // GAP 2 — Prescription-Mandatory Test Upload Validation
+  requires_prescription Boolean @default(false)
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -1163,12 +1214,21 @@ model ClinicalEncounter {
   created_at         DateTime  @default(now())
   updated_at         DateTime  @updatedAt
 
+  // GAP 4 — Coordinator Login with Doctor Approval Workflow
+  typed_by           String? // Coordinator who entered data
+  entered_by         String? // Same as typed_by for clarity
+  approval_status    String?   @default("draft") // draft, pending_approval, approved, rejected
+  approved_at        DateTime?
+  rejected_at        DateTime?
+  rejection_reason   String?
+
   organization Organization @relation(fields: [organizationId], references: [id])
   patient      OPD_REG      @relation(fields: [patient_id], references: [patient_id])
 
   @@index([organizationId])
   @@index([patient_id])
   @@index([doctor_id])
+  @@index([approval_status])
   @@map("clinical_encounters")
 }
 
@@ -2697,6 +2757,203 @@ model whatsapp_log {
   updatedAt DateTime @updatedAt
 
   patient OPD_REG? @relation(fields: [patientId], references: [patient_id])
+}
+
+// ========================================
+// GAP 5 — 2-Hour Initial Assessment Alert with Group Notification
+// ========================================
+
+model NursingAssessmentAlert {
+  id                    String    @id @default(uuid())
+  admission_id          String
+  patient_id            String
+  arrival_in_unit_at    DateTime  @default(now())
+  assessment_due_at     DateTime // arrival_in_unit_at + 2 hours
+  assessment_completed  Boolean   @default(false)
+  completed_at          DateTime?
+  alert_sent_to_group   Boolean   @default(false)
+  alert_sent_at         DateTime?
+  doctor_group_id       String?
+  organizationId        String
+  created_at            DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([admission_id])
+  @@index([organizationId])
+  @@index([assessment_completed])
+  @@map("nursing_assessment_alerts")
+}
+
+// ========================================
+// GAP 6 — 14-Tab IPD EMR Case Sheet Models
+// ========================================
+
+model ClinicalOrder {
+  id             String   @id @default(uuid())
+  admission_id   String
+  patient_id     String
+  doctor_id      String
+  order_type     String // lab, radiology, procedure, consultation
+  order_details  Json
+  status         String   @default("pending") // pending, in_progress, completed, cancelled
+  priority       String   @default("routine") // stat, urgent, routine
+  ordered_at     DateTime @default(now())
+  completed_at   DateTime?
+  organizationId String
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([admission_id])
+  @@index([organizationId])
+  @@index([status])
+  @@map("clinical_orders")
+}
+
+model PhysicianOrder {
+  id             String   @id @default(uuid())
+  admission_id   String
+  patient_id     String
+  doctor_id      String
+  order_category String // medication, diet, activity, monitoring, other
+  order_text     String
+  frequency      String?
+  duration       String?
+  status         String   @default("active") // active, discontinued, completed
+  ordered_at     DateTime @default(now())
+  discontinued_at DateTime?
+  organizationId String
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([admission_id])
+  @@index([organizationId])
+  @@index([status])
+  @@map("physician_orders")
+}
+
+model ActiveMedication {
+  id                String    @id @default(uuid())
+  admission_id      String
+  patient_id        String
+  medication_name   String
+  dosage            String
+  route             String
+  frequency         String
+  start_date        DateTime  @default(now())
+  end_date          DateTime?
+  prescribed_by     String
+  status            String    @default("active") // active, discontinued, completed
+  discontinuation_reason String?
+  organizationId    String
+  created_at        DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([admission_id])
+  @@index([organizationId])
+  @@index([status])
+  @@map("active_medications")
+}
+
+// ========================================
+// GAP 8 — Order Set / Saved Prescription Templates (Enhanced)
+// ========================================
+
+model OrderSet {
+  id                    String   @id @default(uuid())
+  doctor_id             String
+  name                  String
+  description           String?
+  
+  // Multi-domain combination
+  chief_complaints      Json?    @default("[]")
+  gross_examination     Json?    @default("[]")
+  diagnosis             Json?    @default("[]")
+  advice_investigations Json?    @default("[]")
+  advice_medications    Json?    @default("[]")
+  op_procedures         Json?    @default("[]")
+  
+  is_favorite           Boolean  @default(false)
+  usage_count           Int      @default(0)
+  organizationId        String
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([doctor_id])
+  @@index([organizationId])
+  @@map("order_sets")
+}
+
+// ========================================
+// GAP 9 — Investigation "My List" Feature
+// ========================================
+
+model DoctorInvestigationFavorite {
+  id              String   @id @default(uuid())
+  doctor_id       String
+  investigation_name String
+  category        String?
+  display_order   Int      @default(0)
+  organizationId  String
+  created_at      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([doctor_id, investigation_name])
+  @@index([doctor_id])
+  @@index([organizationId])
+  @@map("doctor_investigation_favorites")
+}
+
+// ========================================
+// GAP 10 — ICD-10 / SNOMED CT Lookup Integration
+// ========================================
+
+model ICD10Master {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  description String
+  category    String?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  @@index([code])
+  @@map("icd10_master")
+}
+
+// ========================================
+// GAP 16 — Referral Order as a Generating Entity
+// ========================================
+
+model ReferralOrder {
+  id                String    @id @default(uuid())
+  admission_id      String?
+  patient_id        String
+  referred_by       String // Doctor ID
+  referred_to       String // Doctor ID or external name
+  department        String?
+  location          String? // Internal department or external hospital
+  reason            String
+  status            String    @default("pending") // pending, accepted, completed, cancelled
+  priority          String    @default("routine") // stat, urgent, routine
+  notes             String?
+  referred_at       DateTime  @default(now())
+  accepted_at       DateTime?
+  completed_at      DateTime?
+  organizationId    String
+  created_at        DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([patient_id])
+  @@index([organizationId])
+  @@index([status])
+  @@map("referral_orders")
 }
 
 model patient_external_records {

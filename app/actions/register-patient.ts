@@ -74,6 +74,19 @@ export async function registerPatient(formData: FormData) {
         insurance_policy_number: (formData.get('insurance_policy_number') as string) || '',
         insurance_validity_start: (formData.get('insurance_validity_start') as string) || '',
         insurance_validity_end: (formData.get('insurance_validity_end') as string) || '',
+        // GAP 13 — Extended Registration Fields
+        title: (formData.get('title') as string) || '',
+        is_vip: formData.get('is_vip') === 'true',
+        marital_status: (formData.get('marital_status') as string) || '',
+        preferred_language: (formData.get('preferred_language') as string) || 'en',
+        lead_source: (formData.get('lead_source') as string) || '',
+        race: (formData.get('race') as string) || '',
+        patient_category: (formData.get('patient_category') as string) || '',
+        frro_number: (formData.get('frro_number') as string) || '',
+        age_in_days: (formData.get('age_in_days') as string) || '',
+        registration_remarks: (formData.get('registration_remarks') as string) || '',
+        distance_from_hospital_km: (formData.get('distance_from_hospital_km') as string) || '',
+        registration_form_url: (formData.get('registration_form_url') as string) || '',
     };
 
     // Server-side Zod validation
@@ -132,6 +145,21 @@ export async function registerPatient(formData: FormData) {
                     corporate_id: rawData.corporate_id || null,
                     corporate_card_number: rawData.corporate_card_number || null,
                     employee_id: rawData.employee_id || null,
+                    // GAP 13 — Extended Registration Fields
+                    title: rawData.title || null,
+                    is_vip: rawData.is_vip || false,
+                    marital_status: rawData.marital_status || null,
+                    preferred_language: rawData.preferred_language || 'en',
+                    lead_source: rawData.lead_source || null,
+                    race: rawData.race || null,
+                    patient_category: rawData.patient_category || null,
+                    frro_number: rawData.frro_number || null,
+                    age_in_days: rawData.age_in_days ? parseInt(rawData.age_in_days, 10) : null,
+                    registration_remarks: rawData.registration_remarks || null,
+                    distance_from_hospital_km: rawData.distance_from_hospital_km ? parseFloat(rawData.distance_from_hospital_km) : null,
+                    registration_form_url: rawData.registration_form_url || null,
+                    // Auto-flag senior citizen
+                    is_senior_citizen: rawData.age ? parseInt(rawData.age, 10) > 60 : false,
                 },
             });
 

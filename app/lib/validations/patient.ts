@@ -88,6 +88,19 @@ export const patientRegistrationSchema = z.object({
     insurance_policy_number: z.string().optional().or(z.literal('')),
     insurance_validity_start: z.string().optional().or(z.literal('')),
     insurance_validity_end: z.string().optional().or(z.literal('')),
+    // GAP 13 — Registration Fields Missing from Schema
+    title: z.enum(['Baby', 'Dr', 'Mrs', 'Mr', 'Ms', '']).optional().or(z.literal('')),
+    is_vip: z.union([z.boolean(), z.literal('true'), z.literal('false')]).transform(v => v === true || v === 'true').optional(),
+    marital_status: z.enum(['Single', 'Married', 'Divorced', 'Widowed', '']).optional().or(z.literal('')),
+    preferred_language: z.string().optional().or(z.literal('')),
+    lead_source: z.string().optional().or(z.literal('')),
+    race: z.string().optional().or(z.literal('')),
+    patient_category: z.enum(['Antenatal', 'BPL', 'General', 'Govt Employee', 'Postnatal', '']).optional().or(z.literal('')),
+    frro_number: z.string().optional().or(z.literal('')),
+    age_in_days: z.string().optional().or(z.literal('')),
+    registration_remarks: z.string().optional().or(z.literal('')),
+    distance_from_hospital_km: z.string().optional().or(z.literal('')),
+    registration_form_url: z.string().optional().or(z.literal('')),
 });
 
 export type PatientRegistrationInput = z.infer<typeof patientRegistrationSchema>;
