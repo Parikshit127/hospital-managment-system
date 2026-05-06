@@ -98,7 +98,6 @@ export default function CaseSheetPage() {
     return (
         <AppShell>
             <div className="flex flex-col h-full">
-                {/* Header */}
                 <div className="bg-white border-b border-gray-200 px-6 py-4">
                     <div className="flex items-center justify-between">
                         <div>
@@ -130,7 +129,6 @@ export default function CaseSheetPage() {
                     </div>
                 </div>
 
-                {/* 14 Tabs */}
                 <div className="bg-white border-b border-gray-200 overflow-x-auto">
                     <div className="flex min-w-max">
                         {TABS.map(tab => {
@@ -153,7 +151,6 @@ export default function CaseSheetPage() {
                     </div>
                 </div>
 
-                {/* Tab Content */}
                 <div className="flex-1 overflow-y-auto p-6">
                     {loading ? (
                         <div className="flex items-center justify-center h-48">
@@ -161,7 +158,6 @@ export default function CaseSheetPage() {
                         </div>
                     ) : (
                         <>
-                            {/* Treatment Sheet — 24hr timeline */}
                             {activeTab === 'treatment' && (
                                 <div className="space-y-4">
                                     <h2 className="font-semibold text-gray-800">24-Hour Treatment Timeline</h2>
@@ -194,7 +190,6 @@ export default function CaseSheetPage() {
                                 </div>
                             )}
 
-                            {/* Clinical Orders */}
                             {activeTab === 'clinical_order' && (
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
@@ -226,7 +221,6 @@ export default function CaseSheetPage() {
                                 </div>
                             )}
 
-                            {/* Physician Orders */}
                             {activeTab === 'physician_order' && (
                                 <div className="space-y-4">
                                     <h2 className="font-semibold text-gray-800">Physician Orders</h2>
@@ -249,7 +243,6 @@ export default function CaseSheetPage() {
                                 </div>
                             )}
 
-                            {/* Active Medications */}
                             {activeTab === 'active_meds' && (
                                 <div className="space-y-4">
                                     <h2 className="font-semibold text-gray-800">Active Medications</h2>
@@ -274,7 +267,6 @@ export default function CaseSheetPage() {
                                 </div>
                             )}
 
-                            {/* Referral Orders */}
                             {activeTab === 'referral' && (
                                 <div className="space-y-4">
                                     <h2 className="font-semibold text-gray-800">Referral Orders</h2>
@@ -304,7 +296,6 @@ export default function CaseSheetPage() {
                                 </div>
                             )}
 
-                            {/* Charts — Vitals Trend */}
                             {activeTab === 'charts' && (
                                 <div className="space-y-4">
                                     <h2 className="font-semibold text-gray-800">Vitals Charts</h2>
@@ -325,7 +316,6 @@ export default function CaseSheetPage() {
                                 </div>
                             )}
 
-                            {/* Dietary */}
                             {activeTab === 'dietary' && (
                                 <div className="space-y-4">
                                     <h2 className="font-semibold text-gray-800">Dietary Plan</h2>
@@ -341,7 +331,6 @@ export default function CaseSheetPage() {
                                 </div>
                             )}
 
-                            {/* Default placeholder for other tabs */}
                             {!['treatment', 'clinical_order', 'physician_order', 'active_meds', 'referral', 'charts', 'dietary'].includes(activeTab) && (
                                 <div className="flex flex-col items-center justify-center h-48 text-gray-400">
                                     <Heart className="w-10 h-10 mb-3 opacity-30" />
