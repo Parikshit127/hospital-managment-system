@@ -12,7 +12,6 @@ import {
     Calendar, Clock, Loader2, Plus, AlertTriangle
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { useSearchParams } from 'next/navigation';
 import { get24HourCaseSheet, getClinicalOrders, getPhysicianOrders, getActiveMedications, getReferralOrders } from '@/app/actions/ipd-emr-actions';
 
 const TABS = [
@@ -50,9 +49,8 @@ type CaseSheetData = {
 };
 
 export default function CaseSheetPage() {
-    const searchParams = useSearchParams();
-    const admissionId = searchParams.get('admission_id') || '';
-    const initialDate = searchParams.get('date') || new Date().toISOString().split('T')[0];
+    const admissionId = '';
+    const initialDate = new Date().toISOString().split('T')[0];
     const [activeTab, setActiveTab] = useState('treatment');
     const [caseSheet, setCaseSheet] = useState<CaseSheetData | null>(null);
     const [clinicalOrders, setClinicalOrders] = useState<unknown[]>([]);

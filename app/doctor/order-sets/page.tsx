@@ -10,7 +10,6 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Star, StarOff, Trash2, BookOpen, FlaskConical, Loader2, Search, Check } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useToast } from '@/app/components/ui/Toast';
-import { useSearchParams } from 'next/navigation';
 import { getOrderSets, createOrderSet, deleteOrderSet, toggleOrderSetFavorite } from '@/app/actions/order-set-actions';
 import { getDoctorInvestigationMyList, addToInvestigationMyList, removeFromInvestigationMyList, searchInvestigationLibrary } from '@/app/actions/investigation-mylist-actions';
 
@@ -40,9 +39,8 @@ type InvestigationResult = {
     price: number;
 };
 
-export default function OrderSetsPage() {
-    const searchParams = useSearchParams();
-    const doctorId = searchParams.get('doctor_id') || '';
+export default function OrderSetsPage({ doctor_id }: { doctor_id?: string }) {
+    const doctorId = doctor_id || '';
     const toast = useToast();
     const [activeTab, setActiveTab] = useState<'order_sets' | 'my_list'>('order_sets');
     const [orderSets, setOrderSets] = useState<OrderSet[]>([]);
