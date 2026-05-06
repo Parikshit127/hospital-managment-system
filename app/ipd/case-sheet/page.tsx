@@ -12,6 +12,7 @@ import {
     Calendar, Clock, Loader2, Plus, AlertTriangle
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { useSearchParams } from 'next/navigation';
 import { get24HourCaseSheet, getClinicalOrders, getPhysicianOrders, getActiveMedications, getReferralOrders } from '@/app/actions/ipd-emr-actions';
 
 const TABS = [
@@ -48,8 +49,10 @@ type CaseSheetData = {
     };
 };
 
-export default function CaseSheetPage({ searchParams }: { searchParams: { admission_id?: string; date?: string } }) {
-    const admissionId = searchParams.admission_id || '';
+export default function CaseSheetPage() {
+    const searchParams = useSearchParams();
+    const admissionId = searchParams.get('admission_id') || '';
+    const initialDate = searchParams.get('date') || new Date().toISOString().split('T')[0];
     const [activeTab, setActiveTab] = useState('treatment');
     const [caseSheet, setCaseSheet] = useState<CaseSheetData | null>(null);
     const [clinicalOrders, setClinicalOrders] = useState<unknown[]>([]);
@@ -57,7 +60,7 @@ export default function CaseSheetPage({ searchParams }: { searchParams: { admiss
     const [activeMeds, setActiveMeds] = useState<unknown[]>([]);
     const [referrals, setReferrals] = useState<unknown[]>([]);
     const [loading, setLoading] = useState(true);
-    const [selectedDate, setSelectedDate] = useState(searchParams.date || new Date().toISOString().split('T')[0]);
+    const [selectedDate, setSelectedDate] = useState(initialDate);
 
     const loadData = useCallback(async () => {
         if (!admissionId) return;

@@ -7,9 +7,10 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Clock, User, FileText, Loader2, AlertCircle } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, User, FileText, Loader2 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useToast } from '@/app/components/ui/Toast';
+import { useSearchParams } from 'next/navigation';
 import { getPendingApprovals, approveEncounter, rejectEncounter } from '@/app/actions/coordinator-actions';
 
 type PendingEncounter = {
@@ -24,8 +25,9 @@ type PendingEncounter = {
     patient: { patient_id: string; full_name: string; age: string | null; gender: string | null };
 };
 
-export default function PendingApprovalsPage({ searchParams }: { searchParams: { doctor_id?: string } }) {
-    const doctorId = searchParams.doctor_id || '';
+export default function PendingApprovalsPage() {
+    const searchParams = useSearchParams();
+    const doctorId = searchParams.get('doctor_id') || '';
     const toast = useToast();
     const [encounters, setEncounters] = useState<PendingEncounter[]>([]);
     const [loading, setLoading] = useState(true);
