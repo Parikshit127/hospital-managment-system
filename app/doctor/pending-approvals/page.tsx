@@ -26,7 +26,7 @@ type PendingEncounter = {
 
 export default function PendingApprovalsPage({ searchParams }: { searchParams: { doctor_id?: string } }) {
     const doctorId = searchParams.doctor_id || '';
-    const { showToast } = useToast();
+    const toast = useToast();
     const [encounters, setEncounters] = useState<PendingEncounter[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -46,25 +46,25 @@ export default function PendingApprovalsPage({ searchParams }: { searchParams: {
         const res = await approveEncounter(id, doctorId);
         setActionLoading(null);
         if (res.success) {
-            showToast('EMR entry approved and signed', 'success');
+            toast.success('EMR entry approved and signed');
             setEncounters(prev => prev.filter(e => e.id !== id));
         } else {
-            showToast('Failed to approve', 'error');
+            toast.error('Failed to approve');
         }
     };
 
     const handleReject = async (id: string) => {
-        if (!rejectReason.trim()) { showToast('Please enter a rejection reason', 'error'); return; }
+        if (!rejectReason.trim()) { toast.error('Please enter a rejection reason'); return; }
         setActionLoading(id);
         const res = await rejectEncounter(id, doctorId, rejectReason);
         setActionLoading(null);
         if (res.success) {
-            showToast('EMR entry rejected', 'success');
+            toast.success('EMR entry rejected');
             setEncounters(prev => prev.filter(e => e.id !== id));
             setRejectingId(null);
             setRejectReason('');
         } else {
-            showToast('Failed to reject', 'error');
+            toast.error('Failed to reject');
         }
     };
 
@@ -118,7 +118,7 @@ export default function PendingApprovalsPage({ searchParams }: { searchParams: {
 
                                 {/* Content Preview */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                                    {enc.subjective?.chief_complaint && (
+                                    {(enc.subjective?.chief_complaint as string | undefined) && (
                                         <div className="bg-gray-50 rounded-lg p-3">
                                             <p className="text-xs font-medium text-gray-500 mb-1">Chief Complaint</p>
                                             <p className="text-gray-800">{enc.subjective.chief_complaint as string}</p>
@@ -130,7 +130,7 @@ export default function PendingApprovalsPage({ searchParams }: { searchParams: {
                                             <p className="text-gray-800">{(enc.assessment[0] as Record<string, unknown>)?.diagnosis_text as string}</p>
                                         </div>
                                     )}
-                                    {enc.plan?.instructions && (
+                                    {(enc.plan?.instructions as string | undefined) && (
                                         <div className="bg-gray-50 rounded-lg p-3">
                                             <p className="text-xs font-medium text-gray-500 mb-1">Instructions</p>
                                             <p className="text-gray-800">{enc.plan.instructions as string}</p>

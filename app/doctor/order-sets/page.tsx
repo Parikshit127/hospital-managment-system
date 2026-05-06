@@ -41,7 +41,7 @@ type InvestigationResult = {
 
 export default function OrderSetsPage({ searchParams }: { searchParams: { doctor_id?: string } }) {
     const doctorId = searchParams.doctor_id || '';
-    const { showToast } = useToast();
+    const toast = useToast();
     const [activeTab, setActiveTab] = useState<'order_sets' | 'my_list'>('order_sets');
     const [orderSets, setOrderSets] = useState<OrderSet[]>([]);
     const [myList, setMyList] = useState<InvestigationFavorite[]>([]);
@@ -75,7 +75,7 @@ export default function OrderSetsPage({ searchParams }: { searchParams: { doctor
     const handleAddToMyList = async (name: string, category?: string | null) => {
         const res = await addToInvestigationMyList(doctorId, name, category || undefined);
         if (res.success) {
-            showToast(`${name} added to My List`, 'success');
+            toast.success(`${name} added to My List`);
             const mlRes = await getDoctorInvestigationMyList(doctorId);
             if (mlRes.success) setMyList(mlRes.data as InvestigationFavorite[]);
         }
@@ -94,14 +94,14 @@ export default function OrderSetsPage({ searchParams }: { searchParams: { doctor
         const res = await createOrderSet({ doctor_id: doctorId, name: newSetName, description: newSetDesc });
         setCreating(false);
         if (res.success) {
-            showToast('Order set created', 'success');
+            toast.success('Order set created');
             setShowCreate(false);
             setNewSetName('');
             setNewSetDesc('');
             const osRes = await getOrderSets(doctorId);
             if (osRes.success) setOrderSets(osRes.data as OrderSet[]);
         } else {
-            showToast('Failed to create order set', 'error');
+            toast.error('Failed to create order set');
         }
     };
 
@@ -114,7 +114,7 @@ export default function OrderSetsPage({ searchParams }: { searchParams: { doctor
         const res = await deleteOrderSet(id);
         if (res.success) {
             setOrderSets(prev => prev.filter(os => os.id !== id));
-            showToast('Order set deleted', 'success');
+            toast.success('Order set deleted');
         }
     };
 

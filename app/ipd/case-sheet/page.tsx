@@ -240,7 +240,7 @@ export default function CaseSheetPage({ searchParams }: { searchParams: { admiss
                                                         <span className="text-xs text-green-600">{order.status as string}</span>
                                                     </div>
                                                     <p className="text-sm text-gray-800">{order.order_text as string}</p>
-                                                    {order.frequency && <p className="text-xs text-gray-500 mt-1">Frequency: {order.frequency as string} {order.duration ? `· Duration: ${order.duration as string}` : ''}</p>}
+                                                    {(order.frequency as string | undefined) && <p className="text-xs text-gray-500 mt-1">Frequency: {order.frequency as string}{(order.duration as string | undefined) ? ` · Duration: ${order.duration as string}` : ''}</p>}
                                                 </div>
                                             ))}
                                         </div>
@@ -287,7 +287,7 @@ export default function CaseSheetPage({ searchParams }: { searchParams: { admiss
                                                         <div className="flex items-center gap-2">
                                                             <ChevronRight className="w-4 h-4 text-gray-400" />
                                                             <span className="font-medium text-sm">{ref.referred_to as string}</span>
-                                                            {ref.department && <span className="text-xs text-gray-500">· {ref.department as string}</span>}
+                                                            {(ref.department as string | undefined) && <span className="text-xs text-gray-500">· {ref.department as string}</span>}
                                                         </div>
                                                         <div className="flex items-center gap-2">
                                                             <span className={`text-xs px-2 py-0.5 rounded-full ${ref.priority === 'stat' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>{ref.priority as string}</span>

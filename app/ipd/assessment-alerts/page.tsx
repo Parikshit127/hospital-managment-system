@@ -45,7 +45,7 @@ function TimeRemaining({ dueAt }: { dueAt: string }) {
 }
 
 export default function AssessmentAlertsPage() {
-    const { showToast } = useToast();
+    const toast = useToast();
     const [overdue, setOverdue] = useState<AssessmentAlert[]>([]);
     const [pending, setPending] = useState<AssessmentAlert[]>([]);
     const [loading, setLoading] = useState(true);
@@ -65,10 +65,10 @@ export default function AssessmentAlertsPage() {
         const res = await markAssessmentCompleted(admissionId, 'nurse');
         setCompleting(null);
         if (res.success) {
-            showToast(`Assessment completed ${res.was_on_time ? 'on time' : '(overdue)'}`, res.was_on_time ? 'success' : 'warning');
+            toast.success(`Assessment completed ${res.was_on_time ? 'on time' : '(overdue)'}`, );
             loadData();
         } else {
-            showToast('Failed to mark completed', 'error');
+            toast.error('Failed to mark completed');
         }
     };
 

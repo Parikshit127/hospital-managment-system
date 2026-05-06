@@ -22,7 +22,7 @@ type PatientResult = {
 };
 
 export default function MergePatientsPage() {
-    const { showToast } = useToast();
+    const toast = useToast();
     const [primaryQuery, setPrimaryQuery] = useState('');
     const [secondaryQuery, setSecondaryQuery] = useState('');
     const [primaryResults, setPrimaryResults] = useState<PatientResult[]>([]);
@@ -43,20 +43,20 @@ export default function MergePatientsPage() {
 
     const handleMerge = async () => {
         if (!selectedPrimary || !selectedSecondary) {
-            showToast('Select both primary and secondary patients', 'error');
+            toast.error('Select both primary and secondary patients');
             return;
         }
         setLoading(true);
         const res = await mergePatients(selectedPrimary.patient_id, selectedSecondary.patient_id, 'reception');
         setLoading(false);
         if (res.success) {
-            showToast(res.message || 'Patients merged successfully', 'success');
+            toast.success(res.message || 'Patients merged successfully');
             setSelectedPrimary(null);
             setSelectedSecondary(null);
             setPrimaryQuery('');
             setSecondaryQuery('');
         } else {
-            showToast(res.error || 'Merge failed', 'error');
+            toast.error(res.error || 'Merge failed');
         }
     };
 
@@ -66,10 +66,10 @@ export default function MergePatientsPage() {
         const res = await unmergePatient(unmergeId.trim(), 'reception');
         setLoading(false);
         if (res.success) {
-            showToast(res.message || 'Patient unmerged', 'success');
+            toast.success(res.message || 'Patient unmerged');
             setUnmergeId('');
         } else {
-            showToast(res.error || 'Unmerge failed', 'error');
+            toast.error(res.error || 'Unmerge failed');
         }
     };
 
