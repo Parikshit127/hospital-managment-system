@@ -13,6 +13,7 @@ import {
     LogOut, ChevronLeft, ChevronRight, Workflow,
     GitBranch, Menu, X, DatabaseBackup, BookOpen, Database,
 } from 'lucide-react';
+import PortalSwitcher from './PortalSwitcher';
 
 const NAV_SECTIONS = [
     {
@@ -171,8 +172,9 @@ export default function AdminSidebar() {
                 ))}
             </nav>
 
-            {/* Bottom: Logout + Collapse */}
+            {/* Bottom: Portal Switcher + Logout + Collapse */}
             <div className="px-2.5 py-3 space-y-1 shrink-0" style={{ borderTop: '1px solid var(--admin-sidebar-border)' }}>
+                <PortalSwitcher collapsed={collapsed} />
                 <button
                     onClick={() => logout()}
                     title={collapsed ? 'Logout' : undefined}
