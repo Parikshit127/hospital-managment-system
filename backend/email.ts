@@ -27,15 +27,33 @@ function getAppBaseUrl() {
 }
 
 // Create a singleton transporter instance
-const transporter = nodemailer.createTransport({
+let transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.ethereal.email',
     port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+    secure: process.env.SMTP_SECURE === 'true',
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
     },
 });
+
+/**
+ * Get a transporter — uses org-level SMTP if provided, else falls back to global .env
+ */
+function getTransporter(orgConfig?: { smtp_host?: string | null; smtp_user?: string | null; smtp_pass?: string | null }) {
+    const host = orgConfig?.smtp_host || process.env.SMTP_HOST;
+    const user = orgConfig?.smtp_user || process.env.SMTP_USER;
+    const pass = orgConfig?.smtp_pass || process.env.SMTP_PASS;
+
+    if (!host || !user) return null;
+
+    return nodemailer.createTransport({
+        host,
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: { user, pass },
+    });
+}
 
 /**
  * Generic email sending utility
@@ -49,13 +67,14 @@ export async function sendEmail({
     subject: string;
     html: string;
 }) {
-    if (!process.env.SMTP_HOST || !process.env.SMTP_USER) {
+    const t = getTransporter();
+    if (!t) {
         console.warn('⚠️ SMTP credentials are not fully configured in .env. Email skipped:', subject);
         return { success: false, error: 'SMTP not configured' };
     }
 
     try {
-        const info = await transporter.sendMail({
+        const info = await t.sendMail({
             from: `"Avani Hospital OS" <${process.env.SMTP_USER}>`,
             to,
             subject,

@@ -256,6 +256,8 @@ export default function ReceptionPage() {
             setAgeValue('');
             setPatientType('cash');
             setSelectedCorporate(null);
+            // Force Next.js to refetch server data so patient list updates
+            router.refresh();
         } else {
             toast.error(result.error || 'Registration failed');
         }

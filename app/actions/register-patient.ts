@@ -111,7 +111,14 @@ export async function registerPatient(formData: FormData) {
         let agentPatientId = null;
         let appointmentId = null;
 
-        agentPatientId = await generateUHID(db);
+        // Use org-configured UHID prefix if available
+        const orgConfig = await db.organizationConfig.findUnique({
+            where: { organizationId },
+            select: { uhid_prefix: true },
+        }).catch(() => null);
+        const uhidPrefix = orgConfig?.uhid_prefix || 'AVN';
+
+        agentPatientId = await generateUHID(db, uhidPrefix);
         appointmentId = generateAppointmentId();
 
         // 2. Create/Update Patient in DB
@@ -189,7 +196,12 @@ export async function registerPatient(formData: FormData) {
 
             // 3b. Send email with credentials
             if (rawData.email && rawData.email !== "not given") {
-                await sendWelcomeEmail(rawData.email, rawData.full_name, agentPatientId, setupLink);
+                sendWelcomeEmail(rawData.email, rawData.full_name, agentPatientId, setupLink)
+                    .then(res => {
+                        if (!res.success) console.warn('[Email] Welcome email failed:', res.error);
+                        else console.log('[Email] Welcome email sent to', rawData.email);
+                    })
+                    .catch(err => console.error('[Email] Welcome email error:', err));
             }
 
             // 3c. Send WhatsApp welcome via template

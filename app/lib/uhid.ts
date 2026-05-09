@@ -4,15 +4,32 @@
  *
  * Format: {PREFIX}-{YEAR}-{SEQUENCE}
  * Example: AVN-2026-00042
+ *
+ * Uses the highest existing sequence number to avoid collisions,
+ * not count() which breaks when records are deleted or IDs collide.
  */
 export async function generateUHID(
-    db: { oPD_REG: { count: () => Promise<number> } },
+    db: { oPD_REG: { findFirst: (args: any) => Promise<{ patient_id: string } | null> } },
     prefix: string = 'AVN'
 ): Promise<string> {
     const year = new Date().getFullYear();
-    const count = await db.oPD_REG.count();
-    const seq = String(count + 1).padStart(5, '0');
-    return `${prefix}-${year}-${seq}`;
+    const yearPrefix = `${prefix}-${year}-`;
+
+    // Find the highest existing ID for this prefix+year
+    const last = await db.oPD_REG.findFirst({
+        where: { patient_id: { startsWith: yearPrefix } },
+        orderBy: { patient_id: 'desc' },
+        select: { patient_id: true },
+    } as any);
+
+    let nextSeq = 1;
+    if (last?.patient_id) {
+        const parts = last.patient_id.split('-');
+        const lastSeq = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(lastSeq)) nextSeq = lastSeq + 1;
+    }
+
+    return `${yearPrefix}${String(nextSeq).padStart(5, '0')}`;
 }
 
 /**
