@@ -393,6 +393,51 @@ export async function ensureIPDDemoMasterData() {
             result.services = defaults.length;
         }
 
+        // Seed lab_test_inventory if empty
+        const labTestCount = await db.lab_test_inventory.count({ where: { organizationId } });
+        if (labTestCount === 0) {
+            const labDefaults = [
+                { test_name: 'Complete Blood Count (CBC)', price: 400, category: 'Haematology', sample_type: 'Blood', unit: 'cells/μL', normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'Haemoglobin', price: 150, category: 'Haematology', sample_type: 'Blood', unit: 'g/dL', normal_range_min: 12, normal_range_max: 17, tax_rate: 0 },
+                { test_name: 'Blood Sugar Fasting', price: 120, category: 'Biochemistry', sample_type: 'Blood', unit: 'mg/dL', normal_range_min: 70, normal_range_max: 100, tax_rate: 0 },
+                { test_name: 'Blood Sugar PP', price: 120, category: 'Biochemistry', sample_type: 'Blood', unit: 'mg/dL', normal_range_min: 70, normal_range_max: 140, tax_rate: 0 },
+                { test_name: 'HbA1c', price: 600, category: 'Biochemistry', sample_type: 'Blood', unit: '%', normal_range_min: 4, normal_range_max: 5.7, tax_rate: 0 },
+                { test_name: 'Liver Function Test (LFT)', price: 800, category: 'Biochemistry', sample_type: 'Blood', unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'Renal Function Test (RFT)', price: 800, category: 'Biochemistry', sample_type: 'Blood', unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'Serum Creatinine', price: 200, category: 'Biochemistry', sample_type: 'Blood', unit: 'mg/dL', normal_range_min: 0.6, normal_range_max: 1.2, tax_rate: 0 },
+                { test_name: 'Uric Acid', price: 200, category: 'Biochemistry', sample_type: 'Blood', unit: 'mg/dL', normal_range_min: 3.5, normal_range_max: 7.2, tax_rate: 0 },
+                { test_name: 'Lipid Profile', price: 700, category: 'Biochemistry', sample_type: 'Blood', unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'Thyroid Profile (T3/T4/TSH)', price: 900, category: 'Biochemistry', sample_type: 'Blood', unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'TSH', price: 400, category: 'Biochemistry', sample_type: 'Blood', unit: 'mIU/L', normal_range_min: 0.4, normal_range_max: 4.0, tax_rate: 0 },
+                { test_name: 'Urine Routine & Microscopy', price: 150, category: 'Urine', sample_type: 'Urine', unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'Urine Culture & Sensitivity', price: 500, category: 'Microbiology', sample_type: 'Urine', unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'Blood Culture', price: 800, category: 'Microbiology', sample_type: 'Blood', unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'Widal Test', price: 250, category: 'Serology', sample_type: 'Blood', unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'Dengue NS1 Antigen', price: 700, category: 'Serology', sample_type: 'Blood', unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'Malaria Antigen Test', price: 400, category: 'Serology', sample_type: 'Blood', unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'HIV 1 & 2 (ELISA)', price: 500, category: 'Serology', sample_type: 'Blood', unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'HBsAg (Hepatitis B)', price: 400, category: 'Serology', sample_type: 'Blood', unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'Pregnancy Test (Urine)', price: 150, category: 'Urine', sample_type: 'Urine', unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'ECG', price: 300, category: 'Pathology', sample_type: null, unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'X-Ray Chest PA', price: 400, category: 'Radiology', sample_type: null, unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 5 },
+                { test_name: 'Ultrasound Abdomen', price: 1200, category: 'Radiology', sample_type: null, unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 5 },
+                { test_name: 'CT Scan Head', price: 5000, category: 'Radiology', sample_type: null, unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 5 },
+                { test_name: 'MRI Brain', price: 10000, category: 'Radiology', sample_type: null, unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 5 },
+                { test_name: 'Stool Routine', price: 150, category: 'Pathology', sample_type: 'Stool', unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'Sputum AFB', price: 300, category: 'Microbiology', sample_type: 'Sputum', unit: null, normal_range_min: null, normal_range_max: null, tax_rate: 0 },
+                { test_name: 'Vitamin D (25-OH)', price: 1200, category: 'Biochemistry', sample_type: 'Blood', unit: 'ng/mL', normal_range_min: 30, normal_range_max: 100, tax_rate: 0 },
+                { test_name: 'Vitamin B12', price: 900, category: 'Biochemistry', sample_type: 'Blood', unit: 'pg/mL', normal_range_min: 200, normal_range_max: 900, tax_rate: 0 },
+            ];
+            await db.$transaction(
+                labDefaults.map((t) =>
+                    db.lab_test_inventory.create({
+                        data: { ...t, is_available: true, requires_prescription: false, organizationId },
+                    }),
+                ),
+            );
+            result.services = (result.services || 0) + labDefaults.length;
+        }
+
         // Seed ipdServiceMaster if empty (used by /admin/master/services page)
         const svcMasterCount = await db.ipdServiceMaster.count({ where: { organizationId } });
         if (svcMasterCount === 0) {

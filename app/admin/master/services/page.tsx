@@ -92,8 +92,9 @@ export default function ServiceMasterPage() {
       if (parts.length > 0) {
         toast.success(`Seeded: ${parts.join(', ')}`);
         loadServices();
+        loadLabTests();
       } else {
-        toast.success('Demo data already exists — nothing added');
+        toast.success('All demo data already exists — nothing new to add');
       }
     } else {
       toast.error(res.error || 'Seed failed');
