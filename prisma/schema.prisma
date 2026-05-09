@@ -398,11 +398,12 @@ model User {
   qualifications         String?
   organizationId         String
   is_active              Boolean  @default(true)
-  working_hours          String   @default("09:00-17:00")
-  slot_duration          Int      @default(20)
-  consultation_fee       Float    @default(500)
-  follow_up_fee          Float    @default(300)
-  createdAt              DateTime @default(now())
+  working_hours              String   @default("09:00-17:00")
+  slot_duration              Int      @default(20)
+  consultation_fee           Float    @default(500)
+  follow_up_fee              Float    @default(300)
+  max_overbooking_per_slot   Int      @default(0) // extra patients allowed beyond slot capacity
+  createdAt                  DateTime @default(now())
 
   // GAP 3 — Doctor Group Hierarchy — Senior/Junior Access
   supervisor_id          String? // Senior doctor ID
@@ -521,11 +522,16 @@ model appointments {
   reminder24Sent      Boolean   @default(false)
   slot_id             String?   @unique
 
-  // GAP 14 — Appointment Multi-Mode Differentiation + PAV Flow
-  booking_channel     String?   @default("walk_in") // call_center, patient_app, patient_portal, walk_in
-  payment_mode        String?   @default("cash") // cash, online, pav (Pay at Visit), insurance
-  is_pav              Boolean   @default(false)
-  pav_sms_sent        Boolean   @default(false)
+  // Appointment classification
+  appointment_type      String  @default("NEW_OPD") // NEW_OPD, FOLLOW_UP, EHC
+  parent_appointment_id String? // for follow-ups: links to original appointment_id
+
+  // Booking channel & payment
+  booking_channel String? @default("walk_in") // call_center, patient_app, patient_portal, walk_in
+  payment_mode    String  @default("ONLINE")  // ONLINE, PAV (pay at visit), FREE, cash, insurance
+  payment_status  String  @default("PENDING") // PENDING, PAID, WAIVED
+  is_pav          Boolean @default(false)
+  pav_sms_sent    Boolean @default(false)
 
   organization Organization @relation(fields: [organizationId], references: [id])
   patient      OPD_REG      @relation(fields: [patient_id], references: [patient_id])
@@ -536,6 +542,8 @@ model appointments {
   @@index([appointment_date])
   @@index([doctor_id])
   @@index([booking_channel])
+  @@index([appointment_type])
+  @@index([payment_mode])
 }
 
 // ========================================
@@ -1525,6 +1533,7 @@ model AppointmentSlot {
   is_available   Boolean  @default(true)
   is_booked      Boolean  @default(false)
   booked_by      String? // patient_id
+  is_free        Boolean  @default(false) // free consultation slot (no charge)
   created_at     DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])

@@ -280,6 +280,20 @@ export async function checkInPatient(appointmentId: string) {
 
         if (!appointment) return { success: false, error: 'Appointment not found' };
 
+        // PAV gate: if patient chose "Pay at Visit" and hasn't paid yet, block check-in
+        const apptAny = appointment as any;
+        if (apptAny.payment_mode === 'PAV' && apptAny.payment_status === 'PENDING') {
+            return {
+                success: false,
+                error: 'PAV_PAYMENT_REQUIRED',
+                data: {
+                    requiresPayment: true,
+                    patientName: appointment.patient?.full_name,
+                    appointmentId,
+                },
+            };
+        }
+
         // Get next token number for today for this doctor
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
@@ -615,10 +629,11 @@ export async function bookAppointment(data: {
     date: string;
     slotId?: string;
     reasonForVisit?: string;
-    // GAP 14 — Appointment Multi-Mode Differentiation + PAV Flow
     booking_channel?: 'call_center' | 'patient_app' | 'patient_portal' | 'walk_in';
-    payment_mode?: 'cash' | 'online' | 'pav' | 'insurance';
     is_pav?: boolean;
+    appointmentType?: string; // NEW_OPD | FOLLOW_UP | EHC
+    parentAppointmentId?: string; // for FOLLOW_UP
+    paymentMode?: string; // ONLINE | PAV | FREE
 }) {
     try {
         const { db, session } = await requireTenantContext();
@@ -628,20 +643,47 @@ export async function bookAppointment(data: {
         const appointmentId = `APT-${String(count + 1).padStart(6, '0')}`;
 
         let appointmentDate = new Date(data.date);
+        let slotIsFree = false;
 
         if (data.slotId) {
             const slot = await db.appointmentSlot.findUnique({
                 where: { id: data.slotId }
             });
             if (slot) {
-                // Parse slot start time assuming format HH:MM
                 const [hours, minutes] = slot.start_time.split(':').map(Number);
                 appointmentDate = new Date(data.date);
                 appointmentDate.setHours(hours, minutes, 0, 0);
+                slotIsFree = (slot as any).is_free === true;
             }
         }
 
-        const isPav = data.is_pav || data.payment_mode === 'pav';
+        // Overbooking check
+        if (data.slotId) {
+            const doctor = await db.user.findUnique({
+                where: { id: data.doctorId },
+                select: { max_overbooking_per_slot: true } as any,
+            });
+            const maxOverbook = (doctor as any)?.max_overbooking_per_slot ?? 0;
+
+            const existingCount = await db.appointments.count({
+                where: {
+                    doctor_id: data.doctorId,
+                    appointment_date: {
+                        gte: new Date(appointmentDate.getTime() - 60000),
+                        lte: new Date(appointmentDate.getTime() + 60000),
+                    },
+                    status: { notIn: ['Cancelled', 'No Show'] },
+                },
+            });
+
+            if (existingCount >= 1 + maxOverbook) {
+                return { success: false, error: `Slot is fully booked. Doctor allows ${maxOverbook} overbook(s) per slot.` };
+            }
+        }
+
+        const resolvedPaymentMode = slotIsFree ? 'FREE' : (data.paymentMode || 'ONLINE');
+        const appointmentType = data.appointmentType || 'NEW_OPD';
+        const isPav = data.is_pav || resolvedPaymentMode === 'PAV';
 
         const appointment = await db.appointments.create({
             data: {
@@ -654,9 +696,12 @@ export async function bookAppointment(data: {
                 status: 'Scheduled',
                 appointment_date: appointmentDate,
                 booking_channel: data.booking_channel || 'walk_in',
-                payment_mode: data.payment_mode || 'cash',
+                appointment_type: appointmentType,
+                parent_appointment_id: data.parentAppointmentId || null,
+                payment_mode: resolvedPaymentMode,
+                payment_status: resolvedPaymentMode === 'FREE' ? 'WAIVED' : 'PENDING',
                 is_pav: isPav,
-            },
+            } as any,
         });
 
         // Mark slot as booked if slotId provided
@@ -778,6 +823,72 @@ export async function cancelAppointment(appointmentId: string, reason: string) {
     }
 }
 
+export async function collectPAVPayment(appointmentId: string) {
+    try {
+        const { db } = await requireTenantContext();
+        await db.appointments.update({
+            where: { appointment_id: appointmentId },
+            data: { payment_status: 'PAID' } as any,
+        });
+        revalidatePath('/reception');
+        return { success: true };
+    } catch (error) {
+        console.error('collectPAVPayment Error:', error);
+        return { success: false, error: 'Failed to record payment' };
+    }
+}
+
+export async function getSlotOverbookingStatus(doctorId: string, date: string) {
+    try {
+        const { db } = await requireTenantContext();
+        const dayStart = new Date(date);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(date);
+        dayEnd.setHours(23, 59, 59, 999);
+
+        const doctor = await db.user.findUnique({
+            where: { id: doctorId },
+            select: { max_overbooking_per_slot: true, slot_duration: true } as any,
+        });
+        const maxOverbook = (doctor as any)?.max_overbooking_per_slot ?? 0;
+
+        const slots = await db.appointmentSlot.findMany({
+            where: { doctor_id: doctorId, date: { gte: dayStart, lte: dayEnd } },
+            orderBy: { start_time: 'asc' },
+        });
+
+        const result = await Promise.all(slots.map(async (slot: any) => {
+            const [h, m] = slot.start_time.split(':').map(Number);
+            const slotTime = new Date(date);
+            slotTime.setHours(h, m, 0, 0);
+            const count = await db.appointments.count({
+                where: {
+                    doctor_id: doctorId,
+                    appointment_date: {
+                        gte: new Date(slotTime.getTime() - 60000),
+                        lte: new Date(slotTime.getTime() + 60000),
+                    },
+                    status: { notIn: ['Cancelled', 'No Show'] },
+                },
+            });
+            return {
+                slotId: slot.id,
+                start_time: slot.start_time,
+                booked: count,
+                capacity: 1,
+                maxOverbook,
+                isOverbooked: count > 1,
+                isFull: count >= 1 + maxOverbook,
+            };
+        }));
+
+        return { success: true, data: result };
+    } catch (error) {
+        console.error('getSlotOverbookingStatus Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
 export async function createBulkSlots(data: {
     doctorId: string;
     startDate: string;
@@ -786,6 +897,7 @@ export async function createBulkSlots(data: {
     endTime: string;
     slotDuration: number;
     slotType?: string;
+    isFree?: boolean;
 }) {
     try {
         const { db } = await requireTenantContext();
@@ -816,6 +928,7 @@ export async function createBulkSlots(data: {
                     slot_type: data.slotType || 'scheduled',
                     is_available: true,
                     is_booked: false,
+                    is_free: data.isFree ?? false,
                 });
             }
         }

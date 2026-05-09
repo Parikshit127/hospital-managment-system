@@ -79,6 +79,7 @@ export async function bookAppointment(
     doctorId: string,
     dateStr: string,
     reason: string,
+    paymentMode: 'ONLINE' | 'PAV' | 'FREE' = 'ONLINE',
 ) {
     try {
         const session = await getPatientSession();
@@ -105,6 +106,7 @@ export async function bookAppointment(
         doctorFee = Number(doctorFee) || 0;
 
         const appointmentDate = new Date(dateStr);
+        let slotIsFree = paymentMode === 'FREE';
 
         // If it's a real slot, fetch its start_time and set the correct appointment time
         if (!slotId.startsWith("default-")) {
@@ -115,17 +117,19 @@ export async function bookAppointment(
                 const [h, m] = slot.start_time.split(":").map(Number);
                 appointmentDate.setHours(h, m, 0, 0);
             }
+            if ((slot as any)?.is_free === true) slotIsFree = true;
             await db.appointmentSlot.update({
                 where: { id: slotId },
                 data: { is_booked: true, booked_by: session.id },
             });
         }
 
+        const resolvedMode = slotIsFree ? 'FREE' : paymentMode;
+
         // Create the appointment
         const apptId = `APT-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
 
         await db.$transaction(async (tx: any) => {
-            // Create the appointment
             await tx.appointments.create({
                 data: {
                     appointment_id: apptId,
@@ -136,12 +140,13 @@ export async function bookAppointment(
                     appointment_date: appointmentDate,
                     status: 'Scheduled',
                     reason_for_visit: reason || undefined,
+                    payment_mode: resolvedMode,
+                    payment_status: resolvedMode === 'FREE' ? 'WAIVED' : resolvedMode === 'ONLINE' ? 'PENDING' : 'PENDING',
                 },
             });
 
-            // If doctor has a fee, create Invoice & Payment
-            const fee = doctorFee;
-            if (fee > 0) {
+            // Skip invoice for PAV (collected at desk) and FREE slots
+            if (resolvedMode === 'ONLINE' && doctorFee > 0) {
                 const invNum = `INV-${Date.now().toString().slice(-6)}`;
                 const recNum = `REC-${Date.now().toString().slice(-6)}`;
 
@@ -150,9 +155,9 @@ export async function bookAppointment(
                         invoice_number: invNum,
                         patient_id: session.id,
                         invoice_type: 'OPD',
-                        total_amount: fee,
-                        net_amount: fee,
-                        paid_amount: fee,
+                        total_amount: doctorFee,
+                        net_amount: doctorFee,
+                        paid_amount: doctorFee,
                         balance_due: 0,
                         status: 'Paid',
                         organizationId: session.organization_id,
@@ -161,22 +166,51 @@ export async function bookAppointment(
                                 department: doctor.specialty || 'OPD',
                                 description: `Consultation Fee - Dr. ${doctor.name}`,
                                 quantity: 1,
-                                unit_price: fee,
-                                total_price: fee,
-                                net_price: fee,
+                                unit_price: doctorFee,
+                                total_price: doctorFee,
+                                net_price: doctorFee,
                                 organizationId: session.organization_id
                             }]
                         },
                         payments: {
                             create: [{
                                 receipt_number: recNum,
-                                amount: fee,
+                                amount: doctorFee,
                                 payment_method: 'Online',
                                 payment_type: 'Consultation',
                                 status: 'Completed',
                                 organizationId: session.organization_id
                             }]
                         }
+                    }
+                });
+            }
+
+            // PAV: create unpaid invoice to collect at desk
+            if (resolvedMode === 'PAV' && doctorFee > 0) {
+                const invNum = `INV-PAV-${Date.now().toString().slice(-6)}`;
+                await tx.invoices.create({
+                    data: {
+                        invoice_number: invNum,
+                        patient_id: session.id,
+                        invoice_type: 'OPD',
+                        total_amount: doctorFee,
+                        net_amount: doctorFee,
+                        paid_amount: 0,
+                        balance_due: doctorFee,
+                        status: 'Unpaid',
+                        organizationId: session.organization_id,
+                        items: {
+                            create: [{
+                                department: doctor.specialty || 'OPD',
+                                description: `Consultation Fee - Dr. ${doctor.name} (Pay at Visit)`,
+                                quantity: 1,
+                                unit_price: doctorFee,
+                                total_price: doctorFee,
+                                net_price: doctorFee,
+                                organizationId: session.organization_id
+                            }]
+                        },
                     }
                 });
             }

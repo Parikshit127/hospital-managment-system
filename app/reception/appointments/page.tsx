@@ -10,7 +10,8 @@ import { useToast } from '@/app/components/ui/Toast';
 import {
     getAppointmentCalendar, getDoctorList, bookAppointment,
     cancelAppointment, createBulkSlots, getRegisteredPatients,
-    walkInAppointment, rescheduleAppointment, previewBulkSlots
+    walkInAppointment, rescheduleAppointment, previewBulkSlots,
+    collectPAVPayment,
 } from '@/app/actions/reception-actions';
 import { getOrCreateDailySlots } from '@/app/actions/doctor-actions';
 
@@ -31,7 +32,11 @@ export default function AppointmentsPage() {
     const [bookForm, setBookForm] = useState({
         patientSearch: '', patientId: '', doctorId: '', doctorName: '',
         department: '', date: '', slotId: '', reasonForVisit: '',
+        appointmentType: 'NEW_OPD', parentAppointmentId: '',
     });
+    // PAV payment collection
+    const [pavTarget, setPavTarget] = useState<{ appointmentId: string; patientName: string } | null>(null);
+    const [collectingPAV, setCollectingPAV] = useState(false);
     const [patientResults, setPatientResults] = useState<any[]>([]);
     const [searchingPatients, setSearchingPatients] = useState(false);
     const [booking, setBooking] = useState(false);
@@ -59,6 +64,7 @@ export default function AppointmentsPage() {
     const [bulkForm, setBulkForm] = useState({
         doctorId: '', startDate: '', endDate: '',
         startTime: '09:00', endTime: '17:00', slotDuration: 15, bufferMinutes: 5,
+        isFree: false,
     });
     const [creatingSlots, setCreatingSlots] = useState(false);
     const [slotPreview, setSlotPreview] = useState<{ count: number; days: number } | null>(null);
@@ -181,12 +187,14 @@ export default function AppointmentsPage() {
             date: bookForm.date || selectedDate,
             slotId: bookForm.slotId || undefined,
             reasonForVisit: bookForm.reasonForVisit,
+            appointmentType: bookForm.appointmentType,
+            parentAppointmentId: bookForm.parentAppointmentId || undefined,
         });
         setBooking(false);
         if (result.success) {
             toast.success('Appointment booked successfully');
             setShowBookModal(false);
-            setBookForm({ patientSearch: '', patientId: '', doctorId: '', doctorName: '', department: '', date: '', slotId: '', reasonForVisit: '' });
+            setBookForm({ patientSearch: '', patientId: '', doctorId: '', doctorName: '', department: '', date: '', slotId: '', reasonForVisit: '', appointmentType: 'NEW_OPD', parentAppointmentId: '' });
             loadData();
         } else {
             toast.error(result.error || 'Failed to book appointment');
@@ -249,6 +257,7 @@ export default function AppointmentsPage() {
             startTime: bulkForm.startTime,
             endTime: bulkForm.endTime,
             slotDuration: bulkForm.slotDuration,
+            isFree: bulkForm.isFree,
         });
         setCreatingSlots(false);
         if (result.success) {
@@ -260,6 +269,20 @@ export default function AppointmentsPage() {
         }
     };
 
+    const handleCollectPAV = async () => {
+        if (!pavTarget) return;
+        setCollectingPAV(true);
+        const res = await collectPAVPayment(pavTarget.appointmentId);
+        setCollectingPAV(false);
+        if (res.success) {
+            toast.success('Payment collected. Patient can now check in.');
+            setPavTarget(null);
+            loadData();
+        } else {
+            toast.error('Failed to record payment');
+        }
+    };
+
     const getStatusColor = (status: string) => {
         const map: Record<string, string> = {
             'Scheduled': 'bg-blue-50 text-blue-700 border-blue-200',
@@ -268,8 +291,23 @@ export default function AppointmentsPage() {
             'Completed': 'bg-emerald-50 text-emerald-700 border-emerald-200',
             'Cancelled': 'bg-red-50 text-red-700 border-red-200',
             'Pending': 'bg-amber-50 text-amber-700 border-amber-200',
+            'No Show': 'bg-gray-100 text-gray-500 border-gray-200',
         };
         return map[status] || 'bg-gray-100 text-gray-500';
+    };
+
+    const getTypeColor = (type: string) => {
+        const map: Record<string, string> = {
+            'NEW_OPD': 'bg-blue-50 text-blue-600',
+            'FOLLOW_UP': 'bg-purple-50 text-purple-600',
+            'EHC': 'bg-amber-50 text-amber-700',
+        };
+        return map[type] || 'bg-gray-100 text-gray-500';
+    };
+
+    const getTypeLabel = (type: string) => {
+        const map: Record<string, string> = { 'NEW_OPD': 'New', 'FOLLOW_UP': 'Follow-up', 'EHC': 'EHC' };
+        return map[type] || type;
     };
 
     const headerActions = (
@@ -375,23 +413,49 @@ export default function AppointmentsPage() {
                                         </td>
                                         <td className="px-4 py-3 text-gray-500 text-xs max-w-[150px] truncate">{appt.reason_for_visit || '-'}</td>
                                         <td className="px-4 py-3">
-                                            <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full border ${getStatusColor(appt.status)}`}>
-                                                {appt.status}
-                                            </span>
+                                            <div className="flex flex-col gap-1">
+                                                <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full border ${getStatusColor(appt.status)}`}>
+                                                    {appt.status}
+                                                </span>
+                                                {appt.appointment_type && appt.appointment_type !== 'NEW_OPD' && (
+                                                    <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full ${getTypeColor(appt.appointment_type)}`}>
+                                                        {getTypeLabel(appt.appointment_type)}
+                                                    </span>
+                                                )}
+                                                {appt.payment_mode === 'PAV' && (
+                                                    <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full ${appt.payment_status === 'PAID' ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
+                                                        {appt.payment_status === 'PAID' ? 'PAV Paid' : 'Pay at Visit'}
+                                                    </span>
+                                                )}
+                                                {appt.payment_mode === 'FREE' && (
+                                                    <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full bg-teal-50 text-teal-600">
+                                                        Free
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-4 py-3">
-                                            {appt.status !== 'Cancelled' && appt.status !== 'Completed' && (
-                                                <div className="flex items-center gap-2">
-                                                    <button onClick={() => { setRescheduleTarget(appt.appointment_id); setRescheduleDate(''); setRescheduleSlotId(''); }}
-                                                        className="text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1">
-                                                        <RotateCcw className="h-3 w-3" /> Reschedule
+                                            <div className="flex flex-col gap-1.5">
+                                                {appt.status !== 'Cancelled' && appt.status !== 'Completed' && (
+                                                    <div className="flex items-center gap-2">
+                                                        <button onClick={() => { setRescheduleTarget(appt.appointment_id); setRescheduleDate(''); setRescheduleSlotId(''); }}
+                                                            className="text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1">
+                                                            <RotateCcw className="h-3 w-3" /> Reschedule
+                                                        </button>
+                                                        <button onClick={() => setCancelTarget(appt.appointment_id)}
+                                                            className="text-xs text-red-500 hover:text-red-700 font-medium">
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                {appt.payment_mode === 'PAV' && appt.payment_status === 'PENDING' && appt.status !== 'Cancelled' && (
+                                                    <button
+                                                        onClick={() => setPavTarget({ appointmentId: appt.appointment_id, patientName: appt.patient?.full_name || 'Patient' })}
+                                                        className="text-xs text-orange-600 hover:text-orange-800 font-bold bg-orange-50 hover:bg-orange-100 px-2 py-1 rounded-lg border border-orange-200">
+                                                        Collect Payment
                                                     </button>
-                                                    <button onClick={() => setCancelTarget(appt.appointment_id)}
-                                                        className="text-xs text-red-500 hover:text-red-700 font-medium">
-                                                        Cancel
-                                                    </button>
-                                                </div>
-                                            )}
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -412,11 +476,13 @@ export default function AppointmentsPage() {
                                             ? 'bg-gray-100 text-gray-400 border-gray-200'
                                             : slot.slot_type === 'blocked'
                                                 ? 'bg-red-50 text-red-400 border-red-200'
-                                                : 'bg-teal-50 text-teal-700 border-teal-200 cursor-pointer hover:bg-teal-100'
+                                                : slot.is_free
+                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 cursor-pointer hover:bg-emerald-100'
+                                                    : 'bg-teal-50 text-teal-700 border-teal-200 cursor-pointer hover:bg-teal-100'
                                             }`}>
-                                        {slot.start_time} - {slot.end_time}
-                                        <span className="block text-[9px] mt-0.5 opacity-60">
-                                            {slot.is_booked ? 'Booked' : slot.slot_type === 'blocked' ? 'Blocked' : 'Open'}
+                                        {slot.start_time}
+                                        <span className="block text-[9px] mt-0.5 opacity-70">
+                                            {slot.is_booked ? 'Booked' : slot.slot_type === 'blocked' ? 'Blocked' : slot.is_free ? 'Free' : 'Open'}
                                         </span>
                                     </div>
                                 ))}
@@ -510,14 +576,38 @@ export default function AppointmentsPage() {
                                         <div className="text-xs text-amber-700 bg-amber-50 p-2.5 rounded-xl border border-amber-200">No pre-defined slots available. Will book as a Walk-in appointment.</div>
                                     ) : (
                                         <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto p-1">
-                                            {availableSlots.map(slot => (
+                                            {availableSlots.map((slot: any) => (
                                                 <button key={slot.id} onClick={() => setBookForm(f => ({ ...f, slotId: slot.id }))}
-                                                    className={`py-2 text-xs font-bold rounded-xl border transition-all ${bookForm.slotId === slot.id ? 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white border-transparent shadow-md' : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-teal-400 hover:text-teal-600 hover:bg-white'}`}>
+                                                    className={`py-2 text-xs font-bold rounded-xl border transition-all ${bookForm.slotId === slot.id ? 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white border-transparent shadow-md' : slot.is_free ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:border-emerald-400' : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-teal-400 hover:text-teal-600 hover:bg-white'}`}>
                                                     {slot.start_time}
+                                                    {slot.is_free && <span className="block text-[8px] mt-0.5 font-normal opacity-80">Free</span>}
                                                 </button>
                                             ))}
                                         </div>
                                     )}
+                                </div>
+                            )}
+                            {/* Appointment Type */}
+                            <div>
+                                <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Appointment Type</label>
+                                <div className="flex gap-2">
+                                    {[{ v: 'NEW_OPD', l: 'New OPD' }, { v: 'FOLLOW_UP', l: 'Follow-up' }, { v: 'EHC', l: 'EHC' }].map(t => (
+                                        <button key={t.v} type="button"
+                                            onClick={() => setBookForm(f => ({ ...f, appointmentType: t.v, parentAppointmentId: t.v !== 'FOLLOW_UP' ? '' : f.parentAppointmentId }))}
+                                            className={`flex-1 py-2 text-xs font-bold rounded-xl border transition-all ${bookForm.appointmentType === t.v ? 'bg-teal-500 text-white border-transparent' : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-teal-400'}`}>
+                                            {t.l}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            {/* Parent appointment for follow-ups */}
+                            {bookForm.appointmentType === 'FOLLOW_UP' && (
+                                <div>
+                                    <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Original Appointment ID <span className="text-gray-400 font-normal">(optional)</span></label>
+                                    <input type="text" value={bookForm.parentAppointmentId}
+                                        onChange={e => setBookForm(f => ({ ...f, parentAppointmentId: e.target.value }))}
+                                        placeholder="e.g., APT-000123"
+                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500" />
                                 </div>
                             )}
                             {/* Reason */}
@@ -632,6 +722,19 @@ export default function AppointmentsPage() {
                                 </select>
                             </div>
 
+                            {/* Free Slot Toggle */}
+                            <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-xl border border-gray-200">
+                                <div>
+                                    <p className="text-xs font-semibold text-gray-700">Free Consultation Slots</p>
+                                    <p className="text-[10px] text-gray-400 mt-0.5">No charge for patients booking these slots</p>
+                                </div>
+                                <button type="button"
+                                    onClick={() => setBulkForm(f => ({ ...f, isFree: !f.isFree }))}
+                                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${bulkForm.isFree ? 'bg-teal-500' : 'bg-gray-300'}`}>
+                                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${bulkForm.isFree ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                                </button>
+                            </div>
+
                             {/* Slot Preview */}
                             {slotPreview && (
                                 <div className="bg-teal-50 border border-teal-200 rounded-xl px-4 py-3">
@@ -723,6 +826,39 @@ export default function AppointmentsPage() {
                                 {processingWalkIn ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
                                 Register Walk-in
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* PAV Payment Collection Modal */}
+            {pavTarget && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setPavTarget(null)} />
+                    <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-sm">
+                        <div className="p-6 space-y-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-orange-50 rounded-xl">
+                                    <AlertCircle className="h-5 w-5 text-orange-500" />
+                                </div>
+                                <div>
+                                    <h2 className="text-base font-bold text-gray-900">Collect Payment</h2>
+                                    <p className="text-xs text-gray-500 mt-0.5">Pay at Visit — collect before check-in</p>
+                                </div>
+                            </div>
+                            <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 text-sm text-orange-800">
+                                Patient <span className="font-bold">{pavTarget.patientName}</span> chose "Pay at Visit". Collect consultation fee at the counter before proceeding.
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setPavTarget(null)} className="flex-1 py-2 bg-gray-100 text-gray-600 text-sm font-bold rounded-xl">
+                                    Later
+                                </button>
+                                <button onClick={handleCollectPAV} disabled={collectingPAV}
+                                    className="flex-1 py-2 bg-orange-500 text-white text-sm font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
+                                    {collectingPAV ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                                    Mark as Paid
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

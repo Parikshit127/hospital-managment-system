@@ -57,9 +57,12 @@ export default function BookAppointmentPage() {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
+  const [selectedSlotIsFree, setSelectedSlotIsFree] = useState(false);
 
   // Step 3
   const [reason, setReason] = useState("");
+  const [paymentMode, setPaymentMode] = useState<'ONLINE' | 'PAV'>('ONLINE');
+  const [bookingDirectly, setBookingDirectly] = useState(false);
 
   // Step 4
   const [booking, setBooking] = useState(false);
@@ -137,10 +140,38 @@ export default function BookAppointmentPage() {
       .slice(0, 2);
   }
 
-  // Handle booking confirmation
+  // Handle booking confirmation — PAV and free slots skip Razorpay
   async function handleConfirmBooking() {
     setBookingError("");
     setPaymentError("");
+
+    const effectiveMode = selectedSlotIsFree ? 'FREE' : paymentMode;
+
+    if (effectiveMode === 'PAV' || effectiveMode === 'FREE') {
+      if (!selectedDoctor || !selectedSlot || !selectedDate) return;
+      setBookingDirectly(true);
+      try {
+        const res = await bookAppointment(
+          selectedSlot.id,
+          selectedDoctor.id,
+          selectedDate,
+          reason,
+          effectiveMode,
+        );
+        if (res.success && res.data) {
+          setBookingResult({ appointmentId: res.data.appointmentId });
+          setStep(5);
+        } else {
+          setBookingError(res.error || 'Booking failed. Please try again.');
+        }
+      } catch {
+        setBookingError('Something went wrong. Please try again.');
+      } finally {
+        setBookingDirectly(false);
+      }
+      return;
+    }
+
     setStep(4);
   }
 
@@ -500,23 +531,32 @@ export default function BookAppointmentPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                  {slots.map((slot) => {
+                  {slots.map((slot: any) => {
                     const isSelected = selectedSlot?.id === slot.id;
+                    const isFreeSlot = slot.is_free === true;
                     return (
                       <button
                         key={slot.id}
-                        onClick={() =>
-                          slot.is_available && setSelectedSlot(slot)
-                        }
+                        onClick={() => {
+                          if (slot.is_available) {
+                            setSelectedSlot(slot);
+                            setSelectedSlotIsFree(isFreeSlot);
+                          }
+                        }}
                         disabled={!slot.is_available}
                         className={`py-3 px-3 rounded-xl text-sm font-bold border-2 transition-all ${isSelected
                             ? "bg-emerald-500 text-white border-emerald-500 shadow-md"
                             : slot.is_available
-                              ? "bg-white border-emerald-200 text-emerald-700 hover:border-emerald-400 hover:bg-emerald-50"
+                              ? isFreeSlot
+                                ? "bg-teal-50 border-teal-300 text-teal-700 hover:border-teal-500"
+                                : "bg-white border-emerald-200 text-emerald-700 hover:border-emerald-400 hover:bg-emerald-50"
                               : "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
                           }`}
                       >
                         {slot.start_time}
+                        {isFreeSlot && !isSelected && (
+                          <span className="block text-[9px] font-normal text-teal-600 mt-0.5">Free</span>
+                        )}
                       </button>
                     );
                   })}
@@ -651,6 +691,45 @@ export default function BookAppointmentPage() {
             </div>
           </div>
 
+          {/* Payment Mode — only shown for paid slots */}
+          {!selectedSlotIsFree && (
+            <div className="bg-white border border-gray-100 rounded-2xl p-6">
+              <h3 className="text-sm font-bold text-gray-700 mb-3">Payment Method</h3>
+              <div className="space-y-2">
+                {([
+                  { value: 'ONLINE', label: 'Pay Now (Online)', desc: 'Pay securely via Razorpay — card, UPI, net banking' },
+                  { value: 'PAV', label: 'Pay at Visit', desc: 'Pay at the reception counter when you arrive' },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setPaymentMode(opt.value)}
+                    className={`w-full flex items-start gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${paymentMode === opt.value ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:border-gray-300 bg-white'}`}
+                  >
+                    <div className={`mt-0.5 h-4 w-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${paymentMode === opt.value ? 'border-emerald-500' : 'border-gray-300'}`}>
+                      {paymentMode === opt.value && <div className="h-2 w-2 rounded-full bg-emerald-500" />}
+                    </div>
+                    <div>
+                      <p className={`text-sm font-bold ${paymentMode === opt.value ? 'text-emerald-800' : 'text-gray-700'}`}>{opt.label}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {selectedSlotIsFree && (
+            <div className="bg-teal-50 border border-teal-200 rounded-2xl px-5 py-4 flex items-center gap-3">
+              <div className="h-8 w-8 bg-teal-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                <CreditCard className="h-4 w-4 text-teal-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-teal-800">Free Consultation Slot</p>
+                <p className="text-xs text-teal-600 mt-0.5">No payment required for this appointment.</p>
+              </div>
+            </div>
+          )}
+
           {bookingError && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700 font-medium">
               {bookingError}
@@ -661,18 +740,27 @@ export default function BookAppointmentPage() {
           <div className="flex justify-between pt-2">
             <button
               onClick={() => setStep(2)}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-bold px-4 py-3 rounded-xl hover:bg-gray-100 transition"
+              disabled={bookingDirectly}
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-bold px-4 py-3 rounded-xl hover:bg-gray-100 transition disabled:opacity-50"
             >
               <ChevronLeft className="h-4 w-4" />
               Back
             </button>
             <button
               onClick={handleConfirmBooking}
-              disabled={false}
+              disabled={bookingDirectly}
               className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-8 py-3 rounded-xl transition disabled:opacity-50 shadow-lg shadow-emerald-500/20"
             >
-              <CreditCard className="h-4 w-4" />
-              Continue to Payment
+              {bookingDirectly ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CreditCard className="h-4 w-4" />
+              )}
+              {bookingDirectly
+                ? 'Booking...'
+                : selectedSlotIsFree || paymentMode === 'PAV'
+                  ? 'Confirm Booking'
+                  : 'Continue to Payment'}
             </button>
           </div>
         </div>
@@ -852,6 +940,22 @@ export default function BookAppointmentPage() {
               </div>
             )}
           </div>
+
+          {/* PAV reminder */}
+          {!selectedSlotIsFree && paymentMode === 'PAV' && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 max-w-sm mx-auto text-left">
+              <p className="text-sm font-bold text-amber-800">Payment Reminder</p>
+              <p className="text-xs text-amber-700 mt-1">
+                You chose <span className="font-bold">Pay at Visit</span>. Please pay the consultation fee at the reception counter when you arrive.
+              </p>
+            </div>
+          )}
+          {selectedSlotIsFree && (
+            <div className="bg-teal-50 border border-teal-200 rounded-2xl px-5 py-4 max-w-sm mx-auto text-left">
+              <p className="text-sm font-bold text-teal-800">Free Appointment</p>
+              <p className="text-xs text-teal-700 mt-1">No payment is required for this consultation slot.</p>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
