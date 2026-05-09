@@ -13,6 +13,10 @@ import {
     resetUserPassword, toggleUserActive
 } from '@/app/actions/admin-actions';
 
+const sanitizeName = (value: string) => value.replace(/[^a-zA-Z\s.'-]/g, '');
+const sanitizePhone = (value: string) => value.replace(/\D/g, '').slice(0, 10);
+const sanitizeUsername = (value: string) => value.toLowerCase().replace(/[^a-z0-9._-]/g, '');
+
 const ROLES = [
     { value: 'admin', label: 'Administrator', icon: Shield },
     { value: 'doctor', label: 'Doctor', icon: Stethoscope },
@@ -429,7 +433,8 @@ export default function StaffManagement() {
                             <div>
                                 <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Full Name *</label>
                                 <input
-                                    type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+                                    type="text" value={form.name} onChange={e => setForm({ ...form, name: sanitizeName(e.target.value) })}
+                                    maxLength={60}
                                     className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                                     placeholder="Dr. John Smith"
                                 />
@@ -438,7 +443,8 @@ export default function StaffManagement() {
                                 <div>
                                     <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Username *</label>
                                     <input
-                                        type="text" value={form.username} onChange={e => setForm({ ...form, username: e.target.value })}
+                                        type="text" value={form.username} onChange={e => setForm({ ...form, username: sanitizeUsername(e.target.value) })}
+                                        maxLength={24}
                                         className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                                         placeholder="doc6"
                                     />
@@ -486,7 +492,7 @@ export default function StaffManagement() {
                                 <div>
                                     <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Email</label>
                                     <input
-                                        type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                                        type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value.trim() })}
                                         className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                                         placeholder="john@hospital.com"
                                     />
@@ -494,9 +500,12 @@ export default function StaffManagement() {
                                 <div>
                                     <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Phone</label>
                                     <input
-                                        type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
+                                        type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: sanitizePhone(e.target.value) })}
+                                        inputMode="numeric"
+                                        maxLength={10}
+                                        pattern="[0-9]{10}"
                                         className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
-                                        placeholder="+91 98765 43210"
+                                        placeholder="9876543210"
                                     />
                                 </div>
                             </div>
@@ -534,7 +543,8 @@ export default function StaffManagement() {
                             <div>
                                 <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Full Name</label>
                                 <input
-                                    type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+                                    type="text" value={form.name} onChange={e => setForm({ ...form, name: sanitizeName(e.target.value) })}
+                                    maxLength={60}
                                     className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                                 />
                             </div>
@@ -571,14 +581,17 @@ export default function StaffManagement() {
                                 <div>
                                     <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Email</label>
                                     <input
-                                        type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                                        type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value.trim() })}
                                         className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Phone</label>
                                     <input
-                                        type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
+                                        type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: sanitizePhone(e.target.value) })}
+                                        inputMode="numeric"
+                                        maxLength={10}
+                                        pattern="[0-9]{10}"
                                         className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                                     />
                                 </div>

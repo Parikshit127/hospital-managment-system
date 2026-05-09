@@ -67,6 +67,7 @@ const PATIENT_TYPES = [
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 const RELATIONSHIPS = ['Spouse', 'Parent', 'Child', 'Sibling', 'Friend', 'Other'] as const;
+const sanitizeName = (value: string) => value.replace(/[^a-zA-Z\s.'-]/g, '');
 
 function calculateAge(dob: string): string {
     if (!dob) return '';
@@ -492,6 +493,9 @@ export default function ReceptionPage() {
                                                 <input
                                                     name="full_name"
                                                     required
+                                                    maxLength={60}
+                                                    pattern="[A-Za-z\s.'-]{2,60}"
+                                                    onChange={(e) => { e.target.value = sanitizeName(e.target.value); }}
                                                     className={inputWithIconClass}
                                                     placeholder="e.g. Rahul Kumar"
                                                 />
@@ -516,6 +520,9 @@ export default function ReceptionPage() {
                                                     <input
                                                         name="phone"
                                                         required
+                                                        type="tel"
+                                                        inputMode="numeric"
+                                                        pattern="[0-9]{10}"
                                                         maxLength={10}
                                                         onBlur={handlePhoneBlur}
                                                         className="w-full bg-white border border-gray-300 rounded-r-xl pl-10 pr-24 py-3.5 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/10 outline-none transition-all"
@@ -661,6 +668,8 @@ export default function ReceptionPage() {
                                                 <label className={labelClass}>Contact Name</label>
                                                 <input
                                                     name="emergency_contact_name"
+                                                    maxLength={60}
+                                                    onChange={(e) => { e.target.value = sanitizeName(e.target.value); }}
                                                     className={inputClass}
                                                     placeholder="Full name"
                                                 />
@@ -669,6 +678,9 @@ export default function ReceptionPage() {
                                                 <label className={labelClass}>Contact Phone</label>
                                                 <input
                                                     name="emergency_contact_phone"
+                                                    type="tel"
+                                                    inputMode="numeric"
+                                                    pattern="[0-9]{10}"
                                                     className={inputClass}
                                                     placeholder="10-digit mobile"
                                                     maxLength={10}

@@ -63,6 +63,9 @@ export default function KioskPage() {
                                     type="tel"
                                     value={phone}
                                     onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                                    inputMode="numeric"
+                                    maxLength={10}
+                                    pattern="[0-9]{10}"
                                     onKeyDown={handleKey}
                                     placeholder="e.g. 9876543210"
                                     autoFocus

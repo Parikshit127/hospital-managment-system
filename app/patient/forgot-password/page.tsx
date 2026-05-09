@@ -236,6 +236,9 @@ export default function ForgotPasswordPage() {
                                             type="tel"
                                             value={phone}
                                             onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                                            inputMode="numeric"
+                                            maxLength={10}
+                                            pattern="[0-9]{10}"
                                             placeholder="10-digit phone number"
                                             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-r-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition"
                                         />

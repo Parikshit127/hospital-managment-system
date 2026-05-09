@@ -7,6 +7,10 @@ import { UserPlus, Loader2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { createEmployee } from '@/app/actions/hr-actions';
 
+const sanitizeName = (value: string) => value.replace(/[^a-zA-Z\s.'-]/g, '');
+const sanitizePhone = (value: string) => value.replace(/\D/g, '').slice(0, 10);
+const sanitizeMoney = (value: string) => value.replace(/[^\d.]/g, '');
+
 export default function NewEmployeePage() {
     const router = useRouter();
     const [saving, setSaving] = useState(false);
@@ -64,14 +68,16 @@ export default function NewEmployeePage() {
                         <div>
                             <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Name *</label>
                             <input type="text" required value={form.name}
-                                onChange={e => setForm({ ...form, name: e.target.value })}
+                                onChange={e => setForm({ ...form, name: sanitizeName(e.target.value) })}
+                                maxLength={60}
                                 className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
                                 placeholder="Full name" />
                         </div>
                         <div>
                             <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Designation *</label>
                             <input type="text" required value={form.designation}
-                                onChange={e => setForm({ ...form, designation: e.target.value })}
+                                onChange={e => setForm({ ...form, designation: sanitizeName(e.target.value) })}
+                                maxLength={50}
                                 className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
                                 placeholder="e.g. Nurse, Technician" />
                         </div>
@@ -97,14 +103,20 @@ export default function NewEmployeePage() {
                         <div>
                             <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Basic Salary</label>
                             <input type="number" value={form.salaryBasic}
-                                onChange={e => setForm({ ...form, salaryBasic: e.target.value })}
+                                onChange={e => setForm({ ...form, salaryBasic: sanitizeMoney(e.target.value) })}
+                                min="0"
+                                step="0.01"
+                                inputMode="decimal"
                                 className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
                                 placeholder="0" />
                         </div>
                         <div>
                             <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Phone</label>
                             <input type="tel" value={form.phone}
-                                onChange={e => setForm({ ...form, phone: e.target.value })}
+                                onChange={e => setForm({ ...form, phone: sanitizePhone(e.target.value) })}
+                                inputMode="numeric"
+                                pattern="[0-9]{10}"
+                                maxLength={10}
                                 className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
                                 placeholder="Optional" />
                         </div>

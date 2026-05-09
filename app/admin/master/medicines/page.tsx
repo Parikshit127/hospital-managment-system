@@ -9,6 +9,10 @@ import {
 } from '@/app/actions/medicine-master-actions';
 import MasterImportButton from '@/app/components/master/MasterImportButton';
 
+const sanitizeMoney = (value: string) => value.replace(/[^\d.]/g, '');
+const sanitizeInteger = (value: string) => value.replace(/\D/g, '');
+const sanitizeText = (value: string) => value.replace(/[^a-zA-Z0-9\s./,+()%-]/g, '');
+
 const PAGE_LIMIT = 25;
 const EMPTY_MED = {
   brand_name: '', generic_name: '', category: '', manufacturer: '',
@@ -316,7 +320,24 @@ export default function MedicineMasterPage() {
                   <input
                     type={f.type} required={f.required}
                     value={medForm[f.k] ?? ''}
-                    onChange={e => setMedForm((p: any) => ({ ...p, [f.k]: e.target.value }))}
+                    onChange={e => {
+                      let value = e.target.value;
+                      if (f.k === 'mrp' || f.k === 'purchase_price' || f.k === 'selling_price') value = sanitizeMoney(value);
+                      if (f.k === 'gst_percent') value = sanitizeMoney(value);
+                      if (f.k === 'min_threshold') value = sanitizeInteger(value);
+                      if (f.k === 'brand_name' || f.k === 'generic_name' || f.k === 'category' || f.k === 'manufacturer' || f.k === 'form' || f.k === 'strength') {
+                        value = sanitizeText(value);
+                      }
+                      if (f.k === 'hsn_sac_code') value = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+                      setMedForm((p: any) => ({ ...p, [f.k]: value }));
+                    }}
+                    inputMode={f.k === 'mrp' || f.k === 'purchase_price' || f.k === 'selling_price' || f.k === 'gst_percent' || f.k === 'min_threshold' ? 'decimal' : undefined}
+                    min={f.k === 'mrp' || f.k === 'purchase_price' || f.k === 'selling_price' || f.k === 'min_threshold' ? 0 : f.k === 'gst_percent' ? 0 : undefined}
+                    max={f.k === 'gst_percent' ? 100 : undefined}
+                    step={f.k === 'mrp' || f.k === 'purchase_price' || f.k === 'selling_price' || f.k === 'gst_percent' ? '0.01' : f.k === 'min_threshold' ? '1' : undefined}
+                    maxLength={f.k === 'hsn_sac_code' ? 12 : undefined}
+                    pattern={f.k === 'hsn_sac_code' ? '[A-Z0-9]{4,12}' : undefined}
+                    title={f.k === 'hsn_sac_code' ? 'HSN/SAC should be 4-12 alphanumeric characters' : undefined}
                     className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   />
                 </div>
@@ -420,7 +441,20 @@ export default function MedicineMasterPage() {
                           <input
                             type={f.type} required={f.required}
                             value={batchForm[f.k] ?? ''}
-                            onChange={e => setBatchForm((p: any) => ({ ...p, [f.k]: e.target.value }))}
+                            onChange={e => {
+                              let value = e.target.value;
+                              if (f.k === 'current_stock') value = sanitizeInteger(value);
+                              if (f.k === 'cost_price') value = sanitizeMoney(value);
+                              if (f.k === 'rack_location' || f.k === 'supplier_name') value = sanitizeText(value);
+                              if (f.k === 'batch_no') value = value.toUpperCase().replace(/[^A-Z0-9/-]/g, '').slice(0, 24);
+                              setBatchForm((p: any) => ({ ...p, [f.k]: value }));
+                            }}
+                            inputMode={f.k === 'current_stock' || f.k === 'cost_price' ? 'decimal' : undefined}
+                            min={f.k === 'current_stock' || f.k === 'cost_price' ? 0 : undefined}
+                            step={f.k === 'cost_price' ? '0.01' : f.k === 'current_stock' ? '1' : undefined}
+                            maxLength={f.k === 'batch_no' ? 24 : undefined}
+                            pattern={f.k === 'batch_no' ? '[A-Z0-9/-]{2,24}' : undefined}
+                            title={f.k === 'batch_no' ? 'Use letters, numbers, slash or hyphen' : undefined}
                             className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                           />
                         </div>

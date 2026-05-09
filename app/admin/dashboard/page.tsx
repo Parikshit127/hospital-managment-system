@@ -19,6 +19,10 @@ import {
 import { getPatientQueue } from '@/app/actions/doctor-actions';
 import { getAllModuleStatuses, toggleModule } from '@/app/actions/module-config-actions';
 
+const sanitizeName = (value: string) => value.replace(/[^a-zA-Z\s.'-]/g, '');
+const sanitizePhone = (value: string) => value.replace(/\D/g, '').slice(0, 10);
+const sanitizeUsername = (value: string) => value.toLowerCase().replace(/[^a-z0-9._-]/g, '');
+
 const DOCTOR_SPECIALTIES = [
     'General Medicine',
     'Cardiology',
@@ -876,7 +880,8 @@ export default function AdminDashboard() {
                                     <div>
                                         <label className="block text-[10px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--admin-text-muted)' }}>Doctor Name *</label>
                                         <input type="text" value={doctorForm.name}
-                                            onChange={e => setDoctorForm({ ...doctorForm, name: e.target.value })}
+                                            onChange={e => setDoctorForm({ ...doctorForm, name: sanitizeName(e.target.value) })}
+                                            maxLength={60}
                                             placeholder="Dr. John Smith"
                                             className="w-full px-3 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-1"
                                             style={{ borderColor: 'var(--admin-border)', color: 'var(--admin-text)', background: 'var(--admin-bg)' }}
@@ -886,7 +891,8 @@ export default function AdminDashboard() {
                                         <div>
                                             <label className="block text-[10px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--admin-text-muted)' }}>Username *</label>
                                             <input type="text" value={doctorForm.username}
-                                                onChange={e => setDoctorForm({ ...doctorForm, username: e.target.value })}
+                                                onChange={e => setDoctorForm({ ...doctorForm, username: sanitizeUsername(e.target.value) })}
+                                                maxLength={24}
                                                 placeholder="doc_new"
                                                 className="w-full px-3 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-1"
                                                 style={{ borderColor: 'var(--admin-border)', color: 'var(--admin-text)', background: 'var(--admin-bg)' }}
@@ -917,8 +923,11 @@ export default function AdminDashboard() {
                                         <div>
                                             <label className="block text-[10px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--admin-text-muted)' }}>Phone</label>
                                             <input type="tel" value={doctorForm.phone}
-                                                onChange={e => setDoctorForm({ ...doctorForm, phone: e.target.value })}
-                                                placeholder="+91 98765 43210"
+                                                onChange={e => setDoctorForm({ ...doctorForm, phone: sanitizePhone(e.target.value) })}
+                                                inputMode="numeric"
+                                                maxLength={10}
+                                                pattern="[0-9]{10}"
+                                                placeholder="9876543210"
                                                 className="w-full px-3 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-1"
                                                 style={{ borderColor: 'var(--admin-border)', color: 'var(--admin-text)', background: 'var(--admin-bg)' }}
                                             />

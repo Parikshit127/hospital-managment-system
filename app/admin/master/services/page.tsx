@@ -11,6 +11,10 @@ import {
 import { ensureIPDDemoMasterData } from '@/app/actions/ipd-billing-helpers';
 import MasterImportButton from '@/app/components/master/MasterImportButton';
 
+const sanitizeMoney = (value: string) => value.replace(/[^\d.]/g, '');
+const sanitizeInteger = (value: string) => value.replace(/\D/g, '');
+const sanitizeText = (value: string) => value.replace(/[^a-zA-Z0-9\s./,+()%-]/g, '');
+
 const PAGE_LIMIT = 25;
 const SERVICE_CATEGORIES = ['OPD Consultation', 'ICU', 'Procedure', 'Room', 'Nursing', 'Diet', 'Consumable', 'Misc'] as const;
 
@@ -375,13 +379,17 @@ export default function ServiceMasterPage() {
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Service Code *</label>
                     <input type="text" required value={svcForm.service_code}
-                      onChange={e => setSvcForm((p: any) => ({ ...p, service_code: e.target.value }))}
+                      onChange={e => setSvcForm((p: any) => ({ ...p, service_code: e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 30) }))}
+                      maxLength={30}
+                      pattern="[A-Z0-9_-]{2,30}"
+                      title="Use uppercase letters, numbers, underscore or hyphen"
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Service Name *</label>
                     <input type="text" required value={svcForm.service_name}
-                      onChange={e => setSvcForm((p: any) => ({ ...p, service_name: e.target.value }))}
+                      onChange={e => setSvcForm((p: any) => ({ ...p, service_name: sanitizeText(e.target.value) }))}
+                      maxLength={100}
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   <div>
@@ -395,19 +403,23 @@ export default function ServiceMasterPage() {
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Default Rate (₹) *</label>
                     <input type="number" required min={0} step="0.01" value={svcForm.default_rate}
-                      onChange={e => setSvcForm((p: any) => ({ ...p, default_rate: e.target.value }))}
+                      onChange={e => setSvcForm((p: any) => ({ ...p, default_rate: sanitizeMoney(e.target.value) }))}
+                      inputMode="decimal"
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">HSN/SAC Code</label>
                     <input type="text" value={svcForm.hsn_sac_code}
-                      onChange={e => setSvcForm((p: any) => ({ ...p, hsn_sac_code: e.target.value }))}
+                      onChange={e => setSvcForm((p: any) => ({ ...p, hsn_sac_code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) }))}
+                      maxLength={12}
+                      pattern="[A-Z0-9]{4,12}"
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Tax Rate (%)</label>
-                    <input type="number" min={0} step="0.01" value={svcForm.tax_rate}
-                      onChange={e => setSvcForm((p: any) => ({ ...p, tax_rate: e.target.value }))}
+                    <input type="number" min={0} max={100} step="0.01" value={svcForm.tax_rate}
+                      onChange={e => setSvcForm((p: any) => ({ ...p, tax_rate: sanitizeMoney(e.target.value) }))}
+                      inputMode="decimal"
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   <label className="col-span-2 flex items-center gap-2 text-sm">
@@ -504,31 +516,33 @@ export default function ServiceMasterPage() {
                   <div className="col-span-2">
                     <label className="block text-xs font-bold text-gray-600 mb-1">Test Name *</label>
                     <input type="text" required value={labForm.test_name}
-                      onChange={e => setLabForm((p: any) => ({ ...p, test_name: e.target.value }))}
+                      onChange={e => setLabForm((p: any) => ({ ...p, test_name: sanitizeText(e.target.value) }))}
+                      maxLength={100}
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Price (₹) *</label>
                     <input type="number" required min={0} step="0.01" value={labForm.price}
-                      onChange={e => setLabForm((p: any) => ({ ...p, price: e.target.value }))}
+                      onChange={e => setLabForm((p: any) => ({ ...p, price: sanitizeMoney(e.target.value) }))}
+                      inputMode="decimal"
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Category</label>
                     <input type="text" value={labForm.category}
-                      onChange={e => setLabForm((p: any) => ({ ...p, category: e.target.value }))}
+                      onChange={e => setLabForm((p: any) => ({ ...p, category: sanitizeText(e.target.value) }))}
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Sample Type</label>
                     <input type="text" value={labForm.sample_type}
-                      onChange={e => setLabForm((p: any) => ({ ...p, sample_type: e.target.value }))}
+                      onChange={e => setLabForm((p: any) => ({ ...p, sample_type: sanitizeText(e.target.value) }))}
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Unit</label>
                     <input type="text" value={labForm.unit}
-                      onChange={e => setLabForm((p: any) => ({ ...p, unit: e.target.value }))}
+                      onChange={e => setLabForm((p: any) => ({ ...p, unit: sanitizeText(e.target.value) }))}
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   <div>
@@ -546,13 +560,16 @@ export default function ServiceMasterPage() {
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">HSN/SAC Code</label>
                     <input type="text" value={labForm.hsn_sac_code}
-                      onChange={e => setLabForm((p: any) => ({ ...p, hsn_sac_code: e.target.value }))}
+                      onChange={e => setLabForm((p: any) => ({ ...p, hsn_sac_code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) }))}
+                      maxLength={12}
+                      pattern="[A-Z0-9]{4,12}"
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Tax Rate (%)</label>
-                    <input type="number" min={0} step="0.01" value={labForm.tax_rate}
-                      onChange={e => setLabForm((p: any) => ({ ...p, tax_rate: e.target.value }))}
+                    <input type="number" min={0} max={100} step="0.01" value={labForm.tax_rate}
+                      onChange={e => setLabForm((p: any) => ({ ...p, tax_rate: sanitizeMoney(e.target.value) }))}
+                      inputMode="decimal"
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   <label className="col-span-2 flex items-center gap-2 text-sm">
@@ -649,13 +666,16 @@ export default function ServiceMasterPage() {
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Package Code *</label>
                     <input type="text" required value={pkgForm.package_code}
-                      onChange={e => setPkgForm((p: any) => ({ ...p, package_code: e.target.value }))}
+                      onChange={e => setPkgForm((p: any) => ({ ...p, package_code: e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 30) }))}
+                      maxLength={30}
+                      pattern="[A-Z0-9_-]{2,30}"
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Package Name *</label>
                     <input type="text" required value={pkgForm.package_name}
-                      onChange={e => setPkgForm((p: any) => ({ ...p, package_name: e.target.value }))}
+                      onChange={e => setPkgForm((p: any) => ({ ...p, package_name: sanitizeText(e.target.value) }))}
+                      maxLength={100}
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   <div className="col-span-2">
@@ -667,13 +687,15 @@ export default function ServiceMasterPage() {
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Total Amount (₹) *</label>
                     <input type="number" required min={0} step="0.01" value={pkgForm.total_amount}
-                      onChange={e => setPkgForm((p: any) => ({ ...p, total_amount: e.target.value }))}
+                      onChange={e => setPkgForm((p: any) => ({ ...p, total_amount: sanitizeMoney(e.target.value) }))}
+                      inputMode="decimal"
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Validity (days)</label>
                     <input type="number" min={1} value={pkgForm.validity_days}
-                      onChange={e => setPkgForm((p: any) => ({ ...p, validity_days: e.target.value }))}
+                      onChange={e => setPkgForm((p: any) => ({ ...p, validity_days: sanitizeInteger(e.target.value) }))}
+                      inputMode="numeric"
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   <div className="col-span-2">

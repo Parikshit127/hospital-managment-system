@@ -17,6 +17,10 @@ import {
 } from "lucide-react";
 import { searchPatientsForReceipt, getAvailableServicesList, saveFeeReceipt } from "@/app/actions/fee-receipt-actions";
 
+const sanitizePhone = (value: string) => value.replace(/\D/g, '').slice(0, 10);
+const sanitizePatientName = (value: string) => value.replace(/[^a-zA-Z\s.'-]/g, '');
+const sanitizeDecimal = (value: string) => value.replace(/[^\d.]/g, '');
+
 export default function GenerateReceiptPage() {
     const [patientId, setPatientId] = useState<string>("");
     const [patientName, setPatientName] = useState("");
@@ -211,7 +215,10 @@ export default function GenerateReceiptPage() {
                                             <input
                                                 type="text"
                                                 value={patientName}
-                                                onChange={e => { setPatientName(e.target.value); setPatientId(""); }}
+                                            onChange={e => { setPatientName(sanitizePatientName(e.target.value)); setPatientId(""); }}
+                                            maxLength={60}
+                                            pattern="[A-Za-z\s.'-]{2,60}"
+                                            title="Use letters and valid name characters only"
                                                 placeholder="Enter full name"
                                                 className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:border-emerald-500 outline-none"
                                             />
@@ -222,7 +229,11 @@ export default function GenerateReceiptPage() {
                                         <input
                                             type="tel"
                                             value={patientPhone}
-                                            onChange={e => { setPatientPhone(e.target.value); setPatientId(""); }}
+                                            onChange={e => { setPatientPhone(sanitizePhone(e.target.value)); setPatientId(""); }}
+                                            inputMode="numeric"
+                                            maxLength={10}
+                                            pattern="[0-9]{10}"
+                                            title="Enter valid 10-digit mobile number"
                                             placeholder="Mobile number"
                                             className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm focus:border-emerald-500 outline-none mt-1"
                                         />
@@ -280,7 +291,8 @@ export default function GenerateReceiptPage() {
                                         <input
                                             type="number"
                                             value={item.quantity}
-                                            onChange={(e) => handleItemChange(item.id, 'quantity', e.target.value)}
+                                            onChange={(e) => handleItemChange(item.id, 'quantity', e.target.value.replace(/\D/g, ''))}
+                                            inputMode="numeric"
                                             min="1"
                                             className="w-full px-2 py-2.5 bg-gray-50 border border-gray-200 focus:bg-white rounded-xl text-sm focus:border-emerald-500 outline-none text-center font-mono transition-colors print:border-0 print:bg-white"
                                         />
@@ -289,8 +301,11 @@ export default function GenerateReceiptPage() {
                                         <input
                                             type="number"
                                             value={item.amount}
-                                            onChange={(e) => !item.isLocked && handleItemChange(item.id, 'amount', e.target.value)}
+                                            onChange={(e) => !item.isLocked && handleItemChange(item.id, 'amount', sanitizeDecimal(e.target.value))}
+                                            inputMode="decimal"
                                             readOnly={item.isLocked}
+                                            min="0"
+                                            step="0.01"
                                             placeholder="0.00"
                                             className={`w-full px-4 py-2.5 border rounded-xl text-sm outline-none text-right font-mono transition-colors print:border-0 print:bg-white print:px-0 ${item.isLocked ? 'bg-gray-50 text-gray-600 cursor-not-allowed border-gray-200' : 'bg-gray-50 border-gray-200 focus:bg-white focus:border-emerald-500'}`}
                                         />

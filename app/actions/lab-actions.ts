@@ -447,3 +447,111 @@ export async function getLabTATReport(days: number = 7) {
         return { success: false, data: null };
     }
 }
+
+// ========================================
+// TEST CATALOG (lab_test_inventory)
+// ========================================
+
+export async function getTestCatalog() {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const tests = await db.lab_test_inventory.findMany({
+            where: { organizationId },
+            orderBy: { test_name: 'asc' },
+        });
+        return { success: true, data: JSON.parse(JSON.stringify(tests)) };
+    } catch (error) {
+        console.error('Get Test Catalog Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+export async function addTestTocatalog(data: {
+    test_name: string;
+    price: number;
+    category?: string;
+    sample_type?: string;
+    unit?: string;
+    normal_range_min?: number;
+    normal_range_max?: number;
+    tax_rate?: number;
+    requires_prescription?: boolean;
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const test = await db.lab_test_inventory.create({
+            data: {
+                test_name: data.test_name,
+                price: data.price,
+                category: data.category || null,
+                sample_type: data.sample_type || null,
+                unit: data.unit || null,
+                normal_range_min: data.normal_range_min ?? null,
+                normal_range_max: data.normal_range_max ?? null,
+                tax_rate: data.tax_rate ?? 0,
+                requires_prescription: data.requires_prescription ?? false,
+                is_available: true,
+                organizationId,
+            },
+        });
+        revalidatePath('/lab/tests');
+        revalidatePath('/admin/lab');
+        return { success: true, data: JSON.parse(JSON.stringify(test)) };
+    } catch (error: any) {
+        if (error?.code === 'P2002') return { success: false, error: 'Test name already exists' };
+        console.error('Add Test Error:', error);
+        return { success: false, error: 'Failed to add test' };
+    }
+}
+
+export async function updateTestInCatalog(id: number, data: {
+    test_name?: string;
+    price?: number;
+    category?: string;
+    sample_type?: string;
+    unit?: string;
+    normal_range_min?: number | null;
+    normal_range_max?: number | null;
+    tax_rate?: number;
+    is_available?: boolean;
+    requires_prescription?: boolean;
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        await db.lab_test_inventory.update({
+            where: { id, organizationId },
+            data,
+        });
+        revalidatePath('/lab/tests');
+        return { success: true };
+    } catch (error) {
+        console.error('Update Test Error:', error);
+        return { success: false, error: 'Failed to update test' };
+    }
+}
+
+export async function deleteTestFromCatalog(id: number) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        await db.lab_test_inventory.delete({ where: { id, organizationId } });
+        revalidatePath('/lab/tests');
+        return { success: true };
+    } catch (error) {
+        console.error('Delete Test Error:', error);
+        return { success: false, error: 'Failed to delete test' };
+    }
+}
+
+export async function toggleTestAvailability(id: number, is_available: boolean) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        await db.lab_test_inventory.update({
+            where: { id, organizationId },
+            data: { is_available },
+        });
+        revalidatePath('/lab/tests');
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: 'Failed to toggle availability' };
+    }
+}

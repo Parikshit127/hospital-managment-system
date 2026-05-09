@@ -6,6 +6,10 @@ import { Users, Plus, Mail, Phone, Hash, X, Loader2, Pencil, CheckCircle } from 
 import { getSuppliers, createSupplier, updateSupplier } from '@/app/actions/pharmacy-actions';
 
 const emptyForm = { name: '', contact_person: '', phone: '', email: '', gst_no: '' };
+const sanitizeName = (value: string) => value.replace(/[^a-zA-Z0-9\s.&'()-]/g, '');
+const sanitizePerson = (value: string) => value.replace(/[^a-zA-Z\s.'-]/g, '');
+const sanitizePhone = (value: string) => value.replace(/\D/g, '').slice(0, 10);
+const sanitizeGST = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15);
 
 export default function SuppliersPage() {
     const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -146,22 +150,27 @@ export default function SuppliersPage() {
                         <div className="p-6 space-y-4">
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Supplier Name *</label>
-                                <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+                                <input value={form.name} onChange={e => setForm({ ...form, name: sanitizeName(e.target.value) })}
+                                    maxLength={80}
                                     className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-bold text-gray-900 placeholder:text-gray-400"
                                     placeholder="e.g. MedSupply India Pvt Ltd" />
                             </div>
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Contact Person</label>
-                                <input value={form.contact_person} onChange={e => setForm({ ...form, contact_person: e.target.value })}
+                                <input value={form.contact_person} onChange={e => setForm({ ...form, contact_person: sanitizePerson(e.target.value) })}
+                                    maxLength={60}
                                     className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none font-medium text-gray-900 placeholder:text-gray-400"
                                     placeholder="Name" />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Phone</label>
-                                    <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
+                                    <input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: sanitizePhone(e.target.value) })}
+                                        inputMode="numeric"
+                                        maxLength={10}
+                                        pattern="[0-9]{10}"
                                         className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none font-medium text-gray-900 placeholder:text-gray-400"
-                                        placeholder="+91..." />
+                                        placeholder="9876543210" />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Email</label>
@@ -172,7 +181,9 @@ export default function SuppliersPage() {
                             </div>
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">GST Number</label>
-                                <input value={form.gst_no} onChange={e => setForm({ ...form, gst_no: e.target.value })}
+                                    <input value={form.gst_no} onChange={e => setForm({ ...form, gst_no: sanitizeGST(e.target.value) })}
+                                        maxLength={15}
+                                        pattern="[0-9A-Z]{15}"
                                     className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none font-mono font-medium text-gray-900 placeholder:text-gray-400"
                                     placeholder="e.g. 27AABCU9603R1ZM" />
                             </div>

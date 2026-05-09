@@ -22,6 +22,9 @@ const PT_LABEL: Record<string, string> = {
 };
 
 export default function ReceptionGenerateBillPage() {
+    const sanitizePositiveInt = (value: string) => value.replace(/\D/g, '');
+    const sanitizeDecimal = (value: string) => value.replace(/[^\d.]/g, '');
+
     const router = useRouter();
     const toast = useToast();
 
@@ -338,7 +341,9 @@ export default function ReceptionGenerateBillPage() {
                                     <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Qty</label>
                                     <input 
                                         type="number" min="1" 
-                                        value={draftQty} onChange={e => setDraftQty(Number(e.target.value))}
+                                        inputMode="numeric"
+                                        value={draftQty}
+                                        onChange={e => setDraftQty(Number(sanitizePositiveInt(e.target.value) || '1'))}
                                         className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none"
                                     />
                                 </div>
@@ -347,7 +352,10 @@ export default function ReceptionGenerateBillPage() {
                                     <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Discount (₹)</label>
                                     <input 
                                         type="number" min="0" 
-                                        value={draftDiscount} onChange={e => setDraftDiscount(Number(e.target.value))}
+                                        step="0.01"
+                                        inputMode="decimal"
+                                        value={draftDiscount}
+                                        onChange={e => setDraftDiscount(Number(sanitizeDecimal(e.target.value) || '0'))}
                                         className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none"
                                     />
                                 </div>
@@ -478,8 +486,9 @@ export default function ReceptionGenerateBillPage() {
                                             <p className="font-sans text-[10px] font-black uppercase tracking-widest text-slate-400">Concession (Optional)</p>
                                             <input
                                                 type="number" min="0" step="0.01"
+                                                inputMode="decimal"
                                                 value={concessionAmount}
-                                                onChange={e => setConcessionAmount(parseFloat(e.target.value) || 0)}
+                                                onChange={e => setConcessionAmount(parseFloat(sanitizeDecimal(e.target.value)) || 0)}
                                                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm outline-none"
                                                 placeholder="₹ Amount"
                                             />

@@ -8,6 +8,9 @@ import {
 } from '@/app/actions/doctor-master-actions';
 import MasterImportButton from '@/app/components/master/MasterImportButton';
 
+const onlyDigits = (value: string) => value.replace(/\D/g, '');
+const normalizePersonName = (value: string) => value.replace(/[^a-zA-Z\s.'-]/g, '');
+
 const PAGE_LIMIT = 25;
 const EMPTY_FORM = {
   name: '', username: '', password: '',
@@ -186,7 +189,38 @@ export default function DoctorMasterPage() {
                   <input
                     type={f.type} required={f.required}
                     value={form[f.k] ?? ''}
-                    onChange={e => setForm((p: any) => ({ ...p, [f.k]: e.target.value }))}
+                    onChange={e => {
+                      let value = e.target.value;
+                      if (f.k === 'phone') value = onlyDigits(value).slice(0, 10);
+                      if (f.k === 'name') value = normalizePersonName(value);
+                      if (f.k === 'consultation_fee' || f.k === 'follow_up_fee') value = onlyDigits(value).slice(0, 6);
+                      if (f.k === 'slot_duration') value = onlyDigits(value).slice(0, 3);
+                      setForm((p: any) => ({ ...p, [f.k]: value }));
+                    }}
+                    inputMode={
+                      f.k === 'phone' || f.k === 'consultation_fee' || f.k === 'follow_up_fee' || f.k === 'slot_duration'
+                        ? 'numeric'
+                        : undefined
+                    }
+                    min={f.k === 'consultation_fee' || f.k === 'follow_up_fee' ? 0 : f.k === 'slot_duration' ? 5 : undefined}
+                    max={f.k === 'slot_duration' ? 180 : undefined}
+                    maxLength={f.k === 'phone' ? 10 : f.k === 'doctor_registration_no' ? 30 : undefined}
+                    pattern={
+                      f.k === 'phone'
+                        ? '[0-9]{10}'
+                        : f.k === 'email'
+                          ? '[^\\s@]+@[^\\s@]+\\.[^\\s@]+'
+                          : f.k === 'name'
+                            ? "[A-Za-z\\s.'-]{2,60}"
+                            : undefined
+                    }
+                    title={
+                      f.k === 'phone'
+                        ? 'Enter a valid 10-digit mobile number'
+                        : f.k === 'name'
+                          ? 'Only letters and basic name characters are allowed'
+                          : undefined
+                    }
                     className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   />
                 </div>
