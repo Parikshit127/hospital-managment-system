@@ -49,8 +49,15 @@ type CaseSheetData = {
 };
 
 export default function CaseSheetPage() {
-    const admissionId = '';
-    const initialDate = new Date().toISOString().split('T')[0];
+    // admissionId comes from URL query param: /ipd/case-sheet?admission_id=XXX
+    const [admissionId, setAdmissionId] = useState('');
+    const [initialDate] = useState(new Date().toISOString().split('T')[0]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('admission_id') || '';
+        setAdmissionId(id);
+    }, []);
     const [activeTab, setActiveTab] = useState('treatment');
     const [caseSheet, setCaseSheet] = useState<CaseSheetData | null>(null);
     const [clinicalOrders, setClinicalOrders] = useState<unknown[]>([]);
@@ -62,8 +69,7 @@ export default function CaseSheetPage() {
 
     const loadData = useCallback(async () => {
         if (!admissionId) return;
-        setLoading(true);
-        const [csRes, coRes, poRes, amRes] = await Promise.all([
+        setLoading(true);        const [csRes, coRes, poRes, amRes] = await Promise.all([
             get24HourCaseSheet(admissionId, selectedDate),
             getClinicalOrders(admissionId),
             getPhysicianOrders(admissionId),

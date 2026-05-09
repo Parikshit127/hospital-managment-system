@@ -244,6 +244,12 @@ export async function registerPatient(formData: FormData) {
         }
 
         revalidatePath('/doctor/dashboard');
+        revalidatePath('/reception');
+        revalidatePath('/reception/patient');
+        revalidatePath('/reception/dashboard');
+        revalidatePath('/reception/appointments');
+        revalidatePath('/admin/patients');
+        revalidatePath('/opd-manager/dashboard');
 
         // Audit log
         await db.system_audit_logs.create({

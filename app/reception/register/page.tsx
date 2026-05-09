@@ -387,12 +387,18 @@ export default function ReceptionPage() {
                                         )}
                                     </div>
 
-                                    <div className="mt-8 flex items-center gap-3">
+                                    <div className="mt-8 flex items-center gap-3 flex-wrap justify-center">
                                         <button
                                             onClick={() => setSuccessData(null)}
                                             className="px-6 py-3.5 bg-gray-100 border border-gray-200 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-200 transition-all active:scale-[0.98] flex items-center gap-2"
                                         >
                                             <UserPlus className="h-4 w-4" /> Register Next
+                                        </button>
+                                        <button
+                                            onClick={() => router.push(`/reception/patient/${successData.patient_id}`)}
+                                            className="px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center gap-2"
+                                        >
+                                            <ArrowRight className="h-4 w-4" /> View Patient
                                         </button>
                                         <button
                                             onClick={() => router.push('/reception/appointments')}

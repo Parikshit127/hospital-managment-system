@@ -7,11 +7,13 @@ import {
     X, FileText, Thermometer, ArrowRight, AlertCircle, CheckCircle2, Bell
 } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Skeleton, SkeletonCard } from '@/app/components/ui/Skeleton';
 import { getRegisteredPatients, getReceptionStats, getPatientDetail, getExpectedArrivals, checkInPatient } from '@/app/actions/reception-actions';
 
 export default function ReceptionDashboard() {
+    const pathname = usePathname();
     const [patients, setPatients] = useState<any[]>([]);
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -65,6 +67,25 @@ export default function ReceptionDashboard() {
 
     useEffect(() => { loadData(); }, [loadData]);
     useEffect(() => { loadArrivals(); }, [loadArrivals]);
+
+    // Refetch when user navigates back to this page (e.g. after registering a patient)
+    useEffect(() => {
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                loadData();
+                loadArrivals();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => document.removeEventListener('visibilitychange', handleVisibility);
+    }, [loadData, loadArrivals]);
+
+    // Also refetch when pathname changes back to /reception
+    useEffect(() => {
+        if (pathname === '/reception') {
+            loadData();
+        }
+    }, [pathname, loadData]);
 
     const handleCheckIn = async (appointmentId: string) => {
         setCheckingIn(appointmentId);

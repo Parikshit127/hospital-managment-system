@@ -793,8 +793,11 @@ export default function AdmissionDetailPage() {
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                     {[
                                         { label: 'Nursing Station', href: `/ipd/nursing-station/${data.admission_id}`, icon: HeartPulse },
+                                        { label: 'Case Sheet (14-Tab)', href: `/ipd/case-sheet?admission_id=${data.admission_id}`, icon: Stethoscope },
+                                        { label: 'Ward Rounds', href: `/ipd/ward-rounds?admission_id=${data.admission_id}`, icon: Stethoscope },
+                                        { label: 'Vitals', href: `/ipd/vitals/${data.admission_id}`, icon: HeartPulse },
+                                        { label: 'Medication Admin', href: `/ipd/medication-admin`, icon: HeartPulse },
                                         { label: 'Discharge Settlement', href: `/ipd/discharge-settlement/${data.admission_id}`, icon: LogOut },
-                                        { label: 'Ward Rounds', href: `/ipd/ward-rounds`, icon: Stethoscope },
                                     ].map(link => {
                                         const Icon = link.icon;
                                         return (
