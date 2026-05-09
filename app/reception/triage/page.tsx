@@ -70,8 +70,24 @@ export default function TriagePage() {
     };
 
     const handleTriage = async () => {
-        if (!patientName || selectedSymptoms.length === 0) {
-            toast.warning('Please provide patient name and at least one symptom');
+        if (!patientName.trim()) {
+            toast.warning('Patient name is required');
+            return;
+        }
+        if (!phone.trim()) {
+            toast.warning('Phone number is required');
+            return;
+        }
+        if (!age.trim()) {
+            toast.warning('Age is required');
+            return;
+        }
+        if (!gender.trim()) {
+            toast.warning('Gender is required');
+            return;
+        }
+        if (selectedSymptoms.length === 0) {
+            toast.warning('Please select at least one symptom');
             return;
         }
         setIsTriaging(true);

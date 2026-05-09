@@ -3,6 +3,7 @@ import Script from "next/script";
 import { ToastProvider } from "@/app/components/ui/Toast";
 import { ThemeProvider } from "next-themes";
 import { DM_Sans, Playfair_Display } from "next/font/google";
+import { Toaster } from "react-hot-toast";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -36,6 +37,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light" disableTransitionOnChange>
           <ToastProvider>
             {children}
+            <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
           </ToastProvider>
         </ThemeProvider>
         <Script

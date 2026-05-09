@@ -4,11 +4,38 @@ import { requireTenantContext } from "@/backend/tenant";
 import { addUserSchema, updateUserSchema } from "@/app/lib/validations";
 import * as bcrypt from "bcryptjs";
 
+// Helper to get date range from timeRange string
+function getDateRange(timeRange?: string): { gte: Date; lte: Date } {
+  const now = new Date();
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+
+  switch (timeRange) {
+    case 'week': {
+      const start = new Date(today);
+      start.setDate(today.getDate() - today.getDay()); // start of week
+      return { gte: start, lte: now };
+    }
+    case 'month': {
+      const start = new Date(today.getFullYear(), today.getMonth(), 1);
+      return { gte: start, lte: now };
+    }
+    case 'quarter': {
+      const start = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
+      return { gte: start, lte: now };
+    }
+    case 'today':
+    default:
+      return { gte: today, lte: now };
+  }
+}
+
 // Get dashboard overview stats
-export async function getDashboardStats() {
+export async function getDashboardStats(timeRange?: string) {
   try {
     const { db } = await requireTenantContext();
 
+    const { gte: rangeStart } = getDateRange(timeRange);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -22,7 +49,7 @@ export async function getDashboardStats() {
       appointmentsToday,
     ] = await Promise.all([
       db.oPD_REG.count({
-        where: { created_at: { gte: today } },
+        where: { created_at: { gte: rangeStart } },
       }),
       db.oPD_REG.count(),
       db.admissions.count({
@@ -32,14 +59,14 @@ export async function getDashboardStats() {
         where: { status: "Pending" },
       }),
       db.lab_orders.count({
-        where: { status: "Completed", created_at: { gte: today } },
+        where: { status: "Completed", created_at: { gte: rangeStart } },
       }),
       db.billing_records.aggregate({
         _sum: { net_amount: true },
-        where: { payment_status: "Paid" },
+        where: { payment_status: "Paid", created_at: { gte: rangeStart } },
       }),
       db.appointments.count({
-        where: { appointment_date: { gte: today } },
+        where: { appointment_date: { gte: rangeStart } },
       }),
     ]);
 
@@ -126,33 +153,32 @@ export async function getBedOccupancy() {
 }
 
 // Get department-wise revenue breakdown
-export async function getRevenueBreakdown() {
+export async function getRevenueBreakdown(timeRange?: string) {
   try {
     const { db } = await requireTenantContext();
 
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const { gte: rangeStart } = getDateRange(timeRange);
 
     const [byDeptRaw, byTypeRaw, totalAgg, dailyTrendRaw] = await Promise.all([
       db.billing_records.groupBy({
         by: ["department"],
         _sum: { net_amount: true },
-        where: { payment_status: "Paid" },
+        where: { payment_status: "Paid", created_at: { gte: rangeStart } },
       }),
       db.billing_records.groupBy({
         by: ["bill_type"],
         _sum: { net_amount: true },
-        where: { payment_status: "Paid" },
+        where: { payment_status: "Paid", created_at: { gte: rangeStart } },
       }),
       db.billing_records.aggregate({
         _sum: { net_amount: true },
-        where: { payment_status: "Paid" },
+        where: { payment_status: "Paid", created_at: { gte: rangeStart } },
       }),
       // Aggregate daily revenue in DB instead of fetching all rows
       db.$queryRaw<{ day: Date; total: number }[]>`
         SELECT DATE("created_at") as day, SUM("net_amount")::float as total
         FROM "billing_records"
-        WHERE "payment_status" = 'Paid' AND "created_at" >= ${sevenDaysAgo}
+        WHERE "payment_status" = 'Paid' AND "created_at" >= ${rangeStart}
         GROUP BY DATE("created_at")
         ORDER BY day ASC
       `,
@@ -208,19 +234,17 @@ export async function getRecentActivity(limit: number = 20) {
 }
 
 // Get patient flow data (registrations per day for the last 7 days)
-export async function getPatientFlow() {
+export async function getPatientFlow(timeRange?: string) {
   try {
     const { db } = await requireTenantContext();
 
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
+    const { gte: rangeStart } = getDateRange(timeRange);
 
     // Use raw count query grouped by date instead of fetching all rows
     const patients = await db.$queryRaw<{ day: Date; count: bigint }[]>`
       SELECT DATE("created_at") as day, COUNT(*)::bigint as count
       FROM "OPD_REG"
-      WHERE "created_at" >= ${sevenDaysAgo}
+      WHERE "created_at" >= ${rangeStart}
       GROUP BY DATE("created_at")
       ORDER BY day ASC
     `;

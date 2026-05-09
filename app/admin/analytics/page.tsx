@@ -168,10 +168,10 @@ export default function AnalyticsSLAPage() {
         setLoading(true);
         try {
             const [s, b, r, pf, inv] = await Promise.all([
-                getDashboardStats(),
+                getDashboardStats(timeRange),
                 getBedOccupancy(),
-                getRevenueBreakdown(),
-                getPatientFlow(),
+                getRevenueBreakdown(timeRange),
+                getPatientFlow(timeRange),
                 getInventoryAlerts(),
             ]);
             if (s.success) setStats(s.data);
@@ -183,7 +183,7 @@ export default function AnalyticsSLAPage() {
             console.error('Analytics load error:', err);
         }
         setLoading(false);
-    }, []);
+    }, [timeRange]);
 
     useEffect(() => {
         loadData();

@@ -303,12 +303,27 @@ export async function getExternalRecords() {
         const session = await getPatientSession();
         if (!session) return { success: false, data: [] };
         const db = getTenantPrisma(session.organization_id);
-        const records = await db.$queryRaw`
-            SELECT * FROM patient_external_records
-            WHERE patient_id = ${session.id}
-            ORDER BY created_at DESC
-        ` as any[];
-        return { success: true, data: records };
+        // Store external records in system_audit_logs as a workaround
+        // using action='EXTERNAL_RECORD' and entity_type='patient'
+        const records = await db.system_audit_logs.findMany({
+            where: {
+                organizationId: session.organization_id,
+                entity_id: session.id,
+                action: 'EXTERNAL_RECORD',
+            },
+            orderBy: { created_at: 'desc' },
+        });
+        return {
+            success: true,
+            data: records.map((r: any) => {
+                try {
+                    const d = JSON.parse(r.details || '{}');
+                    return { id: r.id, ...d, created_at: r.created_at };
+                } catch {
+                    return { id: r.id, title: 'Record', created_at: r.created_at };
+                }
+            }),
+        };
     } catch (error) {
         console.error('External records error:', error);
         return { success: false, data: [] };
@@ -327,22 +342,26 @@ export async function saveExternalRecord(data: {
     try {
         const session = await getPatientSession();
         if (!session) return { success: false, error: 'Not authenticated' };
+        if (!data.title?.trim()) return { success: false, error: 'Title is required' };
         const db = getTenantPrisma(session.organization_id);
-        await db.$executeRaw`
-            INSERT INTO patient_external_records
-            (patient_id, "organizationId", title, description, hospital_name, record_date, file_url, file_name, file_type)
-            VALUES (
-                ${session.id},
-                ${session.organization_id},
-                ${data.title},
-                ${data.description || null},
-                ${data.hospital_name || null},
-                ${data.record_date ? new Date(data.record_date) : null},
-                ${data.file_url || null},
-                ${data.file_name || null},
-                ${data.file_type || null}
-            )
-        `;
+        await db.system_audit_logs.create({
+            data: {
+                action: 'EXTERNAL_RECORD',
+                module: 'patient_portal',
+                entity_type: 'patient',
+                entity_id: session.id,
+                details: JSON.stringify({
+                    title: data.title,
+                    description: data.description || null,
+                    hospital_name: data.hospital_name || null,
+                    record_date: data.record_date || null,
+                    file_url: data.file_url || null,
+                    file_name: data.file_name || null,
+                    file_type: data.file_type || null,
+                }),
+                organizationId: session.organization_id,
+            },
+        });
         return { success: true };
     } catch (error) {
         console.error('Save external record error:', error);
@@ -355,10 +374,14 @@ export async function deleteExternalRecord(id: number) {
         const session = await getPatientSession();
         if (!session) return { success: false, error: 'Not authenticated' };
         const db = getTenantPrisma(session.organization_id);
-        await db.$executeRaw`
-            DELETE FROM patient_external_records
-            WHERE id = ${id} AND patient_id = ${session.id}
-        `;
+        await db.system_audit_logs.deleteMany({
+            where: {
+                id,
+                organizationId: session.organization_id,
+                entity_id: session.id,
+                action: 'EXTERNAL_RECORD',
+            },
+        });
         return { success: true };
     } catch (error) {
         return { success: false, error: 'Failed to delete' };

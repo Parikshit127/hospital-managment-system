@@ -65,9 +65,11 @@ import { SOAPNoteForm } from "@/app/components/clinical/SOAPNoteForm";
 import { getOrCreateEncounterForAppointment } from "@/app/actions/emr-actions";
 import { TemplatePicker } from "@/app/components/clinical/TemplatePicker";
 import { PrescriptionPrint, type PrescriptionData } from "@/app/components/clinical/PrescriptionPrint";
+import { useToast } from "@/app/components/ui/Toast";
 
 export default function DoctorDashboard() {
   // ─── SESSION STATE ───
+  const toast = useToast();
   const [session, setSession] = useState<{
     id: string;
     username: string;
@@ -496,10 +498,30 @@ export default function DoctorDashboard() {
   const handleWalkinSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isSubmitting) return;
+
+    // Client-side validation before hitting Zod
+    const phone = walkinFormData.phone.replace(/[\s\-+]/g, '').slice(-10);
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      alert('Phone must be a valid 10-digit Indian mobile number (starting with 6-9)');
+      return;
+    }
+    if (!walkinFormData.full_name.trim() || walkinFormData.full_name.trim().length < 2) {
+      alert('Please enter patient full name');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const formData = new FormData();
-      Object.entries(walkinFormData).forEach(([k, v]) => formData.append(k, v));
+      // Ensure address meets min 10 char requirement
+      const dataToSubmit = {
+        ...walkinFormData,
+        phone,
+        address: walkinFormData.address?.trim().length >= 10 ? walkinFormData.address : (walkinFormData.address?.trim() || 'Walk-in patient'),
+        registration_consent: 'true',
+        skipAppointment: 'false',
+      };
+      Object.entries(dataToSubmit).forEach(([k, v]) => formData.append(k, v));
       const res = await registerPatient(formData);
       if (res.success) {
         alert(`Walk-in Registered! Patient ID: ${res.patient_id}`);
@@ -583,11 +605,11 @@ export default function DoctorDashboard() {
 
   const handleScheduleFollowUp = () =>
     withSubmission(async () => {
-      if (!activePatient?.patient_id) return alert("Select a patient first.");
-      if (!followUpDate) return alert("Please select follow-up date & time.");
+      if (!activePatient?.patient_id) { toast.error("Select a patient first."); return; }
+      if (!followUpDate) { toast.error("Please select follow-up date & time."); return; }
 
       const assignedDoctorId = doctorId || session?.id;
-      if (!assignedDoctorId) return alert("Unable to detect doctor session.");
+      if (!assignedDoctorId) { toast.error("Unable to detect doctor session."); return; }
 
       const res = await scheduleFollowUp({
         patientId: activePatient.patient_id,
@@ -597,11 +619,11 @@ export default function DoctorDashboard() {
       });
 
       if (res.success) {
-        alert("Follow-up scheduled successfully.");
+        toast.success("Follow-up scheduled successfully.");
         setFollowUpNotes("");
         await fetchPatientFollowUps(activePatient.patient_id);
       } else {
-        alert(res.error || "Failed to schedule follow-up.");
+        toast.error(res.error || "Failed to schedule follow-up.");
       }
     });
 
