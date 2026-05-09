@@ -60,6 +60,9 @@ export default function DoctorSchedule() {
     specialty?: string;
   } | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterStatus, setFilterStatus] = useState("All");
+  const [filterDepartment, setFilterDepartment] = useState("All");
   const [appointments, setAppointments] = useState<QueueItem[]>([]);
   const [slots, setSlots] = useState<AppointmentSlot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -178,7 +181,15 @@ export default function DoctorSchedule() {
     setShowPatientModal(true);
   }
 
-  // Format time from appointment_date
+  useEffect(() => {
+    if (!filterOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-filter-dropdown]')) setFilterOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [filterOpen]);
   function formatTime(dateStr: string): string {
     try {
       const d = new Date(dateStr);
@@ -241,8 +252,14 @@ export default function DoctorSchedule() {
 
   const filteredAppointments = appointments.filter((a) => {
     const name = (a.full_name || "").toLowerCase();
-    return name.includes(searchTerm.toLowerCase());
+    const matchesSearch = name.includes(searchTerm.toLowerCase());
+    const matchesStatus = filterStatus === "All" || a.status === filterStatus;
+    const matchesDept = filterDepartment === "All" || (a.department || "") === filterDepartment;
+    return matchesSearch && matchesStatus && matchesDept;
   });
+
+  const departments = ["All", ...Array.from(new Set(appointments.map(a => a.department).filter(Boolean) as string[]))];
+  const statuses = ["All", "Pending", "Scheduled", "Checked In", "In Progress", "Completed"];
 
   const inputCls =
     "w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400 transition-all shadow-sm";
@@ -268,10 +285,87 @@ export default function DoctorSchedule() {
                 Manage your appointments and daily itinerary.
               </p>
             </div>
-            <div className="flex gap-3">
-              <button className="px-5 py-2.5 bg-white border border-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-50 hover:border-teal-500/30 transition-all flex items-center gap-2 shadow-sm text-sm truncate">
+            <div className="flex gap-3 relative" data-filter-dropdown>
+              <button
+                onClick={() => setFilterOpen(!filterOpen)}
+                className={`px-5 py-2.5 border font-bold rounded-xl transition-all flex items-center gap-2 shadow-sm text-sm truncate ${
+                  filterOpen || filterStatus !== "All" || filterDepartment !== "All"
+                    ? "bg-teal-50 border-teal-400 text-teal-700"
+                    : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-teal-500/30"
+                }`}
+              >
                 <Filter className="h-4 w-4" /> Filter
+                {(filterStatus !== "All" || filterDepartment !== "All") && (
+                  <span className="ml-1 bg-teal-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {[filterStatus !== "All", filterDepartment !== "All"].filter(Boolean).length}
+                  </span>
+                )}
               </button>
+
+              {/* Filter Dropdown */}
+              {filterOpen && (
+                <div className="absolute top-full right-0 mt-2 w-64 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-bold text-gray-800">Filters</span>
+                    <button
+                      onClick={() => { setFilterStatus("All"); setFilterDepartment("All"); }}
+                      className="text-xs text-teal-600 hover:text-teal-700 font-medium"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+
+                  {/* Status Filter */}
+                  <div>
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Status</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {statuses.map(s => (
+                        <button
+                          key={s}
+                          onClick={() => setFilterStatus(s)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                            filterStatus === s
+                              ? "bg-teal-500 text-white"
+                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Department Filter */}
+                  {departments.length > 1 && (
+                    <div>
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Department</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {departments.map(d => (
+                          <button
+                            key={d}
+                            onClick={() => setFilterDepartment(d)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                              filterDepartment === d
+                                ? "bg-teal-500 text-white"
+                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            }`}
+                          >
+                            {d}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => setFilterOpen(false)}
+                    className="w-full py-2 bg-teal-500 hover:bg-teal-600 text-white text-sm font-bold rounded-xl transition-colors"
+                  >
+                    Apply
+                  </button>
+                </div>
+              )}
+
               <button
                 onClick={() => setShowBlockModal(true)}
                 className="px-5 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 text-white font-bold rounded-xl hover:from-teal-400 hover:to-emerald-500 transition-all flex items-center gap-2 shadow-lg shadow-teal-500/20 text-sm whitespace-nowrap"
