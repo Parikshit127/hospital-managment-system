@@ -6,6 +6,7 @@ import { getTodayRange, getOrgTimezone } from '@/app/lib/timezone';
 import { notifyPatient } from '@/app/lib/notify-patient';
 import { sendWhatsAppMessage, sendWhatsAppTemplate, formatPhoneNumber } from '@/app/lib/whatsapp';
 import { appointmentConfirmationMsg, appointmentCancellationMsg } from '@/app/lib/whatsapp-templates';
+import { resolveOPDConfig } from '@/app/lib/opd-config';
 import type {
     ActionResponse,
     PaginatedResponse,
@@ -1373,10 +1374,10 @@ export async function getQueueWithSLA() {
             include: { patient: { select: { full_name: true, patient_id: true } } },
             orderBy: [{ doctor_id: 'asc' }, { queue_token: 'asc' }],
         }),
-        db.oPDConfig.findFirst({ where: { organizationId } }),
+        resolveOPDConfig(db, organizationId),
     ]);
 
-    const maxWait = config?.max_wait_minutes ?? 30;
+    const maxWait = config.max_wait_minutes;
     const now = new Date();
 
     const data = appointments.map((a: {

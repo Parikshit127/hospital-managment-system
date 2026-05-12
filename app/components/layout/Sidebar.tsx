@@ -14,6 +14,8 @@ import {
   Pill,
   Bed,
   DollarSign,
+  CircleDollarSign,
+  Scale,
   FileText,
   Activity,
   Menu,
@@ -56,6 +58,16 @@ import {
   Briefcase,
   CalendarCheck,
   Timer,
+  Workflow,
+  Plug,
+  GitBranch,
+  UsersRound,
+  KeyRound,
+  Code,
+  Scissors,
+  Siren,
+  ShieldAlert,
+  MapPin,
 } from "lucide-react";
 
 interface NavItem {
@@ -84,7 +96,9 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "IPD", href: "/admin/ipd", icon: Bed },
         { label: "Lab", href: "/admin/lab", icon: FlaskConical },
         { label: "Finance", href: "/admin/finance", icon: DollarSign },
-        { label: "Master Billing", href: "/admin/billing", icon: FileText },
+        { label: "Master Billing", href: "/billing", icon: CircleDollarSign },
+        { label: "Approval Center", href: "/billing/approvals", icon: ShieldAlert },
+        { label: "Write-offs", href: "/billing/writeoffs", icon: Scale },
         { label: "HR", href: "/admin/hr", icon: Briefcase },
       ],
     },
@@ -95,6 +109,33 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Doctors", href: "/admin/doctors", icon: Stethoscope },
         { label: "Departments", href: "/admin/departments", icon: Building2 },
         { label: "Patients", href: "/admin/patients", icon: Users },
+      ],
+    },
+    {
+      title: "Configuration",
+      items: [
+        { label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
+        { label: "Workflows", href: "/admin/workflows", icon: Workflow },
+        { label: "Templates", href: "/admin/templates", icon: FileStack },
+        { label: "Notifications", href: "/admin/notifications", icon: Bell },
+        { label: "Integrations", href: "/admin/integrations", icon: Plug },
+      ],
+    },
+    {
+      title: "Advanced",
+      items: [
+        { label: "Branches", href: "/admin/branches", icon: GitBranch },
+        { label: "Roles", href: "/admin/roles", icon: UsersRound },
+        { label: "MFA Setup", href: "/admin/mfa-setup", icon: KeyRound },
+        { label: "API Docs", href: "/admin/api-docs", icon: Code },
+        { label: "OT Setup", href: "/admin/ot-setup", icon: Scissors },
+      ],
+    },
+    {
+      title: "Clinical Modules",
+      items: [
+        { label: "Operation Theatre", href: "/ot/dashboard", icon: Scissors },
+        { label: "Emergency Room", href: "/er/dashboard", icon: Siren },
       ],
     },
     {
@@ -119,6 +160,14 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Follow-Ups", href: "/doctor/follow-ups", icon: UserCheck },
       ],
     },
+    {
+      title: "Procedural",
+      items: [
+        { label: "Surgery Requests", href: "/ot/requests", icon: Scissors },
+        { label: "OT Worklist", href: "/ot/worklist", icon: ClipboardCheck },
+        { label: "Emergency Room", href: "/er/dashboard", icon: Siren },
+      ],
+    },
   ],
 
   receptionist: [
@@ -129,7 +178,8 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Patient List", href: "/reception", icon: Users },
         { label: "Register Patient", href: "/reception/register", icon: UserPlus },
         { label: "Generate Receipt", href: "/reception/fees", icon: FileText },
-        { label: "Master Billing", href: "/reception/billing", icon: CreditCard },
+        { label: "Master Billing", href: "/billing", icon: CircleDollarSign },
+        { label: "Counter Billing", href: "/reception/billing", icon: CreditCard },
         { label: "Patient History", href: "/reception/history", icon: Clock },
       ],
     },
@@ -189,6 +239,9 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
     {
       title: "Finance",
       items: [
+        { label: "Master Billing", href: "/billing", icon: CircleDollarSign },
+        { label: "Approval Center", href: "/billing/approvals", icon: ShieldAlert },
+        { label: "Write-offs", href: "/billing/writeoffs", icon: Scale },
         { label: "Dashboard", href: "/finance/dashboard", icon: DollarSign },
         { label: "All Invoices", href: "/finance/invoices", icon: FileText },
         { label: "Payment Ledger", href: "/finance/payments", icon: CreditCard },
@@ -225,6 +278,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "IPD Dashboard", href: "/ipd", icon: Bed },
         { label: "Bed Matrix", href: "/ipd/bed-matrix", icon: BedDouble },
         { label: "Transfer", href: "/ipd/transfer", icon: RotateCcw },
+        { label: "OT Worklist", href: "/ot/worklist", icon: Scissors },
       ],
     },
     {
@@ -233,8 +287,23 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Nursing Station", href: "/ipd/nursing-station", icon: Syringe },
         { label: "Diet Plans", href: "/ipd/diet", icon: UtensilsCrossed },
         { label: "Ward Rounds", href: "/ipd/ward-rounds", icon: ClipboardCheck },
+        { label: "Case Sheet", href: "/ipd/case-sheet", icon: ClipboardList },
         { label: "Census", href: "/ipd/census", icon: PieChart },
-        { label: "Discharge", href: "/discharge/admin", icon: FileText },
+      ],
+    },
+    {
+      title: "Billing & Settlement",
+      items: [
+        { label: "Master Billing", href: "/billing", icon: CircleDollarSign },
+        { label: "Approval Center", href: "/billing/approvals", icon: ShieldAlert },
+        { label: "IPD Billing", href: "/ipd/billing", icon: CreditCard },
+        { label: "Discharge Settlement", href: "/ipd/discharge-settlement", icon: Wallet },
+      ],
+    },
+    {
+      title: "System",
+      items: [
+        { label: "Audit Trail", href: "/ipd/audit-trail", icon: Activity },
       ],
     },
   ],
@@ -269,6 +338,14 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Handover", href: "/nurse/handover", icon: ArrowLeftRight },
       ],
     },
+    {
+      title: "Procedural",
+      items: [
+        { label: "OT Worklist", href: "/ot/worklist", icon: Scissors },
+        { label: "ER Triage", href: "/er/dashboard", icon: Siren },
+        { label: "ER Tracking Board", href: "/er/tracking-board", icon: MonitorPlay },
+      ],
+    },
   ],
   opd_manager: [
     {
@@ -292,6 +369,58 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Leave", href: "/hr/leave", icon: CalendarDays },
         { label: "Shifts", href: "/hr/shifts", icon: Timer },
         { label: "Reports", href: "/hr/reports", icon: BarChart3 },
+      ],
+    },
+  ],
+  ot_manager: [
+    {
+      title: "Operation Theatre",
+      items: [
+        { label: "Dashboard", href: "/ot/dashboard", icon: LayoutDashboard },
+        { label: "OT Calendar", href: "/ot/calendar", icon: CalendarDays },
+        { label: "Surgery Requests", href: "/ot/requests", icon: ClipboardList },
+        { label: "Schedule Surgery", href: "/ot/schedule", icon: CalendarClock },
+        { label: "Today's Worklist", href: "/ot/worklist", icon: ClipboardCheck },
+      ],
+    },
+    {
+      title: "Clinical",
+      items: [
+        { label: "PAC Clearance", href: "/ot/pac", icon: HeartPulse },
+        { label: "OT Billing", href: "/ot/billing", icon: CreditCard },
+        { label: "OT Reports", href: "/ot/reports", icon: BarChart3 },
+      ],
+    },
+    {
+      title: "Setup",
+      items: [
+        { label: "OT Master Setup", href: "/admin/ot-setup", icon: Settings },
+      ],
+    },
+  ],
+  er_staff: [
+    {
+      title: "Emergency Room",
+      items: [
+        { label: "Dashboard", href: "/er/dashboard", icon: LayoutDashboard },
+        { label: "Tracking Board", href: "/er/tracking-board", icon: MonitorPlay },
+        { label: "Register Patient", href: "/er/register", icon: UserPlus },
+        { label: "Bulk Register", href: "/er/bulk-register", icon: Users },
+      ],
+    },
+    {
+      title: "Workflows",
+      items: [
+        { label: "ER Billing", href: "/er/billing", icon: CreditCard },
+        { label: "ER Reports", href: "/er/reports", icon: BarChart3 },
+      ],
+    },
+    {
+      title: "Hospital",
+      items: [
+        { label: "IPD Beds", href: "/ipd/bed-matrix", icon: BedDouble },
+        { label: "Lab", href: "/lab/worklist", icon: ClipboardCheck },
+        { label: "Pharmacy", href: "/pharmacy/orders", icon: Pill },
       ],
     },
   ],
@@ -321,6 +450,8 @@ const roleLabelMap: Record<string, string> = {
   nurse: "Nurse",
   opd_manager: "OPD Manager",
   hr: "HR Manager",
+  ot_manager: "OT Manager",
+  er_staff: "ER Staff",
 };
 
 export function Sidebar({ session }: SidebarProps) {

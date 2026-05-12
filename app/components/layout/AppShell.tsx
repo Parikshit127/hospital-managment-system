@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Sidebar } from "./Sidebar";
 import { RefreshCw } from "lucide-react";
 import { NotificationBell } from "@/app/components/NotificationBell";
+import { GlobalPatientSearch } from "./GlobalPatientSearch";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -74,6 +75,7 @@ export function AppShell({
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {session?.role && <GlobalPatientSearch role={session.role} />}
                 {onRefresh && (
                   <button
                     onClick={onRefresh}

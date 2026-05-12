@@ -2,6 +2,7 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
+import { resolveOPDConfig } from '@/app/lib/opd-config';
 
 // ========================================
 // OPD MANAGER DASHBOARD
@@ -281,13 +282,13 @@ export async function getNoShowReport(days: number = 7) {
 export async function getOPDConfig() {
     try {
         const { db, organizationId } = await requireTenantContext();
-        const config = await db.oPDConfig.findFirst({ where: { organizationId } });
+        const config = await resolveOPDConfig(db, organizationId);
         return {
             success: true,
             data: {
-                max_wait_minutes: config?.max_wait_minutes ?? 30,
-                escalation_threshold: config?.escalation_threshold ?? 45,
-                max_patients_per_doctor: config?.max_patients_per_doctor ?? 30,
+                max_wait_minutes: config.max_wait_minutes,
+                escalation_threshold: config.escalation_threshold,
+                max_patients_per_doctor: config.max_patients_per_doctor,
             },
         };
     } catch {
@@ -314,10 +315,10 @@ export async function getSLABreachAlerts() {
                 include: { patient: { select: { full_name: true } } },
                 orderBy: { checked_in_at: 'asc' },
             }),
-            db.oPDConfig.findFirst({ where: { organizationId } }),
+            resolveOPDConfig(db, organizationId),
         ]);
 
-        const maxWait = config?.max_wait_minutes ?? 30;
+        const maxWait = config.max_wait_minutes;
         const now = Date.now();
 
         const breaches = checkedIn

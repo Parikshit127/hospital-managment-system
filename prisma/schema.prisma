@@ -158,18 +158,29 @@ model Organization {
   budget_alerts                 BudgetAlert[]
 
   // GAP 5 — 2-Hour Assessment Alerts
-  nursing_assessment_alerts     NursingAssessmentAlert[]
+  nursing_assessment_alerts      NursingAssessmentAlert[]
   // GAP 6 — 14-Tab IPD EMR
-  clinical_orders               ClinicalOrder[]
-  physician_orders              PhysicianOrder[]
-  active_medications            ActiveMedication[]
+  clinical_orders                ClinicalOrder[]
+  physician_orders               PhysicianOrder[]
+  active_medications             ActiveMedication[]
   // GAP 8 — Order Sets
-  order_sets                    OrderSet[]
+  order_sets                     OrderSet[]
   // GAP 9 — Investigation My List
   doctor_investigation_favorites DoctorInvestigationFavorite[]
   // GAP 16 — Referral Orders
-  referral_orders               ReferralOrder[]
+  referral_orders                ReferralOrder[]
 
+  // Phase 2 — OT Module
+  ot_rooms         OTRoom[]
+  surgery_masters  SurgeryMaster[]
+  surgery_requests SurgeryRequest[]
+  ot_schedules     OTSchedule[]
+
+  // Phase 3 — Emergency Module
+  er_registrations ERRegistration[]
+
+  // Master Billing Phase 2 — Write-offs
+  writeoffs Writeoff[]
 
   // Extended hospital profile fields
   hospital_type          String? // General, Multi-Specialty, Super-Specialty, Clinic, Nursing Home
@@ -385,30 +396,30 @@ model SuperAdmin {
 // ========================================
 
 model User {
-  id                     String   @id @default(uuid())
-  username               String   @unique
-  password               String
-  role                   String // admin, doctor, receptionist, lab_technician, pharmacist, finance, ipd_manager, nurse, opd_manager, hr, coordinator
-  name                   String?
-  specialty              String?
-  email                  String?
-  phone                  String?
-  assigned_ward_id       Int?
-  doctor_registration_no String?
-  qualifications         String?
-  organizationId         String
-  is_active              Boolean  @default(true)
-  working_hours              String   @default("09:00-17:00")
-  slot_duration              Int      @default(20)
-  consultation_fee           Float    @default(500)
-  follow_up_fee              Float    @default(300)
-  max_overbooking_per_slot   Int      @default(0) // extra patients allowed beyond slot capacity
-  createdAt                  DateTime @default(now())
+  id                       String   @id @default(uuid())
+  username                 String   @unique
+  password                 String
+  role                     String // admin, doctor, receptionist, lab_technician, pharmacist, finance, ipd_manager, nurse, opd_manager, hr, coordinator
+  name                     String?
+  specialty                String?
+  email                    String?
+  phone                    String?
+  assigned_ward_id         Int?
+  doctor_registration_no   String?
+  qualifications           String?
+  organizationId           String
+  is_active                Boolean  @default(true)
+  working_hours            String   @default("09:00-17:00")
+  slot_duration            Int      @default(20)
+  consultation_fee         Float    @default(500)
+  follow_up_fee            Float    @default(300)
+  max_overbooking_per_slot Int      @default(0) // extra patients allowed beyond slot capacity
+  createdAt                DateTime @default(now())
 
   // GAP 3 — Doctor Group Hierarchy — Senior/Junior Access
-  supervisor_id          String? // Senior doctor ID
-  doctor_group_id        String? // Group identifier
-  is_group_lead          Boolean @default(false)
+  supervisor_id   String? // Senior doctor ID
+  doctor_group_id String? // Group identifier
+  is_group_lead   Boolean @default(false)
 
   organization      Organization      @relation(fields: [organizationId], references: [id])
   appointment_slots AppointmentSlot[]
@@ -459,26 +470,26 @@ model OPD_REG {
   corporate_card_number String?
 
   // GAP 1 — UHID Merging / Unmerging
-  parent_patient_id String?  // Primary UHID if this is secondary
-  is_secondary      Boolean @default(false)
+  parent_patient_id String? // Primary UHID if this is secondary
+  is_secondary      Boolean   @default(false)
   merged_into       String? // Tracks merge history
   merged_at         DateTime?
   merged_by         String?
 
   // GAP 13 — Registration Fields Missing
-  title                      String? // Baby, Dr, Mrs, Mr, Ms
-  is_vip                     Boolean @default(false)
-  marital_status             String? // Single, Married, Divorced, Widowed
-  preferred_language         String? @default("en") // en, hi, ar, etc.
-  lead_source                String? // Hospital, Doctor, Website, Social Media, Referral
-  race                       String? // For Arab nation patients
-  patient_category           String? // Antenatal, BPL, General, Govt Employee, Postnatal
-  frro_number                String? // Required for international patients
-  is_senior_citizen          Boolean @default(false)
-  age_in_days                Int? // For newborns
-  registration_remarks       String?
-  distance_from_hospital_km  Float?
-  registration_form_url      String? // Signed form upload
+  title                     String? // Baby, Dr, Mrs, Mr, Ms
+  is_vip                    Boolean @default(false)
+  marital_status            String? // Single, Married, Divorced, Widowed
+  preferred_language        String? @default("en") // en, hi, ar, etc.
+  lead_source               String? // Hospital, Doctor, Website, Social Media, Referral
+  race                      String? // For Arab nation patients
+  patient_category          String? // Antenatal, BPL, General, Govt Employee, Postnatal
+  frro_number               String? // Required for international patients
+  is_senior_citizen         Boolean @default(false)
+  age_in_days               Int? // For newborns
+  registration_remarks      String?
+  distance_from_hospital_km Float?
+  registration_form_url     String? // Signed form upload
 
   organization          Organization                @relation(fields: [organizationId], references: [id])
   corporate             CorporateMaster?            @relation(fields: [corporate_id], references: [id])
@@ -528,7 +539,7 @@ model appointments {
 
   // Booking channel & payment
   booking_channel String? @default("walk_in") // call_center, patient_app, patient_portal, walk_in
-  payment_mode    String  @default("ONLINE")  // ONLINE, PAV (pay at visit), FREE, cash, insurance
+  payment_mode    String  @default("ONLINE") // ONLINE, PAV (pay at visit), FREE, cash, insurance
   payment_status  String  @default("PENDING") // PENDING, PAID, WAIVED
   is_pav          Boolean @default(false)
   pav_sms_sent    Boolean @default(false)
@@ -671,31 +682,31 @@ model lab_audit_logs {
 // ========================================
 
 model pharmacy_medicine_master {
-  id             Int     @id @default(autoincrement())
-  brand_name     String  @unique
-  generic_name   String?
-  category       String?
-  manufacturer   String?
+  id              Int     @id @default(autoincrement())
+  brand_name      String  @unique
+  generic_name    String?
+  category        String?
+  manufacturer    String?
   // legacy field retained for backward compat; mirrors selling_price
-  price_per_unit Float
+  price_per_unit  Float
   // NEW pricing fields
-  mrp            Float   @default(0)
-  purchase_price Float   @default(0)
-  selling_price  Float   @default(0)
-  gst_percent    Float   @default(0)
+  mrp             Float   @default(0)
+  purchase_price  Float   @default(0)
+  selling_price   Float   @default(0)
+  gst_percent     Float   @default(0)
   // formulation metadata
-  strength       String?
-  form           String? // tablet, syrup, injection, etc.
-  min_threshold  Int     @default(10)
-  hsn_sac_code   String?
-  ndc_code       String? // National Drug Code
-  tax_rate       Float?  @default(0) // keep for existing GST calc — sync with gst_percent on save
-  is_active      Boolean @default(true)
+  strength        String?
+  form            String? // tablet, syrup, injection, etc.
+  min_threshold   Int     @default(10)
+  hsn_sac_code    String?
+  ndc_code        String? // National Drug Code
+  tax_rate        Float?  @default(0) // keep for existing GST calc — sync with gst_percent on save
+  is_active       Boolean @default(true)
   // Drug classification & safety flags
-  drug_schedule    String?  // H, H1, X, NDPS, OTC
-  is_narcotic      Boolean  @default(false)
-  is_refrigerated  Boolean  @default(false)
-  organizationId String
+  drug_schedule   String? // H, H1, X, NDPS, OTC
+  is_narcotic     Boolean @default(false)
+  is_refrigerated Boolean @default(false)
+  organizationId  String
 
   organization Organization               @relation(fields: [organizationId], references: [id])
   batches      pharmacy_batch_inventory[]
@@ -763,21 +774,21 @@ model pharmacy_orders {
 }
 
 model pharmacy_order_items {
-  id                 Int      @id @default(autoincrement())
+  id                 Int     @id @default(autoincrement())
   order_id           Int
   medicine_id        Int?
   medicine_name      String // kept for display / backward compat
   quantity_requested Int
-  quantity_dispensed  Int?
+  quantity_dispensed Int?
   unit_price         Float?
   total_price        Float?
   batch_id           String?
-  status             String   @default("Pending")
-  tax_rate           Float?   @default(0)
-  tax_amount         Float?   @default(0)
+  status             String  @default("Pending")
+  tax_rate           Float?  @default(0)
+  tax_amount         Float?  @default(0)
   hsn_sac_code       String?
 
-  order    pharmacy_orders          @relation(fields: [order_id], references: [id])
+  order    pharmacy_orders           @relation(fields: [order_id], references: [id])
   medicine pharmacy_medicine_master? @relation(fields: [medicine_id], references: [id])
 
   @@index([medicine_id])
@@ -1003,6 +1014,7 @@ model invoices {
   credit_notes          CreditNote[]
   payment_splits        PaymentSplit[]
   pharmacy_orders       pharmacy_orders[]
+  writeoffs             Writeoff[]
 
   @@index([organizationId])
   @@index([status])
@@ -1223,12 +1235,12 @@ model ClinicalEncounter {
   updated_at         DateTime  @updatedAt
 
   // GAP 4 — Coordinator Login with Doctor Approval Workflow
-  typed_by           String? // Coordinator who entered data
-  entered_by         String? // Same as typed_by for clarity
-  approval_status    String?   @default("draft") // draft, pending_approval, approved, rejected
-  approved_at        DateTime?
-  rejected_at        DateTime?
-  rejection_reason   String?
+  typed_by         String? // Coordinator who entered data
+  entered_by       String? // Same as typed_by for clarity
+  approval_status  String?   @default("draft") // draft, pending_approval, approved, rejected
+  approved_at      DateTime?
+  rejected_at      DateTime?
+  rejection_reason String?
 
   organization Organization @relation(fields: [organizationId], references: [id])
   patient      OPD_REG      @relation(fields: [patient_id], references: [patient_id])
@@ -1319,6 +1331,11 @@ model CorporateMaster {
   @@map("corporate_masters")
 }
 
+/// @deprecated Use `InsurancePreAuth` (insurance_preauths) — it is the richer
+/// IPD-aware model (admission link, query log, enhancement history). This
+/// model is still referenced by billing-engine.ts and OPD pre-auth flows.
+/// Slated for merger in Phase 6: move appointment_id/provider_id/corporate_id
+/// fields onto InsurancePreAuth and migrate rows.
 model PreAuthorization {
   id               String    @id @default(uuid())
   organizationId   String
@@ -1352,6 +1369,10 @@ model PreAuthorization {
 // MODULE — Legacy Billing
 // ========================================
 
+/// @deprecated Use `invoices` + `invoice_items` for all new billing flows.
+/// Currently still read by admin-actions.ts dashboard aggregates (revenue by
+/// department/type). Slated for removal in Phase 6 once those aggregates are
+/// rewritten against the invoices model.
 model billing_records {
   id                 Int      @id @default(autoincrement())
   patient_id         String
@@ -1716,21 +1737,21 @@ model PurchaseOrderItem {
 // ========================================
 
 model GoodsReceiptNote {
-  id               Int       @id @default(autoincrement())
-  grn_number       String    @unique
-  po_id            Int?
-  supplier_id      Int?
-  received_by      String?
-  remarks          String?
-  total_amount     Float     @default(0)
-  organizationId   String
-  received_at      DateTime  @default(now())
-  created_at       DateTime  @default(now())
+  id             Int      @id @default(autoincrement())
+  grn_number     String   @unique
+  po_id          Int?
+  supplier_id    Int?
+  received_by    String?
+  remarks        String?
+  total_amount   Float    @default(0)
+  organizationId String
+  received_at    DateTime @default(now())
+  created_at     DateTime @default(now())
 
-  organization     Organization             @relation(fields: [organizationId], references: [id])
-  purchase_order   PurchaseOrder?           @relation(fields: [po_id], references: [id])
-  supplier         PharmacySupplier?        @relation(fields: [supplier_id], references: [id])
-  batches          pharmacy_batch_inventory[]
+  organization   Organization               @relation(fields: [organizationId], references: [id])
+  purchase_order PurchaseOrder?             @relation(fields: [po_id], references: [id])
+  supplier       PharmacySupplier?          @relation(fields: [supplier_id], references: [id])
+  batches        pharmacy_batch_inventory[]
 
   @@index([organizationId])
   @@index([po_id])
@@ -1763,12 +1784,12 @@ model PharmacyReturn {
 // ========================================
 
 model WardStock {
-  id             Int     @id @default(autoincrement())
+  id             Int    @id @default(autoincrement())
   ward_id        Int
   medicine_id    Int
-  par_level      Int     @default(0) // auto-indent when stock < par
-  current_stock  Int     @default(0)
-  reorder_point  Int     @default(0) // trigger level for auto-indent
+  par_level      Int    @default(0) // auto-indent when stock < par
+  current_stock  Int    @default(0)
+  reorder_point  Int    @default(0) // trigger level for auto-indent
   organizationId String
 
   ward         wards                    @relation(fields: [ward_id], references: [ward_id])
@@ -1782,9 +1803,9 @@ model WardStock {
 }
 
 model WardStockTransaction {
-  id              Int      @id @default(autoincrement())
-  ward_stock_id   Int
-  transaction_type String  // ISSUE, RETURN, TOP_UP, ADJUSTMENT
+  id               Int      @id @default(autoincrement())
+  ward_stock_id    Int
+  transaction_type String // ISSUE, RETURN, TOP_UP, ADJUSTMENT
   quantity         Int
   batch_no         String?
   performed_by     String?
@@ -2048,6 +2069,9 @@ model ShiftHandover {
 // MODULE — Phase 3: OPD Manager
 // ========================================
 
+/// @deprecated Canonical OPD config lives in module_configs (module_key='opd').
+/// This table is kept as a read-only fallback during migration; new writes should
+/// go through updateModuleConfig('opd', ...). Slated for removal in Phase 6 cleanup.
 model OPDConfig {
   id                      Int      @id @default(autoincrement())
   max_wait_minutes        Int      @default(30)
@@ -2246,10 +2270,10 @@ model Vendor {
   organizationId String
   created_at     DateTime @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  expenses     Expense[]
-  fixed_assets       FixedAsset[]
-  asset_maintenance  AssetMaintenance[]
+  organization      Organization       @relation(fields: [organizationId], references: [id])
+  expenses          Expense[]
+  fixed_assets      FixedAsset[]
+  asset_maintenance AssetMaintenance[]
 
   @@unique([vendor_code, organizationId])
   @@index([organizationId])
@@ -2773,18 +2797,18 @@ model whatsapp_log {
 // ========================================
 
 model NursingAssessmentAlert {
-  id                    String    @id @default(uuid())
-  admission_id          String
-  patient_id            String
-  arrival_in_unit_at    DateTime  @default(now())
-  assessment_due_at     DateTime // arrival_in_unit_at + 2 hours
-  assessment_completed  Boolean   @default(false)
-  completed_at          DateTime?
-  alert_sent_to_group   Boolean   @default(false)
-  alert_sent_at         DateTime?
-  doctor_group_id       String?
-  organizationId        String
-  created_at            DateTime  @default(now())
+  id                   String    @id @default(uuid())
+  admission_id         String
+  patient_id           String
+  arrival_in_unit_at   DateTime  @default(now())
+  assessment_due_at    DateTime // arrival_in_unit_at + 2 hours
+  assessment_completed Boolean   @default(false)
+  completed_at         DateTime?
+  alert_sent_to_group  Boolean   @default(false)
+  alert_sent_at        DateTime?
+  doctor_group_id      String?
+  organizationId       String
+  created_at           DateTime  @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -2799,18 +2823,18 @@ model NursingAssessmentAlert {
 // ========================================
 
 model ClinicalOrder {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   admission_id   String
   patient_id     String
   doctor_id      String
   order_type     String // lab, radiology, procedure, consultation
   order_details  Json
-  status         String   @default("pending") // pending, in_progress, completed, cancelled
-  priority       String   @default("routine") // stat, urgent, routine
-  ordered_at     DateTime @default(now())
+  status         String    @default("pending") // pending, in_progress, completed, cancelled
+  priority       String    @default("routine") // stat, urgent, routine
+  ordered_at     DateTime  @default(now())
   completed_at   DateTime?
   organizationId String
-  created_at     DateTime @default(now())
+  created_at     DateTime  @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -2821,19 +2845,19 @@ model ClinicalOrder {
 }
 
 model PhysicianOrder {
-  id             String   @id @default(uuid())
-  admission_id   String
-  patient_id     String
-  doctor_id      String
-  order_category String // medication, diet, activity, monitoring, other
-  order_text     String
-  frequency      String?
-  duration       String?
-  status         String   @default("active") // active, discontinued, completed
-  ordered_at     DateTime @default(now())
+  id              String    @id @default(uuid())
+  admission_id    String
+  patient_id      String
+  doctor_id       String
+  order_category  String // medication, diet, activity, monitoring, other
+  order_text      String
+  frequency       String?
+  duration        String?
+  status          String    @default("active") // active, discontinued, completed
+  ordered_at      DateTime  @default(now())
   discontinued_at DateTime?
-  organizationId String
-  created_at     DateTime @default(now())
+  organizationId  String
+  created_at      DateTime  @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -2844,20 +2868,20 @@ model PhysicianOrder {
 }
 
 model ActiveMedication {
-  id                String    @id @default(uuid())
-  admission_id      String
-  patient_id        String
-  medication_name   String
-  dosage            String
-  route             String
-  frequency         String
-  start_date        DateTime  @default(now())
-  end_date          DateTime?
-  prescribed_by     String
-  status            String    @default("active") // active, discontinued, completed
+  id                     String    @id @default(uuid())
+  admission_id           String
+  patient_id             String
+  medication_name        String
+  dosage                 String
+  route                  String
+  frequency              String
+  start_date             DateTime  @default(now())
+  end_date               DateTime?
+  prescribed_by          String
+  status                 String    @default("active") // active, discontinued, completed
   discontinuation_reason String?
-  organizationId    String
-  created_at        DateTime  @default(now())
+  organizationId         String
+  created_at             DateTime  @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -2872,24 +2896,24 @@ model ActiveMedication {
 // ========================================
 
 model OrderSet {
-  id                    String   @id @default(uuid())
-  doctor_id             String
-  name                  String
-  description           String?
-  
+  id          String  @id @default(uuid())
+  doctor_id   String
+  name        String
+  description String?
+
   // Multi-domain combination
-  chief_complaints      Json?    @default("[]")
-  gross_examination     Json?    @default("[]")
-  diagnosis             Json?    @default("[]")
-  advice_investigations Json?    @default("[]")
-  advice_medications    Json?    @default("[]")
-  op_procedures         Json?    @default("[]")
-  
-  is_favorite           Boolean  @default(false)
-  usage_count           Int      @default(0)
-  organizationId        String
-  created_at            DateTime @default(now())
-  updated_at            DateTime @updatedAt
+  chief_complaints      Json? @default("[]")
+  gross_examination     Json? @default("[]")
+  diagnosis             Json? @default("[]")
+  advice_investigations Json? @default("[]")
+  advice_medications    Json? @default("[]")
+  op_procedures         Json? @default("[]")
+
+  is_favorite    Boolean  @default(false)
+  usage_count    Int      @default(0)
+  organizationId String
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -2903,13 +2927,13 @@ model OrderSet {
 // ========================================
 
 model DoctorInvestigationFavorite {
-  id              String   @id @default(uuid())
-  doctor_id       String
+  id                 String   @id @default(uuid())
+  doctor_id          String
   investigation_name String
-  category        String?
-  display_order   Int      @default(0)
-  organizationId  String
-  created_at      DateTime @default(now())
+  category           String?
+  display_order      Int      @default(0)
+  organizationId     String
+  created_at         DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -2940,22 +2964,22 @@ model ICD10Master {
 // ========================================
 
 model ReferralOrder {
-  id                String    @id @default(uuid())
-  admission_id      String?
-  patient_id        String
-  referred_by       String // Doctor ID
-  referred_to       String // Doctor ID or external name
-  department        String?
-  location          String? // Internal department or external hospital
-  reason            String
-  status            String    @default("pending") // pending, accepted, completed, cancelled
-  priority          String    @default("routine") // stat, urgent, routine
-  notes             String?
-  referred_at       DateTime  @default(now())
-  accepted_at       DateTime?
-  completed_at      DateTime?
-  organizationId    String
-  created_at        DateTime  @default(now())
+  id             String    @id @default(uuid())
+  admission_id   String?
+  patient_id     String
+  referred_by    String // Doctor ID
+  referred_to    String // Doctor ID or external name
+  department     String?
+  location       String? // Internal department or external hospital
+  reason         String
+  status         String    @default("pending") // pending, accepted, completed, cancelled
+  priority       String    @default("routine") // stat, urgent, routine
+  notes          String?
+  referred_at    DateTime  @default(now())
+  accepted_at    DateTime?
+  completed_at   DateTime?
+  organizationId String
+  created_at     DateTime  @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -3124,16 +3148,16 @@ model GL_Account {
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
 
-  organization           Organization     @relation(fields: [organizationId], references: [id])
-  parent                 GL_Account?      @relation("AccountHierarchy", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  children               GL_Account[]     @relation("AccountHierarchy")
-  journal_lines          GL_JournalLine[]
-  asset_categories_as_asset_account       AssetCategory[] @relation("AssetAccount")
-  asset_categories_as_depreciation_account AssetCategory[] @relation("DepreciationAccount")
-  asset_categories_as_expense_account     AssetCategory[] @relation("ExpenseAccount")
+  organization                             Organization     @relation(fields: [organizationId], references: [id])
+  parent                                   GL_Account?      @relation("AccountHierarchy", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children                                 GL_Account[]     @relation("AccountHierarchy")
+  journal_lines                            GL_JournalLine[]
+  asset_categories_as_asset_account        AssetCategory[]  @relation("AssetAccount")
+  asset_categories_as_depreciation_account AssetCategory[]  @relation("DepreciationAccount")
+  asset_categories_as_expense_account      AssetCategory[]  @relation("ExpenseAccount")
   budget_lines                             BudgetLine[]
-  admissions             admissions?      @relation(fields: [admissionsAdmission_id], references: [admission_id])
-  admissionsAdmission_id String?
+  admissions                               admissions?      @relation(fields: [admissionsAdmission_id], references: [admission_id])
+  admissionsAdmission_id                   String?
 
   @@unique([account_code, organizationId])
   @@index([organizationId])
@@ -3161,13 +3185,13 @@ model GL_JournalEntry {
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
 
-  organization           Organization     @relation(fields: [organizationId], references: [id])
-  period                 FinancialPeriod? @relation(fields: [period_id], references: [id])
-  reversal_entry         GL_JournalEntry? @relation("JournalReversal", fields: [reversal_entry_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  reversed_by            GL_JournalEntry? @relation("JournalReversal")
+  organization           Organization        @relation(fields: [organizationId], references: [id])
+  period                 FinancialPeriod?    @relation(fields: [period_id], references: [id])
+  reversal_entry         GL_JournalEntry?    @relation("JournalReversal", fields: [reversal_entry_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reversed_by            GL_JournalEntry?    @relation("JournalReversal")
   lines                  GL_JournalLine[]
   depreciation_entries   DepreciationEntry[]
-  admissions             admissions?      @relation(fields: [admissionsAdmission_id], references: [admission_id])
+  admissions             admissions?         @relation(fields: [admissionsAdmission_id], references: [admission_id])
   admissionsAdmission_id String?
 
   @@unique([journal_number, organizationId])
@@ -3350,8 +3374,8 @@ model AssetCategory {
   organizationId             String
   category_name              String
   category_code              String
-  asset_type                 String   // Tangible, Intangible
-  depreciation_method        String   // SLM, WDV
+  asset_type                 String // Tangible, Intangible
+  depreciation_method        String // SLM, WDV
   depreciation_rate          Decimal  @db.Decimal(5, 2) // % per annum
   useful_life_years          Int?
   gl_asset_account_id        String?
@@ -3361,11 +3385,11 @@ model AssetCategory {
   created_at                 DateTime @default(now())
   updated_at                 DateTime @updatedAt
 
-  organization           Organization  @relation(fields: [organizationId], references: [id])
-  gl_asset_account       GL_Account?   @relation("AssetAccount", fields: [gl_asset_account_id], references: [id])
-  gl_depreciation_account GL_Account? @relation("DepreciationAccount", fields: [gl_depreciation_account_id], references: [id])
-  gl_expense_account     GL_Account?   @relation("ExpenseAccount", fields: [gl_expense_account_id], references: [id])
-  assets                 FixedAsset[]
+  organization            Organization @relation(fields: [organizationId], references: [id])
+  gl_asset_account        GL_Account?  @relation("AssetAccount", fields: [gl_asset_account_id], references: [id])
+  gl_depreciation_account GL_Account?  @relation("DepreciationAccount", fields: [gl_depreciation_account_id], references: [id])
+  gl_expense_account      GL_Account?  @relation("ExpenseAccount", fields: [gl_expense_account_id], references: [id])
+  assets                  FixedAsset[]
 
   @@unique([category_code, organizationId])
   @@index([organizationId])
@@ -3373,57 +3397,57 @@ model AssetCategory {
 }
 
 model FixedAsset {
-  id                      String    @id @default(uuid())
-  organizationId          String
-  asset_code              String
-  asset_name              String
-  category_id             String
-  description             String?   @db.Text
-  location                String?
-  department              String?
+  id             String  @id @default(uuid())
+  organizationId String
+  asset_code     String
+  asset_name     String
+  category_id    String
+  description    String? @db.Text
+  location       String?
+  department     String?
 
   // Acquisition
-  acquisition_date        DateTime
-  acquisition_cost        Decimal   @db.Decimal(15, 2)
-  vendor_id               Int?
-  invoice_number          String?
-  warranty_expiry         DateTime?
+  acquisition_date DateTime
+  acquisition_cost Decimal   @db.Decimal(15, 2)
+  vendor_id        Int?
+  invoice_number   String?
+  warranty_expiry  DateTime?
 
   // Depreciation
-  depreciation_method     String    // SLM, WDV
-  depreciation_rate       Decimal   @db.Decimal(5, 2)
-  salvage_value           Decimal   @default(0) @db.Decimal(15, 2)
-  accumulated_depreciation Decimal  @default(0) @db.Decimal(15, 2)
-  book_value              Decimal   @db.Decimal(15, 2)
-  last_depreciation_date  DateTime?
+  depreciation_method      String // SLM, WDV
+  depreciation_rate        Decimal   @db.Decimal(5, 2)
+  salvage_value            Decimal   @default(0) @db.Decimal(15, 2)
+  accumulated_depreciation Decimal   @default(0) @db.Decimal(15, 2)
+  book_value               Decimal   @db.Decimal(15, 2)
+  last_depreciation_date   DateTime?
 
   // Status
-  status                  String    @default("Active") // Active, Disposed, Sold, WrittenOff, UnderMaintenance
-  disposed_date           DateTime?
-  disposal_value          Decimal?  @db.Decimal(15, 2)
-  disposal_reason         String?   @db.Text
+  status          String    @default("Active") // Active, Disposed, Sold, WrittenOff, UnderMaintenance
+  disposed_date   DateTime?
+  disposal_value  Decimal?  @db.Decimal(15, 2)
+  disposal_reason String?   @db.Text
 
   // Maintenance
-  maintenance_schedule    String?   // Monthly, Quarterly, Yearly
-  last_maintenance_date   DateTime?
-  next_maintenance_date   DateTime?
+  maintenance_schedule  String? // Monthly, Quarterly, Yearly
+  last_maintenance_date DateTime?
+  next_maintenance_date DateTime?
 
   // Additional
-  serial_number           String?
-  manufacturer            String?
-  model_number            String?
-  is_capitalized          Boolean   @default(true)
-  capitalization_date     DateTime?
+  serial_number       String?
+  manufacturer        String?
+  model_number        String?
+  is_capitalized      Boolean   @default(true)
+  capitalization_date DateTime?
 
-  created_at              DateTime  @default(now())
-  updated_at              DateTime  @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
-  organization       Organization         @relation(fields: [organizationId], references: [id])
-  category           AssetCategory        @relation(fields: [category_id], references: [id])
-  vendor             Vendor?              @relation(fields: [vendor_id], references: [id])
+  organization         Organization        @relation(fields: [organizationId], references: [id])
+  category             AssetCategory       @relation(fields: [category_id], references: [id])
+  vendor               Vendor?             @relation(fields: [vendor_id], references: [id])
   depreciation_entries DepreciationEntry[]
-  transfers          AssetTransfer[]
-  maintenance_records AssetMaintenance[]
+  transfers            AssetTransfer[]
+  maintenance_records  AssetMaintenance[]
 
   @@unique([asset_code, organizationId])
   @@index([organizationId])
@@ -3433,25 +3457,25 @@ model FixedAsset {
 }
 
 model DepreciationEntry {
-  id                      String    @id @default(uuid())
-  organizationId          String
-  asset_id                String
-  depreciation_period     String    // MMYYYY
-  period_start            DateTime
-  period_end              DateTime
-  opening_book_value      Decimal   @db.Decimal(15, 2)
-  depreciation_amount     Decimal   @db.Decimal(15, 2)
+  id                       String   @id @default(uuid())
+  organizationId           String
+  asset_id                 String
+  depreciation_period      String // MMYYYY
+  period_start             DateTime
+  period_end               DateTime
+  opening_book_value       Decimal  @db.Decimal(15, 2)
+  depreciation_amount      Decimal  @db.Decimal(15, 2)
   accumulated_depreciation Decimal  @db.Decimal(15, 2)
-  closing_book_value      Decimal   @db.Decimal(15, 2)
-  calculation_method      String    // SLM, WDV
-  journal_entry_id        String?
-  status                  String    @default("Draft") // Draft, Posted, Reversed
-  created_at              DateTime  @default(now())
-  updated_at              DateTime  @updatedAt
+  closing_book_value       Decimal  @db.Decimal(15, 2)
+  calculation_method       String // SLM, WDV
+  journal_entry_id         String?
+  status                   String   @default("Draft") // Draft, Posted, Reversed
+  created_at               DateTime @default(now())
+  updated_at               DateTime @updatedAt
 
-  organization   Organization    @relation(fields: [organizationId], references: [id])
-  asset          FixedAsset      @relation(fields: [asset_id], references: [id])
-  journal_entry  GL_JournalEntry? @relation(fields: [journal_entry_id], references: [id])
+  organization  Organization     @relation(fields: [organizationId], references: [id])
+  asset         FixedAsset       @relation(fields: [asset_id], references: [id])
+  journal_entry GL_JournalEntry? @relation(fields: [journal_entry_id], references: [id])
 
   @@unique([asset_id, depreciation_period])
   @@index([organizationId])
@@ -3461,18 +3485,18 @@ model DepreciationEntry {
 }
 
 model AssetTransfer {
-  id               String   @id @default(uuid())
-  organizationId   String
-  asset_id         String
-  from_location    String?
-  to_location      String?
-  from_department  String?
-  to_department    String?
-  transfer_date    DateTime
-  transfer_reason  String?  @db.Text
-  approved_by      String?
-  created_at       DateTime @default(now())
-  updated_at       DateTime @updatedAt
+  id              String   @id @default(uuid())
+  organizationId  String
+  asset_id        String
+  from_location   String?
+  to_location     String?
+  from_department String?
+  to_department   String?
+  transfer_date   DateTime
+  transfer_reason String?  @db.Text
+  approved_by     String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
   asset        FixedAsset   @relation(fields: [asset_id], references: [id])
@@ -3483,18 +3507,18 @@ model AssetTransfer {
 }
 
 model AssetMaintenance {
-  id                String    @id @default(uuid())
-  organizationId    String
-  asset_id          String
-  maintenance_type  String    // Preventive, Corrective, Calibration
-  maintenance_date  DateTime
-  description       String?   @db.Text
-  cost              Decimal?  @db.Decimal(15, 2)
-  vendor_id         Int?
-  next_due_date     DateTime?
-  performed_by      String?
-  created_at        DateTime  @default(now())
-  updated_at        DateTime  @updatedAt
+  id               String    @id @default(uuid())
+  organizationId   String
+  asset_id         String
+  maintenance_type String // Preventive, Corrective, Calibration
+  maintenance_date DateTime
+  description      String?   @db.Text
+  cost             Decimal?  @db.Decimal(15, 2)
+  vendor_id        Int?
+  next_due_date    DateTime?
+  performed_by     String?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
   asset        FixedAsset   @relation(fields: [asset_id], references: [id])
@@ -3515,7 +3539,7 @@ model BudgetMaster {
   organizationId      String
   budget_name         String
   budget_year         Int
-  budget_period       String    // Annual, Quarterly, Monthly
+  budget_period       String // Annual, Quarterly, Monthly
   start_date          DateTime
   end_date            DateTime
   status              String    @default("Draft") // Draft, Approved, Active, Closed, Revised
@@ -3529,7 +3553,7 @@ model BudgetMaster {
   created_at          DateTime  @default(now())
   updated_at          DateTime  @updatedAt
 
-  organization Organization    @relation(fields: [organizationId], references: [id])
+  organization Organization     @relation(fields: [organizationId], references: [id])
   budget_lines BudgetLine[]
   revisions    BudgetRevision[]
 
@@ -3599,7 +3623,7 @@ model BudgetAlert {
   id                  String    @id @default(uuid())
   organizationId      String
   budget_line_id      String
-  alert_type          String    // Threshold, Overrun, Underutilization
+  alert_type          String // Threshold, Overrun, Underutilization
   alert_date          DateTime
   budget_amount       Decimal   @db.Decimal(15, 2)
   actual_amount       Decimal   @db.Decimal(15, 2)
@@ -3617,4 +3641,392 @@ model BudgetAlert {
   @@index([budget_line_id])
   @@index([is_acknowledged])
   @@map("budget_alerts")
+}
+
+// ========================================
+// MODULE — OT (Operation Theatre) — Phase 2
+// ========================================
+
+model OTRoom {
+  id             String   @id @default(uuid())
+  organizationId String
+  room_name      String // "OT-1", "OT-2", "Minor OT"
+  room_type      String // Major, Minor, Cath Lab, Endo Suite
+  floor          String?
+  wing           String?
+  is_active      Boolean  @default(true)
+  equipment      Json? // ["ventilator", "c-arm", "laparoscopy"]
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  schedules    OTSchedule[]
+
+  @@index([organizationId])
+  @@map("ot_rooms")
+}
+
+model SurgeryMaster {
+  id                    String   @id @default(uuid())
+  organizationId        String
+  surgery_code          String
+  surgery_name          String
+  category              String // General, Ortho, Cardiac, Neuro, etc.
+  sub_category          String?
+  default_duration_mins Int      @default(60)
+  ot_room_type          String? // Required room type
+  requires_icu          Boolean  @default(false)
+  billing_components    Json? // surgeon fee, anesthesia fee, OT charges, consumables template
+  is_active             Boolean  @default(true)
+  created_at            DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, surgery_code])
+  @@index([organizationId])
+  @@map("surgery_masters")
+}
+
+model SurgeryRequest {
+  id                   String    @id @default(uuid())
+  organizationId       String
+  request_number       String    @unique
+  patient_id           String
+  admission_id         String?
+  appointment_id       String?
+  requesting_doctor_id String
+  surgery_master_id    String?
+  surgery_name         String
+  surgery_category     String?
+  urgency              String    @default("Elective") // Elective, Urgent, Emergency
+  clinical_notes       String?
+  diagnosis            String?
+  icd_codes            Json?
+  status               String    @default("Requested") // Requested, Approved, Scheduled, PAC_Pending, PAC_Cleared, Ready, InProgress, Completed, Cancelled
+  requested_date       DateTime?
+  approved_by          String?
+  approved_at          DateTime?
+  cancelled_reason     String?
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id])
+  schedule     OTSchedule?
+  pac          PACClearance?
+  checklist    OTChecklist?
+  notes        SurgeryNote[]
+  team         SurgeryTeamMember[]
+  billing      SurgeryBilling?
+  consumables  SurgeryConsumable[]
+
+  @@index([organizationId])
+  @@index([patient_id])
+  @@index([status])
+  @@map("surgery_requests")
+}
+
+model OTSchedule {
+  id                 String    @id @default(uuid())
+  organizationId     String
+  surgery_request_id String    @unique
+  ot_room_id         String
+  scheduled_date     DateTime
+  start_time         String // "09:00"
+  end_time           String // "11:00"
+  actual_start       DateTime?
+  actual_end         DateTime?
+  wheel_in_time      DateTime?
+  wheel_out_time     DateTime?
+  status             String    @default("Scheduled") // Scheduled, InProgress, Completed, Cancelled, Delayed
+  delay_reason       String?
+  created_at         DateTime  @default(now())
+
+  organization Organization   @relation(fields: [organizationId], references: [id])
+  ot_room      OTRoom         @relation(fields: [ot_room_id], references: [id])
+  surgery      SurgeryRequest @relation(fields: [surgery_request_id], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, scheduled_date])
+  @@index([ot_room_id, scheduled_date])
+  @@map("ot_schedules")
+}
+
+model SurgeryTeamMember {
+  id                 String  @id @default(uuid())
+  surgery_request_id String
+  role               String // Primary Surgeon, Asst Surgeon, Anesthetist, Scrub Nurse, Circulating Nurse
+  doctor_id          String?
+  staff_name         String
+  specialty          String?
+
+  surgery SurgeryRequest @relation(fields: [surgery_request_id], references: [id], onDelete: Cascade)
+
+  @@index([surgery_request_id])
+  @@map("surgery_team_members")
+}
+
+model PACClearance {
+  id                    String    @id @default(uuid())
+  surgery_request_id    String    @unique
+  anesthetist_id        String?
+  anesthetist_name      String?
+  asa_grade             String? // ASA I-VI
+  anesthesia_type       String? // General, Spinal, Epidural, Local, Regional
+  airway_assessment     Json? // Mallampati, thyromental, neck mobility
+  pre_op_investigations Json? // required labs, ECG, chest X-ray
+  fitness_status        String    @default("Pending") // Pending, Fit, Unfit, ConditionallyFit
+  conditions            String? // conditions if conditionally fit
+  notes                 String?
+  cleared_at            DateTime?
+  created_at            DateTime  @default(now())
+
+  surgery SurgeryRequest @relation(fields: [surgery_request_id], references: [id], onDelete: Cascade)
+
+  @@map("pac_clearances")
+}
+
+model OTChecklist {
+  id                 String    @id @default(uuid())
+  surgery_request_id String    @unique
+  // WHO Surgical Safety Checklist (3 phases)
+  sign_in            Json? // Before anesthesia: identity, consent, site marked, allergies, airway risk, blood loss risk
+  time_out           Json? // Before incision: team intro, patient/procedure/site confirmed, antibiotic given, imaging displayed
+  sign_out           Json? // Before leaving OT: instrument/sponge count, specimen labeled, equipment issues, recovery plan
+  sign_in_by         String?
+  sign_in_at         DateTime?
+  time_out_by        String?
+  time_out_at        DateTime?
+  sign_out_by        String?
+  sign_out_at        DateTime?
+
+  surgery SurgeryRequest @relation(fields: [surgery_request_id], references: [id], onDelete: Cascade)
+
+  @@map("ot_checklists")
+}
+
+model SurgeryNote {
+  id                 String   @id @default(uuid())
+  surgery_request_id String
+  note_type          String // Pre-Op, Intra-Op, Post-Op, Anesthesia
+  content            String
+  findings           String?
+  complications      String?
+  blood_loss_ml      Int?
+  duration_mins      Int?
+  created_by         String
+  created_at         DateTime @default(now())
+
+  surgery SurgeryRequest @relation(fields: [surgery_request_id], references: [id], onDelete: Cascade)
+
+  @@index([surgery_request_id])
+  @@map("surgery_notes")
+}
+
+model SurgeryConsumable {
+  id                 String  @id @default(uuid())
+  surgery_request_id String
+  item_name          String
+  item_code          String?
+  quantity           Int     @default(1)
+  unit_price         Float?
+  is_implant         Boolean @default(false)
+  batch_no           String?
+  serial_no          String? // for implants
+
+  surgery SurgeryRequest @relation(fields: [surgery_request_id], references: [id], onDelete: Cascade)
+
+  @@index([surgery_request_id])
+  @@map("surgery_consumables")
+}
+
+model SurgeryBilling {
+  id                 String  @id @default(uuid())
+  surgery_request_id String  @unique
+  surgeon_fee        Float   @default(0)
+  anesthesia_fee     Float   @default(0)
+  ot_charges         Float   @default(0)
+  consumable_total   Float   @default(0)
+  implant_total      Float   @default(0)
+  total_amount       Float   @default(0)
+  posted_to_ipd      Boolean @default(false)
+  invoice_id         String?
+
+  surgery SurgeryRequest @relation(fields: [surgery_request_id], references: [id], onDelete: Cascade)
+
+  @@map("surgery_billings")
+}
+
+// ========================================
+// MODULE — Emergency (ER) — Phase 3
+// ========================================
+
+model ERRegistration {
+  id                  String    @id @default(uuid())
+  organizationId      String
+  er_number           String    @unique // ER-20260512-001
+  patient_id          String? // null for unknown patients
+  patient_name        String // "Unknown Male ~30y" for unidentified
+  is_unknown          Boolean   @default(false)
+  age_estimate        String? // for unknown patients
+  gender              String?
+  brought_by          String? // ambulance, self, police, bystander
+  arrival_mode        String? // Walking, Wheelchair, Stretcher, Ambulance
+  arrival_time        DateTime  @default(now())
+  chief_complaint     String
+  triage_level        String? // ESI 1-5
+  triage_color        String? // Red, Orange, Yellow, Green, Blue
+  triage_nurse_id     String?
+  triage_time         DateTime?
+  attending_doctor_id String?
+  bed_id              String?
+  status              String    @default("Triaged") // Triaged, UnderTreatment, Observation, AdmittedToIP, Discharged, LAMA, Death, Referred
+  is_mlc              Boolean   @default(false)
+  disposition         String? // Discharged, Admitted, Transferred, LAMA, Death
+  disposition_time    DateTime?
+  admission_id        String? // if admitted to IP
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  mlc_record   MLCRecord?
+  er_vitals    ERVitals[]
+  er_orders    EROrder[]
+  er_notes     ERNote[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([triage_level])
+  @@map("er_registrations")
+}
+
+model MLCRecord {
+  id                       String    @id @default(uuid())
+  er_registration_id       String    @unique
+  mlc_number               String    @unique
+  case_type                String // RTA, Assault, Poisoning, Burns, Suicide Attempt, Snake Bite, Dog Bite, Industrial, Other
+  police_station           String?
+  fir_number               String?
+  io_name                  String? // Investigating Officer
+  io_contact               String?
+  brought_by_name          String?
+  brought_by_relation      String?
+  brought_by_id_proof      String?
+  injury_description       String?
+  injury_time              DateTime?
+  alcohol_involved         Boolean   @default(false)
+  police_informed          Boolean   @default(false)
+  police_informed_at       DateTime?
+  magistrate_statement     Boolean   @default(false)
+  wound_certificate_issued Boolean   @default(false)
+  created_at               DateTime  @default(now())
+
+  er_registration ERRegistration @relation(fields: [er_registration_id], references: [id], onDelete: Cascade)
+
+  @@map("mlc_records")
+}
+
+model ERVitals {
+  id                 String   @id @default(uuid())
+  er_registration_id String
+  recorded_at        DateTime @default(now())
+  recorded_by        String
+  bp_systolic        Int?
+  bp_diastolic       Int?
+  heart_rate         Int?
+  respiratory_rate   Int?
+  temperature        Float?
+  spo2               Int?
+  gcs_eye            Int? // Glasgow Coma Scale
+  gcs_verbal         Int?
+  gcs_motor          Int?
+  gcs_total          Int?
+  pain_scale         Int?
+  blood_sugar        Float?
+
+  er_registration ERRegistration @relation(fields: [er_registration_id], references: [id], onDelete: Cascade)
+
+  @@index([er_registration_id])
+  @@map("er_vitals")
+}
+
+model EROrder {
+  id                 String    @id @default(uuid())
+  er_registration_id String
+  order_type         String // Lab, Radiology, Medication, Procedure, Blood
+  order_details      String
+  priority           String    @default("Stat") // Stat, Urgent, Routine
+  status             String    @default("Ordered") // Ordered, InProgress, Completed, Cancelled
+  ordered_by         String
+  ordered_at         DateTime  @default(now())
+  completed_at       DateTime?
+
+  er_registration ERRegistration @relation(fields: [er_registration_id], references: [id], onDelete: Cascade)
+
+  @@index([er_registration_id])
+  @@map("er_orders")
+}
+
+model ERNote {
+  id                 String   @id @default(uuid())
+  er_registration_id String
+  note_type          String // Assessment, Procedure, Progress, Discharge
+  content            String
+  created_by         String
+  created_at         DateTime @default(now())
+
+  er_registration ERRegistration @relation(fields: [er_registration_id], references: [id], onDelete: Cascade)
+
+  @@index([er_registration_id])
+  @@map("er_notes")
+}
+
+// ========================================
+// MODULE — Master Billing Phase 2: Write-offs
+// ========================================
+//
+// Write-offs are explicit, audited reductions of an outstanding receivable
+// where the hospital chooses NOT to pursue collection. Unlike credit notes
+// (which reverse a billed item), write-offs are an accounting event posted
+// to a dedicated bad-debt expense account in the GL.
+//
+// Lifecycle: Requested → Approved/Rejected → Posted → (optional) Reversed
+//
+// Approval routing (amount-tier, codified in writeoff-actions.ts):
+//   amount <  5,000   → manager / finance / admin
+//   amount <  50,000  → finance / admin
+//   amount >= 50,000  → admin
+
+model Writeoff {
+  id               String    @id @default(uuid())
+  organizationId   String
+  writeoff_number  String    @unique // WO-YYYYMMDD-NNNN
+  patient_id       String
+  invoice_id       Int?
+  writeoff_type    String // charity | bad_debt | management_waiver | settlement_adjustment | employee_waiver
+  amount           Decimal   @db.Decimal(15, 2)
+  reason           String
+  status           String    @default("Requested") // Requested, Approved, Rejected, Posted, Reversed
+  requested_by     String
+  requested_role   String?
+  approved_by      String?
+  approved_at      DateTime?
+  rejected_by      String?
+  rejected_at      DateTime?
+  rejection_reason String?
+  posted_at        DateTime?
+  gl_journal_id    String? // FK to GL_JournalEntry once posted (string FK kept loose for safety)
+  reversed_at      DateTime?
+  reversed_by      String?
+  reversal_reason  String?
+  notes            String?
+  approval_chain   Json? // [{ action, by, role, at, comment }]
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  invoice      invoices?    @relation(fields: [invoice_id], references: [id])
+
+  @@index([organizationId])
+  @@index([patient_id])
+  @@index([status])
+  @@index([writeoff_type])
+  @@map("writeoffs")
 }

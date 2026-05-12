@@ -9,6 +9,7 @@ import { sendWhatsAppMessage, sendWhatsAppTemplate, formatPhoneNumber } from "@/
 import { prescriptionReadyMsg, admissionConfirmedMsg, icuDailyUpdateMsg } from "@/app/lib/whatsapp-templates";
 import { getTodayRange, getOrgTimezone } from "@/app/lib/timezone";
 import { sendAdmissionEmail, sendPrescriptionEmail } from "@/backend/email";
+import { resolveOPDConfig } from "@/app/lib/opd-config";
 
 export async function getPatientQueue(options?: {
   doctor_id?: string;
@@ -672,10 +673,11 @@ export async function getOrCreateDailySlots(
       return { success: true, data: existingSlots };
     }
 
-    // Auto-generate 20-min slots from 09:00 to 17:00
-    const SLOT_DURATION = 20;
-    const START_HOUR = 9;
-    const END_HOUR = 17;
+    // Read slot config from unified OPD config (module_configs canonical, OPDConfig fallback)
+    const opdCfg = await resolveOPDConfig(db, orgId!);
+    const SLOT_DURATION = opdCfg.slot_duration;
+    const START_HOUR = opdCfg.slot_start_hour;
+    const END_HOUR = opdCfg.slot_end_hour;
     const slots: any[] = [];
     const startMin = START_HOUR * 60;
     const endMin = END_HOUR * 60;

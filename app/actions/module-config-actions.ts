@@ -10,6 +10,8 @@ type ModuleKey = typeof MODULE_KEYS[number];
 const DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
     opd: {
         slot_duration: 15,
+        slot_start_hour: 9,
+        slot_end_hour: 17,
         max_patients_per_doctor: 30,
         max_wait_minutes: 20,
         escalation_threshold: 30,

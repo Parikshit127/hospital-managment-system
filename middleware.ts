@@ -30,6 +30,12 @@ const ROLE_ROUTES: Record<string, string[]> = {
   "/nurse": ["admin", "nurse"],
   "/opd-manager": ["admin", "opd_manager"],
   "/hr": ["admin", "hr"],
+  // Phase 2 — OT module
+  "/ot": ["admin", "ot_manager", "doctor", "nurse"],
+  // Phase 3 — Emergency module
+  "/er": ["admin", "er_staff", "doctor", "nurse"],
+  // Master Billing — orchestrates across reception, ipd, finance, admin
+  "/billing": ["admin", "finance", "ipd_manager", "receptionist", "opd_manager"],
 };
 
 // Route -> required module permission (granular permission check)
@@ -48,21 +54,26 @@ const PERMISSION_ROUTES: Record<string, string> = {
   "/nurse": "ipd.view",
   "/opd-manager": "opd.view",
   "/hr": "hr.view",
+  "/ot": "ot.view",
+  "/er": "er.view",
+  "/billing": "billing.view",
 };
 
 // System role -> permission map (mirrors session.ts SYSTEM_ROLE_PERMISSIONS)
 // Kept minimal here for Edge runtime compatibility
 const ROLE_PERMISSIONS: Record<string, string[]> = {
-  admin: ["opd.view", "ipd.view", "lab.view", "pharmacy.view", "finance.view", "insurance.view", "hr.view", "admin.view", "reports.view"],
-  doctor: ["opd.view", "ipd.view", "lab.view", "pharmacy.view", "finance.view", "insurance.view", "reports.view"],
-  receptionist: ["opd.view", "ipd.view", "finance.view", "insurance.view", "reports.view"],
+  admin: ["opd.view", "ipd.view", "lab.view", "pharmacy.view", "finance.view", "insurance.view", "hr.view", "admin.view", "reports.view", "ot.view", "er.view", "billing.view"],
+  doctor: ["opd.view", "ipd.view", "lab.view", "pharmacy.view", "finance.view", "insurance.view", "reports.view", "ot.view", "er.view"],
+  receptionist: ["opd.view", "ipd.view", "finance.view", "insurance.view", "reports.view", "billing.view"],
   lab_technician: ["lab.view", "reports.view"],
   pharmacist: ["pharmacy.view", "reports.view"],
-  finance: ["finance.view", "insurance.view", "reports.view"],
-  ipd_manager: ["ipd.view", "opd.view", "lab.view", "pharmacy.view", "finance.view", "reports.view"],
-  nurse: ["ipd.view", "opd.view", "lab.view", "pharmacy.view", "reports.view"],
-  opd_manager: ["opd.view", "lab.view", "pharmacy.view", "finance.view", "reports.view"],
+  finance: ["finance.view", "insurance.view", "reports.view", "billing.view"],
+  ipd_manager: ["ipd.view", "opd.view", "lab.view", "pharmacy.view", "finance.view", "reports.view", "ot.view", "billing.view"],
+  nurse: ["ipd.view", "opd.view", "lab.view", "pharmacy.view", "reports.view", "ot.view", "er.view"],
+  opd_manager: ["opd.view", "lab.view", "pharmacy.view", "finance.view", "reports.view", "billing.view"],
   hr: ["hr.view", "reports.view"],
+  ot_manager: ["ot.view", "ipd.view", "pharmacy.view", "reports.view"],
+  er_staff: ["er.view", "ipd.view", "lab.view", "pharmacy.view", "reports.view"],
 };
 
 export async function middleware(request: NextRequest) {
@@ -223,6 +234,8 @@ export async function middleware(request: NextRequest) {
         nurse: "/nurse/dashboard",
         opd_manager: "/opd-manager/dashboard",
         hr: "/hr/dashboard",
+        ot_manager: "/ot/dashboard",
+        er_staff: "/er/dashboard",
       };
       return NextResponse.redirect(
         new URL(redirectMap[role] || "/", request.url),
