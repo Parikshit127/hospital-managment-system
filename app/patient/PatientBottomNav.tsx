@@ -5,22 +5,28 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     Home, Calendar, FlaskConical, CreditCard, MoreHorizontal,
-    Pill, Heart, FileText, User, MessageSquare, X, Bell, Shield
+    Pill, Heart, FileText, User, MessageSquare, X, Bell, Shield,
+    Video, Package, Ambulance, LayoutGrid
 } from 'lucide-react';
 
 const PRIMARY_TABS = [
     { label: 'Home', href: '/patient/dashboard', icon: Home },
+    { label: 'Services', href: '/patient/services', icon: LayoutGrid },
     { label: 'Appointments', href: '/patient/appointments', icon: Calendar },
     { label: 'Labs', href: '/patient/labs', icon: FlaskConical },
-    { label: 'Payments', href: '/patient/payments', icon: CreditCard },
 ];
 
 const MORE_ITEMS = [
-    { label: 'Notifications', href: '/patient/notifications', icon: Bell },
+    { label: 'Teleconsult', href: '/patient/teleconsultation', icon: Video },
+    { label: 'Medicines', href: '/patient/medicines', icon: Pill },
+    { label: 'Ambulance', href: '/patient/ambulance', icon: Ambulance },
+    { label: 'My Orders', href: '/patient/orders', icon: Package },
+    { label: 'Payments', href: '/patient/payments', icon: CreditCard },
     { label: 'Prescriptions', href: '/patient/prescriptions', icon: Pill },
     { label: 'My Vitals', href: '/patient/vitals', icon: Heart },
-    { label: 'Medical Records', href: '/patient/records', icon: FileText },
+    { label: 'Records', href: '/patient/records', icon: FileText },
     { label: 'My Profile', href: '/patient/profile', icon: User },
+    { label: 'Notifications', href: '/patient/notifications', icon: Bell },
     { label: 'Feedback', href: '/patient/feedback', icon: MessageSquare },
     { label: 'Privacy', href: '/patient/settings/privacy', icon: Shield },
 ];

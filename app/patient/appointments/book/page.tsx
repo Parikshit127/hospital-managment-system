@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   Stethoscope,
   CalendarDays,
@@ -44,6 +45,14 @@ const STEPS = [
 ];
 
 export default function BookAppointmentPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500" /></div>}>
+      <BookAppointmentContent />
+    </Suspense>
+  );
+}
+
+function BookAppointmentContent() {
   const [step, setStep] = useState(1);
 
   // Step 1
@@ -58,6 +67,16 @@ export default function BookAppointmentPage() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [selectedSlotIsFree, setSelectedSlotIsFree] = useState(false);
+
+  // Appointment type from URL param
+  const searchParams = useSearchParams();
+  const appointmentType = searchParams.get('type') || 'consultation';
+  const TYPE_LABELS: Record<string, string> = {
+    consultation: 'Consultation',
+    package: 'Health Package',
+    diagnostics: 'Diagnostics',
+    vaccination: 'Vaccination',
+  };
 
   // Step 3
   const [reason, setReason] = useState("");
@@ -977,3 +996,4 @@ export default function BookAppointmentPage() {
     </div>
   );
 }
+

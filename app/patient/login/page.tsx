@@ -92,13 +92,25 @@ function PatientLoginForm() {
                         </button>
                     </form>
 
-                    <div className="mt-6 text-center">
+                    <div className="mt-6 text-center space-y-3">
                         <Link
                             href="/patient/forgot-password"
-                            className="text-sm font-semibold text-teal-600 hover:text-teal-700 transition-colors"
+                            className="block text-sm font-semibold text-teal-600 hover:text-teal-700 transition-colors"
                         >
                             Forgot Password?
                         </Link>
+                        <div className="border-t border-gray-100 pt-3">
+                            <p className="text-sm text-gray-500">
+                                New patient?{' '}
+                                <Link href="/patient/register" className="text-emerald-600 font-bold hover:underline">
+                                    Register here
+                                </Link>
+                                {' '}or{' '}
+                                <Link href="/patient/organisations" className="text-emerald-600 font-bold hover:underline">
+                                    Find a hospital
+                                </Link>
+                            </p>
+                        </div>
                     </div>
 
                     <p className="mt-4 text-center text-xs text-gray-500 leading-relaxed">

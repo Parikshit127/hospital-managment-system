@@ -1,6 +1,7 @@
 import {
     Activity, Calendar, FlaskConical, CreditCard, LogOut,
-    Pill, Heart, FileText, User, MessageSquare, MoreHorizontal, Home, Bell, Shield
+    Pill, Heart, FileText, User, MessageSquare, MoreHorizontal, Home, Bell, Shield,
+    Video, Package, Ambulance, Stethoscope, Upload, LayoutGrid
 } from 'lucide-react';
 import { getPatientSession, patientLogout } from './login/actions';
 import Link from 'next/link';
@@ -21,18 +22,23 @@ export default async function PatientLayout({
     }
 
     const primaryNav = [
-        { label: 'Dashboard', href: '/patient/dashboard', icon: Home },
+        { label: 'Home', href: '/patient/dashboard', icon: Home },
+        { label: 'Services', href: '/patient/services', icon: LayoutGrid },
         { label: 'Appointments', href: '/patient/appointments', icon: Calendar },
         { label: 'Lab Results', href: '/patient/labs', icon: FlaskConical },
         { label: 'Prescriptions', href: '/patient/prescriptions', icon: Pill },
-        { label: 'Payments', href: '/patient/payments', icon: CreditCard },
     ];
 
     const moreNav = [
-        { label: 'Notifications', href: '/patient/notifications', icon: Bell },
+        { label: 'Teleconsultation', href: '/patient/teleconsultation', icon: Video },
+        { label: 'Order Medicines', href: '/patient/medicines', icon: Pill },
+        { label: 'Ambulance', href: '/patient/ambulance', icon: Ambulance },
+        { label: 'My Orders', href: '/patient/orders', icon: Package },
+        { label: 'Payments', href: '/patient/payments', icon: CreditCard },
         { label: 'My Vitals', href: '/patient/vitals', icon: Heart },
         { label: 'Medical Records', href: '/patient/records', icon: FileText },
         { label: 'My Profile', href: '/patient/profile', icon: User },
+        { label: 'Notifications', href: '/patient/notifications', icon: Bell },
         { label: 'Feedback', href: '/patient/feedback', icon: MessageSquare },
         { label: 'Privacy & Data', href: '/patient/settings/privacy', icon: Shield },
     ];

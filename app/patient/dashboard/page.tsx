@@ -223,11 +223,21 @@ export default function PatientDashboard() {
             )}
 
             {/* Quick Links */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 <Link href="/patient/appointments/book" className="bg-gradient-to-br from-indigo-500 to-blue-600 rounded-2xl p-5 text-white hover:shadow-lg transition-shadow relative overflow-hidden group">
                     <Calendar className="absolute right-[-10px] bottom-[-10px] h-20 w-20 text-white/10 group-hover:scale-110 transition-transform" />
                     <h3 className="text-base font-black mb-0.5">Book Appointment</h3>
                     <p className="text-indigo-100 text-xs font-medium">Schedule a visit</p>
+                </Link>
+                <Link href="/patient/teleconsultation" className="bg-gradient-to-br from-rose-500 to-pink-600 rounded-2xl p-5 text-white hover:shadow-lg transition-shadow relative overflow-hidden group">
+                    <Video className="absolute right-[-10px] bottom-[-10px] h-20 w-20 text-white/10 group-hover:scale-110 transition-transform" />
+                    <h3 className="text-base font-black mb-0.5">Video Consult</h3>
+                    <p className="text-rose-100 text-xs font-medium">Talk to your doctor</p>
+                </Link>
+                <Link href="/patient/medicines" className="bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl p-5 text-white hover:shadow-lg transition-shadow relative overflow-hidden group">
+                    <Pill className="absolute right-[-10px] bottom-[-10px] h-20 w-20 text-white/10 group-hover:scale-110 transition-transform" />
+                    <h3 className="text-base font-black mb-0.5">Order Medicines</h3>
+                    <p className="text-orange-100 text-xs font-medium">Get medicines delivered</p>
                 </Link>
                 <Link href="/patient/records" className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-5 text-white hover:shadow-lg transition-shadow relative overflow-hidden group">
                     <FileText className="absolute right-[-10px] bottom-[-10px] h-20 w-20 text-white/10 group-hover:scale-110 transition-transform" />
@@ -239,14 +249,21 @@ export default function PatientDashboard() {
                     <h3 className="text-base font-black mb-0.5">My Prescriptions</h3>
                     <p className="text-purple-100 text-xs font-medium">Active medications</p>
                 </Link>
-                <button 
-                    onClick={() => setShowDoctorModal(true)}
-                    className="bg-gradient-to-br from-rose-500 to-pink-600 rounded-2xl p-5 text-left text-white hover:shadow-lg transition-shadow relative overflow-hidden group"
-                >
-                    <Video className="absolute right-[-10px] bottom-[-10px] h-20 w-20 text-white/10 group-hover:scale-110 transition-transform" />
-                    <h3 className="text-base font-black mb-0.5">Video Consult</h3>
-                    <p className="text-rose-100 text-xs font-medium">Talk to your doctor</p>
-                </button>
+                <Link href="/patient/ambulance" className="bg-gradient-to-br from-red-500 to-rose-600 rounded-2xl p-5 text-white hover:shadow-lg transition-shadow relative overflow-hidden group">
+                    <Activity className="absolute right-[-10px] bottom-[-10px] h-20 w-20 text-white/10 group-hover:scale-110 transition-transform" />
+                    <h3 className="text-base font-black mb-0.5">Ambulance</h3>
+                    <p className="text-red-100 text-xs font-medium">Request emergency transport</p>
+                </Link>
+                <Link href="/patient/vitals" className="bg-gradient-to-br from-teal-500 to-cyan-600 rounded-2xl p-5 text-white hover:shadow-lg transition-shadow relative overflow-hidden group">
+                    <Activity className="absolute right-[-10px] bottom-[-10px] h-20 w-20 text-white/10 group-hover:scale-110 transition-transform" />
+                    <h3 className="text-base font-black mb-0.5">Update Vitals</h3>
+                    <p className="text-teal-100 text-xs font-medium">Log your health data</p>
+                </Link>
+                <Link href="/patient/orders" className="bg-gradient-to-br from-slate-500 to-gray-600 rounded-2xl p-5 text-white hover:shadow-lg transition-shadow relative overflow-hidden group">
+                    <Activity className="absolute right-[-10px] bottom-[-10px] h-20 w-20 text-white/10 group-hover:scale-110 transition-transform" />
+                    <h3 className="text-base font-black mb-0.5">My Orders</h3>
+                    <p className="text-slate-100 text-xs font-medium">Track all orders</p>
+                </Link>
             </div>
 
             {/* Video Call Status Banner */}
