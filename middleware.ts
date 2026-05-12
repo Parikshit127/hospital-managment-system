@@ -75,7 +75,9 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/api/discharge/") ||
     pathname.startsWith("/api/razorpay/") ||
     pathname.startsWith("/api/verify-lab-pharmacy") ||
-    pathname.startsWith("/api/zealthix/")
+    pathname.startsWith("/api/zealthix/") ||
+    pathname.startsWith("/api/public/") ||
+    pathname.startsWith("/api/patient/self-register")
   ) {
     return NextResponse.next();
   }
@@ -118,7 +120,9 @@ export async function middleware(request: NextRequest) {
     const isPatientAuthPage =
       pathname.startsWith("/patient/login") ||
       pathname.startsWith("/patient/setup-password") ||
-      pathname.startsWith("/patient/forgot-password");
+      pathname.startsWith("/patient/forgot-password") ||
+      pathname.startsWith("/patient/register") ||
+      pathname.startsWith("/patient/organisations");
     // Allow public assessment pages without auth
     if (pathname.startsWith("/patient/assessment/")) {
       return NextResponse.next();
