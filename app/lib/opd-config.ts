@@ -1,6 +1,6 @@
 // Unified OPD configuration reader.
 // Canonical source: module_configs row with module_key='opd' (config_json).
-// Fallback: legacy OPDConfig table (kept for backward compatibility during migration).
+// Note: legacy OPDConfig table has been removed in Phase 1 cleanup.
 
 export interface ResolvedOPDConfig {
   slot_duration: number;
@@ -33,28 +33,16 @@ type PrismaLike = {
       select?: Record<string, boolean>;
     }) => Promise<{ config_json: unknown } | null>;
   };
-  oPDConfig: {
-    findFirst: (args: {
-      where: { organizationId: string };
-    }) => Promise<{
-      max_wait_minutes: number | null;
-      escalation_threshold: number | null;
-      max_patients_per_doctor: number | null;
-    } | null>;
-  };
 };
 
 export async function resolveOPDConfig(
   db: PrismaLike,
   organizationId: string,
 ): Promise<ResolvedOPDConfig> {
-  const [mod, legacy] = await Promise.all([
-    db.moduleConfig.findFirst({
-      where: { module_key: "opd", organizationId },
-      select: { config_json: true },
-    }),
-    db.oPDConfig.findFirst({ where: { organizationId } }),
-  ]);
+  const mod = await db.moduleConfig.findFirst({
+    where: { module_key: "opd", organizationId },
+    select: { config_json: true },
+  });
 
   const cfg = (mod?.config_json as Record<string, unknown> | null) || {};
 
@@ -62,17 +50,8 @@ export async function resolveOPDConfig(
     slot_duration: toInt(cfg.slot_duration, DEFAULTS.slot_duration),
     slot_start_hour: toInt(cfg.slot_start_hour, DEFAULTS.slot_start_hour),
     slot_end_hour: toInt(cfg.slot_end_hour, DEFAULTS.slot_end_hour),
-    max_wait_minutes: toInt(
-      cfg.max_wait_minutes ?? legacy?.max_wait_minutes,
-      DEFAULTS.max_wait_minutes,
-    ),
-    escalation_threshold: toInt(
-      cfg.escalation_threshold ?? legacy?.escalation_threshold,
-      DEFAULTS.escalation_threshold,
-    ),
-    max_patients_per_doctor: toInt(
-      cfg.max_patients_per_doctor ?? legacy?.max_patients_per_doctor,
-      DEFAULTS.max_patients_per_doctor,
-    ),
+    max_wait_minutes: toInt(cfg.max_wait_minutes, DEFAULTS.max_wait_minutes),
+    escalation_threshold: toInt(cfg.escalation_threshold, DEFAULTS.escalation_threshold),
+    max_patients_per_doctor: toInt(cfg.max_patients_per_doctor, DEFAULTS.max_patients_per_doctor),
   };
 }

@@ -11,6 +11,19 @@ function serialize<T>(data: T): T {
     ));
 }
 
+// Check if a given date falls into a locked financial period
+async function checkPeriodLock(db: any, date: Date = new Date()) {
+    const period = await db.financialPeriod.findFirst({
+        where: {
+            start_date: { lte: date },
+            end_date: { gte: date }
+        }
+    });
+    if (period && period.status === 'Locked') {
+        throw new Error(`Financial period '${period.period_name}' is locked. Cannot process transaction.`);
+    }
+}
+
 function generateClaimNumber() {
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
@@ -142,6 +155,10 @@ export async function submitInsuranceClaim(data: {
 }) {
     try {
         const { db } = await requireTenantContext();
+        
+        // Phase 4: Period Locking
+        await checkPeriodLock(db);
+        
         // Validate policy
         const policy = await db.insurance_policies.findUnique({
             where: { id: data.policy_id },
@@ -200,7 +217,11 @@ export async function updateClaimStatus(claimId: number, data: {
 }) {
     try {
         const { db } = await requireTenantContext();
-        const validStatuses = ['Submitted', 'UnderReview', 'Approved', 'Rejected', 'PartiallyApproved', 'Settled'];
+        
+        // Phase 4: Period Locking
+        await checkPeriodLock(db);
+
+        const validStatuses = ['Submitted', 'UnderReview', 'Approved', 'Rejected', 'PartiallyApproved', 'Settled', 'Disputed'];
         if (!validStatuses.includes(data.status)) {
             return { success: false, error: 'Invalid claim status' };
         }
@@ -540,6 +561,63 @@ export async function autoSubmitClaim(invoiceId: number) {
         return { success: true, data: serialize(claim) };
     } catch (error: any) {
         console.error('autoSubmitClaim error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Get all pre-authorizations for the dashboard
+export async function getAllPreAuths(filters?: { status?: string; limit?: number }) {
+    try {
+        const { db } = await requireTenantContext();
+        const where: any = {};
+        if (filters?.status) where.status = filters.status;
+
+        const preauths = await db.insurancePreAuth.findMany({
+            where,
+            include: {
+                admission: {
+                    select: {
+                        patient: { select: { full_name: true, patient_id: true } }
+                    }
+                }
+            },
+            orderBy: { submitted_at: 'desc' },
+            take: filters?.limit || 100,
+        });
+
+        return { success: true, data: serialize(preauths) };
+    } catch (error: any) {
+        console.error('getAllPreAuths error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Dispute a rejected claim
+export async function disputeClaim(claimId: number, reason: string) {
+    try {
+        const { db } = await requireTenantContext();
+        
+        const claim = await db.insurance_claims.update({
+            where: { id: claimId },
+            data: {
+                status: 'Disputed',
+                rejection_reason: reason, // Save the dispute reason or update remarks
+            },
+        });
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'DISPUTE_CLAIM',
+                module: 'insurance',
+                entity_type: 'claim',
+                entity_id: claim.claim_number,
+                details: JSON.stringify({ reason }),
+            },
+        });
+
+        return { success: true, data: serialize(claim) };
+    } catch (error: any) {
+        console.error('disputeClaim error:', error);
         return { success: false, error: error.message };
     }
 }

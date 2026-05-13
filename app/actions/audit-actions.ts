@@ -41,6 +41,8 @@ export async function getAuditLogs(page: number = 1, limit: number = 50, filters
     module?: string;
     action?: string;
     username?: string;
+    entity_id?: string;
+    entity_type?: string;
 }) {
     try {
         const { db } = await requireTenantContext();
@@ -49,6 +51,8 @@ export async function getAuditLogs(page: number = 1, limit: number = 50, filters
         if (filters?.module) where.module = filters.module;
         if (filters?.action) where.action = { contains: filters.action, mode: 'insensitive' };
         if (filters?.username) where.username = { contains: filters.username, mode: 'insensitive' };
+        if (filters?.entity_id) where.entity_id = filters.entity_id;
+        if (filters?.entity_type) where.entity_type = filters.entity_type;
 
         const [logs, total] = await Promise.all([
             db.system_audit_logs.findMany({

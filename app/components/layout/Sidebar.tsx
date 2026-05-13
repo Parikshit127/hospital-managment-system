@@ -68,6 +68,14 @@ import {
   Siren,
   ShieldAlert,
   MapPin,
+  Phone,
+  CalendarOff,
+  Megaphone,
+  Network,
+  HeartHandshake,
+  Printer,
+  LayoutList,
+  Tag,
 } from "lucide-react";
 
 interface NavItem {
@@ -119,6 +127,9 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Templates", href: "/admin/templates", icon: FileStack },
         { label: "Notifications", href: "/admin/notifications", icon: Bell },
         { label: "Integrations", href: "/admin/integrations", icon: Plug },
+        { label: "Registration Config", href: "/admin/registration-config", icon: Settings },
+        { label: "Billing Order Sets", href: "/admin/billing-ordersets", icon: LayoutList },
+        { label: "Discount Schemes", href: "/admin/discount-schemes", icon: Tag },
       ],
     },
     {
@@ -129,6 +140,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "MFA Setup", href: "/admin/mfa-setup", icon: KeyRound },
         { label: "API Docs", href: "/admin/api-docs", icon: Code },
         { label: "OT Setup", href: "/admin/ot-setup", icon: Scissors },
+        { label: "Doctor Leave", href: "/admin/doctor-leave", icon: CalendarOff },
       ],
     },
     {
@@ -145,6 +157,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Reports", href: "/admin/reports", icon: BarChart3 },
         { label: "Audit Trail", href: "/admin/audit", icon: Activity },
         { label: "Data Import", href: "/admin/data-import", icon: Package },
+        { label: "Print Center", href: "/print-center", icon: Printer },
       ],
     },
   ],
@@ -217,6 +230,8 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Dashboard", href: "/pharmacy/dashboard", icon: LayoutDashboard },
         { label: "Orders", href: "/pharmacy/orders", icon: ScrollText },
         { label: "Dispensing", href: "/pharmacy/billing", icon: Pill },
+        { label: "IP Orders", href: "/pharmacy/ip-orders", icon: ClipboardList },
+        { label: "Narcotics Register", href: "/pharmacy/narcotics", icon: ShieldAlert },
       ],
     },
     {
@@ -243,6 +258,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Approval Center", href: "/billing/approvals", icon: ShieldAlert },
         { label: "Write-offs", href: "/billing/writeoffs", icon: Scale },
         { label: "Dashboard", href: "/finance/dashboard", icon: DollarSign },
+        { label: "Intelligence", href: "/finance/analytics", icon: ShieldAlert },
         { label: "All Invoices", href: "/finance/invoices", icon: FileText },
         { label: "Payment Ledger", href: "/finance/payments", icon: CreditCard },
         { label: "Expenses", href: "/finance/expenses", icon: Banknote },
@@ -256,6 +272,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Refunds", href: "/finance/refunds", icon: Undo2 },
         { label: "Deposits", href: "/finance/deposits", icon: Wallet },
         { label: "Credit Notes", href: "/finance/credit-notes", icon: FileText },
+        { label: "Print Center", href: "/print-center", icon: Printer },
       ],
     },
     {
@@ -279,6 +296,9 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Bed Matrix", href: "/ipd/bed-matrix", icon: BedDouble },
         { label: "Transfer", href: "/ipd/transfer", icon: RotateCcw },
         { label: "OT Worklist", href: "/ot/worklist", icon: Scissors },
+        { label: "Pre-Admissions", href: "/ipd/pre-admissions", icon: CalendarClock },
+        { label: "Daycare", href: "/ipd/daycare", icon: Clock },
+        { label: "Patient Movement", href: "/ipd/movement", icon: ArrowLeftRight },
       ],
     },
     {
@@ -398,6 +418,16 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       ],
     },
   ],
+  call_center: [
+    {
+      title: "Call Center",
+      items: [
+        { label: "Dashboard", href: "/call-center/dashboard", icon: Phone },
+        { label: "Book Appointment", href: "/call-center/book", icon: CalendarPlus },
+        { label: "Call Logs", href: "/call-center/logs", icon: FileText },
+      ],
+    },
+  ],
   er_staff: [
     {
       title: "Emergency Room",
@@ -421,6 +451,27 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "IPD Beds", href: "/ipd/bed-matrix", icon: BedDouble },
         { label: "Lab", href: "/lab/worklist", icon: ClipboardCheck },
         { label: "Pharmacy", href: "/pharmacy/orders", icon: Pill },
+      ],
+    },
+  ],
+  crm_manager: [
+    {
+      title: "CRM",
+      items: [
+        { label: "Dashboard", href: "/crm/dashboard", icon: LayoutDashboard },
+        { label: "Leads", href: "/crm/leads", icon: Users },
+        { label: "Campaigns", href: "/crm/campaigns", icon: Megaphone },
+        { label: "Referral Network", href: "/crm/referrals", icon: Network },
+        { label: "Engagement", href: "/crm/engagement", icon: HeartHandshake },
+        { label: "Reports", href: "/crm/reports", icon: BarChart3 },
+      ],
+    },
+  ],
+  counsellor: [
+    {
+      title: "Counselling",
+      items: [
+        { label: "Counselling Sessions", href: "/counselling", icon: MessageSquare },
       ],
     },
   ],
@@ -449,9 +500,11 @@ const roleLabelMap: Record<string, string> = {
   patient: "Patient Portal",
   nurse: "Nurse",
   opd_manager: "OPD Manager",
+  counsellor: "Counsellor",
   hr: "HR Manager",
   ot_manager: "OT Manager",
   er_staff: "ER Staff",
+  crm_manager: "CRM Manager",
 };
 
 export function Sidebar({ session }: SidebarProps) {

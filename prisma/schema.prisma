@@ -52,7 +52,6 @@ model Organization {
   invoice_items                 invoice_items[]
   payments                      payments[]
   payment_order_intents         PaymentOrderIntent[]
-  billing_records               billing_records[]
   charge_catalog                charge_catalog[]
   insurance_providers           insurance_providers[]
   insurance_policies            insurance_policies[]
@@ -84,7 +83,6 @@ model Organization {
   nursing_notes                 NursingNote[]
   medication_administrations    MedicationAdministration[]
   shift_handovers               ShiftHandover[]
-  opd_configs                   OPDConfig[]
   employees                     Employee[]
   attendances                   Attendance[]
   leave_types                   LeaveType[]
@@ -125,7 +123,6 @@ model Organization {
   video_call_requests           VideoCallRequest[]
   // Phase 1 — Corporate & Pre-Authorization
   corporate_masters             CorporateMaster[]
-  pre_authorizations            PreAuthorization[]
   // Phase 2 — Payment Splits
   payment_splits                PaymentSplit[]
   // Phase 3 — EMR
@@ -182,6 +179,23 @@ model Organization {
   // Master Billing Phase 2 — Write-offs
   writeoffs Writeoff[]
 
+  // Phase 7 — CRM Module
+  crm_leads            CRMLead[]
+  crm_campaigns        CRMCampaign[]
+  doctor_referrals     DoctorReferralNetwork[]
+  patient_engagements  PatientEngagement[]
+
+  // Phase 4 — OPD Enhancements
+  doctor_leaves         DoctorLeave[]
+  appointment_waitlists AppointmentWaitlist[]
+  call_logs             CallLog[]
+
+  // IPD Workflow models
+  admission_bookings    AdmissionBooking[]
+  patient_movements     PatientMovement[]
+  discharge_clearances  DischargeClearance[]
+  patient_consents_ipd  PatientConsent_IPD[]
+
   // Extended hospital profile fields
   hospital_type          String? // General, Multi-Specialty, Super-Specialty, Clinic, Nursing Home
   bed_capacity           Int?
@@ -197,6 +211,16 @@ model Organization {
   specialties            String[]  @default([])
   latitude               Float?
   longitude              Float?
+
+  counselling_sessions       CounsellingSession[]
+  registration_field_configs RegistrationFieldConfig[]
+  financial_counsellings     FinancialCounselling[]
+  narcotic_registers         NarcoticRegister[]
+
+  // Phase 6 — Billing Enhancements
+  discount_otps        DiscountOTP[]
+  billing_order_sets   BillingOrderSet[]
+  discount_schemes     DiscountScheme[]
 
   @@map("organizations")
 }
@@ -502,7 +526,6 @@ model OPD_REG {
   pill_reminders        PillReminder[]
   video_call_requests   VideoCallRequest[]
   whatsapp_logs         whatsapp_log[]
-  pre_authorizations    PreAuthorization[]
   // Phase 3 — EMR
   clinical_encounters   ClinicalEncounter[]
   patient_allergies     PatientAllergy[]
@@ -543,6 +566,10 @@ model appointments {
   payment_status  String  @default("PENDING") // PENDING, PAID, WAIVED
   is_pav          Boolean @default(false)
   pav_sms_sent    Boolean @default(false)
+
+  // Phase 4 — Priority & Recurrence
+  priority        String? @default("Regular") // Regular, VIP, Elderly, Disabled
+  recurrence_rule Json?   // { frequency: "weekly", count: 6, end_date: "2026-08-01" }
 
   organization Organization @relation(fields: [organizationId], references: [id])
   patient      OPD_REG      @relation(fields: [patient_id], references: [patient_id])
@@ -765,12 +792,39 @@ model pharmacy_orders {
   invoice_id            Int?
   created_at            DateTime @default(now())
 
+  verified_by        String?
+  verified_at        DateTime?
+  verification_notes String?
+
   organization Organization           @relation(fields: [organizationId], references: [id])
   invoice      invoices?              @relation(fields: [invoice_id], references: [id])
   items        pharmacy_order_items[]
 
   @@index([organizationId])
   @@index([invoice_id])
+}
+
+model NarcoticRegister {
+  id              String   @id @default(uuid())
+  organizationId  String
+  drug_name       String
+  batch_no        String?
+  patient_id      String?
+  patient_name    String?
+  prescriber_id   String?
+  prescriber_name String?
+  witness_name    String?
+  quantity_in     Float    @default(0)
+  quantity_out    Float    @default(0)
+  balance         Float    @default(0)
+  transaction_type String  // IN | OUT
+  notes           String?
+  created_at      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([drug_name])
 }
 
 model pharmacy_order_items {
@@ -848,6 +902,7 @@ model admissions {
   discharge_instructions    String? // patient instructions
   allergy_alerts            Json? // pulled from patient master
   version                   Int       @default(0)
+  billing_category          String?   @default("General") // General, Semi-Private, Private, Deluxe, VIP
 
   organization           Organization           @relation(fields: [organizationId], references: [id])
   patient                OPD_REG                @relation(fields: [patient_id], references: [patient_id])
@@ -987,6 +1042,7 @@ model invoices {
   estimate_id    Int?
   approved_by    String?
   approved_at    DateTime?
+  version        Int       @default(1)
 
   // Phase 2 — Billing Engine (patient type split)
   billing_patient_type     String  @default("cash") // cash | corporate | tpa_insurance
@@ -1003,6 +1059,11 @@ model invoices {
   concession_amount        Decimal @default(0)
   concession_reason        String?
   concession_approved_by   String?
+
+  // Phase 6 — Addendum Invoices
+  is_addendum        Boolean @default(false)
+  parent_invoice_id  String?
+  addendum_reason    String?
 
   organization          Organization         @relation(fields: [organizationId], references: [id])
   patient               OPD_REG              @relation(fields: [patient_id], references: [patient_id])
@@ -1065,6 +1126,7 @@ model payments {
   notes                String?
   organizationId       String
   created_at           DateTime @default(now())
+  version              Int      @default(1)
 
   invoice      invoices     @relation(fields: [invoice_id], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id])
@@ -1142,7 +1204,6 @@ model insurance_providers {
 
   organization       Organization         @relation(fields: [organizationId], references: [id])
   policies           insurance_policies[]
-  pre_authorizations PreAuthorization[]
 
   @@index([organizationId])
 }
@@ -1324,77 +1385,10 @@ model CorporateMaster {
 
   organization       Organization       @relation(fields: [organizationId], references: [id])
   patients           OPD_REG[]
-  pre_authorizations PreAuthorization[]
 
   @@unique([organizationId, company_code])
   @@index([organizationId])
   @@map("corporate_masters")
-}
-
-/// @deprecated Use `InsurancePreAuth` (insurance_preauths) — it is the richer
-/// IPD-aware model (admission link, query log, enhancement history). This
-/// model is still referenced by billing-engine.ts and OPD pre-auth flows.
-/// Slated for merger in Phase 6: move appointment_id/provider_id/corporate_id
-/// fields onto InsurancePreAuth and migrate rows.
-model PreAuthorization {
-  id               String    @id @default(uuid())
-  organizationId   String
-  patient_id       String
-  provider_id      Int?
-  corporate_id     String?
-  appointment_id   String?
-  pre_auth_number  String?
-  requested_amount Decimal?
-  approved_amount  Decimal?
-  status           String    @default("pending") // pending | approved | rejected | expired | partially_approved
-  requested_at     DateTime  @default(now())
-  responded_at     DateTime?
-  valid_until      DateTime?
-  remarks          String?
-  documents        Json      @default("[]")
-  created_at       DateTime  @default(now())
-
-  organization Organization         @relation(fields: [organizationId], references: [id])
-  patient      OPD_REG              @relation(fields: [patient_id], references: [patient_id])
-  provider     insurance_providers? @relation(fields: [provider_id], references: [id])
-  corporate    CorporateMaster?     @relation(fields: [corporate_id], references: [id])
-
-  @@index([organizationId])
-  @@index([patient_id])
-  @@index([status])
-  @@map("pre_authorizations")
-}
-
-// ========================================
-// MODULE — Legacy Billing
-// ========================================
-
-/// @deprecated Use `invoices` + `invoice_items` for all new billing flows.
-/// Currently still read by admin-actions.ts dashboard aggregates (revenue by
-/// department/type). Slated for removal in Phase 6 once those aggregates are
-/// rewritten against the invoices model.
-model billing_records {
-  id                 Int      @id @default(autoincrement())
-  patient_id         String
-  patient_name       String?
-  bill_type          String
-  department         String?
-  description        String?
-  amount             Float
-  discount           Float    @default(0)
-  net_amount         Float
-  payment_status     String   @default("Pending")
-  payment_method     String?
-  insurance_claim_id String?
-  organizationId     String
-  created_at         DateTime @default(now())
-
-  organization Organization @relation(fields: [organizationId], references: [id])
-
-  @@index([organizationId])
-  @@index([payment_status])
-  @@index([created_at])
-  @@index([payment_status, created_at])
 }
 
 // ========================================
@@ -2063,27 +2057,6 @@ model ShiftHandover {
   @@index([organizationId])
   @@index([ward_id])
   @@map("shift_handovers")
-}
-
-// ========================================
-// MODULE — Phase 3: OPD Manager
-// ========================================
-
-/// @deprecated Canonical OPD config lives in module_configs (module_key='opd').
-/// This table is kept as a read-only fallback during migration; new writes should
-/// go through updateModuleConfig('opd', ...). Slated for removal in Phase 6 cleanup.
-model OPDConfig {
-  id                      Int      @id @default(autoincrement())
-  max_wait_minutes        Int      @default(30)
-  escalation_threshold    Int      @default(45)
-  max_patients_per_doctor Int      @default(30)
-  organizationId          String
-  created_at              DateTime @default(now())
-
-  organization Organization @relation(fields: [organizationId], references: [id])
-
-  @@index([organizationId])
-  @@map("opd_configs")
 }
 
 // ========================================
@@ -4029,4 +4002,384 @@ model Writeoff {
   @@index([status])
   @@index([writeoff_type])
   @@map("writeoffs")
+}
+
+// ========== PHASE 7 — CRM MODULE ==========
+
+model CRMLead {
+  id                  String   @id @default(uuid())
+  organizationId      String
+  lead_number         String   @unique
+  patient_id          String?
+  name                String
+  phone               String
+  email               String?
+  source              String   // Website, Social Media, Referral, Walk-in, Campaign, Doctor Referral
+  source_detail       String?
+  status              String   @default("New") // New, Contacted, Interested, Appointment_Booked, Converted, Lost
+  assigned_to         String?
+  department_interest String?
+  doctor_interest     String?
+  notes               String?
+  last_contacted      DateTime?
+  follow_up_date      DateTime?
+  converted_at        DateTime?
+  lost_reason         String?
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  activities   CRMActivity[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([source])
+  @@index([assigned_to])
+}
+
+model CRMActivity {
+  id            String   @id @default(uuid())
+  lead_id       String
+  activity_type String   // Call, WhatsApp, Email, SMS, Meeting, Note
+  direction     String?  // Inbound, Outbound
+  content       String
+  outcome       String?  // Connected, No Answer, Interested, Not Interested, Callback
+  performed_by  String
+  performed_at  DateTime @default(now())
+
+  lead CRMLead @relation(fields: [lead_id], references: [id])
+
+  @@index([lead_id])
+}
+
+model CRMCampaign {
+  id                String   @id @default(uuid())
+  organizationId    String
+  name              String
+  campaign_type     String   // WhatsApp, SMS, Email
+  target_audience   String?
+  message_template  String
+  scheduled_at      DateTime?
+  status            String   @default("Draft") // Draft, Scheduled, Running, Completed
+  total_recipients  Int      @default(0)
+  delivered         Int      @default(0)
+  opened            Int      @default(0)
+  converted         Int      @default(0)
+  created_by        String
+  created_at        DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+}
+
+model DoctorReferralNetwork {
+  id                 String   @id @default(uuid())
+  organizationId     String
+  doctor_name        String
+  specialty          String?
+  hospital           String?
+  phone              String?
+  email              String?
+  referral_count     Int      @default(0)
+  last_referral      DateTime?
+  payout_percentage  Float?
+  is_active          Boolean  @default(true)
+  created_at         DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+}
+
+model PatientEngagement {
+  id               String   @id @default(uuid())
+  organizationId   String
+  patient_id       String
+  last_visit       DateTime?
+  visit_count      Int      @default(0)
+  total_revenue    Float    @default(0)
+  engagement_score Int      @default(0)
+  risk_level       String?  // Active, At_Risk, Lapsed, Lost
+  next_follow_up   DateTime?
+  tags             Json?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, patient_id])
+  @@index([risk_level])
+}
+
+// ========== PHASE 4 — OPD ENHANCEMENTS ==========
+
+model DoctorLeave {
+  id             String   @id @default(uuid())
+  organizationId String
+  doctor_id      String
+  doctor_name    String
+  leave_type     String   @default("Leave") // Leave, Conference, Training, Personal
+  from_date      DateTime
+  to_date        DateTime
+  reason         String?
+  is_approved    Boolean  @default(true)
+  approved_by    String?
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([doctor_id])
+  @@index([from_date, to_date])
+}
+
+model AppointmentWaitlist {
+  id             String   @id @default(uuid())
+  organizationId String
+  patient_id     String
+  doctor_id      String
+  department     String
+  preferred_date DateTime?
+  reason         String?
+  status         String   @default("Waiting") // Waiting, Notified, Booked, Cancelled
+  notified_at    DateTime?
+  booked_appointment_id String?
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([doctor_id])
+  @@index([status])
+}
+
+model CallLog {
+  id               String   @id @default(uuid())
+  organizationId   String
+  agent_id         String
+  patient_phone    String
+  patient_name     String?
+  call_type        String   // Inbound, Outbound, Follow-up
+  outcome          String   // Booked, Cancelled, Rescheduled, Enquiry, NoAnswer, Busy
+  appointment_id   String?
+  duration_seconds Int?
+  notes            String?
+  created_at       DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([agent_id])
+  @@index([patient_phone])
+}
+
+// ========== PHASE 8 — IPD ENHANCEMENTS ==========
+
+model AdmissionBooking {
+  id                   String   @id @default(uuid())
+  organizationId       String
+  patient_id           String
+  booking_number       String   @unique
+  expected_date        DateTime
+  bed_category         String   @default("General") // General, Semi-Private, Private, Deluxe, VIP
+  department           String
+  doctor_id            String?
+  doctor_name          String?
+  estimated_cost       Float?
+  deposit_paid         Float?   @default(0)
+  status               String   @default("Booked") // Booked, Confirmed, Admitted, Cancelled
+  notes                String?
+  created_at           DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([patient_id])
+  @@index([expected_date])
+}
+
+model PatientMovement {
+  id             String   @id @default(uuid())
+  organizationId String
+  admission_id   String
+  patient_id     String
+  from_location  String
+  to_location    String   // OT, Radiology, Dialysis, Physiotherapy, ICU, Lab
+  purpose        String?
+  moved_at       DateTime @default(now())
+  returned_at    DateTime?
+  moved_by       String?
+  escort_name    String?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([admission_id])
+}
+
+model DischargeClearance {
+  id             String   @id @default(uuid())
+  organizationId String
+  admission_id   String   @unique
+  pharmacy       String   @default("Pending") // Pending, Cleared, Waived
+  pharmacy_by    String?
+  pharmacy_at    DateTime?
+  lab            String   @default("Pending")
+  lab_by         String?
+  lab_at         DateTime?
+  finance        String   @default("Pending")
+  finance_by     String?
+  finance_at     DateTime?
+  nursing        String   @default("Pending")
+  nursing_by     String?
+  nursing_at     DateTime?
+  doctor         String   @default("Pending")
+  doctor_by      String?
+  doctor_at      DateTime?
+  all_cleared    Boolean  @default(false)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([admission_id])
+}
+
+model PatientConsent_IPD {
+  id             String   @id @default(uuid())
+  organizationId String
+  admission_id   String
+  consent_type   String   // Admission, Surgery, Anesthesia, Blood, LAMA, Procedure
+  form_url       String?
+  signed_at      DateTime?
+  witness_name   String?
+  notes          String?
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([admission_id])
+}
+
+// ========== PHASE 4 MISSING — OPD ==========
+
+model CounsellingSession {
+  id              String   @id @default(uuid())
+  organizationId  String
+  session_number  String   @unique
+  patient_id      String
+  counsellor_id   String?
+  counsellor_name String?
+  session_type    String   @default("General") // General, Financial, Pre-Surgery, Discharge, Psychological
+  status          String   @default("Requested") // Requested, Draft, Confirmed, Completed, Cancelled
+  scheduled_at    DateTime?
+  completed_at    DateTime?
+  notes           String?
+  outcome         String?
+  financial_estimate Float?
+  deposit_advised    Float?
+  patient_consent    Boolean @default(false)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([patient_id])
+  @@index([status])
+}
+
+model FinancialCounselling {
+  id              String    @id @default(uuid())
+  organizationId  String
+  patient_id      String
+  counsellor_id   String?
+  counsellor_name String?
+  invoice_id      String?
+  estimated_cost  Float?
+  deposit_advised Float?
+  payment_plan    String?   // Upfront, Installment, Insurance
+  notes           String?
+  status          String    @default("Pending") // Pending | Done | Cancelled
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([patient_id])
+}
+
+model RegistrationFieldConfig {
+  id              String   @id @default(uuid())
+  organizationId  String
+  field_name      String   // e.g. "aadhar", "blood_group", "email", "emergency_contact_name"
+  is_required     Boolean  @default(false)
+  is_visible      Boolean  @default(true)
+  display_label   String?
+  sort_order      Int      @default(0)
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, field_name])
+  @@index([organizationId])
+}
+
+// ========================================
+// MODULE — Phase 6 Billing Enhancements
+// ========================================
+
+model DiscountOTP {
+  id               String    @id @default(uuid())
+  organizationId   String
+  invoice_id       String
+  discount_amount  Float
+  discount_percent Float?
+  otp_code         String
+  requested_by     String
+  approved_by      String?
+  expires_at       DateTime
+  used_at          DateTime?
+  status           String    @default("Pending") // Pending | Approved | Expired | Used
+  created_at       DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([invoice_id])
+}
+
+model BillingOrderSet {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  category       String?  // Health Check, Minor Procedure, Delivery, etc.
+  description    String?
+  items          Json     // [{charge_catalog_id, name, quantity, unit_price}]
+  total_amount   Float    @default(0)
+  is_active      Boolean  @default(true)
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+}
+
+model DiscountScheme {
+  id             String    @id @default(uuid())
+  organizationId String
+  name           String
+  scheme_type    String    // Percentage | Flat
+  value          Float
+  applicable_to  Json?     // ["OPD", "IPD", "Pharmacy"] or specific service categories
+  valid_from     DateTime?
+  valid_to       DateTime?
+  requires_otp   Boolean   @default(false)
+  is_active      Boolean   @default(true)
+  created_at     DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }

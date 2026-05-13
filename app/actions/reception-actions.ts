@@ -1641,3 +1641,46 @@ export async function getDoctorMorningSummary(doctorId: string) {
         return { success: false, data: null };
     }
 }
+
+export async function addToWaitlist(data: {
+    patientId: string;
+    doctorId: string;
+    department: string;
+    preferredDate?: string;
+    reason?: string;
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const entry = await (db.appointmentWaitlist as any).create({
+            data: {
+                organizationId,
+                patient_id: data.patientId,
+                doctor_id: data.doctorId,
+                department: data.department,
+                preferred_date: data.preferredDate ? new Date(data.preferredDate) : null,
+                reason: data.reason || null,
+            },
+        });
+        return { success: true, data: entry };
+    } catch (error) {
+        return { success: false, error: 'Failed to add to waitlist' };
+    }
+}
+
+export async function getWaitlist(doctorId?: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const where: any = { organizationId, status: 'Waiting' };
+        if (doctorId) where.doctor_id = doctorId;
+        const list = await (db.appointmentWaitlist as any).findMany({
+            where,
+            orderBy: { created_at: 'asc' },
+            include: {
+                patient: { select: { full_name: true, phone: true, patient_id: true } },
+            },
+        });
+        return { success: true, data: list };
+    } catch (error) {
+        return { success: false, data: [] };
+    }
+}

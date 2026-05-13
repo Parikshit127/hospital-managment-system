@@ -16,6 +16,19 @@ function serialize<T>(data: T): T {
     ));
 }
 
+// Check if a given date falls into a locked financial period
+async function checkPeriodLock(db: any, date: Date = new Date()) {
+    const period = await db.financialPeriod.findFirst({
+        where: {
+            start_date: { lte: date },
+            end_date: { gte: date }
+        }
+    });
+    if (period && period.status === 'Locked') {
+        throw new Error(`Financial period '${period.period_name}' is locked. Cannot process transaction.`);
+    }
+}
+
 // ============================================
 // INVOICE MANAGEMENT
 // ============================================
@@ -54,6 +67,25 @@ export async function createInvoice(data: {
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
+
+        // Phase 4: Period Locking
+        await checkPeriodLock(db);
+
+        // Phase 4: Duplicate Detection
+        const duplicateWindow = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours
+        const existingDraft = await db.invoices.findFirst({
+            where: {
+                patient_id: data.patient_id,
+                invoice_type: data.invoice_type,
+                status: 'Draft',
+                created_at: { gte: duplicateWindow },
+                organizationId
+            }
+        });
+
+        if (existingDraft) {
+            return { success: false, error: `Duplicate invoice detected. A Draft invoice (${existingDraft.invoice_number}) was created for this patient recently.` };
+        }
 
         const invoice = await db.invoices.create({
             data: {
@@ -183,6 +215,7 @@ async function recalculateInvoice(invoiceId: number) {
             igst_amount: isInterState ? total_tax : 0,
             balance_due: balance_due > 0 ? balance_due : 0,
             status: balance_due <= 0 && net_amount > 0 ? 'Paid' : invoice?.status,
+            version: { increment: 1 },
         },
     });
 }
@@ -393,6 +426,7 @@ export async function finalizeInvoice(invoiceId: number) {
             data: {
                 status: 'Final',
                 finalized_at: new Date(),
+                version: { increment: 1 },
             },
         });
 
@@ -438,7 +472,11 @@ export async function cancelInvoice(invoiceId: number, reason?: string) {
 
         const invoice = await db.invoices.update({
             where: { id: invoiceId },
-            data: { status: 'Cancelled', notes: reason || 'Cancelled by admin' },
+            data: { 
+                status: 'Cancelled', 
+                notes: reason || 'Cancelled by admin',
+                version: { increment: 1 }
+            },
         });
 
         await db.system_audit_logs.create({
@@ -476,6 +514,24 @@ export async function recordPayment(data: {
     try {
         const { db, organizationId } = await requireTenantContext();
 
+        // Phase 4: Period Locking
+        await checkPeriodLock(db);
+
+        // Phase 4: Duplicate Payment Detection
+        const duplicateWindow = new Date(Date.now() - 30 * 60 * 1000); // 30 minutes
+        const existingPayment = await db.payments.findFirst({
+            where: {
+                invoice_id: data.invoice_id,
+                amount: data.amount,
+                payment_method: data.payment_method,
+                created_at: { gte: duplicateWindow },
+                organizationId
+            }
+        });
+        if (existingPayment) {
+            return { success: false, error: 'Duplicate payment detected. An identical payment was recorded recently.' };
+        }
+
         const payment = await db.payments.create({
             data: {
                 receipt_number: generateReceiptNumber(),
@@ -510,6 +566,7 @@ export async function recordPayment(data: {
                 paid_amount: totalPaid,
                 balance_due: balance > 0 ? balance : 0,
                 status: newStatus,
+                version: { increment: 1 },
             },
         });
 
@@ -573,6 +630,9 @@ export async function recordSplitPayment(data: {
     try {
         const { db, organizationId } = await requireTenantContext();
 
+        // Phase 4: Period Locking
+        await checkPeriodLock(db);
+
         // Validate splits total
         const totalSplit = data.splits.reduce((sum, s) => sum + s.amount, 0);
         if (totalSplit <= 0) return { success: false, error: 'Total split amount must be greater than 0' };
@@ -623,6 +683,7 @@ export async function recordSplitPayment(data: {
                 paid_amount: totalPaid,
                 balance_due: balance > 0 ? balance : 0,
                 status: newStatus,
+                version: { increment: 1 },
             },
         });
 
@@ -693,6 +754,7 @@ export async function reversePayment(paymentId: number, reason: string) {
                 paid_amount: totalPaid,
                 balance_due: balance > 0 ? balance : 0,
                 status: totalPaid >= netAmount ? 'Paid' : totalPaid > 0 ? 'Partial' : 'Final',
+                version: { increment: 1 },
             },
         });
 
@@ -1214,6 +1276,224 @@ export async function removeInvoiceItem(itemId: number, invoiceId: number) {
         return { success: true };
     } catch (error: any) {
         console.error('removeInvoiceItem error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// ============================================
+// PHASE 6 — BILLING ENHANCEMENTS
+// ============================================
+
+// Request a discount OTP for approver to authorise
+export async function requestDiscountOTP(invoiceId: string, discountAmount: number, discountPercent?: number) {
+    try {
+        const { db, organizationId, session } = await requireTenantContext();
+        const otpCode = String(Math.floor(100000 + Math.random() * 900000));
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+        const record = await (db.discountOTP as any).create({
+            data: {
+                organizationId,
+                invoice_id: invoiceId,
+                discount_amount: discountAmount,
+                discount_percent: discountPercent ?? null,
+                otp_code: otpCode,
+                requested_by: session.username,
+                expires_at: expiresAt,
+                status: 'Pending',
+            },
+        });
+
+        return { success: true, data: { otpId: record.id, otp: 'sent to approver' } };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+// Validate entered OTP and apply discount to invoice
+export async function approveDiscountOTP(otpId: string, enteredOtp: string) {
+    try {
+        const { db, organizationId, session } = await requireTenantContext();
+
+        const record = await (db.discountOTP as any).findFirst({
+            where: { id: otpId, organizationId },
+        });
+
+        if (!record) return { success: false, error: 'OTP record not found' };
+        if (record.status !== 'Pending') return { success: false, error: `OTP is already ${record.status}` };
+        if (new Date() > new Date(record.expires_at)) {
+            await (db.discountOTP as any).update({ where: { id: otpId }, data: { status: 'Expired' } });
+            return { success: false, error: 'OTP has expired' };
+        }
+        if (record.otp_code !== enteredOtp) return { success: false, error: 'Invalid OTP' };
+
+        await (db.discountOTP as any).update({
+            where: { id: otpId },
+            data: { status: 'Used', used_at: new Date(), approved_by: session.username },
+        });
+
+        // Apply discount as negative line item
+        await addInvoiceItem({
+            invoice_id: Number(record.invoice_id),
+            department: 'Discount',
+            description: `Approved Discount${record.discount_percent ? ` (${record.discount_percent}%)` : ''}`,
+            quantity: 1,
+            unit_price: -Math.abs(record.discount_amount),
+        });
+
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+// Get all active Billing Order Sets for org
+export async function getBillingOrderSets() {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const sets = await (db.billingOrderSet as any).findMany({
+            where: { organizationId, is_active: true },
+            orderBy: { created_at: 'desc' },
+        });
+        return { success: true, data: serialize(sets) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+// Create a new Billing Order Set
+export async function createBillingOrderSet(data: {
+    name: string;
+    category?: string;
+    description?: string;
+    items: any[];
+    total_amount: number;
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const set = await (db.billingOrderSet as any).create({
+            data: {
+                organizationId,
+                name: data.name,
+                category: data.category ?? null,
+                description: data.description ?? null,
+                items: data.items,
+                total_amount: data.total_amount,
+            },
+        });
+        return { success: true, data: serialize(set) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+// Apply a Billing Order Set to an invoice (adds each item as a line)
+export async function applyOrderSetToInvoice(invoiceId: string, orderSetId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const set = await (db.billingOrderSet as any).findFirst({
+            where: { id: orderSetId, organizationId },
+        });
+        if (!set) return { success: false, error: 'Order set not found' };
+
+        const items: any[] = Array.isArray(set.items) ? set.items : JSON.parse(set.items as string);
+        for (const item of items) {
+            await addInvoiceItem({
+                invoice_id: Number(invoiceId),
+                department: set.category || 'General',
+                description: item.name,
+                quantity: item.quantity ?? 1,
+                unit_price: item.unit_price,
+            });
+        }
+
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+// Get all active Discount Schemes for org
+export async function getDiscountSchemes() {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const schemes = await (db.discountScheme as any).findMany({
+            where: { organizationId, is_active: true },
+            orderBy: { created_at: 'desc' },
+        });
+        return { success: true, data: serialize(schemes) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+// Create a new Discount Scheme
+export async function createDiscountScheme(data: {
+    name: string;
+    scheme_type: string;
+    value: number;
+    applicable_to?: string[];
+    valid_from?: string;
+    valid_to?: string;
+    requires_otp?: boolean;
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const scheme = await (db.discountScheme as any).create({
+            data: {
+                organizationId,
+                name: data.name,
+                scheme_type: data.scheme_type,
+                value: data.value,
+                applicable_to: data.applicable_to ?? null,
+                valid_from: data.valid_from ? new Date(data.valid_from) : null,
+                valid_to: data.valid_to ? new Date(data.valid_to) : null,
+                requires_otp: data.requires_otp ?? false,
+            },
+        });
+        return { success: true, data: serialize(scheme) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+// Create an addendum invoice linked to parent
+export async function createAddendumInvoice(parentInvoiceId: string, reason: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const parent = await db.invoices.findFirst({
+            where: { id: Number(parentInvoiceId), organizationId },
+        });
+        if (!parent) return { success: false, error: 'Parent invoice not found' };
+
+        // Find existing addenda to determine suffix number
+        const existingAddenda = await db.invoices.findMany({
+            where: { organizationId, parent_invoice_id: parentInvoiceId } as any,
+        });
+        const suffix = `A${existingAddenda.length + 1}`;
+        const addendumNumber = `${parent.invoice_number}-${suffix}`;
+
+        const addendum = await db.invoices.create({
+            data: {
+                invoice_number: addendumNumber,
+                patient_id: parent.patient_id,
+                admission_id: parent.admission_id ?? undefined,
+                invoice_type: parent.invoice_type,
+                status: 'Draft',
+                notes: reason,
+                organizationId,
+                billing_patient_type: parent.billing_patient_type,
+                corporate_id: parent.corporate_id ?? undefined,
+                tpa_provider_id: parent.tpa_provider_id ?? undefined,
+                is_addendum: true,
+                parent_invoice_id: parentInvoiceId,
+                addendum_reason: reason,
+            } as any,
+        });
+
+        return { success: true, data: serialize(addendum) };
+    } catch (error: any) {
         return { success: false, error: error.message };
     }
 }

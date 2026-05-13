@@ -61,9 +61,9 @@ export async function getDashboardStats(timeRange?: string) {
       db.lab_orders.count({
         where: { status: "Completed", created_at: { gte: rangeStart } },
       }),
-      db.billing_records.aggregate({
-        _sum: { net_amount: true },
-        where: { payment_status: "Paid", created_at: { gte: rangeStart } },
+      db.invoices.aggregate({
+        _sum: { total_amount: true },
+        where: { status: "Paid", created_at: { gte: rangeStart } },
       }),
       db.appointments.count({
         where: { appointment_date: { gte: rangeStart } },
@@ -78,7 +78,7 @@ export async function getDashboardStats(timeRange?: string) {
         activeAdmissions,
         pendingLabOrders,
         completedLabToday,
-        totalRevenue: totalRevenue._sum.net_amount || 0,
+        totalRevenue: (totalRevenue._sum as any).total_amount || 0,
         pendingDischarges: activeAdmissions,
         appointmentsToday,
       },
@@ -159,26 +159,21 @@ export async function getRevenueBreakdown(timeRange?: string) {
 
     const { gte: rangeStart } = getDateRange(timeRange);
 
-    const [byDeptRaw, byTypeRaw, totalAgg, dailyTrendRaw] = await Promise.all([
-      db.billing_records.groupBy({
-        by: ["department"],
-        _sum: { net_amount: true },
-        where: { payment_status: "Paid", created_at: { gte: rangeStart } },
+    const [byDeptRaw, totalAgg, dailyTrendRaw] = await Promise.all([
+      db.invoices.groupBy({
+        by: ["department" as any],
+        _sum: { total_amount: true },
+        where: { status: "Paid", created_at: { gte: rangeStart } },
       }),
-      db.billing_records.groupBy({
-        by: ["bill_type"],
-        _sum: { net_amount: true },
-        where: { payment_status: "Paid", created_at: { gte: rangeStart } },
-      }),
-      db.billing_records.aggregate({
-        _sum: { net_amount: true },
-        where: { payment_status: "Paid", created_at: { gte: rangeStart } },
+      db.invoices.aggregate({
+        _sum: { total_amount: true },
+        where: { status: "Paid", created_at: { gte: rangeStart } },
       }),
       // Aggregate daily revenue in DB instead of fetching all rows
       db.$queryRaw<{ day: Date; total: number }[]>`
-        SELECT DATE("created_at") as day, SUM("net_amount")::float as total
-        FROM "billing_records"
-        WHERE "payment_status" = 'Paid' AND "created_at" >= ${rangeStart}
+        SELECT DATE("created_at") as day, SUM("total_amount")::float as total
+        FROM "invoices"
+        WHERE "status" = 'Paid' AND "created_at" >= ${rangeStart}
         GROUP BY DATE("created_at")
         ORDER BY day ASC
       `,
@@ -195,15 +190,12 @@ export async function getRevenueBreakdown(timeRange?: string) {
     return {
       success: true,
       data: {
-        totalRevenue: totalAgg._sum.net_amount || 0,
-        byDepartment: byDeptRaw.map((r: any) => ({
+        totalRevenue: (totalAgg._sum as any).total_amount || 0,
+        byDepartment: (byDeptRaw as any[]).map((r: any) => ({
           name: r.department || "General",
-          amount: r._sum.net_amount || 0,
+          amount: r._sum.total_amount || 0,
         })),
-        byBillType: byTypeRaw.map((r: any) => ({
-          name: r.bill_type,
-          amount: r._sum.net_amount || 0,
-        })),
+        byBillType: [],
         dailyTrend: Object.entries(dailyRevenue).map(([day, amount]) => ({
           day,
           amount,

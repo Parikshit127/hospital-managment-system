@@ -11,7 +11,7 @@ import {
     getInsuranceProviders, getInsuranceClaims, getInsuranceStats,
     getAllPolicies, addInsuranceProvider,
     submitInsuranceClaim, updateClaimStatus, getRevenueLeakage, getClaimableInvoices,
-    getProviderPerformance, autoSubmitClaim,
+    getProviderPerformance, autoSubmitClaim, getAllPreAuths, disputeClaim
 } from '@/app/actions/insurance-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useToast } from '@/app/components/ui/Toast';
@@ -49,16 +49,20 @@ export default function InsuranceDashboard() {
     // Provider performance
     const [providerPerf, setProviderPerf] = useState<any[]>([]);
 
+    // Pre-Auths
+    const [preAuths, setPreAuths] = useState<any[]>([]);
+
     const loadData = async () => {
         setLoading(true);
         try {
-            const [s, p, c, pol, leak, perf] = await Promise.all([
+            const [s, p, c, pol, leak, perf, preauthsData] = await Promise.all([
                 getInsuranceStats(),
                 getInsuranceProviders(),
                 getInsuranceClaims({ status: claimFilter || undefined }),
                 getAllPolicies(),
                 getRevenueLeakage(),
                 getProviderPerformance(),
+                getAllPreAuths(),
             ]);
             if (s.success) setStats(s.data);
             if (p.success) setProviders(p.data || []);
@@ -66,6 +70,7 @@ export default function InsuranceDashboard() {
             if (pol.success) setPolicies(pol.data || []);
             if (leak.success) setLeakage(leak.data || []);
             if (perf.success) setProviderPerf(perf.data || []);
+            if (preauthsData.success) setPreAuths(preauthsData.data || []);
         } catch (err) { console.error('Insurance load error:', err); }
         setLoading(false);
     };
@@ -129,6 +134,16 @@ export default function InsuranceDashboard() {
         loadData();
     };
 
+    const handleDisputeClaim = async (claimId: number, reason: string) => {
+        const res = await disputeClaim(claimId, reason);
+        if (res.success) {
+            toast.success("Claim status updated to Disputed");
+            loadData();
+        } else {
+            toast.error(res.error || "Failed to dispute claim");
+        }
+    };
+
     const handleAutoSubmit = async (invoiceId: number) => {
         setAutoSubmitting(invoiceId);
         const res = await autoSubmitClaim(invoiceId);
@@ -148,6 +163,7 @@ export default function InsuranceDashboard() {
             Rejected: 'text-rose-400 bg-rose-500/10',
             PartiallyApproved: 'text-orange-400 bg-orange-500/10',
             Settled: 'text-teal-400 bg-teal-500/10',
+            Disputed: 'text-purple-400 bg-purple-500/10',
         };
         return map[status] || 'text-gray-500 bg-gray-100';
     };
@@ -160,6 +176,7 @@ export default function InsuranceDashboard() {
             Rejected: ShieldX,
             PartiallyApproved: Shield,
             Settled: CheckCircle,
+            Disputed: AlertTriangle,
         };
         const Icon = map[status] || Shield;
         return <Icon className="h-3.5 w-3.5" />;
@@ -185,7 +202,7 @@ export default function InsuranceDashboard() {
                         <p className="text-gray-500 mt-1 font-medium">Providers, policies, and claims lifecycle</p>
                     </div>
                     <div className="flex gap-2">
-                        {['overview', 'claims', 'policies', 'providers', 'leakage'].map(tab => (
+                        {['overview', 'preauths', 'claims', 'policies', 'providers', 'leakage'].map(tab => (
                             <button key={tab} onClick={() => setActiveTab(tab)}
                                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all capitalize ${activeTab === tab ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:text-gray-900'}`}>
                                 {tab}
@@ -368,11 +385,77 @@ export default function InsuranceDashboard() {
                             )}
                         </>)}
 
+                        {/* PREAUTHS TAB */}
+                        {activeTab === 'preauths' && (
+                            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                                <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+                                    <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
+                                        <Shield className="h-4 w-4 text-purple-400" /> Pre-Authorizations
+                                    </h3>
+                                    <span className="text-xs font-bold text-gray-400">{preAuths.length} total</span>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr className="border-b border-gray-200">
+                                                <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Patient</th>
+                                                <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">TPA / Policy</th>
+                                                <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Pre-Auth #</th>
+                                                <th className="text-right px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Requested</th>
+                                                <th className="text-right px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Approved</th>
+                                                <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Status</th>
+                                                <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Date</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {preAuths.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={7} className="px-5 py-16 text-center text-gray-300">
+                                                        <Shield className="h-8 w-8 mx-auto mb-2" />
+                                                        <p className="text-xs font-bold">No pre-authorizations found</p>
+                                                    </td>
+                                                </tr>
+                                            ) : preAuths.map((auth: any) => (
+                                                <tr key={auth.id} className="border-b border-gray-200 hover:bg-gray-50">
+                                                    <td className="px-5 py-3.5">
+                                                        <p className="text-xs font-bold text-gray-700">{auth.admission?.patient?.full_name}</p>
+                                                        <p className="text-[10px] text-gray-400">{auth.admission?.patient?.patient_id}</p>
+                                                    </td>
+                                                    <td className="px-5 py-3.5">
+                                                        <p className="text-xs font-bold text-gray-700">{auth.tpa_name || '-'}</p>
+                                                        <p className="text-[10px] text-gray-400">{auth.policy_id || '-'}</p>
+                                                    </td>
+                                                    <td className="px-5 py-3.5 text-xs font-mono text-gray-500">{auth.pre_auth_number || '-'}</td>
+                                                    <td className="px-5 py-3.5 text-right text-xs font-bold text-gray-700">{'\u20B9'}{Number(auth.requested_amount || 0).toLocaleString()}</td>
+                                                    <td className="px-5 py-3.5 text-right text-xs font-bold text-emerald-400">
+                                                        {auth.approved_amount ? `\u20B9${Number(auth.approved_amount).toLocaleString()}` : '-'}
+                                                    </td>
+                                                    <td className="px-5 py-3.5 text-center">
+                                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${
+                                                            auth.status === 'Approved' ? 'text-emerald-400 bg-emerald-500/10' :
+                                                            auth.status === 'Denied' ? 'text-rose-400 bg-rose-500/10' :
+                                                            auth.status === 'QueryRaised' ? 'text-amber-400 bg-amber-500/10' :
+                                                            'text-blue-400 bg-blue-500/10'
+                                                        }`}>
+                                                            {auth.status}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-5 py-3.5 text-center text-[10px] text-gray-500">
+                                                        {new Date(auth.submitted_at).toLocaleDateString('en-IN')}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
                         {/* CLAIMS TAB */}
                         {activeTab === 'claims' && (
                             <div className="space-y-4">
                                 <div className="flex gap-2">
-                                    {['', 'Submitted', 'UnderReview', 'Approved', 'Rejected', 'Settled'].map(f => (
+                                    {['', 'Submitted', 'UnderReview', 'Approved', 'Rejected', 'Settled', 'Disputed'].map(f => (
                                         <button key={f} onClick={() => setClaimFilter(f)}
                                             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${claimFilter === f ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
                                             {f || 'All'}
@@ -419,11 +502,20 @@ export default function InsuranceDashboard() {
                                                                 {getClaimStatusIcon(claim.status)} {claim.status}
                                                             </span>
                                                         </td>
-                                                        <td className="px-5 py-3.5 text-center">
-                                                            {!['Settled', 'Rejected'].includes(claim.status) && (
+                                                        <td className="px-5 py-3.5 text-center flex items-center justify-center gap-1">
+                                                            {!['Settled', 'Rejected', 'Disputed'].includes(claim.status) && (
                                                                 <button onClick={() => { setClaimModal(claim); setClaimUpdateForm({ status: '', approved_amount: '', rejection_reason: '' }); }}
                                                                     className="p-1.5 hover:bg-blue-500/10 rounded-lg transition-all" title="Update Status">
                                                                     <Eye className="h-3.5 w-3.5 text-blue-400/60 hover:text-blue-400" />
+                                                                </button>
+                                                            )}
+                                                            {claim.status === 'Rejected' && (
+                                                                <button onClick={() => {
+                                                                        const reason = prompt("Enter dispute reason for " + claim.claim_number);
+                                                                        if (reason) handleDisputeClaim(claim.id, reason);
+                                                                    }}
+                                                                    className="p-1.5 hover:bg-purple-500/10 rounded-lg transition-all" title="Dispute Claim">
+                                                                    <AlertTriangle className="h-3.5 w-3.5 text-purple-400/60 hover:text-purple-400" />
                                                                 </button>
                                                             )}
                                                         </td>

@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { FileText, ArrowLeft, Printer, Edit, Trash2, Plus, CheckCircle, Save, X } from 'lucide-react';
+import { FileText, ArrowLeft, Printer, Edit, Trash2, Plus, CheckCircle, Save, X, History } from 'lucide-react';
 import { getInvoiceDetail, addInvoiceItem, removeInvoiceItem, finalizeInvoice } from '@/app/actions/finance-actions';
+import { getAuditLogs } from '@/app/actions/audit-actions';
 import { getIpdServices } from '@/app/actions/ipd-master-actions';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -26,10 +27,18 @@ export default function InvoiceDetailPage() {
     const [draftDiscount, setDraftDiscount] = useState(0);
     const [actionLoading, setActionLoading] = useState(false);
 
+    const [auditLogs, setAuditLogs] = useState<any[]>([]);
+
     const loadInvoice = async () => {
         setLoading(true);
         const res = await getInvoiceDetail(invoiceId);
-        if (res.success) setInvoice(res.data);
+        if (res.success) {
+            setInvoice(res.data);
+            const auditRes = await getAuditLogs(1, 50, { entity_type: 'invoice', entity_id: res.data.invoice_number });
+            if (auditRes.success) {
+                setAuditLogs(auditRes.data || []);
+            }
+        }
         setLoading(false);
     };
 
@@ -433,6 +442,47 @@ export default function InvoiceDetailPage() {
                         </div>
                     </div>
 
+                </div>
+
+                {/* Audit Trail / Version History (Hidden in Print) */}
+                <div className="mt-8 print-hidden">
+                    <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                        <History className="h-5 w-5 text-indigo-500" /> Version & Audit History
+                    </h3>
+                    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                        {auditLogs.length > 0 ? (
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-slate-50 text-slate-500 font-bold text-[11px] uppercase tracking-wider">
+                                    <tr>
+                                        <th className="px-4 py-3">Date</th>
+                                        <th className="px-4 py-3">Action</th>
+                                        <th className="px-4 py-3">User</th>
+                                        <th className="px-4 py-3">Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {auditLogs.map((log: any) => (
+                                        <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-4 py-3 font-mono text-slate-500 text-xs">
+                                                {new Date(log.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700">
+                                                    {log.action}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 font-medium text-slate-700">{log.username || 'System'}</td>
+                                            <td className="px-4 py-3 text-slate-500 text-xs max-w-xs truncate" title={log.details || ''}>
+                                                {log.details || '-'}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        ) : (
+                            <div className="p-8 text-center text-slate-400 font-medium">No audit logs found for this invoice.</div>
+                        )}
+                    </div>
                 </div>
             </div>
         </AppShell>

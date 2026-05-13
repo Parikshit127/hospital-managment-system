@@ -967,6 +967,177 @@ export async function getPharmacyOrderDetails(orderId: number) {
 // PHARMACY KPI & ANALYTICS
 // ========================================
 
+// ========================================
+// PHASE 5 PHARMACY ACTIONS
+// ========================================
+
+export async function verifyPharmacyOrder(orderId: number, notes?: string) {
+    try {
+        const { db } = await requireTenantContext();
+
+        await (db.pharmacy_orders as any).update({
+            where: { id: orderId },
+            data: {
+                status: 'Verified',
+                verified_by: 'Pharmacist',
+                verified_at: new Date(),
+                verification_notes: notes || null,
+            },
+        });
+
+        await logAudit({
+            action: 'PHARMACY_ORDER_VERIFIED',
+            module: 'Pharmacy',
+            entity_type: 'pharmacy_order',
+            entity_id: String(orderId),
+            details: JSON.stringify({ notes }),
+        });
+
+        revalidatePath('/pharmacy/ip-orders');
+        revalidatePath('/pharmacy/orders');
+        return { success: true };
+    } catch (error: any) {
+        console.error('Verify Order Error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function getNarcoticRegister(drugName?: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const entries = await (db.narcoticRegister as any).findMany({
+            where: {
+                organizationId,
+                ...(drugName ? { drug_name: drugName } : {}),
+            },
+            orderBy: { created_at: 'desc' },
+        });
+
+        return { success: true, data: entries };
+    } catch (error) {
+        console.error('Get Narcotic Register Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+export async function addNarcoticEntry(data: {
+    drug_name: string;
+    batch_no?: string;
+    patient_name?: string;
+    prescriber_name?: string;
+    witness_name?: string;
+    quantity_in?: number;
+    quantity_out?: number;
+    transaction_type: string;
+    notes?: string;
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        // Get last entry for this drug to calculate running balance
+        const lastEntry = await (db.narcoticRegister as any).findFirst({
+            where: { organizationId, drug_name: data.drug_name },
+            orderBy: { created_at: 'desc' },
+        });
+
+        const prevBalance = lastEntry ? Number(lastEntry.balance) : 0;
+        const qtyIn = Number(data.quantity_in || 0);
+        const qtyOut = Number(data.quantity_out || 0);
+        const balance = prevBalance + qtyIn - qtyOut;
+
+        const entry = await (db.narcoticRegister as any).create({
+            data: {
+                organizationId,
+                drug_name: data.drug_name,
+                batch_no: data.batch_no || null,
+                patient_name: data.patient_name || null,
+                prescriber_name: data.prescriber_name || null,
+                witness_name: data.witness_name || null,
+                quantity_in: qtyIn,
+                quantity_out: qtyOut,
+                balance,
+                transaction_type: data.transaction_type,
+                notes: data.notes || null,
+            },
+        });
+
+        await logAudit({
+            action: 'NARCOTIC_ENTRY_ADDED',
+            module: 'Pharmacy',
+            entity_type: 'narcotic_register',
+            entity_id: entry.id,
+            details: JSON.stringify({ drug_name: data.drug_name, transaction_type: data.transaction_type, balance }),
+        });
+
+        revalidatePath('/pharmacy/narcotics');
+        return { success: true, data: entry };
+    } catch (error: any) {
+        console.error('Add Narcotic Entry Error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function generatePullSheet(wardId?: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const wardStockItems = await (db.ward_stock as any).findMany({
+            where: {
+                organizationId,
+                ...(wardId ? { ward_id: Number(wardId) } : {}),
+            },
+        });
+
+        const pullItems = wardStockItems
+            .filter((item: any) => item.quantity < item.min_quantity)
+            .map((item: any) => ({
+                medicine_name: item.medicine_name,
+                current_quantity: item.quantity,
+                required_quantity: item.min_quantity - item.quantity,
+                rack_location: item.rack_location || null,
+            }))
+            .sort((a: any, b: any) => a.medicine_name.localeCompare(b.medicine_name));
+
+        return { success: true, data: pullItems };
+    } catch (error: any) {
+        console.error('Generate Pull Sheet Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+export async function getGenericAlternatives(genericName: string) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const alternatives = await db.pharmacy_medicine_master.findMany({
+            where: {
+                generic_name: genericName,
+                is_active: true,
+            },
+            select: {
+                id: true,
+                brand_name: true,
+                mrp: true,
+                category: true,
+            },
+        });
+
+        return {
+            success: true,
+            data: alternatives.map((m: any) => ({
+                id: m.id,
+                name: m.brand_name,
+                mrp: m.mrp,
+                category: m.category,
+            })),
+        };
+    } catch (error) {
+        console.error('Get Generic Alternatives Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
 export async function getPharmacyAnalytics() {
     try {
         const { db } = await requireTenantContext();

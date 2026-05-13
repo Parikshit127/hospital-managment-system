@@ -5,7 +5,8 @@ import {
     ClipboardList, UserPlus, CheckCircle, Phone, Activity,
     User, MapPin, Shield, Calendar, Hash, Loader2, Mail,
     Search, AlertCircle, Heart, Users, ArrowRight, FileCheck,
-    Building2, CreditCard, FileText
+    Building2, CreditCard, FileText, GitMerge, CalendarPlus,
+    Receipt, UserCheck, X
 } from 'lucide-react';
 import { registerPatient, checkDuplicatePatient } from '@/app/actions/register-patient';
 import { lookupInsuranceByPhone } from '@/app/actions/insurance-lookup';
@@ -389,7 +390,7 @@ export default function ReceptionPage() {
                                         )}
                                     </div>
 
-                                    <div className="mt-8 flex items-center gap-3 flex-wrap justify-center">
+                                    <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                                         <button
                                             onClick={() => setSuccessData(null)}
                                             className="px-6 py-3.5 bg-gray-100 border border-gray-200 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-200 transition-all active:scale-[0.98] flex items-center gap-2"
@@ -400,13 +401,13 @@ export default function ReceptionPage() {
                                             onClick={() => router.push(`/reception/patient/${successData.patient_id}`)}
                                             className="px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center gap-2"
                                         >
-                                            <ArrowRight className="h-4 w-4" /> View Patient
+                                            <User className="h-4 w-4" /> View Profile
                                         </button>
                                         <button
-                                            onClick={() => router.push('/reception/appointments')}
+                                            onClick={() => router.push(`/reception/appointments?patientId=${successData.patient_id}`)}
                                             className="px-6 py-3.5 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-teal-500/20 hover:shadow-teal-500/30 transition-all active:scale-[0.98] flex items-center gap-2"
                                         >
-                                            <ArrowRight className="h-4 w-4" /> Book Appointment
+                                            <CalendarPlus className="h-4 w-4" /> Book Appointment
                                         </button>
                                     </div>
                                 </div>
@@ -447,50 +448,6 @@ export default function ReceptionPage() {
                                         </div>
                                     )}
 
-                                    {/* Duplicate Warning */}
-                                    {showDuplicateWarning && duplicates.length > 0 && (
-                                        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <AlertCircle className="h-4 w-4 text-amber-500" />
-                                                <span className="text-sm font-bold text-amber-700">
-                                                    Possible duplicate{duplicates.length > 1 ? 's' : ''} found
-                                                </span>
-                                            </div>
-                                            <div className="space-y-2">
-                                                {duplicates.map((p) => (
-                                                    <div key={p.patient_id} className="flex items-center justify-between bg-white border border-amber-100 rounded-lg px-4 py-3">
-                                                        <div>
-                                                            <div className="flex items-center gap-2">
-                                                                <p className="text-sm font-bold text-gray-800">{p.full_name}</p>
-                                                                {p.patient_type && (
-                                                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide ${PATIENT_TYPE_BADGE[p.patient_type] || 'bg-gray-100 text-gray-600'}`}>
-                                                                        {PATIENT_TYPE_LABEL[p.patient_type] || p.patient_type}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <p className="text-xs text-gray-500">
-                                                                {p.patient_id} · {p.phone} · {p.age ? `${p.age}y` : ''} {p.gender || ''} · {p.department || 'No dept'}
-                                                            </p>
-                                                        </div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => router.push(`/reception/patient/${p.patient_id}`)}
-                                                            className="px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-lg transition-colors"
-                                                        >
-                                                            Use Existing
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowDuplicateWarning(false)}
-                                                className="mt-3 text-xs font-bold text-gray-500 hover:text-gray-700 transition-colors"
-                                            >
-                                                Dismiss · Register as new patient
-                                            </button>
-                                        </div>
-                                    )}
 
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-6">
                                         {/* Full Name */}
@@ -888,6 +845,113 @@ export default function ReceptionPage() {
                     </div>
                 </div>
             </div>
+
+        {/* Duplicate Patient Detection Modal */}
+        {showDuplicateWarning && duplicates.length > 0 && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+                    {/* Header */}
+                    <div className="bg-amber-50 border-b border-amber-100 px-6 py-4 flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-amber-100 rounded-xl">
+                                <AlertCircle className="h-5 w-5 text-amber-600" />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-black text-gray-900">
+                                    Patient Already Registered
+                                </h3>
+                                <p className="text-xs text-amber-700 font-medium mt-0.5">
+                                    {duplicates.length} existing record{duplicates.length > 1 ? 's' : ''} found with this phone number
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => setShowDuplicateWarning(false)}
+                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+
+                    {/* Patient Cards */}
+                    <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">
+                        {duplicates.map((p) => (
+                            <div key={p.patient_id} className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                <div className="flex items-start gap-3 mb-3">
+                                    {/* Avatar */}
+                                    <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-emerald-600 rounded-xl flex items-center justify-center text-white text-sm font-black shrink-0">
+                                        {p.full_name?.charAt(0) || 'P'}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-sm font-black text-gray-900">{p.full_name}</span>
+                                            {p.patient_type && (
+                                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide ${PATIENT_TYPE_BADGE[p.patient_type] || 'bg-gray-100 text-gray-600'}`}>
+                                                    {PATIENT_TYPE_LABEL[p.patient_type] || p.patient_type}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-xs font-mono text-teal-600 mt-0.5">{p.patient_id}</p>
+                                        <p className="text-xs text-gray-500 mt-0.5">
+                                            {[p.phone, p.age ? `${p.age}y` : null, p.gender, p.department].filter(Boolean).join(' · ')}
+                                        </p>
+                                        {p.date_of_birth && (
+                                            <p className="text-[10px] text-gray-400 mt-0.5">
+                                                Registered {new Date(p.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                                {/* Action Buttons */}
+                                <div className="flex gap-2 flex-wrap">
+                                    <button
+                                        type="button"
+                                        onClick={() => router.push(`/reception/patient/${p.patient_id}`)}
+                                        className="flex items-center gap-1.5 px-3 py-2 bg-teal-500 hover:bg-teal-600 text-white text-xs font-bold rounded-lg transition-colors"
+                                    >
+                                        <UserCheck className="h-3.5 w-3.5" /> Open Profile
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => router.push(`/reception/appointments?patientId=${p.patient_id}`)}
+                                        className="flex items-center gap-1.5 px-3 py-2 bg-violet-100 hover:bg-violet-200 text-violet-700 text-xs font-bold rounded-lg transition-colors"
+                                    >
+                                        <CalendarPlus className="h-3.5 w-3.5" /> Book Appointment
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => router.push(`/reception/billing/new?patientId=${p.patient_id}`)}
+                                        className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg transition-colors"
+                                    >
+                                        <Receipt className="h-3.5 w-3.5" /> New Bill
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3 bg-gray-50">
+                        {duplicates.length >= 2 && (
+                            <button
+                                type="button"
+                                onClick={() => router.push(`/reception/merge-patients?phone=${duplicates[0]?.phone || ''}`)}
+                                className="flex items-center gap-1.5 px-4 py-2.5 border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 text-xs font-bold rounded-xl transition-colors"
+                            >
+                                <GitMerge className="h-3.5 w-3.5" /> Merge Records
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            onClick={() => setShowDuplicateWarning(false)}
+                            className="ml-auto flex items-center gap-1.5 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl transition-colors"
+                        >
+                            <UserPlus className="h-3.5 w-3.5" /> Register as New Patient
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
 
         </AppShell>
     );
