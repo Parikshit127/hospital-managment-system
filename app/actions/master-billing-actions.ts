@@ -368,7 +368,7 @@ export async function getMasterBillingKPIs() {
         where: { organizationId, status: "Active" },
         _sum: { amount: true, applied_amount: true, refunded_amount: true },
       }),
-      db.refunds.aggregate({
+      db.refund.aggregate({
         where: { organizationId, created_at: { gte: thirtyAgo } },
         _sum: { amount: true },
         _count: { id: true },
@@ -406,7 +406,7 @@ export async function getMasterBillingKPIs() {
         _count: { id: true },
         _sum: { balance_due: true },
       }),
-      db.refunds.count({
+      db.refund.count({
         where: { organizationId, status: "Pending" },
       }),
       db.invoice_items.groupBy({
@@ -592,7 +592,7 @@ export async function globalFinanceSearch(query: string): Promise<{
         },
         take: 5,
       }),
-      db.refunds.findMany({
+      db.refund.findMany({
         where: { organizationId, invoice_id: { contains: trimmed, mode: "insensitive" } },
         select: { id: true, invoice_id: true, amount: true, status: true, created_at: true },
         take: 5,
@@ -706,7 +706,7 @@ export async function getPatientFinancialProfile(patientId: string) {
           where: { patient_id: patientId, organizationId },
           orderBy: { created_at: "desc" },
         }),
-        db.refunds.findMany({
+        db.refund.findMany({
           where: {
             organizationId,
             invoice_id: {
@@ -854,7 +854,7 @@ export async function getPatientLedger(patientId: string) {
         where: { patient_id: patientId, organizationId },
         orderBy: { created_at: "asc" },
       }),
-      db.refunds.findMany({
+      db.refund.findMany({
         where: { organizationId, invoice_id: { in: invoiceIds } },
         orderBy: { created_at: "asc" },
       }),
@@ -1028,7 +1028,7 @@ export async function getPatientTimeline(patientId: string) {
           discharge_type: true,
         },
       }),
-      db.refunds.findMany({
+      db.refund.findMany({
         where: { organizationId, invoice_id: { in: [] } }, // placeholder; filtered below
         select: { id: true, amount: true, status: true, created_at: true },
       }),
