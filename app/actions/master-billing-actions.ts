@@ -721,13 +721,15 @@ export async function getPatientFinancialProfile(patientId: string) {
           orderBy: { created_at: "desc" },
         }),
         db.insurance_claims.findMany({
-          where: { patient_id: patientId, organizationId },
-          include: { provider: { select: { provider_name: true } } },
-          orderBy: { created_at: "desc" },
+          where: {
+            organizationId,
+            invoice: { patient_id: patientId },
+          },
+          include: { policy: { select: { policy_number: true, provider: { select: { provider_name: true } } } } },
+          orderBy: { submitted_at: "desc" },
         }),
         (db.insurancePreAuth as any).findMany({
           where: { patient_id: patientId, organizationId },
-          include: { provider: { select: { provider_name: true } } },
           orderBy: { created_at: "desc" },
         }),
         db.system_audit_logs.findMany({
@@ -1034,7 +1036,7 @@ export async function getPatientTimeline(patientId: string) {
       }),
       (db.insurancePreAuth as any).findMany({
         where: { patient_id: patientId, organizationId },
-        select: { pre_auth_number: true, status: true, requested_at: true, responded_at: true },
+        select: { pre_auth_number: true, status: true, submitted_at: true, responded_at: true },
       }),
     ]);
 
