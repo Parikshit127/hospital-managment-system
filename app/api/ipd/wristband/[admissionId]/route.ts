@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireTenantContext } from '@/backend/tenant';
 
-export async function GET(request: NextRequest, { params }: { params: { admissionId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ admissionId: string }> }) {
   try {
+    const { admissionId } = await params;
     const { db } = await requireTenantContext();
     const admission = await (db.admissions as any).findUnique({
-      where: { admission_id: params.admissionId },
+      where: { admission_id: admissionId },
       include: { ward: true, bed: true },
     });
     if (!admission) return NextResponse.json({ error: 'Not found' }, { status: 404 });

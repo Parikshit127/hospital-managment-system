@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireTenantContext } from '@/backend/tenant';
 
-export async function GET(request: NextRequest, { params }: { params: { admissionId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ admissionId: string }> }) {
   try {
+    const { admissionId } = await params;
     const { db } = await requireTenantContext();
     const admission = await (db.admissions as any).findUnique({
-      where: { admission_id: params.admissionId },
+      where: { admission_id: admissionId },
     });
     if (!admission) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest, { params }: { params: { admissio
   <div><div class="lbl">Admitting Staff</div><div style="border-bottom:1px solid #000;height:40px"></div></div>
   <div><div class="lbl">Date & Time</div><div style="border-bottom:1px solid #000;height:40px"></div></div>
 </div>
-<div class="foot">Generated ${new Date().toLocaleString('en-IN')} · HospitalOS · ${params.admissionId}</div>
+<div class="foot">Generated ${new Date().toLocaleString('en-IN')} · HospitalOS · ${admissionId}</div>
 <script>window.onload=()=>window.print()</script>
 </body></html>`;
 
