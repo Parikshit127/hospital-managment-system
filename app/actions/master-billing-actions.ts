@@ -725,7 +725,7 @@ export async function getPatientFinancialProfile(patientId: string) {
           include: { provider: { select: { provider_name: true } } },
           orderBy: { created_at: "desc" },
         }),
-        db.preAuthorization.findMany({
+        (db.insurancePreAuth as any).findMany({
           where: { patient_id: patientId, organizationId },
           include: { provider: { select: { provider_name: true } } },
           orderBy: { created_at: "desc" },
@@ -1032,7 +1032,7 @@ export async function getPatientTimeline(patientId: string) {
         where: { organizationId, invoice_id: { in: [] } }, // placeholder; filtered below
         select: { id: true, amount: true, status: true, created_at: true },
       }),
-      db.preAuthorization.findMany({
+      (db.insurancePreAuth as any).findMany({
         where: { patient_id: patientId, organizationId },
         select: { pre_auth_number: true, status: true, requested_at: true, responded_at: true },
       }),
