@@ -205,7 +205,7 @@ export default function AdminIPDHub() {
 
                     {/* QUICK LINKS */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <Link href="/ipd/bed-matrix"
+                        <Link href="/admin/ipd-setup"
                             className="group bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-blue-300 transition-all flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-blue-50 rounded-xl"><Bed className="h-5 w-5 text-blue-500" /></div>
@@ -216,7 +216,7 @@ export default function AdminIPDHub() {
                             </div>
                             <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-blue-500" />
                         </Link>
-                        <Link href="/ipd/nursing-station"
+                        <Link href="/admin/ipd-setup"
                             className="group bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-violet-300 transition-all flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-violet-50 rounded-xl"><Heart className="h-5 w-5 text-violet-500" /></div>
@@ -227,7 +227,7 @@ export default function AdminIPDHub() {
                             </div>
                             <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-violet-500" />
                         </Link>
-                        <Link href="/ipd/ward-rounds"
+                        <Link href="/admin/ipd-setup"
                             className="group bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-teal-300 transition-all flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-teal-50 rounded-xl"><ClipboardList className="h-5 w-5 text-teal-500" /></div>

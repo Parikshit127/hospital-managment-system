@@ -7,11 +7,12 @@ import { useBranding } from './ThemeProvider';
 import { logout } from '@/app/login/actions';
 import {
     LayoutDashboard, LineChart,
-    Stethoscope, Bed, FlaskConical, Pill, DollarSign, Briefcase,
+    Stethoscope, Bed, BedDouble, FlaskConical, Pill, DollarSign, Receipt, CreditCard, Briefcase,
     Users, UserCog, Building2, ShieldCheck, UserRound,
     Settings, Palette, FileText, Bell, Plug, Clock, BarChart3, Lock,
-    LogOut, ChevronLeft, ChevronRight, Workflow,
+    LogOut, ChevronLeft, ChevronRight, Workflow, Scissors,
     GitBranch, Menu, X, DatabaseBackup, BookOpen, Database,
+    ShieldAlert, Scale, Siren,
 } from 'lucide-react';
 import PortalSwitcher from './PortalSwitcher';
 
@@ -28,11 +29,19 @@ const NAV_SECTIONS = [
         items: [
             { label: 'OPD', href: '/admin/opd', icon: Stethoscope },
             { label: 'IPD', href: '/admin/ipd', icon: Bed },
+            { label: 'IPD Setup', href: '/admin/ipd-setup', icon: BedDouble },
+            { label: 'IPD Finance', href: '/admin/ipd-finance', icon: CreditCard },
+            { label: 'OT Setup', href: '/admin/ot-setup', icon: Scissors },
             { label: 'Lab', href: '/admin/lab', icon: FlaskConical },
             { label: 'Pharmacy', href: '/admin/pharmacy', icon: Pill },
             { label: 'Finance', href: '/admin/finance', icon: DollarSign },
+            { label: 'Finance Master', href: '/admin/finance-master', icon: Receipt },
             { label: 'Master Billing', href: '/admin/billing', icon: FileText },
+            { label: 'Approval Center', href: '/admin/billing/approvals', icon: ShieldAlert },
+            { label: 'Write-offs', href: '/admin/billing/writeoffs', icon: Scale },
             { label: 'HR', href: '/admin/hr', icon: Briefcase },
+            { label: 'Operation Theatre', href: '/admin/ot/dashboard', icon: Scissors },
+            { label: 'Emergency Room', href: '/admin/er/dashboard', icon: Siren },
         ],
     },
     {

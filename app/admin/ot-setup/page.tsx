@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Settings, Loader2, Plus, Building2, Scissors } from "lucide-react";
-import { AppShell } from "@/app/components/layout/AppShell";
+import { AdminPage } from "@/app/admin/components/AdminPage";
 import {
   listOTRooms,
   createOTRoom,
@@ -100,7 +100,7 @@ export default function OTMasterSetupPage() {
   };
 
   return (
-    <AppShell
+    <AdminPage
       pageTitle="OT Master Setup"
       pageIcon={<Settings className="h-5 w-5" />}
       onRefresh={load}
@@ -326,6 +326,6 @@ export default function OTMasterSetupPage() {
           </div>
         </div>
       )}
-    </AppShell>
+    </AdminPage>
   );
 }
