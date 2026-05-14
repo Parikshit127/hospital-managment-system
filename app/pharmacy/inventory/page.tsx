@@ -17,12 +17,24 @@ export default function PharmacyInventoryPage() {
 
     const loadInventory = async (query: string = '') => {
         setRefreshing(true);
-        if (filterLow) {
-            const res = await getLowStockAlerts();
-            if (res.success) setMedicines(res.data);
-        } else {
-            const res = await searchMedicine(query);
-            if (res.success) setMedicines(res.data);
+        // Fetch everything and filter client-side for immediate responsive search/toggle
+        const res = await searchMedicine(''); 
+        if (res.success) {
+            let filtered = res.data;
+            if (filterLow) {
+                filtered = filtered.filter((med: any) => {
+                    const total = med.batches.reduce((s: number, b: any) => s + b.current_stock, 0);
+                    return total <= (med.min_threshold || 10);
+                });
+            }
+            if (query) {
+                const q = query.toLowerCase();
+                filtered = filtered.filter((med: any) => 
+                    med.brand_name.toLowerCase().includes(q) || 
+                    med.generic_name?.toLowerCase().includes(q)
+                );
+            }
+            setMedicines(filtered);
         }
         setRefreshing(false);
     };

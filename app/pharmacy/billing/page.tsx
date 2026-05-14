@@ -6,7 +6,8 @@ import {
     Trash2, AlertTriangle, CheckCircle, Package, Printer, X, Loader2,
     CreditCard, Banknote, Smartphone, Clock, IndianRupee, FileText
 } from 'lucide-react';
-import { getInventory, generateInvoice, getPharmacyQueue, markOrderAsPaid, addInventoryBatch } from '@/app/actions/pharmacy-actions';
+import { getInventory, generateInvoice, getPharmacyQueue, markOrderAsPaid, addInventoryBatch, processDoctorOrder } from '@/app/actions/pharmacy-actions';
+import { searchPatientsForBilling } from '@/app/actions/finance-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
 
 type InventoryItem = {
@@ -52,6 +53,12 @@ export default function PharmacyPage() {
     const [activeTab, setActiveTab] = useState<'billing' | 'orders'>('billing');
     const [orderQueue, setOrderQueue] = useState<any[]>([]);
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
+
+    // Patient search state
+    const [patientSearch, setPatientSearch] = useState('');
+    const [patientSuggestions, setPatientSuggestions] = useState<any[]>([]);
+    const [selectedPatient, setSelectedPatient] = useState<any>(null);
+    const [isWalkIn, setIsWalkIn] = useState(false);
 
     const [showInvoiceModal, setShowInvoiceModal] = useState(false);
     const [invoiceResult, setInvoiceResult] = useState<any>(null);
@@ -106,6 +113,29 @@ export default function PharmacyPage() {
     }, [loadInventory, loadQueue]);
 
     // Cart Logic
+    // Patient search debounce
+    useEffect(() => {
+        if (isWalkIn || patientSearch.length < 2) { setPatientSuggestions([]); return; }
+        const t = setTimeout(async () => {
+            const res = await searchPatientsForBilling(patientSearch);
+            if (res.success) setPatientSuggestions(res.data);
+        }, 300);
+        return () => clearTimeout(t);
+    }, [patientSearch, isWalkIn]);
+
+    const selectPatient = (p: any) => {
+        setSelectedPatient(p);
+        setPatientId(p.patient_id);
+        setPatientSearch(p.full_name);
+        setPatientSuggestions([]);
+    };
+
+    const clearPatient = () => {
+        setSelectedPatient(null);
+        setPatientId('');
+        setPatientSearch('');
+    };
+
     const addToCart = (item: InventoryItem) => {
         setCart(prev => {
             const existing = prev.find(i => i.batch_id === item.batch_id);
@@ -146,17 +176,22 @@ export default function PharmacyPage() {
     const grandTotal = subtotal + totalTax;
 
     const handleCheckout = () => {
-        if (!patientId) return alert('Please enter Patient ID');
+        if (!isWalkIn && !patientId) return alert('Please search and select a patient, or enable Walk-in / OTC mode.');
         if (cart.length === 0) return alert('Cart is empty');
         setShowInvoiceModal(true);
     };
 
     const confirmPayment = async () => {
         if (isSubmitting) return;
+        if (!isWalkIn && !selectedPatient) {
+            alert('Please search and select a patient, or enable Walk-in / OTC mode.');
+            return;
+        }
         setIsSubmitting(true);
         try {
+            const resolvedPatientId = isWalkIn ? 'WALKIN' : patientId;
             const payload = cart.map(item => ({ ...item, batch_no: item.batch_id }));
-            const res = await generateInvoice(patientId, payload);
+            const res = await generateInvoice(resolvedPatientId, payload);
             if (res.success) {
                 setInvoiceResult(res);
                 setCart([]);
@@ -175,6 +210,8 @@ export default function PharmacyPage() {
         setShowInvoiceModal(false);
         setInvoiceResult(null);
         setPatientId('');
+        setPatientSearch('');
+        setSelectedPatient(null);
     };
 
     const uniqueMedicines = Array.from(new Set(inventory.map(i => JSON.stringify({ id: i.medicine_id, name: i.medicine_name }))))
@@ -391,12 +428,65 @@ export default function PharmacyPage() {
                         <h2 className="text-sm font-black text-gray-700 mb-3 flex items-center gap-2 uppercase tracking-[0.12em]">
                             <ShoppingCart className="h-4 w-4 text-teal-500" /> Current Bill
                         </h2>
-                        <input
-                            value={patientId}
-                            onChange={e => setPatientId(e.target.value)}
-                            className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-bold text-gray-900 placeholder:text-gray-400"
-                            placeholder="Patient ID"
-                        />
+
+                        {/* Patient selection */}
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Patient</span>
+                                <button
+                                    type="button"
+                                    onClick={() => { setIsWalkIn(!isWalkIn); clearPatient(); }}
+                                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors ${
+                                        isWalkIn ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    {isWalkIn ? '⚡ Walk-in / OTC' : 'Walk-in / OTC'}
+                                </button>
+                            </div>
+
+                            {isWalkIn ? (
+                                <div className="w-full p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-700 text-center">
+                                    Walk-in Sale — No registration needed
+                                </div>
+                            ) : (
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                                    <input
+                                        value={patientSearch}
+                                        onChange={e => { setPatientSearch(e.target.value); setSelectedPatient(null); setPatientId(''); }}
+                                        className="w-full pl-9 pr-8 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400"
+                                        placeholder="Search by name, ID, phone..."
+                                    />
+                                    {selectedPatient && (
+                                        <button onClick={clearPatient} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                            <X className="h-3.5 w-3.5" />
+                                        </button>
+                                    )}
+                                    {patientSuggestions.length > 0 && !selectedPatient && (
+                                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-44 overflow-y-auto">
+                                            {patientSuggestions.map((p: any) => (
+                                                <button key={p.patient_id} type="button"
+                                                    onClick={() => selectPatient(p)}
+                                                    className="w-full text-left px-4 py-2.5 hover:bg-teal-50 border-b border-gray-50 last:border-0 transition-colors"
+                                                >
+                                                    <p className="text-sm font-bold text-gray-900">{p.full_name}</p>
+                                                    <p className="text-[10px] text-gray-400 font-mono">{p.patient_id} · {p.phone}</p>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {selectedPatient && (
+                                        <div className="mt-1.5 px-3 py-2 bg-teal-50 border border-teal-200 rounded-lg flex items-center justify-between">
+                                            <div>
+                                                <p className="text-xs font-bold text-teal-800">{selectedPatient.full_name}</p>
+                                                <p className="text-[10px] font-mono text-teal-500">{selectedPatient.patient_id}</p>
+                                            </div>
+                                            <CheckCircle className="h-4 w-4 text-teal-500 flex-shrink-0" />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <div className="flex-1 overflow-auto p-4 space-y-2">
@@ -484,7 +574,7 @@ export default function PharmacyPage() {
 
                         <button
                             onClick={handleCheckout}
-                            disabled={cart.length === 0 || !patientId}
+                            disabled={cart.length === 0 || (!isWalkIn && !patientId)}
                             className="w-full bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-xl shadow-teal-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98]"
                         >
                             <Receipt className="h-5 w-5" /> Generate Invoice
@@ -751,10 +841,14 @@ export default function PharmacyPage() {
                                 <button
                                     onClick={async () => {
                                         setIsSubmitting(true);
-                                        await markOrderAsPaid(selectedOrder.id, paymentMethod);
-                                        await loadQueue();
+                                        const res = await processDoctorOrder(selectedOrder.id, paymentMethod);
+                                        if (res.success) {
+                                            await loadQueue();
+                                            setSelectedOrder(null);
+                                        } else {
+                                            alert((res as any).error || 'Failed to process order');
+                                        }
                                         setIsSubmitting(false);
-                                        setSelectedOrder(null);
                                     }}
                                     disabled={isSubmitting}
                                     className="flex-1 px-8 py-3 bg-gradient-to-r from-teal-500 to-emerald-600 text-white font-bold rounded-xl hover:from-teal-400 hover:to-emerald-500 shadow-xl shadow-teal-500/20 flex items-center justify-center gap-2 disabled:opacity-70 transition-all active:scale-[0.98]"

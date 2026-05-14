@@ -84,10 +84,23 @@ export async function generateInvoice(patientId: string, items: any[]) {
         }
 
         if (invoiceItems.length === 0) {
-            return { success: false, error: 'No items could be dispensed' };
+            return { success: false, error: 'No items could be dispensed — check stock levels and batch numbers' };
         }
 
-        // 2. Create formal invoice in finance system
+        // 2. Ensure walk-in patient record exists (for OTC/counter sales without registered patient)
+        if (patientId === 'WALKIN') {
+            await db.oPD_REG.upsert({
+                where: { patient_id: 'WALKIN' },
+                create: {
+                    patient_id: 'WALKIN',
+                    full_name: 'Walk-in Patient (OTC)',
+                    organizationId,
+                },
+                update: {}
+            });
+        }
+
+        // 3. Create formal invoice in finance system
         const netAmount = totalAmount + totalTax;
         const cgst = totalTax / 2;
         const sgst = totalTax / 2;
@@ -161,9 +174,66 @@ export async function generateInvoice(patientId: string, items: any[]) {
             invoice_number: invoice.invoice_number,
             items: invoiceItems
         };
-    } catch (error) {
-        console.error('Invoice Error:', error);
-        return { success: false, error: 'Failed to generate invoice' };
+    } catch (error: any) {
+        console.error('Invoice Error:', error?.message || error);
+        return { success: false, error: error?.message || 'Failed to generate invoice' };
+    }
+}
+
+export async function processDoctorOrder(orderId: number, paymentMethod: string = 'Cash') {
+    try {
+        const { db } = await requireTenantContext();
+
+        // 1. Fetch order details
+        const order = await db.pharmacy_orders.findUnique({
+            where: { id: orderId },
+            include: { items: true }
+        });
+        if (!order) return { success: false, error: 'Order not found' };
+        if (order.status === 'Completed') return { success: false, error: 'Order already processed' };
+
+        // 2. Map items to best available batches (FEFO)
+        const dispenseItems = [];
+        for (const item of order.items) {
+            const batches = await db.pharmacy_batch_inventory.findMany({
+                where: { medicine_id: item.medicine_id, current_stock: { gt: 0 } },
+                orderBy: { expiry_date: 'asc' }
+            });
+
+            if (batches.length === 0) {
+                return { success: false, error: `Medicine ${item.medicine_name} is out of stock` };
+            }
+
+            // Simple allocation: take from first batch that has enough, or split?
+            // For now, take from the earliest expiring batch.
+            const batch = batches[0];
+            if (batch.current_stock < item.quantity_requested) {
+                return { success: false, error: `Insufficient stock for ${item.medicine_name}` };
+            }
+
+            dispenseItems.push({
+                order_item_id: item.id,
+                medicine_id: item.medicine_id,
+                batch_no: batch.batch_no,
+                quantity: item.quantity_requested
+            });
+        }
+
+        // 3. Call dispenseMedicine (Atomic)
+        const dispenseRes = await dispenseMedicine(orderId, dispenseItems);
+        if (!dispenseRes.success) return dispenseRes;
+
+        // 4. Mark as paid if it's an OPD patient (IPD is handled by dispenseMedicine → postChargeToIpdBill)
+        if (!order.is_ipd_linked) {
+            await markOrderAsPaid(orderId, paymentMethod);
+        }
+
+        revalidatePath('/pharmacy/orders');
+        revalidatePath('/pharmacy/billing');
+        return { success: true };
+    } catch (error: any) {
+        console.error('Process Doctor Order Error:', error);
+        return { success: false, error: error.message };
     }
 }
 
@@ -381,13 +451,16 @@ export async function getPharmacyDashboardStats() {
         ] = await Promise.all([
             db.pharmacy_orders.count({ where: { status: 'Pending' } }),
 
-            db.pharmacy_medicine_master.count({
-                where: {
-                    batches: { some: {} },
-                    // To do complex low stock filtering, we usually rely on raw query or fetch and filter,
-                    // but for stats, we will check if any batch has stock < min_threshold.
-                }
-            }), // simplified metric
+            // Accurate low stock count: Sum stock across batches for each medicine
+            (async () => {
+                const meds = await db.pharmacy_medicine_master.findMany({
+                    include: { batches: true }
+                });
+                return meds.filter((m: any) => {
+                    const total = m.batches.reduce((s: number, b: any) => s + b.current_stock, 0);
+                    return total <= m.min_threshold;
+                }).length;
+            })(),
 
             db.pharmacy_batch_inventory.count({
                 where: {
@@ -429,13 +502,25 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
         // Using transaction strictly
         await db.$transaction(async (tx: any) => {
             for (const item of dispensedItems) {
+                // Robust batch lookup: try medicine_id first, fallback to order_item_id resolution
+                let medId = item.medicine_id;
+                if (!medId && item.order_item_id) {
+                    const orderItem = await tx.pharmacy_order_items.findUnique({
+                        where: { id: item.order_item_id },
+                        select: { medicine_id: true }
+                    });
+                    medId = orderItem?.medicine_id;
+                }
+
+                if (!medId) throw new Error("Could not resolve medicine ID for item");
+
                 const batch = await tx.pharmacy_batch_inventory.findFirst({
-                    where: { batch_no: item.batch_no, medicine_id: item.medicine_id },
+                    where: { batch_no: item.batch_no, medicine_id: medId },
                     include: { medicine: true }
                 });
 
                 if (!batch || batch.current_stock < item.quantity) {
-                    throw new Error(`Insufficient stock for batch ${item.batch_no}`);
+                    throw new Error(`Insufficient stock for batch ${item.batch_no} of ${batch?.medicine?.brand_name || 'requested medicine'}`);
                 }
 
                 await tx.pharmacy_batch_inventory.update({

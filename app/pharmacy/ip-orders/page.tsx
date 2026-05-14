@@ -6,6 +6,7 @@ import { useToast } from '@/app/components/ui/Toast';
 
 interface OrderItem {
   id: number;
+  medicine_id: number;
   medicine_name: string;
   quantity_requested: number;
   quantity_dispensed: number | null;
@@ -80,7 +81,7 @@ export default function IPMedicationOrdersPage() {
         const batch = item.available_batches?.[0];
         return {
           order_item_id: item.id,
-          medicine_id: 0, // resolved server-side via medicine_name
+          medicine_id: item.medicine_id,
           batch_no: batch?.batch_no || 'DEFAULT',
           quantity: item.quantity_requested,
         };

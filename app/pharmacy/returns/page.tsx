@@ -130,7 +130,16 @@ export default function ReturnsPage() {
                                 <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-auto">
                                     {medicines.map((m: any) => (
                                         <div key={m.id}
-                                            onClick={() => { setForm({ ...form, medicine_id: m.id, medicine_name: m.brand_name }); setMedicines([]); setSearchQuery(''); }}
+                                            onClick={() => { 
+                                                setForm({ 
+                                                    ...form, 
+                                                    medicine_id: m.id, 
+                                                    medicine_name: m.brand_name,
+                                                    available_batches: m.batches || [] 
+                                                } as any); 
+                                                setMedicines([]); 
+                                                setSearchQuery(''); 
+                                            }}
                                             className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0">
                                             <p className="font-bold text-sm text-gray-900">{m.brand_name}</p>
                                             <div className="flex items-center gap-2 mt-0.5">
@@ -149,10 +158,20 @@ export default function ReturnsPage() {
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.12em] mb-1.5 ml-1">Batch Number</label>
-                                <input value={form.batch_id} onChange={e => setForm({ ...form, batch_id: e.target.value })}
-                                    className="w-full py-3 px-4 bg-white border border-gray-300 rounded-xl text-sm font-mono font-medium focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none text-gray-900 placeholder:text-gray-400"
-                                    placeholder="e.g. BATCH-A1" />
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.12em] mb-1.5 ml-1">Batch Number *</label>
+                                <select 
+                                    required
+                                    value={form.batch_id} 
+                                    onChange={e => setForm({ ...form, batch_id: e.target.value })}
+                                    className="w-full py-3 px-4 bg-white border border-gray-300 rounded-xl text-sm font-mono font-bold focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none text-gray-900"
+                                >
+                                    <option value="">Select Batch...</option>
+                                    {(form as any).available_batches?.map((b: any) => (
+                                        <option key={b.id} value={b.batch_no}>
+                                            {b.batch_no} (Exp: {new Date(b.expiry_date).toLocaleDateString()}) - {b.current_stock} units
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                             <div>
                                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.12em] mb-1.5 ml-1">Quantity *</label>
