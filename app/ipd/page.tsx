@@ -746,13 +746,13 @@ export default function IPDDashboard() {
                                   <ClipboardList className="h-3 w-3 text-gray-400 hover:text-gray-900" />
                                 </button>
                                 {adm.status === "Admitted" && (
-                                  <button
-                                    onClick={() => setDischargeModal(adm)}
+                                  <Link
+                                    href={`/ipd/discharge-settlement/${adm.admission_id}`}
                                     className="p-1 hover:bg-rose-500/10 rounded transition-all"
-                                    title="Discharge"
+                                    title="Discharge & Settlement"
                                   >
-                                    <LogOut className="h-3 w-3 text-rose-400/50 hover:text-rose-400" />
-                                  </button>
+                                    <CircleDollarSign className="h-3 w-3 text-rose-400/50 hover:text-rose-400" />
+                                  </Link>
                                 )}
                               </div>
                             </div>

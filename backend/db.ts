@@ -53,12 +53,10 @@ const TENANT_SCOPED_MODELS = new Set([
     'ZealthixApiKey',
     'PillReminder',
     'VideoCallRequest',
-    // ER Module
-    'ERRegistration', 'MLCRecord', 'ERVitals', 'EROrder', 'ERNote',
-    // OT Module
-    'OTRoom', 'SurgeryMaster', 'SurgeryRequest', 'OTSchedule',
-    'SurgeryTeamMember', 'PACClearance', 'OTChecklist', 'SurgeryNote',
-    'SurgeryConsumable', 'SurgeryBilling',
+    // ER Module — only top-level models with organizationId
+    'ERRegistration',
+    // OT Module — only top-level models with organizationId
+    'OTRoom', 'SurgeryMaster', 'SurgeryRequest', 'OTSchedule', 'SurgeryBilling',
     // CRM Module
     'CRMLead', 'CRMActivity', 'CRMCampaign', 'DoctorReferralNetwork', 'PatientEngagement',
     // IPD Enhancements
@@ -70,10 +68,10 @@ const TENANT_SCOPED_MODELS = new Set([
     'NarcoticRegister',
     // OPD Enhancements
     'CounsellingSession', 'DoctorLeave', 'CallLog',
-    // New GAP models
+    // GAP models
     'NursingAssessmentAlert', 'ClinicalOrder', 'PhysicianOrder',
     'ActiveMedication', 'OrderSet', 'DoctorInvestigationFavorite',
-    'ReferralOrder',
+    'ReferralOrder', 'ICD10Master',
     // IPD Finance
     'IpdServiceMaster', 'IpdTariffRate', 'IpdPackage', 'IpdAdmissionPackage',
     'IpdEstimate', 'IpdChargePosting',

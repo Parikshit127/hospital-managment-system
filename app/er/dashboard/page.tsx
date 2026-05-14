@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Siren, Loader2, UserPlus, Activity, AlertTriangle, MonitorPlay } from "lucide-react";
+import { Siren, Loader2, UserPlus, Activity, AlertTriangle, MonitorPlay, CircleDollarSign } from "lucide-react";
 import { AppShell } from "@/app/components/layout/AppShell";
 import { getERDashboard } from "@/app/actions/er-actions";
 
@@ -44,6 +44,12 @@ export default function ERDashboardPage() {
             className="px-3 py-1.5 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 flex items-center gap-1.5"
           >
             <UserPlus className="h-3.5 w-3.5" /> Register
+          </Link>
+          <Link
+            href="/er/billing"
+            className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-50 flex items-center gap-1.5"
+          >
+            <CircleDollarSign className="h-3.5 w-3.5" /> Billing
           </Link>
           <Link
             href="/er/tracking-board"

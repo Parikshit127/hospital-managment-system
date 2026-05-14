@@ -148,6 +148,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       items: [
         { label: "Operation Theatre", href: "/ot/dashboard", icon: Scissors },
         { label: "Emergency Room", href: "/er/dashboard", icon: Siren },
+        { label: "ER Billing", href: "/er/billing", icon: CreditCard },
       ],
     },
     {
@@ -193,6 +194,8 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Generate Receipt", href: "/reception/fees", icon: FileText },
         { label: "Master Billing", href: "/billing", icon: CircleDollarSign },
         { label: "Counter Billing", href: "/reception/billing", icon: CreditCard },
+        { label: "IPD Settlement", href: "/ipd/discharge-settlement", icon: Wallet },
+        { label: "All Invoices", href: "/finance/invoices", icon: FileText },
         { label: "Patient History", href: "/reception/history", icon: Clock },
       ],
     },

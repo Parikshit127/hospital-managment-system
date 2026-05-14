@@ -518,42 +518,58 @@ export async function accrueIPDDailyCharges(admissionId: string) {
 
     // Add room charge
     if (roomRate > 0) {
-      await db.invoice_items.create({
-        data: {
-          invoice_id: invoice.id,
-          department: "Room",
-          description: `${ward.ward_name} - Room Charge (${today})`,
-          quantity: 1,
-          unit_price: roomRate,
-          total_price: roomRate,
-          discount: 0,
-          net_price: roomRate,
-          tax_rate: roomTaxRate,
-          tax_amount: roomTaxAmount,
-          hsn_sac_code: roomRate > 5000 ? '9963' : '9993',
-          service_category: 'Room',
-        },
+      const roomRef = `room_${admissionId}_${today}`;
+      const existingRoom = await db.invoice_items.findFirst({
+        where: { invoice_id: invoice.id, ref_id: roomRef }
       });
+
+      if (!existingRoom) {
+        await db.invoice_items.create({
+          data: {
+            invoice_id: invoice.id,
+            department: "Room",
+            description: `${ward.ward_name} - Room Charge (${today})`,
+            quantity: 1,
+            unit_price: roomRate,
+            total_price: roomRate,
+            discount: 0,
+            net_price: roomRate,
+            tax_rate: roomTaxRate,
+            tax_amount: roomTaxAmount,
+            hsn_sac_code: roomRate > 5000 ? '9963' : '9993',
+            service_category: 'Room',
+            ref_id: roomRef,
+          },
+        });
+      }
     }
 
     // Add nursing charge
     if (nursingRate > 0) {
-      await db.invoice_items.create({
-        data: {
-          invoice_id: invoice.id,
-          department: "Nursing",
-          description: `Nursing Charge (${today})`,
-          quantity: 1,
-          unit_price: nursingRate,
-          total_price: nursingRate,
-          discount: 0,
-          net_price: nursingRate,
-          tax_rate: 0,
-          tax_amount: 0,
-          hsn_sac_code: '9993',
-          service_category: 'Nursing',
-        },
+      const nursingRef = `nursing_${admissionId}_${today}`;
+      const existingNursing = await db.invoice_items.findFirst({
+        where: { invoice_id: invoice.id, ref_id: nursingRef }
       });
+
+      if (!existingNursing) {
+        await db.invoice_items.create({
+          data: {
+            invoice_id: invoice.id,
+            department: "Nursing",
+            description: `Nursing Charge (${today})`,
+            quantity: 1,
+            unit_price: nursingRate,
+            total_price: nursingRate,
+            discount: 0,
+            net_price: nursingRate,
+            tax_rate: 0,
+            tax_amount: 0,
+            hsn_sac_code: '9993',
+            service_category: 'Nursing',
+            ref_id: nursingRef,
+          },
+        });
+      }
     }
 
     // Recalculate totals

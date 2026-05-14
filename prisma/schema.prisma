@@ -3855,6 +3855,7 @@ model ERRegistration {
   disposition         String? // Discharged, Admitted, Transferred, LAMA, Death
   disposition_time    DateTime?
   admission_id        String? // if admitted to IP
+  invoice_id          Int?    // Link to finance invoices
   created_at          DateTime  @default(now())
   updated_at          DateTime  @updatedAt
 

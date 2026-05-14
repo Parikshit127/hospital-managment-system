@@ -3,6 +3,7 @@
 import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
 import { createJournalEntry } from './gl-actions';
+import { accrueIPDDailyCharges } from '@/app/actions/ipd-actions';
 
 
 function serialize<T>(data: T): T {
@@ -434,6 +435,11 @@ export async function generateInterimBill(admissionId: string) {
             },
         });
         if (!admission) return { success: false, error: 'Admission not found' };
+
+        // Ensure daily charges (room/nursing) are up to date before fetching invoice
+        if (admission.status === 'Admitted') {
+            await accrueIPDDailyCharges(admissionId);
+        }
 
         // Find the IPD invoice
         const invoice = await db.invoices.findFirst({

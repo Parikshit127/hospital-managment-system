@@ -1,6 +1,7 @@
 "use server";
 
 import { requireTenantContext } from "@/backend/tenant";
+import { prisma } from "@/backend/db";
 import { logAudit } from "@/app/lib/audit";
 import { revalidatePath } from "next/cache";
 

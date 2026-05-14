@@ -1,8 +1,11 @@
 "use server";
 
 import { requireTenantContext } from "@/backend/tenant";
+import { prisma } from "@/backend/db";
 import { logAudit } from "@/app/lib/audit";
 import { revalidatePath } from "next/cache";
+import { generateUHID } from "@/app/lib/uhid";
+import { createInvoice, addInvoiceItem } from "@/app/actions/finance-actions";
 
 function serialize<T>(data: T): T {
   return JSON.parse(
@@ -19,19 +22,41 @@ function serialize<T>(data: T): T {
 async function nextERNumber(db: any, organizationId: string): Promise<string> {
   const yyyymmdd = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const prefix = `ER-${yyyymmdd}-`;
-  const count = await db.eRRegistration.count({
+  
+  const last = await db.eRRegistration.findFirst({
     where: { organizationId, er_number: { startsWith: prefix } },
+    orderBy: { er_number: "desc" },
+    select: { er_number: true },
   });
-  return `${prefix}${String(count + 1).padStart(3, "0")}`;
+
+  let nextSeq = 1;
+  if (last?.er_number) {
+    const parts = last.er_number.split("-");
+    const lastSeq = parseInt(parts[parts.length - 1], 10);
+    if (!isNaN(lastSeq)) nextSeq = lastSeq + 1;
+  }
+  
+  return `${prefix}${String(nextSeq).padStart(3, "0")}`;
 }
 
-async function nextMLCNumber(db: any): Promise<string> {
+async function nextMLCNumber(db: any, organizationId: string): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `MLC-${year}-`;
-  const count = await db.mLCRecord.count({
-    where: { mlc_number: { startsWith: prefix } },
+  
+  const last = await db.mLCRecord.findFirst({
+    where: { organizationId, mlc_number: { startsWith: prefix } },
+    orderBy: { mlc_number: "desc" },
+    select: { mlc_number: true },
   });
-  return `${prefix}${String(count + 1).padStart(4, "0")}`;
+
+  let nextSeq = 1;
+  if (last?.mlc_number) {
+    const parts = last.mlc_number.split("-");
+    const lastSeq = parseInt(parts[parts.length - 1], 10);
+    if (!isNaN(lastSeq)) nextSeq = lastSeq + 1;
+  }
+
+  return `${prefix}${String(nextSeq).padStart(4, "0")}`;
 }
 
 // ESI (Emergency Severity Index): 1=resuscitation, 2=emergent, 3=urgent, 4=less urgent, 5=non-urgent
@@ -227,6 +252,7 @@ export async function getERDashboard() {
       },
       include: {
         er_vitals: { orderBy: { recorded_at: "desc" }, take: 1 },
+        er_orders: { where: { status: { not: "Cancelled" } } },
         mlc_record: true,
       },
       orderBy: [{ triage_level: "asc" }, { arrival_time: "asc" }],
@@ -322,8 +348,8 @@ export async function createMLCRecord(input: {
   alcohol_involved?: boolean;
 }) {
   try {
-    const { db } = await requireTenantContext();
-    const mlc_number = await nextMLCNumber(db);
+    const { db, organizationId } = await requireTenantContext();
+    const mlc_number = await nextMLCNumber(db, organizationId);
 
     const mlc = await db.mLCRecord.upsert({
       where: { er_registration_id: input.er_registration_id },
@@ -371,9 +397,165 @@ export async function createMLCRecord(input: {
     });
 
     revalidatePath("/er/dashboard");
-    return { success: true, data: serialize(mlc) };
+    return { success: true };
   } catch (error: any) {
     console.error("createMLCRecord error:", error);
+    return { success: false, error: error?.message };
+  }
+}
+
+// ============================================
+// Finance & Billing Integration
+// ============================================
+
+/**
+ * Converts an ER registration summary (Visit Fee + Orders) into a Finance Invoice.
+ */
+export async function generateERInvoice(erRegistrationId: string) {
+  try {
+    const { db, organizationId } = await requireTenantContext();
+
+    // 1. Get ER Registration
+    const reg = await db.eRRegistration.findUnique({
+      where: { id: erRegistrationId },
+      include: {
+        er_orders: {
+          where: { status: { not: "Cancelled" } },
+        },
+      },
+    });
+
+    if (!reg) return { success: false, error: "ER Registration not found" };
+    if (reg.invoice_id) return { success: false, error: "Invoice already generated for this visit" };
+
+    let patient_id = reg.patient_id;
+
+    // 2. Handle Unknown Patients (Auto-register in OPD_REG for billing compatibility)
+    if (!patient_id) {
+      // Find UHID prefix
+      const orgConfig = await db.organizationConfig
+        .findUnique({
+          where: { organizationId },
+          select: { uhid_prefix: true },
+        })
+        .catch(() => null);
+      const uhidPrefix = orgConfig?.uhid_prefix || "AVN";
+
+      patient_id = await generateUHID(db, uhidPrefix);
+
+      // Create Lite OPD_REG record
+      await db.oPD_REG.create({
+        data: {
+          patient_id,
+          full_name: reg.patient_name,
+          age: reg.age_estimate,
+          gender: reg.gender,
+          phone: null, // Unknown patient
+          organizationId,
+          patient_type: "cash",
+          address: "Registered via Emergency",
+        },
+      });
+
+      // Update ER registration with the new patient_id
+      await db.eRRegistration.update({
+        where: { id: erRegistrationId },
+        data: { patient_id },
+      });
+    }
+
+    // 3. Create Draft Invoice
+    let invRes = await createInvoice({
+      patient_id,
+      invoice_type: "OPD", // ER is handled as Outpatient billing
+      notes: `ER Visit Bill: ${reg.er_number}`,
+      billing_patient_type: "cash",
+    });
+
+    let invoiceId: number;
+
+    if (!invRes.success) {
+      if (invRes.error?.includes("Duplicate invoice detected")) {
+        // Recover: Find the existing draft invoice for this patient
+        const existingInv = await db.invoices.findFirst({
+          where: {
+            patient_id,
+            status: "Draft",
+            invoice_type: "OPD",
+            organizationId,
+          },
+          orderBy: { created_at: "desc" },
+        });
+        if (!existingInv) return invRes; // Truly failed
+        invoiceId = existingInv.id;
+      } else {
+        return invRes;
+      }
+    } else {
+      invoiceId = invRes.data.id;
+    }
+
+    // 4. Add Line Items
+    
+    // 4.1 ER Visit Fee
+    const visitRef = `er_visit_${erRegistrationId}`;
+    const visitExists = await db.invoice_items.findFirst({
+      where: { invoice_id: invoiceId, ref_id: visitRef },
+    });
+
+    if (!visitExists) {
+      await addInvoiceItem({
+        invoice_id: invoiceId,
+        department: "Emergency",
+        description: "ER Consultation & Observation Fee",
+        quantity: 1,
+        unit_price: 500, // Fixed placeholder for now
+        service_category: "Consultation",
+        ref_id: visitRef,
+      });
+    }
+
+    // 4.2 Accrued Orders
+    for (const order of reg.er_orders) {
+      const orderRef = `er_order_${order.id}`;
+      const orderExists = await db.invoice_items.findFirst({
+        where: { invoice_id: invoiceId, ref_id: orderRef },
+      });
+
+      if (!orderExists) {
+        await addInvoiceItem({
+          invoice_id: invoiceId,
+          department: order.department,
+          description: order.order_name,
+          quantity: 1, // ER orders are usually per-item
+          unit_price: 150, // Placeholder price per order
+          service_category: order.order_type,
+          ref_id: orderRef,
+        });
+      }
+    }
+
+    // 5. Link Invoice to ER Registration
+    await db.eRRegistration.update({
+      where: { id: erRegistrationId },
+      data: { invoice_id: invoiceId },
+    });
+
+    // Fetch invoice details for logging if we recovered from a duplicate
+    const finalInvoice = invRes.success ? invRes.data : await db.invoices.findUnique({ where: { id: invoiceId } });
+
+    await logAudit({
+      action: "ER_INVOICE_GENERATE",
+      module: "er",
+      entity_type: "ERRegistration",
+      entity_id: erRegistrationId,
+      details: `Generated Invoice #${finalInvoice?.invoice_number || invoiceId} for ER-${reg.er_number}`,
+    });
+
+    revalidatePath("/er/billing");
+    return { success: true, invoiceId };
+  } catch (error: any) {
+    console.error("generateERInvoice error:", error);
     return { success: false, error: error?.message };
   }
 }
