@@ -53,6 +53,45 @@ const TENANT_SCOPED_MODELS = new Set([
     'ZealthixApiKey',
     'PillReminder',
     'VideoCallRequest',
+    // ER Module
+    'ERRegistration', 'MLCRecord', 'ERVitals', 'EROrder', 'ERNote',
+    // OT Module
+    'OTRoom', 'SurgeryMaster', 'SurgeryRequest', 'OTSchedule',
+    'SurgeryTeamMember', 'PACClearance', 'OTChecklist', 'SurgeryNote',
+    'SurgeryConsumable', 'SurgeryBilling',
+    // CRM Module
+    'CRMLead', 'CRMActivity', 'CRMCampaign', 'DoctorReferralNetwork', 'PatientEngagement',
+    // IPD Enhancements
+    'AdmissionBooking', 'PatientMovement', 'DischargeClearance',
+    'PatientConsent_IPD', 'FinancialCounselling',
+    // Billing Enhancements
+    'DiscountOTP', 'BillingOrderSet', 'DiscountScheme',
+    // Pharmacy Enhancements
+    'NarcoticRegister',
+    // OPD Enhancements
+    'CounsellingSession', 'DoctorLeave', 'CallLog',
+    // New GAP models
+    'NursingAssessmentAlert', 'ClinicalOrder', 'PhysicianOrder',
+    'ActiveMedication', 'OrderSet', 'DoctorInvestigationFavorite',
+    'ReferralOrder',
+    // IPD Finance
+    'IpdServiceMaster', 'IpdTariffRate', 'IpdPackage', 'IpdAdmissionPackage',
+    'IpdEstimate', 'IpdChargePosting',
+    // Insurance
+    'CorporateMaster', 'PreAuthorization', 'PaymentSplit',
+    'InsurancePreAuth', 'AdmissionConsultant',
+    // Clinical
+    'ClinicalEncounter', 'PatientAllergy',
+    'IPDVitals', 'NursingAssessment',
+    // GST & Finance
+    'GST_Invoice_Register', 'GST_Return_Filing', 'HSN_SAC_Master',
+    'GL_Account', 'GL_JournalEntry', 'GL_JournalLine', 'TallyExport',
+    'AssetCategory', 'FixedAsset', 'DepreciationEntry',
+    'AssetTransfer', 'AssetMaintenance',
+    'BudgetMaster', 'BudgetLine', 'BudgetRevision', 'BudgetAlert',
+    'WardStock', 'WardStockTransaction',
+    'GoodsReceiptNote',
+    'MessageDeliveryLog', 'WhatsAppIncomingMessage',
 ]);
 
 // Models where organizationId is nullable (audit logs, etc.)
