@@ -37,7 +37,7 @@ export default function ERBillingPage() {
       toast.success("Invoice generated successfully!");
       load(); // refresh to show invoice link
     } else {
-      toast.error(res.error || "Failed to generate invoice");
+      toast.error((res as any).error || "Failed to generate invoice");
     }
     setProcessingId(null);
   };
