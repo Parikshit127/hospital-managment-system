@@ -72,9 +72,9 @@ function generateCSSVariables(branding: BrandingData): string {
             --admin-secondary-s: ${secondary.s}%;
             --admin-secondary-l: ${secondary.l}%;
 
-            --admin-sidebar-bg: hsl(${secondary.h}, ${Math.min(secondary.s + 5, 100)}%, ${Math.max(secondary.l - 2, 3)}%);
-            --admin-sidebar-hover: hsl(${secondary.h}, ${secondary.s}%, ${secondary.l + 6}%);
-            --admin-sidebar-border: hsl(${secondary.h}, ${secondary.s}%, ${secondary.l + 10}%);
+            --admin-sidebar-bg: #ffffff;
+            --admin-sidebar-hover: #f3f4f6;
+            --admin-sidebar-border: #e8e6e3;
 
             --admin-bg: #fafaf8;
             --admin-surface: #ffffff;

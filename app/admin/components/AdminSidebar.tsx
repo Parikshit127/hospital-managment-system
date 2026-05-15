@@ -129,14 +129,14 @@ export default function AdminSidebar() {
                 </div>
                 {!collapsed && (
                     <div className="overflow-hidden">
-                        <p className="text-[13px] font-bold text-white truncate tracking-tight">{branding.portal_title}</p>
+                        <p className="text-[13px] font-bold text-gray-900 truncate tracking-tight">{branding.portal_title}</p>
                         <p className="text-[10px] text-gray-500 tracking-wider font-medium">ADMIN PANEL</p>
                     </div>
                 )}
                 {/* Mobile close */}
                 <button
                     onClick={() => setMobileOpen(false)}
-                    className="lg:hidden ml-auto p-1 text-gray-500 hover:text-white transition-colors"
+                    className="lg:hidden ml-auto p-1 text-gray-500 hover:text-gray-900 transition-colors"
                 >
                     <X className="h-4 w-4" />
                 </button>
@@ -161,14 +161,15 @@ export default function AdminSidebar() {
                                         href={item.href}
                                         onClick={() => setMobileOpen(false)}
                                         title={collapsed ? item.label : undefined}
-                                        className={`flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-all duration-150 ${
+                                        className={`flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] transition-all duration-150 ${
                                             active
-                                                ? 'text-white'
-                                                : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.06]'
+                                                ? 'font-semibold text-[#0d9488]'
+                                                : 'font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                                         } ${collapsed ? 'justify-center px-2' : ''}`}
                                         style={active ? {
-                                            backgroundColor: 'var(--admin-primary-20)',
-                                            color: 'var(--admin-primary-light)',
+                                            backgroundColor: '#f0fdfa',
+                                            color: '#0d9488',
+                                            boxShadow: '0 0 0 1px rgba(13,148,136,0.1)'
                                         } : undefined}
                                     >
                                         <Icon className={`h-[16px] w-[16px] shrink-0 ${active ? '' : 'opacity-70'}`} />
@@ -187,14 +188,14 @@ export default function AdminSidebar() {
                 <button
                     onClick={() => logout()}
                     title={collapsed ? 'Logout' : undefined}
-                    className={`flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-gray-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-150 ${collapsed ? 'justify-center px-2' : ''}`}
+                    className={`flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-gray-600 hover:text-rose-600 hover:bg-rose-50 transition-all duration-150 ${collapsed ? 'justify-center px-2' : ''}`}
                 >
                     <LogOut className="h-4 w-4 shrink-0" />
                     {!collapsed && <span>Logout</span>}
                 </button>
                 <button
                     onClick={() => setCollapsed(!collapsed)}
-                    className={`hidden lg:flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-gray-500 hover:text-white hover:bg-white/[0.06] transition-all duration-150 ${collapsed ? 'justify-center px-2' : ''}`}
+                    className={`hidden lg:flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-all duration-150 ${collapsed ? 'justify-center px-2' : ''}`}
                 >
                     {collapsed ? <ChevronRight className="h-4 w-4 shrink-0" /> : <ChevronLeft className="h-4 w-4 shrink-0" />}
                     {!collapsed && <span>Collapse</span>}

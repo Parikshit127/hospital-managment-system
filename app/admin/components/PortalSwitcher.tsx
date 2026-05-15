@@ -98,9 +98,9 @@ export default function PortalSwitcher({ collapsed }: { collapsed: boolean }) {
             <button
                 onClick={() => { setOpen(!open); setExpandedRole(null); }}
                 title={collapsed ? 'Portal Access' : undefined}
-                className={`flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-all duration-150 text-gray-300 hover:text-white hover:bg-white/[0.08] ${collapsed ? 'justify-center px-2' : ''}`}
+                className={`flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-all duration-150 text-gray-600 hover:text-gray-900 hover:bg-gray-100 ${collapsed ? 'justify-center px-2' : ''}`}
             >
-                <LayoutGrid className="h-[16px] w-[16px] shrink-0 text-blue-400" />
+                <LayoutGrid className="h-[16px] w-[16px] shrink-0 text-[#14b8a6]" />
                 {!collapsed && (
                     <>
                         <span className="truncate flex-1 text-left">Portal Access</span>
@@ -112,21 +112,20 @@ export default function PortalSwitcher({ collapsed }: { collapsed: boolean }) {
             {/* Dropdown Panel */}
             {open && (
                 <div
-                    className="absolute z-[999] bottom-full mb-2 left-0 w-72 rounded-xl shadow-2xl border border-white/10 overflow-hidden"
-                    style={{ backgroundColor: '#1a1f2e' }}
+                    className="absolute z-[999] bottom-full mb-2 left-0 w-72 rounded-xl shadow-2xl border border-[#e8e6e3] overflow-hidden bg-white"
                 >
                     {/* Header */}
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-[#e8e6e3]">
                         <div className="flex items-center gap-2">
-                            <LayoutGrid className="w-4 h-4 text-blue-400" />
-                            <span className="text-sm font-semibold text-white">Portal Access</span>
+                            <LayoutGrid className="w-4 h-4 text-[#14b8a6]" />
+                            <span className="text-sm font-semibold text-gray-900">Portal Access</span>
                         </div>
-                        <button onClick={() => setOpen(false)} className="text-gray-500 hover:text-white transition-colors">
+                        <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-900 transition-colors">
                             <X className="w-4 h-4" />
                         </button>
                     </div>
 
-                    <p className="px-4 py-2 text-[11px] text-gray-500 border-b border-white/5">
+                    <p className="px-4 py-2 text-[11px] text-gray-400 border-b border-[#e8e6e3]">
                         Click a user to log in as them — no password required
                     </p>
 
@@ -140,7 +139,7 @@ export default function PortalSwitcher({ collapsed }: { collapsed: boolean }) {
                                     className="flex items-center gap-3 w-full px-4 py-2.5 hover:bg-white/[0.05] transition-colors group"
                                 >
                                     <span className={`w-2 h-2 rounded-full shrink-0 ${portal.dot}`} />
-                                    <span className="flex-1 text-left text-sm text-gray-200 group-hover:text-white font-medium">
+                                    <span className="flex-1 text-left text-sm text-gray-600 group-hover:text-gray-900 font-medium">
                                         {portal.label}
                                     </span>
                                     {loadingRole === portal.role ? (
@@ -152,7 +151,7 @@ export default function PortalSwitcher({ collapsed }: { collapsed: boolean }) {
 
                                 {/* Users Sub-list */}
                                 {expandedRole === portal.role && (
-                                    <div className="border-t border-b border-white/[0.06]" style={{ backgroundColor: '#141824' }}>
+                                    <div className="border-t border-b border-[#e8e6e3] bg-gray-50">
 
                                         {/* No users registered */}
                                         {users[portal.role]?.length === 0 && (
@@ -164,8 +163,8 @@ export default function PortalSwitcher({ collapsed }: { collapsed: boolean }) {
                                                     onClick={() => handleOpenPortal(portal.path)}
                                                     className="flex items-center gap-2 w-full px-6 py-2 hover:bg-white/[0.05] transition-colors group"
                                                 >
-                                                    <ExternalLink className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                                                    <span className="text-xs text-blue-300 group-hover:text-blue-200">
+                                                    <ExternalLink className="w-3.5 h-3.5 text-[#14b8a6] shrink-0" />
+                                                    <span className="text-xs text-[#0d9488] group-hover:text-[#14b8a6]">
                                                         Open {portal.label} Portal
                                                     </span>
                                                 </button>
@@ -191,19 +190,19 @@ export default function PortalSwitcher({ collapsed }: { collapsed: boolean }) {
 
                                                 {/* Name */}
                                                 <div className="flex-1 text-left min-w-0">
-                                                    <p className="text-xs text-gray-200 group-hover:text-white font-medium truncate">
+                                                    <p className="text-xs text-gray-700 group-hover:text-gray-900 font-medium truncate">
                                                         {user.name || user.username}
                                                     </p>
-                                                    <p className="text-[10px] text-gray-500 truncate">@{user.username}</p>
+                                                    <p className="text-[10px] text-gray-400 truncate">@{user.username}</p>
                                                 </div>
 
                                                 {/* Status / Loading */}
                                                 {impersonating === user.id ? (
-                                                    <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin shrink-0" />
+                                                    <Loader2 className="w-3.5 h-3.5 text-[#14b8a6] animate-spin shrink-0" />
                                                 ) : !user.is_active ? (
                                                     <span className="text-[10px] text-red-400 shrink-0">Inactive</span>
                                                 ) : (
-                                                    <LogIn className="w-3.5 h-3.5 text-gray-500 group-hover:text-blue-400 shrink-0 transition-colors" />
+                                                    <LogIn className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#14b8a6] shrink-0 transition-colors" />
                                                 )}
                                             </button>
                                         ))}
@@ -214,8 +213,8 @@ export default function PortalSwitcher({ collapsed }: { collapsed: boolean }) {
                     </div>
 
                     {/* Footer */}
-                    <div className="px-4 py-2.5 border-t border-white/10 bg-black/20">
-                        <p className="text-[10px] text-gray-500 text-center">
+                    <div className="px-4 py-2.5 border-t border-[#e8e6e3] bg-gray-50/50">
+                        <p className="text-[10px] text-gray-400 text-center">
                             Session opens in a new tab · Audit logged
                         </p>
                     </div>

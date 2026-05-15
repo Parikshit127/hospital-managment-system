@@ -160,11 +160,13 @@ export async function getRevenueBreakdown(timeRange?: string) {
     const { gte: rangeStart } = getDateRange(timeRange);
 
     const [byDeptRaw, totalAgg, dailyTrendRaw] = await Promise.all([
-      db.invoices.groupBy({
-        by: ["department" as any],
-        _sum: { total_amount: true },
-        where: { status: "Paid", created_at: { gte: rangeStart } },
-      }),
+      db.$queryRaw<{ department: string; total: number }[]>`
+        SELECT "department", SUM("total_price")::float as total
+        FROM "invoice_items"
+        JOIN "invoices" ON "invoice_items"."invoice_id" = "invoices"."id"
+        WHERE "invoices"."status" = 'Paid' AND "invoices"."created_at" >= ${rangeStart}
+        GROUP BY "department"
+      `,
       db.invoices.aggregate({
         _sum: { total_amount: true },
         where: { status: "Paid", created_at: { gte: rangeStart } },
@@ -191,9 +193,9 @@ export async function getRevenueBreakdown(timeRange?: string) {
       success: true,
       data: {
         totalRevenue: (totalAgg._sum as any).total_amount || 0,
-        byDepartment: (byDeptRaw as any[]).map((r: any) => ({
+        byDepartment: byDeptRaw.map((r) => ({
           name: r.department || "General",
-          amount: r._sum.total_amount || 0,
+          amount: r.total || 0,
         })),
         byBillType: [],
         dailyTrend: Object.entries(dailyRevenue).map(([day, amount]) => ({

@@ -68,7 +68,7 @@ export default function ApiTestPanel({ method, path, defaultBody }: ApiTestPanel
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     placeholder="Enter your API key (zx_...)"
-                    className="w-full px-3.5 py-2.5 bg-gray-950/50 border border-gray-700/40 rounded-xl text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 font-mono transition-all"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-[#e8e6e3] rounded-xl text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#14b8a6]/50 focus:ring-1 focus:ring-[#14b8a6]/20 font-mono transition-all"
                 />
             </div>
 
@@ -81,7 +81,7 @@ export default function ApiTestPanel({ method, path, defaultBody }: ApiTestPanel
                     value={body}
                     onChange={(e) => setBody(e.target.value)}
                     rows={10}
-                    className="w-full px-3.5 py-2.5 bg-gray-950/50 border border-gray-700/40 rounded-xl text-xs text-gray-200 font-mono focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 resize-y leading-relaxed transition-all"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-[#e8e6e3] rounded-xl text-xs text-gray-800 font-mono focus:outline-none focus:border-[#14b8a6]/50 focus:ring-1 focus:ring-[#14b8a6]/20 resize-y leading-relaxed transition-all"
                 />
             </div>
 
@@ -89,7 +89,7 @@ export default function ApiTestPanel({ method, path, defaultBody }: ApiTestPanel
             <button
                 onClick={handleSend}
                 disabled={loading}
-                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:from-blue-600/50 disabled:to-blue-500/50 text-white text-sm font-medium rounded-xl transition-all shadow-sm shadow-blue-500/20"
+                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#14b8a6] to-[#0d9488] hover:from-[#0d9488] hover:to-[#0f766e] disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-all shadow-sm shadow-blue-500/20"
             >
                 {loading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -129,7 +129,7 @@ export default function ApiTestPanel({ method, path, defaultBody }: ApiTestPanel
                             {statusCode}
                         </span>
                     </div>
-                    <pre className="bg-gray-950/60 rounded-xl p-4 text-xs text-gray-300 overflow-x-auto font-mono leading-relaxed border border-gray-700/20 max-h-96 overflow-y-auto">
+                    <pre className="bg-[#fafaf8] rounded-xl p-4 text-xs text-gray-700 overflow-x-auto font-mono leading-relaxed border border-[#e8e6e3] max-h-96 overflow-y-auto">
                         {response}
                     </pre>
                 </div>
