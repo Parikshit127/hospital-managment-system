@@ -29,9 +29,14 @@ export default function PreAdmissionsPage() {
 
   const loadData = async () => {
     setRefreshing(true);
-    const res = await getAdmissionBookings();
-    if (res.success) setBookings(res.data as any[]);
-    setRefreshing(false);
+    try {
+      const res = await getAdmissionBookings();
+      if (res.success) setBookings(res.data as any[]);
+    } catch (err) {
+      console.error('Failed to load bookings:', err);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   useEffect(() => { loadData(); }, []);

@@ -193,7 +193,7 @@ export async function getRevenueBreakdown(timeRange?: string) {
       success: true,
       data: {
         totalRevenue: (totalAgg._sum as any).total_amount || 0,
-        byDepartment: byDeptRaw.map((r) => ({
+        byDepartment: byDeptRaw.map((r: { department: string; total: number }) => ({
           name: r.department || "General",
           amount: r.total || 0,
         })),
