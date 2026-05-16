@@ -29,9 +29,9 @@ export default function WardRoundsPage() {
     useEffect(() => { loadData(); }, []);
 
     const filteredAds = admissions.filter(a =>
-        a.patient?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        a.bed_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        a.doctor_name?.toLowerCase().includes(searchQuery.toLowerCase())
+        (a.patient?.full_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (a.bed_id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (a.doctor_name || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     const handleRecord = async (e: React.FormEvent) => {

@@ -106,9 +106,9 @@ export async function getPatientRouteForRole(
     case 'doctor':
       return `/doctor/patient/${patientId}`;
     case 'nurse':
-      return `/nurse/patients/${patientId}`;
+      return `/ipd/admissions-hub?q=${encodeURIComponent(patientId)}`;
     case 'ipd_manager':
-      return `/ipd/admission?patient=${encodeURIComponent(patientId)}`;
+      return `/ipd/admissions-hub?q=${encodeURIComponent(patientId)}`;
     case 'finance':
       return `/finance/invoices?patient=${encodeURIComponent(patientId)}`;
     case 'opd_manager':

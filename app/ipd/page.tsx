@@ -771,7 +771,7 @@ export default function IPDDashboard() {
                 {wards.map((ward: any) => (
                   <div
                     key={ward.ward_id}
-                    className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden"
+                    className="bg-white border border-gray-200 shadow-sm rounded-2xl"
                   >
                     <div className="p-5 border-b border-gray-200 flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -798,7 +798,7 @@ export default function IPDDashboard() {
                             {bed.status}
                           </p>
                           {/* Status change dropdown on hover */}
-                          <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg overflow-hidden z-10 hidden group-hover:block w-28 shadow-xl">
+                          <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg z-[50] hidden group-hover:block w-28 shadow-xl">
                             {["Available", "Maintenance", "Cleaning", "Blocked"]
                               .filter((s) => s !== bed.status)
                               .map((s) => (

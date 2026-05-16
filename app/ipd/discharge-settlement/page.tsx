@@ -20,11 +20,12 @@ export default function IPDSettlementListPage() {
 
     useEffect(() => { loadData(); }, []);
 
-    const filtered = admissions.filter(adm => 
-        adm.patient?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        adm.patient_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        adm.admission_id.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filtered = admissions.filter(adm => {
+        const nameMatch = (adm.patient?.full_name || '').toLowerCase().includes(searchTerm.toLowerCase());
+        const idMatch = (adm.patient_id || '').toLowerCase().includes(searchTerm.toLowerCase());
+        const admMatch = (adm.admission_id || '').toLowerCase().includes(searchTerm.toLowerCase());
+        return nameMatch || idMatch || admMatch;
+    });
 
     return (
         <AppShell

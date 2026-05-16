@@ -39,7 +39,7 @@ export default function FinancialReportsPage() {
 
     async function loadReport() {
         setLoading(true);
-        setData(null);
+        setData(null); // always clear stale data before loading new report
         let res;
         switch (activeReport) {
             case 'collections': res = await getCollectionsReport({ from, to }); break;
@@ -53,7 +53,10 @@ export default function FinancialReportsPage() {
         setLoading(false);
     }
 
-    const fmt = (n: number) => n.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+    const fmt = (n: number) => {
+        if (n == null || isNaN(n)) return '₹0';
+        return Number(n).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+    };
 
     return (
         <AppShell pageTitle="Financial Reports" pageIcon={<BarChart3 className="h-5 w-5" />} onRefresh={loadReport} refreshing={loading}>
@@ -105,11 +108,12 @@ export default function FinancialReportsPage() {
 }
 
 function CollectionsReport({ data, fmt, from, to }: { data: any; fmt: (n: number) => string; from: string; to: string }) {
-    const methods = Object.entries(data.totals).filter(([k]) => k !== 'total');
+    const methods = Object.entries(data?.totals || {}).filter(([k]) => k !== 'total');
+    const payments = data?.payments || [];
     return (
         <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <SummaryCard label="Total Collections" value={fmt(data.totals.total || 0)} color="emerald" />
+                <SummaryCard label="Total Collections" value={fmt(data?.totals?.total || 0)} color="emerald" />
                 {methods.map(([method, amount]) => (
                     <SummaryCard key={method} label={method} value={fmt(amount as number)} color="gray" />
                 ))}
@@ -121,8 +125,8 @@ function CollectionsReport({ data, fmt, from, to }: { data: any; fmt: (n: number
             )}
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                    <h3 className="font-semibold text-gray-900">Payment Details ({data.payments.length})</h3>
-                    <ExportButton data={data.payments.map((p: any) => ({
+                    <h3 className="font-semibold text-gray-900">Payment Details ({payments.length})</h3>
+                    <ExportButton data={payments.map((p: any) => ({
                         receipt: p.receipt_number, patient: p.invoice?.patient?.full_name || '-',
                         invoice: p.invoice?.invoice_number, method: p.payment_method, amount: Number(p.amount),
                         date: new Date(p.created_at).toLocaleDateString('en-IN'),
@@ -142,7 +146,7 @@ function CollectionsReport({ data, fmt, from, to }: { data: any; fmt: (n: number
                             <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
                         </tr></thead>
                         <tbody className="divide-y divide-gray-100">
-                            {data.payments.slice(0, 50).map((p: any) => (
+                            {payments.slice(0, 50).map((p: any) => (
                                 <tr key={p.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-3 text-sm font-mono text-gray-600">{p.receipt_number}</td>
                                     <td className="px-6 py-3 text-sm text-gray-900">{p.invoice?.patient?.full_name || '-'}</td>
@@ -217,28 +221,29 @@ function AgingReport({ data, fmt }: { data: any; fmt: (n: number) => string }) {
 }
 
 function CashFlowReport({ data, fmt, from, to }: { data: any; fmt: (n: number) => string; from: string; to: string }) {
+    const daily = data?.daily || [];
     return (
         <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <SummaryCard label="Total Inflow" value={fmt(data.totalInflow)} color="emerald" />
-                <SummaryCard label="Total Outflow" value={fmt(data.totalOutflow)} color="red" />
-                <SummaryCard label="Net Cash Flow" value={fmt(data.netFlow)} color={data.netFlow >= 0 ? 'emerald' : 'red'} />
+                <SummaryCard label="Total Inflow" value={fmt(data?.totalInflow || 0)} color="emerald" />
+                <SummaryCard label="Total Outflow" value={fmt(data?.totalOutflow || 0)} color="red" />
+                <SummaryCard label="Net Cash Flow" value={fmt(data?.netFlow || 0)} color={(data?.netFlow || 0) >= 0 ? 'emerald' : 'red'} />
             </div>
             <div className="bg-white rounded-xl border border-gray-200 p-5">
                 <h3 className="font-semibold text-gray-900 mb-4">Daily Cash Flow</h3>
-                {data.daily.length > 0 ? (
+                {daily.length > 0 ? (
                     <ReportChart type="bar"
-                        labels={data.daily.map((d: any) => new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }))}
+                        labels={daily.map((d: any) => new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }))}
                         datasets={[
-                            { label: 'Inflow', data: data.daily.map((d: any) => d.inflow) },
-                            { label: 'Outflow', data: data.daily.map((d: any) => d.outflow) },
+                            { label: 'Inflow', data: daily.map((d: any) => d.inflow) },
+                            { label: 'Outflow', data: daily.map((d: any) => d.outflow) },
                         ]} height={300} />
                 ) : <div className="text-center py-12 text-gray-400">No cash flow data</div>}
             </div>
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                     <h3 className="font-semibold text-gray-900">Daily Breakdown</h3>
-                    <ExportButton data={data.daily} filename={`cashflow-${from}-${to}`}
+                    <ExportButton data={daily} filename={`cashflow-${from}-${to}`}
                         columns={[{ key: 'date', label: 'Date' }, { key: 'inflow', label: 'Inflow' }, { key: 'outflow', label: 'Outflow' }, { key: 'net', label: 'Net' }]} />
                 </div>
                 <table className="w-full">
@@ -249,7 +254,7 @@ function CashFlowReport({ data, fmt, from, to }: { data: any; fmt: (n: number) =
                         <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500">Net</th>
                     </tr></thead>
                     <tbody className="divide-y divide-gray-100">
-                        {data.daily.map((d: any) => (
+                        {daily.map((d: any) => (
                             <tr key={d.date} className="hover:bg-gray-50">
                                 <td className="px-6 py-3 text-sm text-gray-700">{new Date(d.date).toLocaleDateString('en-IN')}</td>
                                 <td className="px-6 py-3 text-sm text-emerald-600 text-right font-medium">{fmt(d.inflow)}</td>
@@ -265,24 +270,26 @@ function CashFlowReport({ data, fmt, from, to }: { data: any; fmt: (n: number) =
 }
 
 function ProfitLossReport({ data, fmt, from, to }: { data: any; fmt: (n: number) => string; from: string; to: string }) {
+    const income = data?.income || [];
+    const expenses = data?.expenses || [];
     return (
         <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <SummaryCard label="Total Income" value={fmt(data.totalIncome)} color="emerald" />
-                <SummaryCard label="Total Expenses" value={fmt(data.totalExpenses)} color="red" />
-                <SummaryCard label="Net Profit" value={fmt(data.netProfit)} color={data.netProfit >= 0 ? 'emerald' : 'red'} />
+                <SummaryCard label="Total Income" value={fmt(data?.totalIncome || 0)} color="emerald" />
+                <SummaryCard label="Total Expenses" value={fmt(data?.totalExpenses || 0)} color="red" />
+                <SummaryCard label="Net Profit" value={fmt(data?.netProfit || 0)} color={(data?.netProfit || 0) >= 0 ? 'emerald' : 'red'} />
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white rounded-xl border border-gray-200 p-5">
                     <h3 className="font-semibold text-gray-900 mb-4">Income by Department</h3>
-                    {data.income.length > 0 ? (
-                        <ReportChart type="bar" labels={data.income.map((i: any) => i.label)} datasets={[{ label: 'Income', data: data.income.map((i: any) => i.amount) }]} height={250} />
+                    {income.length > 0 ? (
+                        <ReportChart type="bar" labels={income.map((i: any) => i.label)} datasets={[{ label: 'Income', data: income.map((i: any) => i.amount) }]} height={250} />
                     ) : <div className="text-center py-12 text-gray-400">No income data</div>}
                 </div>
                 <div className="bg-white rounded-xl border border-gray-200 p-5">
                     <h3 className="font-semibold text-gray-900 mb-4">Expenses by Category</h3>
-                    {data.expenses.length > 0 ? (
-                        <ReportChart type="doughnut" labels={data.expenses.map((e: any) => e.label)} datasets={[{ label: 'Expenses', data: data.expenses.map((e: any) => e.amount) }]} height={250} />
+                    {expenses.length > 0 ? (
+                        <ReportChart type="doughnut" labels={expenses.map((e: any) => e.label)} datasets={[{ label: 'Expenses', data: expenses.map((e: any) => e.amount) }]} height={250} />
                     ) : <div className="text-center py-12 text-gray-400">No expense data</div>}
                 </div>
             </div>
@@ -290,9 +297,9 @@ function ProfitLossReport({ data, fmt, from, to }: { data: any; fmt: (n: number)
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                     <h3 className="font-semibold text-gray-900">P&L Statement</h3>
                     <ExportButton data={[
-                        ...data.income.map((i: any) => ({ type: 'Income', label: i.label, amount: i.amount })),
-                        ...data.expenses.map((e: any) => ({ type: 'Expense', label: e.label, amount: e.amount })),
-                        { type: 'Net Profit', label: '', amount: data.netProfit },
+                        ...income.map((i: any) => ({ type: 'Income', label: i.label, amount: i.amount })),
+                        ...expenses.map((e: any) => ({ type: 'Expense', label: e.label, amount: e.amount })),
+                        { type: 'Net Profit', label: '', amount: data?.netProfit || 0 },
                     ]} filename={`pnl-${from}-${to}`} columns={[
                         { key: 'type', label: 'Type' }, { key: 'label', label: 'Category' }, { key: 'amount', label: 'Amount' },
                     ]} />
@@ -300,31 +307,31 @@ function ProfitLossReport({ data, fmt, from, to }: { data: any; fmt: (n: number)
                 <div className="p-6 space-y-4">
                     <div>
                         <h4 className="text-xs font-bold text-emerald-600 uppercase mb-2">Income</h4>
-                        {data.income.map((i: any) => (
+                        {income.map((i: any) => (
                             <div key={i.label} className="flex justify-between py-1.5 text-sm">
                                 <span className="text-gray-700">{i.label}</span>
                                 <span className="font-medium text-gray-900">{fmt(i.amount)}</span>
                             </div>
                         ))}
                         <div className="flex justify-between py-2 text-sm font-bold border-t border-gray-200 mt-2">
-                            <span>Total Income</span><span className="text-emerald-600">{fmt(data.totalIncome)}</span>
+                            <span>Total Income</span><span className="text-emerald-600">{fmt(data?.totalIncome || 0)}</span>
                         </div>
                     </div>
                     <div>
                         <h4 className="text-xs font-bold text-red-600 uppercase mb-2">Expenses</h4>
-                        {data.expenses.map((e: any) => (
+                        {expenses.map((e: any) => (
                             <div key={e.label} className="flex justify-between py-1.5 text-sm">
                                 <span className="text-gray-700">{e.label}</span>
                                 <span className="font-medium text-gray-900">{fmt(e.amount)}</span>
                             </div>
                         ))}
                         <div className="flex justify-between py-2 text-sm font-bold border-t border-gray-200 mt-2">
-                            <span>Total Expenses</span><span className="text-red-600">{fmt(data.totalExpenses)}</span>
+                            <span>Total Expenses</span><span className="text-red-600">{fmt(data?.totalExpenses || 0)}</span>
                         </div>
                     </div>
-                    <div className={`flex justify-between py-3 text-lg font-bold border-t-2 border-gray-900 ${data.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    <div className={`flex justify-between py-3 text-lg font-bold border-t-2 border-gray-900 ${(data?.netProfit || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                         <span className="text-gray-900">Net Profit / (Loss)</span>
-                        <span>{fmt(data.netProfit)}</span>
+                        <span>{fmt(data?.netProfit || 0)}</span>
                     </div>
                 </div>
             </div>
@@ -333,22 +340,24 @@ function ProfitLossReport({ data, fmt, from, to }: { data: any; fmt: (n: number)
 }
 
 function InsuranceReport({ data, fmt, from, to }: { data: any; fmt: (n: number) => string; from: string; to: string }) {
+    const summary = data?.summary || {};
+    const claims = data?.claims || [];
     return (
         <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <SummaryCard label="Total Claims" value={String(data.summary.totalClaims)} color="gray" />
-                <SummaryCard label="Claimed" value={fmt(data.summary.totalClaimed)} color="blue" />
-                <SummaryCard label="Approved" value={fmt(data.summary.totalApproved)} color="emerald" />
-                <SummaryCard label="Rejected" value={fmt(data.summary.totalRejected)} color="red" />
+                <SummaryCard label="Total Claims" value={String(summary.totalClaims || 0)} color="gray" />
+                <SummaryCard label="Claimed" value={fmt(summary.totalClaimed || 0)} color="blue" />
+                <SummaryCard label="Approved" value={fmt(summary.totalApproved || 0)} color="emerald" />
+                <SummaryCard label="Rejected" value={fmt(summary.totalRejected || 0)} color="red" />
             </div>
             <div className="bg-white rounded-xl border border-gray-200 p-5">
                 <ReportChart type="bar" labels={['Submitted', 'Approved', 'Settled', 'Rejected']}
-                    datasets={[{ label: 'Claims', data: [data.summary.pending, data.summary.approved, data.summary.settled, data.summary.rejected] }]} height={250} />
+                    datasets={[{ label: 'Claims', data: [summary.pending || 0, summary.approved || 0, summary.settled || 0, summary.rejected || 0] }]} height={250} />
             </div>
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                     <h3 className="font-semibold text-gray-900">Claims Detail</h3>
-                    <ExportButton data={data.claims.map((c: any) => ({
+                    <ExportButton data={claims.map((c: any) => ({
                         claim: c.claim_number, provider: c.policy?.provider?.provider_name || '-',
                         invoice: c.invoice?.invoice_number, claimed: Number(c.claimed_amount),
                         approved: Number(c.approved_amount || 0), status: c.status,
@@ -367,7 +376,9 @@ function InsuranceReport({ data, fmt, from, to }: { data: any; fmt: (n: number) 
                         <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500">Status</th>
                     </tr></thead>
                     <tbody className="divide-y divide-gray-100">
-                        {data.claims.map((c: any) => (
+                        {claims.length === 0 ? (
+                            <tr><td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-400">No claims found</td></tr>
+                        ) : claims.map((c: any) => (
                             <tr key={c.id} className="hover:bg-gray-50">
                                 <td className="px-6 py-3 text-sm font-mono text-gray-600">{c.claim_number}</td>
                                 <td className="px-6 py-3 text-sm text-gray-900">{c.policy?.provider?.provider_name || '-'}</td>

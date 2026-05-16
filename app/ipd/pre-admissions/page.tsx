@@ -40,8 +40,12 @@ export default function PreAdmissionsPage() {
   const weekEnd = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
 
   const totalBooked = bookings.length;
-  const expectedToday = bookings.filter(b => b.expected_date?.slice(0, 10) === today).length;
-  const expectedThisWeek = bookings.filter(b => b.expected_date?.slice(0, 10) >= today && b.expected_date?.slice(0, 10) <= weekEnd).length;
+  const getDateStr = (d: any) => d ? new Date(d).toISOString().slice(0, 10) : '';
+  const expectedToday = bookings.filter(b => getDateStr(b.expected_date) === today).length;
+  const expectedThisWeek = bookings.filter(b => {
+    const dStr = getDateStr(b.expected_date);
+    return dStr && dStr >= today && dStr <= weekEnd;
+  }).length;
   const admitted = bookings.filter(b => b.status === 'Admitted').length;
 
   const handleSubmit = async (e: React.FormEvent) => {

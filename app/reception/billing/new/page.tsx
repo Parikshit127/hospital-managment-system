@@ -343,7 +343,11 @@ export default function ReceptionGenerateBillPage() {
                                         type="number" min="1" 
                                         inputMode="numeric"
                                         value={draftQty}
-                                        onChange={e => setDraftQty(Number(sanitizePositiveInt(e.target.value) || '1'))}
+                                        onFocus={e => e.target.select()}
+                                        onChange={e => {
+                                            const v = sanitizePositiveInt(e.target.value);
+                                            setDraftQty(v === '' ? 1 : Math.max(1, Number(v)));
+                                        }}
                                         className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none"
                                     />
                                 </div>
@@ -354,8 +358,13 @@ export default function ReceptionGenerateBillPage() {
                                         type="number" min="0" 
                                         step="0.01"
                                         inputMode="decimal"
-                                        value={draftDiscount}
-                                        onChange={e => setDraftDiscount(Number(sanitizeDecimal(e.target.value) || '0'))}
+                                        value={draftDiscount === 0 ? '' : draftDiscount}
+                                        placeholder="0"
+                                        onFocus={e => e.target.select()}
+                                        onChange={e => {
+                                            const v = sanitizeDecimal(e.target.value);
+                                            setDraftDiscount(v === '' ? 0 : Number(v));
+                                        }}
                                         className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none"
                                     />
                                 </div>

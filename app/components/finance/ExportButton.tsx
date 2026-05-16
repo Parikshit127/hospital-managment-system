@@ -10,21 +10,31 @@ interface ExportButtonProps {
 
 export function ExportButton({ data, filename, columns }: ExportButtonProps) {
     async function handleExport() {
-        // Dynamic import xlsx to keep bundle small
-        const XLSX = (await import('xlsx')).default;
+        if (!data || data.length === 0) {
+            alert('No data to export');
+            return;
+        }
+        try {
+            // Dynamic import xlsx to keep bundle small
+            const xlsxModule = await import('xlsx');
+            const XLSX = xlsxModule.default || xlsxModule;
 
-        const rows = data.map(row => {
-            const obj: Record<string, any> = {};
-            columns.forEach(col => {
-                obj[col.label] = row[col.key] ?? '';
+            const rows = data.map(row => {
+                const obj: Record<string, any> = {};
+                columns.forEach(col => {
+                    obj[col.label] = row[col.key] ?? '';
+                });
+                return obj;
             });
-            return obj;
-        });
 
-        const ws = XLSX.utils.json_to_sheet(rows);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Report');
-        XLSX.writeFile(wb, `${filename}.xlsx`);
+            const ws = XLSX.utils.json_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Report');
+            XLSX.writeFile(wb, `${filename}.xlsx`);
+        } catch (err) {
+            console.error('Export failed:', err);
+            alert('Export failed. Please try again.');
+        }
     }
 
     return (

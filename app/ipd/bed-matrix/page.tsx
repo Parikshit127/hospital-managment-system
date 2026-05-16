@@ -157,7 +157,7 @@ export default function BedMatrixPage() {
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 overflow-visible">
                                         {wardBeds.map((bed: any) => {
                                             const cfg = statusConfig[bed.status] || statusConfig.Available;
                                             const StatusIcon = cfg.icon;
@@ -166,7 +166,7 @@ export default function BedMatrixPage() {
 
                                             return (
                                                 <div key={bed.bed_id}
-                                                    className={`${cfg.bg} border ${cfg.border} rounded-xl p-3 transition-all hover:scale-[1.02] cursor-default`}
+                                                    className={`${cfg.bg} border ${cfg.border} rounded-xl p-3 transition-all hover:shadow-md cursor-default relative`}
                                                 >
                                                     <div className="flex items-center justify-between mb-2">
                                                         <span className={`text-xs font-black ${cfg.color}`}>

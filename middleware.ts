@@ -25,7 +25,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
   "/ipd": ["admin", "ipd_manager"],
   "/discharge": ["admin", "ipd_manager", "doctor"],
   "/opd": ["admin", "receptionist", "doctor", "opd_manager"],
-  "/insurance": ["admin", "finance"],
+  "/insurance": ["admin", "finance", "ipd_manager"],
   // Phase 3 roles
   "/nurse": ["admin", "nurse"],
   "/opd-manager": ["admin", "opd_manager"],
@@ -68,7 +68,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   lab_technician: ["lab.view", "reports.view"],
   pharmacist: ["pharmacy.view", "reports.view"],
   finance: ["finance.view", "insurance.view", "reports.view", "billing.view"],
-  ipd_manager: ["ipd.view", "opd.view", "lab.view", "pharmacy.view", "finance.view", "reports.view", "ot.view", "billing.view"],
+  ipd_manager: ["ipd.view", "opd.view", "lab.view", "pharmacy.view", "finance.view", "reports.view", "ot.view", "billing.view", "insurance.view"],
   nurse: ["ipd.view", "opd.view", "lab.view", "pharmacy.view", "reports.view", "ot.view", "er.view"],
   opd_manager: ["opd.view", "lab.view", "pharmacy.view", "finance.view", "reports.view", "billing.view"],
   hr: ["hr.view", "reports.view"],

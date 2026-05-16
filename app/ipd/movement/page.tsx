@@ -6,7 +6,8 @@ import { ArrowLeftRight, Plus, ArrowRight, X, CheckCircle2 } from 'lucide-react'
 import { useToast } from '@/app/components/ui/Toast';
 import { getActiveMovements, recordPatientMovement, returnPatient } from '@/app/actions/ipd-enhancement-actions';
 
-const DESTINATIONS = ['OT', 'Radiology', 'Dialysis', 'Physiotherapy', 'ICU', 'Lab', 'Other'];
+const DESTINATIONS = ['OT', 'Radiology', 'Dialysis', 'Physiotherapy', 'ICU', 'Lab', 'Pharmacy', 'Canteen', 'Other'];
+const FROM_LOCATIONS = ['Ward', 'ICU', 'HDU', 'NICU', 'PICU', 'Emergency', 'Recovery Room', 'Day Care', 'Other'];
 
 export default function MovementPage() {
   const toast = useToast();
@@ -18,7 +19,7 @@ export default function MovementPage() {
 
   const [form, setForm] = useState({
     admissionId: '', patientId: '', fromLocation: '',
-    toLocation: 'Radiology', purpose: '', escortName: '',
+    toLocation: 'OT', purpose: '', escortName: '',
   });
 
   const loadData = async () => {
@@ -44,7 +45,7 @@ export default function MovementPage() {
     if (res.success) {
       toast.success('Movement recorded');
       setModalOpen(false);
-      setForm({ admissionId: '', patientId: '', fromLocation: '', toLocation: 'Radiology', purpose: '', escortName: '' });
+      setForm({ admissionId: '', patientId: '', fromLocation: '', toLocation: 'OT', purpose: '', escortName: '' });
       loadData();
     } else {
       toast.error((res as any).error || 'Failed to record movement');
@@ -134,19 +135,28 @@ export default function MovementPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Admission ID *</label>
-                  <input required value={form.admissionId} onChange={e => setForm(f => ({ ...f, admissionId: e.target.value }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" placeholder="ADM-XXXX" />
+                  <input required
+                    type="text" inputMode="text" autoComplete="off" spellCheck={false} maxLength={30}
+                    value={form.admissionId}
+                    onChange={e => setForm(f => ({ ...f, admissionId: e.target.value.replace(/[^a-zA-Z0-9\-]/g, '').toUpperCase() }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" placeholder="IPD-XXXXXXXX-XXXX" />
                 </div>
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Patient ID *</label>
-                  <input required value={form.patientId} onChange={e => setForm(f => ({ ...f, patientId: e.target.value }))}
+                  <input required
+                    type="text" inputMode="text" autoComplete="off" spellCheck={false} maxLength={30}
+                    value={form.patientId}
+                    onChange={e => setForm(f => ({ ...f, patientId: e.target.value.replace(/[^a-zA-Z0-9\-]/g, '').toUpperCase() }))}
                     className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" placeholder="PT-XXXX" />
                 </div>
               </div>
               <div>
                 <label className="block text-xs uppercase font-bold text-gray-500 mb-1">From Location *</label>
-                <input required value={form.fromLocation} onChange={e => setForm(f => ({ ...f, fromLocation: e.target.value }))}
-                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" placeholder="e.g. Ward 3A, Bed 12" />
+                <select required value={form.fromLocation} onChange={e => setForm(f => ({ ...f, fromLocation: e.target.value }))}
+                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none bg-white">
+                  <option value="">Select location</option>
+                  {FROM_LOCATIONS.map(d => <option key={d}>{d}</option>)}
+                </select>
               </div>
               <div>
                 <label className="block text-xs uppercase font-bold text-gray-500 mb-1">To Location *</label>
@@ -158,12 +168,18 @@ export default function MovementPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Purpose</label>
-                  <input value={form.purpose} onChange={e => setForm(f => ({ ...f, purpose: e.target.value }))}
+                  <input
+                    type="text" inputMode="text" maxLength={100}
+                    value={form.purpose}
+                    onChange={e => setForm(f => ({ ...f, purpose: e.target.value.replace(/[^a-zA-Z0-9\s.,\-()]/g, '') }))}
                     className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" placeholder="e.g. MRI Scan" />
                 </div>
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Escort Name</label>
-                  <input value={form.escortName} onChange={e => setForm(f => ({ ...f, escortName: e.target.value }))}
+                  <input
+                    type="text" inputMode="text" maxLength={60}
+                    value={form.escortName}
+                    onChange={e => setForm(f => ({ ...f, escortName: e.target.value.replace(/[^a-zA-Z\s.\-']/g, '') }))}
                     className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" placeholder="Staff name" />
                 </div>
               </div>

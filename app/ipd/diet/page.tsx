@@ -29,8 +29,8 @@ export default function DietPage() {
     useEffect(() => { loadData(); }, []);
 
     const filteredAds = admissions.filter(a =>
-        a.patient?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        a.bed_id?.toLowerCase().includes(searchQuery.toLowerCase())
+        (a.patient?.full_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (a.bed_id || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     const handleAssign = async (e: React.FormEvent) => {

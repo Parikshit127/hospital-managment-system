@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     Bell, Loader2, CheckCheck, Trash2, Filter, ExternalLink,
-    Info, CheckCircle2, AlertTriangle, AlertOctagon
+    Info, CheckCircle2, AlertTriangle, AlertOctagon, Search
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -18,6 +18,7 @@ export default function NotificationsPage() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [filter, setFilter] = useState<'all' | 'unread'>('all');
+    const [search, setSearch] = useState('');
 
     useEffect(() => {
         fetch('/api/session').then(r => r.json()).then(d => setUserId(d?.id || '')).catch(() => {});
@@ -64,6 +65,13 @@ export default function NotificationsPage() {
 
     const unreadCount = notifications.filter(n => !n.is_read).length;
 
+    // Client-side search filter
+    const filtered = notifications.filter(n => {
+        if (!search.trim()) return true;
+        const q = search.toLowerCase();
+        return n.title?.toLowerCase().includes(q) || n.body?.toLowerCase().includes(q);
+    });
+
     return (
         <AppShell pageTitle="Notifications" pageIcon={<Bell className="h-5 w-5" />}
             onRefresh={loadData} refreshing={refreshing}
@@ -76,18 +84,30 @@ export default function NotificationsPage() {
                 ) : null
             }>
             <div className="space-y-4 max-w-3xl">
-                {/* Filters */}
-                <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4 text-gray-400" />
-                    {(['all', 'unread'] as const).map(f => (
-                        <button key={f} onClick={() => setFilter(f)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${filter === f
-                                ? 'bg-teal-50 text-teal-700 border border-teal-200'
-                                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                            }`}>
-                            {f === 'all' ? 'All' : `Unread (${unreadCount})`}
-                        </button>
-                    ))}
+                {/* Filters + Search */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                    <div className="relative flex-1 w-full">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            placeholder="Search notifications…"
+                            className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <Filter className="h-4 w-4 text-gray-400" />
+                        {(['all', 'unread'] as const).map(f => (
+                            <button key={f} onClick={() => setFilter(f)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${filter === f
+                                    ? 'bg-teal-50 text-teal-700 border border-teal-200'
+                                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                                }`}>
+                                {f === 'all' ? 'All' : `Unread (${unreadCount})`}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 {/* Notification List */}
@@ -95,15 +115,15 @@ export default function NotificationsPage() {
                     <div className="flex items-center justify-center py-16">
                         <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
                     </div>
-                ) : notifications.length === 0 ? (
+                ) : filtered.length === 0 ? (
                     <div className="bg-white border border-gray-200 rounded-2xl p-16 text-center">
                         <Bell className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                        <p className="text-gray-400 font-medium">No notifications</p>
-                        <p className="text-gray-300 text-sm mt-1">You're all caught up!</p>
+                        <p className="text-gray-400 font-medium">{search ? 'No notifications matched your search' : 'No notifications'}</p>
+                        <p className="text-gray-300 text-sm mt-1">{search ? 'Try a different keyword' : "You're all caught up!"}</p>
                     </div>
                 ) : (
                     <div className="space-y-2">
-                        {notifications.map((n: any) => (
+                        {filtered.map((n: any) => (
                             <div key={n.id}
                                 className={`bg-white border border-gray-200 shadow-sm rounded-2xl p-4 flex items-start gap-4 transition-all ${!n.is_read ? 'border-l-4 border-l-teal-500' : ''}`}>
                                 <div className="mt-0.5 shrink-0">{getTypeIcon(n.type)}</div>

@@ -204,10 +204,10 @@ export default function IpdBillingPage() {
         if (!searchQuery) return true;
         const q = searchQuery.toLowerCase();
         return (
-            a.patient?.full_name?.toLowerCase().includes(q) ||
-            a.patient?.phone?.includes(q) ||
-            a.admission_id?.toLowerCase().includes(q) ||
-            a.patient?.patient_id?.toLowerCase().includes(q)
+            (a.patient?.full_name || '').toLowerCase().includes(q) ||
+            (a.patient?.phone || '').includes(q) ||
+            (a.admission_id || '').toLowerCase().includes(q) ||
+            (a.patient?.patient_id || '').toLowerCase().includes(q)
         );
     });
 

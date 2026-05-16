@@ -13,9 +13,9 @@ export async function getNotifications(userId: string, options?: {
     offset?: number;
 }) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
 
-        const where: any = { user_id: userId };
+        const where: any = { user_id: userId, organizationId };
         if (options?.unreadOnly) where.is_read = false;
 
         const [data, total, unreadCount] = await Promise.all([
@@ -25,8 +25,8 @@ export async function getNotifications(userId: string, options?: {
                 take: options?.limit || 50,
                 skip: options?.offset || 0,
             }),
-            db.notification.count({ where: { user_id: userId } }),
-            db.notification.count({ where: { user_id: userId, is_read: false } }),
+            db.notification.count({ where: { user_id: userId, organizationId } }),
+            db.notification.count({ where: { user_id: userId, organizationId, is_read: false } }),
         ]);
 
         return { success: true, data, total, unreadCount };
@@ -38,9 +38,9 @@ export async function getNotifications(userId: string, options?: {
 
 export async function getUnreadCount(userId: string) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
         const count = await db.notification.count({
-            where: { user_id: userId, is_read: false },
+            where: { user_id: userId, organizationId, is_read: false },
         });
         return { success: true, count };
     } catch (error) {
@@ -54,9 +54,9 @@ export async function getUnreadCount(userId: string) {
 
 export async function markNotificationRead(id: number) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
         await db.notification.update({
-            where: { id },
+            where: { id, organizationId },
             data: { is_read: true },
         });
         return { success: true };
@@ -68,9 +68,9 @@ export async function markNotificationRead(id: number) {
 
 export async function markAllNotificationsRead(userId: string) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
         await db.notification.updateMany({
-            where: { user_id: userId, is_read: false },
+            where: { user_id: userId, organizationId, is_read: false },
             data: { is_read: true },
         });
         revalidatePath('/notifications');
@@ -93,7 +93,7 @@ export async function createNotification(data: {
     link?: string;
 }) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
         await db.notification.create({
             data: {
                 user_id: data.userId,
@@ -101,6 +101,7 @@ export async function createNotification(data: {
                 body: data.body,
                 type: data.type || 'info',
                 link: data.link,
+                organizationId,
             },
         });
         return { success: true };
@@ -121,9 +122,9 @@ export async function notifyUsersByRole(role: string, data: {
     link?: string;
 }) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
         const users = await db.user.findMany({
-            where: { role, is_active: true },
+            where: { role, is_active: true, organizationId },
             select: { id: true },
         });
 
@@ -135,6 +136,7 @@ export async function notifyUsersByRole(role: string, data: {
                     body: data.body,
                     type: data.type || 'info',
                     link: data.link,
+                    organizationId,
                 })),
             });
         }
@@ -148,8 +150,8 @@ export async function notifyUsersByRole(role: string, data: {
 
 export async function deleteNotification(id: number) {
     try {
-        const { db } = await requireTenantContext();
-        await db.notification.delete({ where: { id } });
+        const { db, organizationId } = await requireTenantContext();
+        await db.notification.delete({ where: { id, organizationId } });
         return { success: true };
     } catch (error) {
         console.error('Delete Notification Error:', error);

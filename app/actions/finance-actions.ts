@@ -71,8 +71,8 @@ export async function createInvoice(data: {
         // Phase 4: Period Locking
         await checkPeriodLock(db);
 
-        // Phase 4: Duplicate Detection
-        const duplicateWindow = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours
+        // Phase 4: Duplicate Detection — only block truly empty drafts within 5 minutes
+        const duplicateWindow = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes
         const existingDraft = await db.invoices.findFirst({
             where: {
                 patient_id: data.patient_id,
@@ -80,10 +80,12 @@ export async function createInvoice(data: {
                 status: 'Draft',
                 created_at: { gte: duplicateWindow },
                 organizationId
-            }
+            },
+            include: { items: { take: 1 } }
         });
 
-        if (existingDraft) {
+        // Only block if the existing draft has no items (truly accidental duplicate)
+        if (existingDraft && existingDraft.items.length === 0) {
             return { success: false, error: `Duplicate invoice detected. A Draft invoice (${existingDraft.invoice_number}) was created for this patient recently.` };
         }
 

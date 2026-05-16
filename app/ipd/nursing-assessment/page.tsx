@@ -171,8 +171,18 @@ export default function NursingAssessmentPage() {
                         </div>
                         <div>
                           <label className="text-[10px] font-bold text-gray-500 uppercase">Pain Score (0–10)</label>
-                          <input type="number" min={0} max={10} value={form.pain_score}
-                            onChange={e => setForm(f => ({ ...f, pain_score: Number(e.target.value) }))}
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            max={10}
+                            value={form.pain_score === 0 ? '' : form.pain_score}
+                            placeholder="0"
+                            onFocus={e => e.target.select()}
+                            onChange={e => {
+                              const val = e.target.value === '' ? 0 : Math.min(10, Math.max(0, parseInt(e.target.value) || 0));
+                              setForm(f => ({ ...f, pain_score: val }));
+                            }}
                             className="w-full mt-1 text-xs border border-teal-200 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-teal-400" />
                         </div>
                         <div>

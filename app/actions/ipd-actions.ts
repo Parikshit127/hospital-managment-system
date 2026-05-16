@@ -1190,13 +1190,19 @@ export async function createNursingTask(data: {
 }
 
 export async function admitEmergency(data: {
-  patient_id: string;
+  patient_id?: string;
   bed_id: string;
   ward_id: number;
   chief_complaint: string;
   doctor_name?: string;
   attending_doctor_id?: string;
   deposit_amount?: number;
+  // Unknown patient fields
+  unknown_patient?: boolean;
+  unknown_name?: string;
+  unknown_age?: string;
+  unknown_gender?: string;
+  unknown_phone?: string;
 }) {
   try {
     const { db, session, organizationId } = await requireTenantContext();
@@ -1209,15 +1215,35 @@ export async function admitEmergency(data: {
     if (!bed) return { success: false, error: 'Bed not found' };
     if (bed.status !== 'Available') return { success: false, error: 'Bed is not available' };
 
-    // 2. Get patient
-    const patient = await db.oPD_REG.findUnique({ where: { patient_id: data.patient_id } });
-    if (!patient) return { success: false, error: 'Patient not found' };
+    // 2. Resolve patient — auto-create a temporary record for unknown/unregistered patients
+    let resolvedPatientId = data.patient_id?.trim() ?? '';
+    let patient = resolvedPatientId
+      ? await db.oPD_REG.findUnique({ where: { patient_id: resolvedPatientId } })
+      : null;
+
+    if (!patient) {
+      // Generate an emergency patient ID
+      const timestamp = Date.now().toString(36).toUpperCase();
+      resolvedPatientId = `EMRG-${timestamp}`;
+
+      patient = await db.oPD_REG.create({
+        data: {
+          patient_id: resolvedPatientId,
+          full_name: data.unknown_name?.trim() || 'Unknown Patient',
+          age: data.unknown_age?.trim() || null,
+          gender: data.unknown_gender?.trim() || null,
+          phone: data.unknown_phone?.trim() || null,
+          registration_remarks: `Auto-created via Emergency Admission on ${new Date().toISOString()}`,
+          organizationId,
+        },
+      });
+    }
 
     const result = await db.$transaction(async (tx: any) => {
       // 3. Create admission
       const admission = await tx.admissions.create({
         data: {
-          patient_id: data.patient_id,
+          patient_id: resolvedPatientId,
           bed_id: data.bed_id,
           ward_id: data.ward_id,
           status: 'Admitted',
@@ -1240,7 +1266,7 @@ export async function admitEmergency(data: {
       const invCount = await tx.invoices.count({ where: { organizationId } });
       const invoice = await tx.invoices.create({
         data: {
-          patient_id: data.patient_id,
+          patient_id: resolvedPatientId,
           admission_id: admission.admission_id,
           invoice_number: `IPD-EMRG-${String(invCount + 1).padStart(5, '0')}`,
           invoice_type: 'IPD',
@@ -1255,7 +1281,7 @@ export async function admitEmergency(data: {
       if (data.deposit_amount && data.deposit_amount > 0) {
         await tx.patientDeposit.create({
           data: {
-            patient_id: data.patient_id,
+            patient_id: resolvedPatientId,
             admission_id: admission.admission_id,
             amount: data.deposit_amount,
             payment_method: 'Cash',
@@ -1270,7 +1296,7 @@ export async function admitEmergency(data: {
     });
 
     revalidatePath('/ipd');
-    return { success: true, data: { admission_id: result.admission.admission_id } };
+    return { success: true, data: { admission_id: result.admission.admission_id, patient_id: resolvedPatientId } };
   } catch (error: any) {
     console.error('admitEmergency error:', error);
     return { success: false, error: error.message };

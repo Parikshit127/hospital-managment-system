@@ -34,8 +34,8 @@ export default function TransferPage() {
     useEffect(() => { loadData(); }, []);
 
     const filteredAds = admissions.filter(a =>
-        a.patient?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        a.bed_id?.toLowerCase().includes(searchQuery.toLowerCase())
+        (a.patient?.full_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (a.bed_id || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     const handleTransfer = async (e: React.FormEvent) => {

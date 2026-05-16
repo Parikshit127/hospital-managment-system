@@ -16,6 +16,37 @@ export function QuickEntryConsole({ admissionId, patientName }: { admissionId: s
 
     // Form states
     const [vitals, setVitals] = useState({ temp: '', bp: '', hr: '', spo2: '' });
+
+    // Filtered setters
+    const setTemp = (val: string) => {
+        // Numeric only, max 3 digits + 1 decimal, range 90–115°F
+        const cleaned = val.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+        const num = parseFloat(cleaned);
+        if (cleaned === '' || cleaned === '.' || (!isNaN(num) && num <= 115)) {
+            setVitals(v => ({ ...v, temp: cleaned }));
+        }
+    };
+    const setBP = (val: string) => {
+        // Allow digits and single slash only — format: 120/80
+        const cleaned = val.replace(/[^0-9/]/g, '').replace(/\/{2,}/g, '/');
+        setVitals(v => ({ ...v, bp: cleaned }));
+    };
+    const setHR = (val: string) => {
+        // Digits only, max 300 bpm
+        const cleaned = val.replace(/[^0-9]/g, '');
+        const num = parseInt(cleaned);
+        if (cleaned === '' || (!isNaN(num) && num <= 300)) {
+            setVitals(v => ({ ...v, hr: cleaned }));
+        }
+    };
+    const setSpo2 = (val: string) => {
+        // Digits only, max 100
+        const cleaned = val.replace(/[^0-9]/g, '');
+        const num = parseInt(cleaned);
+        if (cleaned === '' || (!isNaN(num) && num <= 100)) {
+            setVitals(v => ({ ...v, spo2: cleaned }));
+        }
+    };
     const [doctorNote, setDoctorNote] = useState('');
     const [handoverNote, setHandoverNote] = useState('');
     const [dietNote, setDietNote] = useState('');
@@ -95,29 +126,36 @@ export function QuickEntryConsole({ admissionId, patientName }: { admissionId: s
                                 label="Temperature (°F)" 
                                 placeholder="e.g. 98.6"
                                 value={vitals.temp}
-                                onChange={(e) => setVitals({...vitals, temp: e.target.value})}
-                                type="number"
-                                step="0.1"
+                                onChange={(e) => setTemp(e.target.value)}
+                                type="text"
+                                inputMode="decimal"
                             />
                             <Input 
                                 label="Blood Pressure (mmHg)" 
                                 placeholder="e.g. 120/80"
                                 value={vitals.bp}
-                                onChange={(e) => setVitals({...vitals, bp: e.target.value})}
+                                onChange={(e) => setBP(e.target.value)}
+                                type="text"
+                                inputMode="numeric"
+                                maxLength={7}
                             />
                             <Input 
                                 label="Heart Rate (bpm)" 
                                 placeholder="e.g. 72"
                                 value={vitals.hr}
-                                onChange={(e) => setVitals({...vitals, hr: e.target.value})}
-                                type="number"
+                                onChange={(e) => setHR(e.target.value)}
+                                type="text"
+                                inputMode="numeric"
+                                maxLength={3}
                             />
                             <Input 
                                 label="SpO2 (%)" 
                                 placeholder="e.g. 98"
                                 value={vitals.spo2}
-                                onChange={(e) => setVitals({...vitals, spo2: e.target.value})}
-                                type="number"
+                                onChange={(e) => setSpo2(e.target.value)}
+                                type="text"
+                                inputMode="numeric"
+                                maxLength={3}
                             />
                         </div>
                         

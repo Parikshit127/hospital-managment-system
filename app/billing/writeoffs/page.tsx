@@ -430,9 +430,15 @@ function NewWriteoffModal({
           <Field
             label="Invoice ID (optional)"
             value={form.invoice_id}
-            onChange={(v) => setForm({ ...form, invoice_id: v })}
+            onChange={(v) => {
+              // digits only
+              const cleaned = v.replace(/\D/g, '');
+              setForm({ ...form, invoice_id: cleaned });
+            }}
             placeholder="numeric ID"
             disabled={!!defaultInvoiceId}
+            inputMode="numeric"
+            type="number"
           />
         </div>
 
@@ -507,6 +513,7 @@ function Field({
   type,
   placeholder,
   disabled,
+  inputMode,
 }: {
   label: string;
   value: string;
@@ -515,6 +522,7 @@ function Field({
   type?: string;
   placeholder?: string;
   disabled?: boolean;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
 }) {
   return (
     <div>
@@ -533,6 +541,7 @@ function Field({
       ) : (
         <input
           type={type ?? "text"}
+          inputMode={inputMode}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"

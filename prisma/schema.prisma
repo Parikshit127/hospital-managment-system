@@ -4188,6 +4188,7 @@ model AdmissionBooking {
   estimated_cost       Float?
   deposit_paid         Float?   @default(0)
   status               String   @default("Booked") // Booked, Confirmed, Admitted, Cancelled
+  admission_type       String   @default("REGULAR") // REGULAR, DAYCARE, PRE_ADMISSION
   notes                String?
   created_at           DateTime @default(now())
 
@@ -4196,6 +4197,7 @@ model AdmissionBooking {
   @@index([organizationId])
   @@index([patient_id])
   @@index([expected_date])
+  @@index([admission_type])
 }
 
 model PatientMovement {
