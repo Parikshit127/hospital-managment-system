@@ -764,15 +764,43 @@ export async function toggleUserActive(userId: string) {
 // PHASE 2.1: Admin Settings / Departments / Reports
 // ============================================
 
+export async function getDoctorsForDropdown() {
+  try {
+    const { db, organizationId } = await requireTenantContext();
+    const doctors = await db.user.findMany({
+      where: { organizationId, role: 'doctor', is_active: true },
+      select: { id: true, name: true, specialty: true },
+      orderBy: { name: 'asc' },
+    });
+    return { success: true, data: doctors };
+  } catch (error: any) {
+    return { success: false, error: error.message, data: [] };
+  }
+}
+
 export async function getDepartments() {
   try {
-    const { db } = await requireTenantContext();
+    const { db, organizationId } = await requireTenantContext();
     const depts = await db.department.findMany({
+      where: { organizationId },
       orderBy: { name: "asc" },
     });
-    return { success: true, data: depts };
+    // Fetch head doctor names in one query
+    const doctorIds = depts.map((d: any) => d.head_doctor_id).filter(Boolean);
+    const doctors = doctorIds.length > 0
+      ? await db.user.findMany({
+          where: { id: { in: doctorIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const doctorMap = Object.fromEntries(doctors.map((d: any) => [d.id, d.name]));
+    const data = depts.map((d: any) => ({
+      ...d,
+      head_doctor_name: d.head_doctor_id ? (doctorMap[d.head_doctor_id] ?? null) : null,
+    }));
+    return { success: true, data };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: error.message, data: [] };
   }
 }
 
@@ -785,9 +813,26 @@ export async function createDepartment(data: {
 }) {
   try {
     const { db, organizationId, session } = await requireTenantContext();
+
+    // Auto-generate slug from name
+    const baseSlug = data.name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-');
+
+    // Ensure slug uniqueness within org
+    const existing = await db.department.count({
+      where: { slug: { startsWith: baseSlug }, organizationId },
+    });
+    const slug = existing > 0 ? `${baseSlug}-${existing + 1}` : baseSlug;
+
+    const { description, ...rest } = data;
     const dept = await db.department.create({
       data: {
-        ...data,
+        ...rest,
+        slug,
         organizationId,
       },
     });
