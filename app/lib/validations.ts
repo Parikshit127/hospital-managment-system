@@ -47,6 +47,7 @@ export const registerPatientSchema = z.object({
 // ========================================
 
 export const addUserSchema = z.object({
+    // Mandatory
     username: z.string().min(3, 'Username must be at least 3 characters').max(50),
     password: z.string().min(8, 'Password must be at least 8 characters').max(100)
         .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
@@ -54,9 +55,16 @@ export const addUserSchema = z.object({
         .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
     name: z.string().min(2, 'Name is required').max(200),
     role: z.enum(staffRoles),
-    specialty: z.string().optional(),
+    phone: z.string().min(10, 'Phone is required').max(15),
     email: z.string().email().optional().or(z.literal('')),
-    phone: z.string().optional(),
+    // Preferred
+    department: z.string().optional(),
+    employee_code: z.string().optional(),
+    designation: z.string().optional(),
+    date_of_joining: z.string().optional(), // ISO date string
+    assigned_ward_id: z.number().int().positive().optional(),
+    // Doctor-only
+    specialty: z.string().optional(),
 });
 
 export const updateUserSchema = z.object({
@@ -65,6 +73,12 @@ export const updateUserSchema = z.object({
     specialty: z.string().optional(),
     email: z.string().email().optional().or(z.literal('')),
     phone: z.string().optional(),
+    // Preferred
+    department: z.string().optional(),
+    employee_code: z.string().optional(),
+    designation: z.string().optional(),
+    date_of_joining: z.string().optional(),
+    assigned_ward_id: z.number().int().positive().optional().nullable(),
 });
 
 // ========================================

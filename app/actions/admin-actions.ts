@@ -478,6 +478,7 @@ export async function getUsersList(options?: {
           phone: true,
           is_active: true,
           createdAt: true,
+          assigned_ward_id: true,
         },
         orderBy: { createdAt: "desc" },
         skip,
@@ -537,9 +538,14 @@ export async function addUser(data: {
   password: string;
   name: string;
   role: string;
+  phone?: string;
   specialty?: string;
   email?: string;
-  phone?: string;
+  department?: string;
+  employee_code?: string;
+  designation?: string;
+  date_of_joining?: string;
+  assigned_ward_id?: number;
 }) {
   try {
     const { db, organizationId } = await requireTenantContext();
@@ -566,24 +572,40 @@ export async function addUser(data: {
         password: hashedPassword,
         name: validated.name,
         role: validated.role,
-        specialty:
-          validated.role === "doctor" ? validated.specialty || null : null,
+        specialty: validated.role === "doctor" ? validated.specialty || null : null,
         email: validated.email || null,
         phone: validated.phone || null,
+        assigned_ward_id: validated.assigned_ward_id || null,
         organizationId,
         is_active: true,
       },
       select: {
-        id: true,
-        username: true,
-        name: true,
-        role: true,
-        specialty: true,
-        email: true,
-        phone: true,
-        is_active: true,
+        id: true, username: true, name: true, role: true,
+        specialty: true, email: true, phone: true, is_active: true,
       },
     });
+
+    // Create linked Employee record for HR fields (preferred fields)
+    if (validated.employee_code || validated.designation || validated.date_of_joining) {
+      try {
+        await (db.employee as any).create({
+          data: {
+            user_id: user.id,
+            employee_code: validated.employee_code || `EMP-${Date.now()}`,
+            name: validated.name,
+            designation: validated.designation || validated.role,
+            department_id: null,
+            date_of_joining: validated.date_of_joining
+              ? new Date(validated.date_of_joining)
+              : new Date(),
+            organizationId,
+          },
+        });
+      } catch (hrErr) {
+        // HR record creation is non-blocking — user is still created
+        console.warn('HR employee record creation failed (non-fatal):', hrErr);
+      }
+    }
 
     await db.system_audit_logs.create({
       data: {
@@ -614,22 +636,26 @@ export async function updateUser(
     email?: string;
     phone?: string;
     is_active?: boolean;
+    department?: string;
+    employee_code?: string;
+    designation?: string;
+    date_of_joining?: string;
+    assigned_ward_id?: number | null;
   },
 ) {
   try {
     const { db, organizationId } = await requireTenantContext();
 
-    // Validate input with Zod (partial validation for update)
     const validated = updateUserSchema.parse(data);
 
     const updateData: any = {};
     if (validated.name !== undefined) updateData.name = validated.name;
     if (validated.role !== undefined) updateData.role = validated.role;
-    if (validated.specialty !== undefined)
-      updateData.specialty = validated.specialty;
+    if (validated.specialty !== undefined) updateData.specialty = validated.specialty;
     if (validated.email !== undefined) updateData.email = validated.email;
     if (validated.phone !== undefined) updateData.phone = validated.phone;
     if (data.is_active !== undefined) updateData.is_active = data.is_active;
+    if (data.assigned_ward_id !== undefined) updateData.assigned_ward_id = data.assigned_ward_id;
 
     // Clear specialty if role is not doctor
     if (validated.role && validated.role !== "doctor") {
@@ -640,24 +666,34 @@ export async function updateUser(
       where: { id: userId },
       data: updateData,
       select: {
-        id: true,
-        username: true,
-        name: true,
-        role: true,
-        specialty: true,
-        email: true,
-        phone: true,
-        is_active: true,
+        id: true, username: true, name: true, role: true,
+        specialty: true, email: true, phone: true, is_active: true,
       },
     });
 
+    // Update linked Employee HR record if preferred fields provided
+    if (validated.employee_code || validated.designation || validated.date_of_joining || validated.department) {
+      try {
+        const existing = await (db.employee as any).findFirst({ where: { user_id: userId } });
+        if (existing) {
+          await (db.employee as any).update({
+            where: { id: existing.id },
+            data: {
+              ...(validated.designation && { designation: validated.designation }),
+              ...(validated.date_of_joining && { date_of_joining: new Date(validated.date_of_joining) }),
+              ...(validated.employee_code && { employee_code: validated.employee_code }),
+            },
+          });
+        }
+      } catch (hrErr) {
+        console.warn('HR record update failed (non-fatal):', hrErr);
+      }
+    }
+
     await db.system_audit_logs.create({
       data: {
-        user_id: userId,
-        username: user.username,
-        role: user.role,
-        action: "UPDATE_USER",
-        module: "admin",
+        user_id: userId, username: user.username, role: user.role,
+        action: "UPDATE_USER", module: "admin",
         details: `Updated user ${user.name}: ${JSON.stringify(data)}`,
         organizationId,
       },
@@ -773,6 +809,20 @@ export async function getDoctorsForDropdown() {
       orderBy: { name: 'asc' },
     });
     return { success: true, data: doctors };
+  } catch (error: any) {
+    return { success: false, error: error.message, data: [] };
+  }
+}
+
+export async function getWardsForDropdown() {
+  try {
+    const { db, organizationId } = await requireTenantContext();
+    const wards = await db.wards.findMany({
+      where: { organizationId },
+      select: { ward_id: true, ward_name: true, ward_type: true },
+      orderBy: { ward_name: 'asc' },
+    });
+    return { success: true, data: wards };
   } catch (error: any) {
     return { success: false, error: error.message, data: [] };
   }
