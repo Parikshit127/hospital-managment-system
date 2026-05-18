@@ -130,11 +130,11 @@ export default function DoctorMasterPage() {
     setSubmitting(true);
     const payload: any = {
       ...form,
-      consultation_fee: Number(form.consultation_fee),
-      follow_up_fee: Number(form.follow_up_fee),
-      slot_duration: Number(form.slot_duration),
+      consultation_fee: Number(form.consultation_fee) || 0,
+      follow_up_fee: Number(form.follow_up_fee) || 0,
+      slot_duration: Number(form.slot_duration) || 20,
       max_patients_per_day: form.max_patients_per_day ? Number(form.max_patients_per_day) : undefined,
-      max_overbooking_per_slot: Number(form.max_overbooking_per_slot ?? 0),
+      max_overbooking_per_slot: Number(form.max_overbooking_per_slot) || 0,
       gender: form.gender || undefined,
       working_days: form.working_days || undefined,
       email: form.email || undefined,
