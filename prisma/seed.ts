@@ -281,7 +281,179 @@ async function main() {
     console.log('Seeded Charge Catalog (' + catalogItems.length + ' items)');
 
     // =============================================
-    // 7. INSURANCE PROVIDERS (with organizationId)
+    // 7. DEPARTMENTS
+    // =============================================
+    const departmentsData = [
+        { name: 'General Medicine',    slug: 'general-medicine',    base_consultation_fee: 500  },
+        { name: 'Cardiology',          slug: 'cardiology',          base_consultation_fee: 1000 },
+        { name: 'Orthopedics',         slug: 'orthopedics',         base_consultation_fee: 800  },
+        { name: 'Pediatrics',          slug: 'pediatrics',          base_consultation_fee: 600  },
+        { name: 'Neurology',           slug: 'neurology',           base_consultation_fee: 1000 },
+        { name: 'ENT',                 slug: 'ent',                 base_consultation_fee: 700  },
+        { name: 'Dermatology',         slug: 'dermatology',         base_consultation_fee: 700  },
+        { name: 'Pulmonology',         slug: 'pulmonology',         base_consultation_fee: 800  },
+        { name: 'OB/GYN',             slug: 'ob-gyn',              base_consultation_fee: 800  },
+        { name: 'Ophthalmology',       slug: 'ophthalmology',       base_consultation_fee: 700  },
+        { name: 'Urology',             slug: 'urology',             base_consultation_fee: 900  },
+        { name: 'Gastroenterology',    slug: 'gastroenterology',    base_consultation_fee: 900  },
+        { name: 'Oncology',            slug: 'oncology',            base_consultation_fee: 1500 },
+        { name: 'Radiology',           slug: 'radiology',           base_consultation_fee: 500  },
+        { name: 'Pathology',           slug: 'pathology',           base_consultation_fee: 400  },
+        { name: 'Anesthesiology',      slug: 'anesthesiology',      base_consultation_fee: 1000 },
+        { name: 'Emergency',           slug: 'emergency',           base_consultation_fee: 1500 },
+        { name: 'Dental',              slug: 'dental',              base_consultation_fee: 600  },
+        { name: 'Psychiatry',          slug: 'psychiatry',          base_consultation_fee: 1000 },
+        { name: 'Physiotherapy',       slug: 'physiotherapy',       base_consultation_fee: 500  },
+        { name: 'General Surgery',     slug: 'general-surgery',     base_consultation_fee: 1000 },
+        { name: 'Nephrology',          slug: 'nephrology',          base_consultation_fee: 1000 },
+    ];
+
+    for (const dept of departmentsData) {
+        await prisma.department.upsert({
+            where: { slug_organizationId: { slug: dept.slug, organizationId: DEFAULT_ORG_ID } },
+            update: { base_consultation_fee: dept.base_consultation_fee, is_active: true },
+            create: { ...dept, organizationId: DEFAULT_ORG_ID, is_active: true },
+        });
+    }
+    console.log(`Seeded Departments (${departmentsData.length} departments)`);
+
+    // =============================================
+    // 8. DOCTORS (extended profiles)
+    // =============================================
+    // Update existing doctor users with full profile data
+    const doctorProfiles = [
+        {
+            username: 'doc1',
+            name: 'Dr. Sarah Smith',
+            specialty: 'General Medicine',
+            qualifications: 'MBBS, MD (General Medicine)',
+            doctor_registration_no: 'MCI-GM-10001',
+            consultation_fee: 500,
+            follow_up_fee: 250,
+            slot_duration: 15,
+            working_hours: '09:00-13:00,16:00-19:00',
+        },
+        {
+            username: 'doc2',
+            name: 'Dr. Rajesh Kumar',
+            specialty: 'Cardiology',
+            qualifications: 'MBBS, MD (Medicine), DM (Cardiology)',
+            doctor_registration_no: 'MCI-CAR-10002',
+            consultation_fee: 1000,
+            follow_up_fee: 500,
+            slot_duration: 20,
+            working_hours: '10:00-14:00,17:00-20:00',
+        },
+        {
+            username: 'doc3',
+            name: 'Dr. Priya Sharma',
+            specialty: 'Orthopedics',
+            qualifications: 'MBBS, MS (Orthopedics)',
+            doctor_registration_no: 'MCI-ORT-10003',
+            consultation_fee: 800,
+            follow_up_fee: 400,
+            slot_duration: 20,
+            working_hours: '09:00-13:00,15:00-18:00',
+        },
+        {
+            username: 'doc4',
+            name: 'Dr. Anil Gupta',
+            specialty: 'Pediatrics',
+            qualifications: 'MBBS, MD (Pediatrics)',
+            doctor_registration_no: 'MCI-PED-10004',
+            consultation_fee: 600,
+            follow_up_fee: 300,
+            slot_duration: 15,
+            working_hours: '09:00-13:00,16:00-19:00',
+        },
+        {
+            username: 'doc5',
+            name: 'Dr. Meena Patel',
+            specialty: 'Neurology',
+            qualifications: 'MBBS, MD (Medicine), DM (Neurology)',
+            doctor_registration_no: 'MCI-NEU-10005',
+            consultation_fee: 1000,
+            follow_up_fee: 500,
+            slot_duration: 30,
+            working_hours: '10:00-14:00,17:00-19:00',
+        },
+        {
+            username: 'doc6',
+            name: 'Dr. Vikram Rao',
+            specialty: 'ENT',
+            qualifications: 'MBBS, MS (ENT)',
+            doctor_registration_no: 'MCI-ENT-10006',
+            consultation_fee: 700,
+            follow_up_fee: 350,
+            slot_duration: 15,
+            working_hours: '09:00-13:00,16:00-18:00',
+        },
+        {
+            username: 'doc7',
+            name: 'Dr. Sunita Joshi',
+            specialty: 'Dermatology',
+            qualifications: 'MBBS, MD (Dermatology)',
+            doctor_registration_no: 'MCI-DER-10007',
+            consultation_fee: 700,
+            follow_up_fee: 350,
+            slot_duration: 15,
+            working_hours: '10:00-14:00,16:00-19:00',
+        },
+        {
+            username: 'doc8',
+            name: 'Dr. Arjun Nair',
+            specialty: 'Pulmonology',
+            qualifications: 'MBBS, MD (Respiratory Medicine)',
+            doctor_registration_no: 'MCI-PUL-10008',
+            consultation_fee: 800,
+            follow_up_fee: 400,
+            slot_duration: 20,
+            working_hours: '09:00-13:00,15:00-18:00',
+        },
+    ];
+
+    for (const doc of doctorProfiles) {
+        await prisma.user.update({
+            where: { username: doc.username },
+            data: {
+                name: doc.name,
+                specialty: doc.specialty,
+                qualifications: doc.qualifications,
+                doctor_registration_no: doc.doctor_registration_no,
+                consultation_fee: doc.consultation_fee,
+                follow_up_fee: doc.follow_up_fee,
+                slot_duration: doc.slot_duration,
+                working_hours: doc.working_hours,
+            },
+        });
+        console.log(`Updated doctor profile: ${doc.name} (${doc.specialty})`);
+    }
+
+    // Link head doctors to their departments
+    const headDoctorLinks: { slug: string; username: string }[] = [
+        { slug: 'general-medicine', username: 'doc1' },
+        { slug: 'cardiology',       username: 'doc2' },
+        { slug: 'orthopedics',      username: 'doc3' },
+        { slug: 'pediatrics',       username: 'doc4' },
+        { slug: 'neurology',        username: 'doc5' },
+        { slug: 'ent',              username: 'doc6' },
+        { slug: 'dermatology',      username: 'doc7' },
+        { slug: 'pulmonology',      username: 'doc8' },
+    ];
+
+    for (const link of headDoctorLinks) {
+        const doctor = await prisma.user.findUnique({ where: { username: link.username } });
+        if (doctor) {
+            await prisma.department.update({
+                where: { slug_organizationId: { slug: link.slug, organizationId: DEFAULT_ORG_ID } },
+                data: { head_doctor_id: doctor.id },
+            });
+        }
+    }
+    console.log('Linked head doctors to departments');
+
+    // =============================================
+    // 9. INSURANCE PROVIDERS (with organizationId)
     // =============================================
     const insuranceProviders = [
         { provider_name: 'Star Health Insurance', provider_code: 'STAR', contact_email: 'claims@starhealth.in', contact_phone: '1800-425-2255' },
@@ -306,6 +478,8 @@ async function main() {
     console.log('Organization: Avani Hospital (org-avani-default)');
     console.log('Super Admin: superadmin@hospitalos.com / superadmin123');
     console.log('Staff users: password123 for all');
+    console.log('Departments: ' + departmentsData.length + ' departments seeded');
+    console.log('Doctors: ' + doctorProfiles.length + ' doctor profiles updated');
     console.log('Wards: 6 wards with 48 beds total');
     console.log('Charge Catalog: ' + catalogItems.length + ' service rate items');
     console.log('Insurance: ' + insuranceProviders.length + ' TPA providers');
