@@ -438,6 +438,9 @@ model User {
   consultation_fee         Float    @default(500)
   follow_up_fee            Float    @default(300)
   max_overbooking_per_slot Int      @default(0) // extra patients allowed beyond slot capacity
+  gender                   String?  // Male | Female | Other
+  working_days             String?  // e.g. "Mon-Sat" or "Mon,Wed,Fri"
+  max_patients_per_day     Int?     // daily cap per doctor
   createdAt                DateTime @default(now())
 
   // GAP 3 — Doctor Group Hierarchy — Senior/Junior Access

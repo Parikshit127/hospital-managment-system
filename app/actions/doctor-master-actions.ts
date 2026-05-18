@@ -5,35 +5,49 @@ import { z } from 'zod';
 import * as bcrypt from 'bcryptjs';
 
 const createDoctorSchema = z.object({
+  // Mandatory
   name: z.string().min(2).max(200),
   username: z.string().min(3).max(50),
   password: z.string().min(8).max(100),
   specialty: z.string().min(1),
-  doctor_registration_no: z.string().optional(),
-  qualifications: z.string().optional(),
-  email: z.string().email().optional().or(z.literal('')),
-  phone: z.string().optional(),
   consultation_fee: z.number().nonnegative(),
   follow_up_fee: z.number().nonnegative(),
   working_hours: z.string().default('09:00-17:00'),
   slot_duration: z.number().int().positive().default(20),
   is_active: z.boolean().default(true),
+  // Preferred
+  doctor_registration_no: z.string().optional(),
+  qualifications: z.string().optional(),
+  phone: z.string().optional(),
+  gender: z.enum(['Male', 'Female', 'Other']).optional(),
+  working_days: z.string().optional(),
+  max_patients_per_day: z.number().int().positive().optional(),
+  max_overbooking_per_slot: z.number().int().min(0).default(0),
+  // Optional
+  email: z.string().email().optional().or(z.literal('')),
 });
 
 const updateDoctorSchema = z.object({
+  // Mandatory (all optional on update)
   name: z.string().min(2).max(200).optional(),
   username: z.string().min(3).max(50).optional(),
   password: z.string().min(8).max(100).optional(),
   specialty: z.string().min(1).optional(),
-  doctor_registration_no: z.string().nullable().optional(),
-  qualifications: z.string().nullable().optional(),
-  email: z.string().email().optional().or(z.literal('')),
-  phone: z.string().nullable().optional(),
   consultation_fee: z.number().nonnegative().optional(),
   follow_up_fee: z.number().nonnegative().optional(),
   working_hours: z.string().optional(),
   slot_duration: z.number().int().positive().optional(),
   is_active: z.boolean().optional(),
+  // Preferred
+  doctor_registration_no: z.string().nullable().optional(),
+  qualifications: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  gender: z.enum(['Male', 'Female', 'Other']).nullable().optional(),
+  working_days: z.string().nullable().optional(),
+  max_patients_per_day: z.number().int().positive().nullable().optional(),
+  max_overbooking_per_slot: z.number().int().min(0).optional(),
+  // Optional
+  email: z.string().email().optional().or(z.literal('')),
 });
 
 function assertAdmin(session: { role: string }) {
@@ -78,6 +92,10 @@ export async function listDoctors(opts?: {
           slot_duration: true,
           is_active: true,
           createdAt: true,
+          gender: true,
+          working_days: true,
+          max_patients_per_day: true,
+          max_overbooking_per_slot: true,
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
@@ -120,6 +138,7 @@ export async function createDoctor(input: unknown) {
           role: 'doctor',
           specialty: data.specialty,
           doctor_registration_no: data.doctor_registration_no || null,
+          qualifications: data.qualifications || null,
           email: data.email || null,
           phone: data.phone || null,
           consultation_fee: data.consultation_fee,
@@ -127,6 +146,10 @@ export async function createDoctor(input: unknown) {
           working_hours: data.working_hours,
           slot_duration: data.slot_duration,
           is_active: data.is_active,
+          gender: data.gender || null,
+          working_days: data.working_days || null,
+          max_patients_per_day: data.max_patients_per_day || null,
+          max_overbooking_per_slot: data.max_overbooking_per_slot ?? 0,
         },
         select: {
           id: true,
