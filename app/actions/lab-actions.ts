@@ -468,6 +468,7 @@ export async function getTestCatalog() {
 
 export async function addTestTocatalog(data: {
     test_name: string;
+    test_code?: string;
     price: number;
     category?: string;
     sample_type?: string;
@@ -475,13 +476,17 @@ export async function addTestTocatalog(data: {
     normal_range_min?: number;
     normal_range_max?: number;
     tax_rate?: number;
+    turnaround_time?: string;
     requires_prescription?: boolean;
+    critical_value_low?: number;
+    critical_value_high?: number;
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
         const test = await db.lab_test_inventory.create({
             data: {
                 test_name: data.test_name,
+                test_code: data.test_code || null,
                 price: data.price,
                 category: data.category || null,
                 sample_type: data.sample_type || null,
@@ -489,7 +494,10 @@ export async function addTestTocatalog(data: {
                 normal_range_min: data.normal_range_min ?? null,
                 normal_range_max: data.normal_range_max ?? null,
                 tax_rate: data.tax_rate ?? 0,
+                turnaround_time: data.turnaround_time || null,
                 requires_prescription: data.requires_prescription ?? false,
+                critical_value_low: data.critical_value_low ?? null,
+                critical_value_high: data.critical_value_high ?? null,
                 is_available: true,
                 organizationId,
             },
@@ -506,6 +514,7 @@ export async function addTestTocatalog(data: {
 
 export async function updateTestInCatalog(id: number, data: {
     test_name?: string;
+    test_code?: string;
     price?: number;
     category?: string;
     sample_type?: string;
@@ -513,8 +522,11 @@ export async function updateTestInCatalog(id: number, data: {
     normal_range_min?: number | null;
     normal_range_max?: number | null;
     tax_rate?: number;
+    turnaround_time?: string | null;
     is_available?: boolean;
     requires_prescription?: boolean;
+    critical_value_low?: number | null;
+    critical_value_high?: number | null;
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();

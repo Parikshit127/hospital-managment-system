@@ -38,6 +38,7 @@ model Organization {
   triage_results                triage_results[]
   lab_orders                    lab_orders[]
   lab_test_inventory            lab_test_inventory[]
+  lab_panels                    LabPanel[]
   lab_staff                     lab_staff[]
   lab_audit_logs                lab_audit_logs[]
   pharmacy_medicine_master      pharmacy_medicine_master[]
@@ -448,8 +449,15 @@ model User {
   doctor_group_id String? // Group identifier
   is_group_lead   Boolean @default(false)
 
+  // Non-Doctor Staff fields (section 3.2)
+  employee_code   String?  // Internal employee ID e.g. EMP-0042 (Preferred)
+  designation     String?  // Job title e.g. Senior Nurse (Preferred)
+  department      String?  // Department name e.g. Cardiology, Lab, Pharmacy (Yes for non-doctor)
+  date_of_joining DateTime? // DD/MM/YYYY — required for HR module
+
   organization      Organization      @relation(fields: [organizationId], references: [id])
   appointment_slots AppointmentSlot[]
+  employee_profile  Employee?         // reverse link to HR Employee record
 
   @@index([organizationId])
   @@index([doctor_group_id])
@@ -662,24 +670,67 @@ model lab_orders {
 
 model lab_test_inventory {
   id               Int     @id @default(autoincrement())
+  // Section 6.1 — Mandatory fields
   test_name        String  @unique
-  price            Float
+  test_code        String?              // Short code e.g. CBC-001
+  price            Float                // Patient charge (INR)
+  category         String?              // Hematology | Biochemistry | Microbiology | Serology | Urine | Histopathology | Cytology
+  sample_type      String?              // Blood | Urine | Stool | Sputum | CSF | Tissue | Swab
+  normal_range_min Float?               // Lower reference limit
+  normal_range_max Float?               // Upper reference limit
+  unit             String?              // x10^3/uL, mg/dL, mmol/L etc.
   is_available     Boolean @default(true)
-  normal_range_min Float?
-  normal_range_max Float?
-  unit             String?
-  category         String?
-  sample_type      String?
-  hsn_sac_code     String?
-  tax_rate         Float?  @default(0)
-  organizationId   String
-
-  // GAP 2 — Prescription-Mandatory Test Upload Validation
+  // Section 6.1 — Preferred fields
+  hsn_sac_code          String?
+  tax_rate              Float?  @default(0) // retained for billing engine compatibility
+  turnaround_time       String?          // e.g. "4 hours", "24 hours", "3 days"
   requires_prescription Boolean @default(false)
+  critical_value_low    Float?           // Alert threshold - low e.g. Hb < 7
+  critical_value_high   Float?           // Alert threshold - high e.g. Potassium > 6.5
+  organizationId        String
 
-  organization Organization @relation(fields: [organizationId], references: [id])
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  panel_tests  LabPanelTest[]
 
   @@index([organizationId])
+  @@map("lab_test_inventory")
+}
+
+// ========================================
+// Section 6.2 — Lab Panels / Profiles
+// ========================================
+
+model LabPanel {
+  id             Int      @id @default(autoincrement())
+  panel_name     String                    // e.g. Liver Function Test (LFT)
+  panel_code     String?                   // e.g. LFT, KFT, LIPID
+  description    String?
+  panel_price    Float                     // Bundled price (INR) e.g. 600
+  is_active      Boolean  @default(true)
+  organizationId String
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id])
+  panel_tests  LabPanelTest[]
+
+  @@unique([panel_name, organizationId])
+  @@index([organizationId])
+  @@map("lab_panels")
+}
+
+model LabPanelTest {
+  id          Int @id @default(autoincrement())
+  panel_id    Int
+  test_id     Int // references lab_test_inventory.id
+  test_name   String // denormalised for display without join
+  sort_order  Int @default(0)
+
+  panel LabPanel            @relation(fields: [panel_id], references: [id], onDelete: Cascade)
+  test  lab_test_inventory  @relation(fields: [test_id], references: [id], onDelete: Cascade)
+
+  @@unique([panel_id, test_id])
+  @@map("lab_panel_tests")
 }
 
 model lab_staff {
@@ -712,31 +763,30 @@ model lab_audit_logs {
 // ========================================
 
 model pharmacy_medicine_master {
-  id              Int     @id @default(autoincrement())
-  brand_name      String  @unique
-  generic_name    String?
-  category        String?
-  manufacturer    String?
-  // legacy field retained for backward compat; mirrors selling_price
-  price_per_unit  Float
-  // NEW pricing fields
-  mrp             Float   @default(0)
-  purchase_price  Float   @default(0)
-  selling_price   Float   @default(0)
-  gst_percent     Float   @default(0)
-  // formulation metadata
-  strength        String?
-  form            String? // tablet, syrup, injection, etc.
-  min_threshold   Int     @default(10)
-  hsn_sac_code    String?
-  ndc_code        String? // National Drug Code
-  tax_rate        Float?  @default(0) // keep for existing GST calc — sync with gst_percent on save
-  is_active       Boolean @default(true)
-  // Drug classification & safety flags
-  drug_schedule   String? // H, H1, X, NDPS, OTC
-  is_narcotic     Boolean @default(false)
-  is_refrigerated Boolean @default(false)
-  organizationId  String
+  id             Int     @id @default(autoincrement())
+  // Section 7.1 — Mandatory fields
+  brand_name     String  @unique          // Commercial name e.g. Crocin Advance
+  generic_name   String?                  // INN/generic e.g. Paracamol (Mandatory per doc)
+  strength       String?                  // Dose strength e.g. 500mg (Mandatory per doc)
+  form           String?                  // Tablet | Capsule | Syrup | Injection | Cream | Drops | Inhaler | Ointment | Powder | Suspension (Mandatory)
+  category       String?                  // Analgesic | Antibiotic | Cardiac | Diabetic | Gastro etc. (Mandatory)
+  mrp            Float   @default(0)      // Maximum retail price per unit (Mandatory)
+  purchase_price Float   @default(0)      // Your buying price (Mandatory)
+  selling_price  Float   @default(0)      // Your selling price (Mandatory)
+  gst_percent    Float   @default(0)      // Applicable GST rate: 5 / 12 / 18 (Mandatory)
+  is_narcotic    Boolean @default(false)  // Controlled substance Yes/No (Mandatory)
+  // Section 7.1 — Preferred fields
+  manufacturer   String?                  // Pharma company e.g. GSK India
+  hsn_sac_code   String?                  // HSN Code for GST classification e.g. 3004
+  drug_schedule  String?                  // H | H1 | X | NDPS | OTC
+  is_refrigerated Boolean @default(false) // Cold chain storage
+  min_threshold  Int     @default(10)     // Reorder alert level e.g. 50 units
+  // Legacy / compat fields
+  price_per_unit Float   @default(0)      // mirrors selling_price — retained for billing compat
+  ndc_code       String?                  // National Drug Code
+  tax_rate       Float?  @default(0)      // synced with gst_percent — retained for billing engine
+  is_active      Boolean @default(true)
+  organizationId String
 
   organization Organization               @relation(fields: [organizationId], references: [id])
   batches      pharmacy_batch_inventory[]
@@ -752,8 +802,9 @@ model pharmacy_batch_inventory {
   batch_no         String
   current_stock    Int
   manufacture_date DateTime?
-  expiry_date      DateTime
-  cost_price       Float? // purchase price at the time this batch was received
+  expiry_date      DateTime                // Section 7.3 — required
+  cost_price       Float?                  // Purchase Price at time of receipt — Section 7.3
+  mrp              Float?                  // MRP per unit for this batch — Section 7.3
   rack_location    String?
   supplier_name    String?
   grn_id           Int?
@@ -2068,7 +2119,7 @@ model ShiftHandover {
 
 model Employee {
   id              Int      @id @default(autoincrement())
-  user_id         String?
+  user_id         String?  @unique // 1-to-1 link to User (system access account)
   employee_code   String   @unique
   name            String
   designation     String
@@ -2083,6 +2134,7 @@ model Employee {
   updated_at      DateTime @updatedAt
 
   organization      Organization      @relation(fields: [organizationId], references: [id])
+  user              User?             @relation(fields: [user_id], references: [id])
   attendances       Attendance[]
   leave_requests    LeaveRequest[]
   shift_assignments ShiftAssignment[]
@@ -2648,18 +2700,25 @@ model IpdServiceMaster {
 }
 
 model IpdTariffRate {
-  id              Int      @id @default(autoincrement())
-  service_id      Int
-  tariff_category String
-  rate            Decimal
-  is_active       Boolean  @default(true)
-  organizationId  String
-  created_at      DateTime @default(now())
+  id                Int      @id @default(autoincrement())
+  service_id        Int
+  // Section 5.1 — explicit category-wise rate columns
+  general_rate      Decimal  @default(0) // General ward rate
+  semi_private_rate Decimal  @default(0) // Semi-Private ward rate
+  private_rate      Decimal  @default(0) // Private ward rate
+  deluxe_rate       Decimal  @default(0) // Deluxe ward rate
+  icu_rate          Decimal  @default(0) // ICU rate
+  // Legacy generic field retained for backward compat
+  tariff_category   String   @default("general")
+  rate              Decimal  @default(0)
+  is_active         Boolean  @default(true)
+  organizationId    String
+  created_at        DateTime @default(now())
 
   service      IpdServiceMaster @relation(fields: [service_id], references: [id])
   organization Organization     @relation(fields: [organizationId], references: [id])
 
-  @@unique([service_id, tariff_category, organizationId])
+  @@unique([service_id, organizationId])
   @@index([organizationId])
   @@map("ipd_tariff_rates")
 }
@@ -2671,8 +2730,8 @@ model IpdPackage {
   description    String?
   total_amount   Decimal
   validity_days  Int      @default(7)
-  inclusions     Json     @default("[]")
-  exclusions     String?
+  inclusions     Json     @default("[]") // e.g. ["Room (3 days)", "OT", "medicines", "nursing"]
+  exclusions     Json     @default("[]") // e.g. ["ICU", "blood products"]
   is_active      Boolean  @default(true)
   organizationId String
   created_at     DateTime @default(now())
@@ -3651,7 +3710,12 @@ model SurgeryMaster {
   default_duration_mins Int      @default(60)
   ot_room_type          String? // Required room type
   requires_icu          Boolean  @default(false)
-  billing_components    Json? // surgeon fee, anesthesia fee, OT charges, consumables template
+  // Section 5.3 — explicit billing fee columns
+  surgeon_fee           Decimal  @default(0) // e.g. 15000
+  anesthesia_fee        Decimal  @default(0) // e.g. 5000
+  ot_charges            Decimal  @default(0) // e.g. 8000
+  // Legacy generic blob retained for consumables / extra components
+  billing_components    Json?
   is_active             Boolean  @default(true)
   created_at            DateTime @default(now())
 
