@@ -13,6 +13,10 @@
     "lint:ci": "eslint --max-warnings=0 app/lib/env.ts app/lib/route-auth.ts app/lib/password-setup.ts app/lib/login-rate-limit.ts app/patient/setup-password",
     "typecheck": "tsc --noEmit",
     "check:prisma": "prisma validate",
+    "db:migrate:prod": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:status": "prisma migrate status",
+    "db:backup": "mkdir -p backups && pg_dump \"$DIRECT_URL\" --format=custom --no-owner --no-acl --file \"backups/hospitalos-$(date +%Y%m%d-%H%M%S).dump\"",
     "postinstall": "prisma generate"
   },
   "prisma": {

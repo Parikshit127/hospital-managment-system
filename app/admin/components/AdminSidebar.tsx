@@ -5,94 +5,38 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useBranding } from './ThemeProvider';
 import { logout } from '@/app/login/actions';
-import {
-    LayoutDashboard, LineChart,
-    Stethoscope, Bed, BedDouble, FlaskConical, Pill, DollarSign, Receipt, CreditCard, Briefcase,
-    Users, UserCog, Building2, ShieldCheck, UserRound,
-    Settings, Palette, FileText, Bell, Plug, Clock, BarChart3, Lock,
-    LogOut, ChevronLeft, ChevronRight, Workflow, Scissors,
-    GitBranch, Menu, X, DatabaseBackup, BookOpen, Database,
-    ShieldAlert, Scale, Siren,
-} from 'lucide-react';
+import { Building2, LogOut, ChevronLeft, ChevronRight, Menu, X, ChevronDown } from 'lucide-react';
 import PortalSwitcher from './PortalSwitcher';
-
-const NAV_SECTIONS = [
-    {
-        title: 'Overview',
-        items: [
-            { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
-            { label: 'Analytics', href: '/admin/analytics', icon: LineChart },
-        ],
-    },
-    {
-        title: 'Modules',
-        items: [
-            { label: 'OPD', href: '/admin/opd', icon: Stethoscope },
-            { label: 'IPD', href: '/admin/ipd', icon: Bed },
-            { label: 'IPD Setup', href: '/admin/ipd-setup', icon: BedDouble },
-            { label: 'IPD Finance', href: '/admin/ipd-finance', icon: CreditCard },
-            { label: 'OT Setup', href: '/admin/ot-setup', icon: Scissors },
-            { label: 'Lab', href: '/admin/lab', icon: FlaskConical },
-            { label: 'Pharmacy', href: '/admin/pharmacy', icon: Pill },
-            { label: 'Finance', href: '/admin/finance', icon: DollarSign },
-            { label: 'Finance Master', href: '/admin/finance-master', icon: Receipt },
-            { label: 'Master Billing', href: '/admin/billing', icon: FileText },
-            { label: 'Approval Center', href: '/admin/billing/approvals', icon: ShieldAlert },
-            { label: 'Write-offs', href: '/admin/billing/writeoffs', icon: Scale },
-            { label: 'HR', href: '/admin/hr', icon: Briefcase },
-            { label: 'Operation Theatre', href: '/admin/ot/dashboard', icon: Scissors },
-            { label: 'Emergency Room', href: '/admin/er/dashboard', icon: Siren },
-        ],
-    },
-    {
-        title: 'People',
-        items: [
-            { label: 'Staff & Users', href: '/admin/staff', icon: Users },
-            { label: 'Doctors', href: '/admin/doctors', icon: UserCog },
-            { label: 'Departments', href: '/admin/departments', icon: Building2 },
-            { label: 'Patients', href: '/admin/patients', icon: UserRound },
-            { label: 'Roles & Permissions', href: '/admin/roles', icon: ShieldCheck },
-        ],
-    },
-    {
-        title: 'Master Data',
-        items: [
-            { label: 'Master Data', href: '/admin/master', icon: Database },
-        ],
-    },
-    {
-        title: 'System',
-        items: [
-            { label: 'Settings', href: '/admin/settings', icon: Settings },
-            { label: 'Branding', href: '/admin/settings/branding', icon: Palette },
-            { label: 'Templates', href: '/admin/templates', icon: FileText },
-            { label: 'Notifications', href: '/admin/notifications', icon: Bell },
-            { label: 'Integrations', href: '/admin/integrations', icon: Plug },
-            { label: 'Audit Trail', href: '/admin/audit', icon: Clock },
-            { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
-            { label: 'Workflows', href: '/admin/workflows', icon: Workflow },
-            { label: 'Data Import', href: '/admin/data-import', icon: DatabaseBackup },
-            { label: 'Branches', href: '/admin/branches', icon: GitBranch },
-            { label: 'API Documentation', href: '/admin/api-docs', icon: BookOpen },
-            { label: 'MFA Setup', href: '/admin/mfa-setup', icon: Lock },
-        ],
-    },
-];
+import { ADMIN_NAV_SECTIONS } from '@/lib/navigation/admin-nav';
 
 export default function AdminSidebar() {
     const pathname = usePathname();
     const branding = useBranding();
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         const saved = window.localStorage.getItem('admin-sidebar-collapsed');
         if (saved === 'true') setCollapsed(true);
+        const savedSections = window.localStorage.getItem('admin-sidebar-sections');
+        if (savedSections) {
+            try { setCollapsedSections(new Set(JSON.parse(savedSections))); } catch { /* ignore */ }
+        }
     }, []);
 
     useEffect(() => {
         window.localStorage.setItem('admin-sidebar-collapsed', String(collapsed));
     }, [collapsed]);
+
+    const toggleSection = (title: string) => {
+        setCollapsedSections((prev) => {
+            const next = new Set(prev);
+            next.has(title) ? next.delete(title) : next.add(title);
+            window.localStorage.setItem('admin-sidebar-sections', JSON.stringify([...next]));
+            return next;
+        });
+    };
 
     const isActive = (href: string) => {
         if (href === '/admin/dashboard') return pathname === href || pathname === '/admin';
@@ -133,7 +77,6 @@ export default function AdminSidebar() {
                         <p className="text-[10px] text-gray-500 tracking-wider font-medium">ADMIN PANEL</p>
                     </div>
                 )}
-                {/* Mobile close */}
                 <button
                     onClick={() => setMobileOpen(false)}
                     className="lg:hidden ml-auto p-1 text-gray-500 hover:text-gray-900 transition-colors"
@@ -144,42 +87,61 @@ export default function AdminSidebar() {
 
             {/* Navigation */}
             <nav className="flex-1 overflow-y-auto py-4 px-2.5 space-y-5">
-                {NAV_SECTIONS.map((section) => (
-                    <div key={section.title}>
-                        {!collapsed && (
-                            <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500 font-semibold px-2.5 mb-1.5">
-                                {section.title}
-                            </p>
-                        )}
-                        <div className="space-y-0.5">
-                            {section.items.map((item) => {
-                                const Icon = item.icon;
-                                const active = isActive(item.href);
-                                return (
-                                    <Link
-                                        key={item.href}
-                                        href={item.href}
-                                        onClick={() => setMobileOpen(false)}
-                                        title={collapsed ? item.label : undefined}
-                                        className={`flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] transition-all duration-150 ${
-                                            active
-                                                ? 'font-semibold text-[#0d9488]'
-                                                : 'font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                                        } ${collapsed ? 'justify-center px-2' : ''}`}
-                                        style={active ? {
-                                            backgroundColor: '#f0fdfa',
-                                            color: '#0d9488',
-                                            boxShadow: '0 0 0 1px rgba(13,148,136,0.1)'
-                                        } : undefined}
+                {ADMIN_NAV_SECTIONS.map((section) => {
+                    const isSectionCollapsed = section.collapsible && collapsedSections.has(section.title);
+                    return (
+                        <div key={section.title}>
+                            {!collapsed && (
+                                section.collapsible ? (
+                                    <button
+                                        onClick={() => toggleSection(section.title)}
+                                        className="flex items-center justify-between w-full px-2.5 mb-1.5 group"
                                     >
-                                        <Icon className={`h-[16px] w-[16px] shrink-0 ${active ? '' : 'opacity-70'}`} />
-                                        {!collapsed && <span className="truncate">{item.label}</span>}
-                                    </Link>
-                                );
-                            })}
+                                        <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500 font-semibold group-hover:text-gray-700 transition-colors">
+                                            {section.title}
+                                        </p>
+                                        <ChevronDown
+                                            className={`h-3 w-3 text-gray-400 transition-transform duration-200 ${isSectionCollapsed ? '-rotate-90' : ''}`}
+                                        />
+                                    </button>
+                                ) : (
+                                    <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500 font-semibold px-2.5 mb-1.5">
+                                        {section.title}
+                                    </p>
+                                )
+                            )}
+                            {!isSectionCollapsed && (
+                                <div className="space-y-0.5">
+                                    {section.items.map((item) => {
+                                        const Icon = item.icon;
+                                        const active = isActive(item.href);
+                                        return (
+                                            <Link
+                                                key={item.href}
+                                                href={item.href}
+                                                onClick={() => setMobileOpen(false)}
+                                                title={collapsed ? item.label : undefined}
+                                                className={`flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] transition-all duration-150 ${
+                                                    active
+                                                        ? 'font-semibold text-[#0d9488]'
+                                                        : 'font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                                } ${collapsed ? 'justify-center px-2' : ''}`}
+                                                style={active ? {
+                                                    backgroundColor: '#f0fdfa',
+                                                    color: '#0d9488',
+                                                    boxShadow: '0 0 0 1px rgba(13,148,136,0.1)',
+                                                } : undefined}
+                                            >
+                                                <Icon className={`h-[16px] w-[16px] shrink-0 ${active ? '' : 'opacity-70'}`} />
+                                                {!collapsed && <span className="truncate">{item.label}</span>}
+                                            </Link>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </nav>
 
             {/* Bottom: Portal Switcher + Logout + Collapse */}

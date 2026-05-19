@@ -5,6 +5,7 @@ import { Sidebar } from "./Sidebar";
 import { RefreshCw } from "lucide-react";
 import { NotificationBell } from "@/app/components/NotificationBell";
 import { GlobalPatientSearch } from "./GlobalPatientSearch";
+import { useAdminPortal } from "@/app/admin/components/AdminPortalContext";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -23,6 +24,7 @@ export function AppShell({
   onRefresh,
   refreshing,
 }: AppShellProps) {
+  const isAdminPortal = useAdminPortal();
   const [session, setSession] = useState<any>(null);
 
   useEffect(() => {
@@ -33,6 +35,52 @@ export function AppShell({
       })
       .catch(() => {});
   }, []);
+
+  // Inside AdminLayoutShell — skip sidebar, render as plain content block
+  if (isAdminPortal) {
+    return (
+      <div className="space-y-6">
+        {pageTitle && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3.5">
+              {pageIcon && (
+                <div
+                  className="p-2.5 rounded-xl text-white shadow-md"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, var(--admin-primary), var(--admin-primary-dark))",
+                    boxShadow: "0 4px 12px var(--admin-primary-10)",
+                  }}
+                >
+                  {pageIcon}
+                </div>
+              )}
+              <h1
+                className="text-xl font-extrabold tracking-tight"
+                style={{ color: "var(--admin-text)" }}
+              >
+                {pageTitle}
+              </h1>
+            </div>
+            <div className="flex items-center gap-2">
+              {onRefresh && (
+                <button
+                  onClick={onRefresh}
+                  disabled={refreshing}
+                  className="p-2 rounded-xl hover:bg-gray-100 transition-all duration-200 disabled:opacity-50"
+                  style={{ color: "var(--admin-text-muted)" }}
+                >
+                  <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                </button>
+              )}
+              {headerActions}
+            </div>
+          </div>
+        )}
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen" style={{ backgroundColor: "var(--admin-bg)" }}>

@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { sendWelcomeEmail } from '@/backend/email';
 import { createPatientPasswordSetupToken } from '@/app/lib/password-setup';
 import { generateUHID, generateAppointmentId } from '@/app/lib/uhid';
+import { getOpenAIKey } from '@/app/lib/secure-config';
 import {
     EMERGENCY_SYMPTOMS as EMERGENCY_SYMPTOMS_LIST,
     URGENT_SYMPTOMS as URGENT_SYMPTOMS_LIST,
@@ -52,8 +53,8 @@ type TriageOutput = {
 // OpenAI GPT Triage Engine
 // =========================================
 
-async function runOpenAITriage(input: TriageInput): Promise<TriageOutput | null> {
-    const apiKey = process.env.OPENAI_API_KEY;
+async function runOpenAITriage(input: TriageInput, organizationId: string): Promise<TriageOutput | null> {
+    const apiKey = await getOpenAIKey(organizationId);
     if (!apiKey || apiKey.trim() === '') {
         return null; // Fall back to rule-based engine
     }
@@ -323,9 +324,9 @@ ${riskAlerts.length > 0 ? `\n⚠️ RISK ALERTS:\n${riskAlerts.map(a => `• ${a
 // Main Triage Engine (Gemini with Fallback)
 // =========================================
 
-async function runTriageEngine(input: TriageInput): Promise<TriageOutput> {
+async function runTriageEngine(input: TriageInput, organizationId: string): Promise<TriageOutput> {
     // Try OpenAI GPT first
-    const aiResult = await runOpenAITriage(input);
+    const aiResult = await runOpenAITriage(input, organizationId);
     if (aiResult) {
         return aiResult;
     }
@@ -340,7 +341,7 @@ async function runTriageEngine(input: TriageInput): Promise<TriageOutput> {
 export async function performTriage(input: TriageInput) {
     try {
         const { db, organizationId } = await requireTenantContext();
-        const result = await runTriageEngine(input);
+        const result = await runTriageEngine(input, organizationId);
 
         // 1. Generate Patient ID & Appointment ID
         const patientId = input.patientId || await generateUHID(db);

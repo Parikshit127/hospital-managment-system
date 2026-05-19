@@ -1,28 +1,29 @@
 import Razorpay from "razorpay";
+import { getRazorpayCredentials } from "@/app/lib/secure-config";
 
-let razorpayInstance: Razorpay | null = null;
+const razorpayInstances = new Map<string, Razorpay>();
 
-function getRazorpayConfig() {
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+export async function getRazorpayClient(organizationId: string) {
+  const { keyId, keySecret } = await getRazorpayCredentials(organizationId);
+  const cacheKey = `${organizationId}:${keyId}`;
+  const cached = razorpayInstances.get(cacheKey);
+  if (cached) return cached;
 
-  if (!keyId || !keySecret) {
-    throw new Error(
-      "Razorpay is not configured. Missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET.",
-    );
-  }
-
-  return { keyId, keySecret };
-}
-
-export function getRazorpayClient() {
-  if (razorpayInstance) return razorpayInstance;
-
-  const { keyId, keySecret } = getRazorpayConfig();
-  razorpayInstance = new Razorpay({
+  const client = new Razorpay({
     key_id: keyId,
     key_secret: keySecret,
   });
 
-  return razorpayInstance;
+  razorpayInstances.set(cacheKey, client);
+  return client;
+}
+
+export async function getRazorpayPublicKey(organizationId: string) {
+  const { keyId } = await getRazorpayCredentials(organizationId);
+  return keyId;
+}
+
+export async function getRazorpaySigningSecret(organizationId: string) {
+  const { keySecret } = await getRazorpayCredentials(organizationId);
+  return keySecret;
 }

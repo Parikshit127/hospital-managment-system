@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRazorpayClient } from "@/app/lib/razorpay";
+import { getRazorpayClient, getRazorpayPublicKey } from "@/app/lib/razorpay";
 import { getPatientSession } from "@/app/patient/login/actions";
 import { getTenantPrisma } from "@/backend/db";
 
 function toNumber(value: unknown): number {
   if (value === null || value === undefined) return 0;
-  const num = Number(value as any);
+  const num = Number(value);
   return Number.isFinite(num) ? num : 0;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const razorpay = getRazorpayClient();
-
     const session = await getPatientSession();
     if (!session) {
       return NextResponse.json(
@@ -20,6 +18,8 @@ export async function POST(req: NextRequest) {
         { status: 401 },
       );
     }
+    const razorpay = await getRazorpayClient(session.organization_id);
+    const keyId = await getRazorpayPublicKey(session.organization_id);
 
     const body = await req.json();
     const { doctorId, appointmentDate } = body;
@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       order_id: order.id,
-      key_id: process.env.RAZORPAY_KEY_ID,
+      key_id: keyId,
       amount: order.amount,
       currency: order.currency,
       consultation_fee: consultationFee,
@@ -120,12 +120,13 @@ export async function POST(req: NextRequest) {
       total_amount: totalAmount,
       specialty,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Appointment order creation error:", error);
+    const message = error instanceof Error ? error.message : "Failed to create payment order";
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Failed to create payment order",
+        error: message,
       },
       { status: 500 },
     );

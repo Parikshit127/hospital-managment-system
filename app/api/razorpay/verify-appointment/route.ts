@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { getRazorpayClient } from "@/app/lib/razorpay";
+import { getRazorpayClient, getRazorpaySigningSecret } from "@/app/lib/razorpay";
 import { getPatientSession } from "@/app/patient/login/actions";
 import { getTenantPrisma } from "@/backend/db";
 
 export async function POST(req: NextRequest) {
   try {
-    const razorpay = getRazorpayClient();
-
     const session = await getPatientSession();
     if (!session) {
       return NextResponse.json(
@@ -15,6 +13,7 @@ export async function POST(req: NextRequest) {
         { status: 401 },
       );
     }
+    const razorpay = await getRazorpayClient(session.organization_id);
 
     const body = await req.json();
     const {
@@ -36,8 +35,9 @@ export async function POST(req: NextRequest) {
 
     // Verify Razorpay signature
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
+    const signingSecret = await getRazorpaySigningSecret(session.organization_id);
     const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "")
+      .createHmac("sha256", signingSecret)
       .update(sign)
       .digest("hex");
 
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     try {
       // Validate order belongs to this patient and selected doctor.
       const order = await razorpay.orders.fetch(razorpay_order_id);
-      const notes: any = (order as any)?.notes || {};
+      const notes = (order as { notes?: Record<string, unknown> })?.notes || {};
       if (
         String(notes.patient_id || "") !== String(session.id) ||
         String(notes.doctor_id || "") !== String(doctorId) ||
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
 
       // Create the appointment
       const apptId = `APT-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      const appointment = await db.appointments.create({
+      await db.appointments.create({
         data: {
           appointment_id: apptId,
           patient_id: session.id,
@@ -127,17 +127,18 @@ export async function POST(req: NextRequest) {
         appointmentId: apptId,
         message: "Appointment booked successfully!",
       });
-    } catch (dbError: any) {
+    } catch (dbError: unknown) {
       console.error("Database error:", dbError);
       return NextResponse.json(
         { success: false, error: "Failed to create appointment" },
         { status: 500 },
       );
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Appointment verification error:", error);
+    const message = error instanceof Error ? error.message : "Verification failed";
     return NextResponse.json(
-      { success: false, error: error.message || "Verification failed" },
+      { success: false, error: message },
       { status: 500 },
     );
   }

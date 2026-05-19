@@ -189,7 +189,7 @@ export default function AdminOPDHub() {
 
                     {/* QUICK LINKS */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <Link href="/reception/register"
+                        <Link href="/reception/register" target="_blank" rel="noopener noreferrer"
                             className="group bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-blue-300 transition-all flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-blue-50 rounded-xl"><UserPlus className="h-5 w-5 text-blue-500" /></div>
@@ -200,7 +200,7 @@ export default function AdminOPDHub() {
                             </div>
                             <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-blue-500" />
                         </Link>
-                        <Link href="/reception/triage"
+                        <Link href="/reception/triage" target="_blank" rel="noopener noreferrer"
                             className="group bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-violet-300 transition-all flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-violet-50 rounded-xl"><Activity className="h-5 w-5 text-violet-500" /></div>

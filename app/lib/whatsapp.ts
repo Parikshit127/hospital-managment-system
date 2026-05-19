@@ -1,10 +1,10 @@
-const COMBIRDS_BASE_URL = process.env.COMBIRDS_BASE_URL || "https://backend.aisensy.com/campaign/t1/api";
-const AISENSY_API_KEY = process.env.AISENSY_API_KEY || "";
+import { getWhatsAppCredentials } from '@/app/lib/secure-config';
 
 export interface WhatsAppMessage {
   to: string;
   message: string;
   mediaUrl?: string;
+  organizationId?: string;
 }
 
 export interface WhatsAppTemplate {
@@ -13,6 +13,7 @@ export interface WhatsAppTemplate {
   userName?: string;
   params?: string[];
   mediaUrl?: string;
+  organizationId?: string;
 }
 
 export interface WhatsAppResponse {
@@ -29,23 +30,24 @@ export async function sendWhatsAppMessage(
   payload: WhatsAppMessage
 ): Promise<WhatsAppResponse> {
   try {
-    if (!AISENSY_API_KEY) {
+    const { apiKey, baseUrl } = await getWhatsAppCredentials(payload.organizationId);
+    if (!apiKey) {
       console.warn('[WhatsApp] AISENSY_API_KEY not configured — skipping');
       return { success: false, skipped: true };
     }
 
     // Session messages use the base domain, not the campaign path
-    const baseOrigin = new URL(COMBIRDS_BASE_URL).origin;
+    const baseOrigin = new URL(baseUrl).origin;
     const endpoint = `${baseOrigin}/v1/sendsessionmessage`;
 
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${AISENSY_API_KEY}`,
+        "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        apiKey: AISENSY_API_KEY,
+        apiKey,
         destination: payload.to,
         message: {
           type: "text",
@@ -66,7 +68,8 @@ export async function sendWhatsAppMessage(
           'Patient',
           payload.message,
           process.env.HOSPITAL_NAME || 'Hospital'
-        ]
+        ],
+        organizationId: payload.organizationId,
       });
     }
 
@@ -80,12 +83,13 @@ export async function sendWhatsAppMessage(
       to: payload.to,
       templateName: 'generic_hospital_update',
       userName: 'Patient',
-      params: [
-        process.env.HOSPITAL_NAME || 'Hospital',
-        'Patient',
-        payload.message,
-        process.env.HOSPITAL_NAME || 'Hospital'
-      ]
+        params: [
+          process.env.HOSPITAL_NAME || 'Hospital',
+          'Patient',
+          payload.message,
+          process.env.HOSPITAL_NAME || 'Hospital'
+      ],
+      organizationId: payload.organizationId,
     });
   }
 }
@@ -97,21 +101,22 @@ export async function sendWhatsAppTemplate(
   payload: WhatsAppTemplate
 ): Promise<WhatsAppResponse> {
   try {
-    if (!AISENSY_API_KEY) {
+    const { apiKey, baseUrl } = await getWhatsAppCredentials(payload.organizationId);
+    if (!apiKey) {
       console.warn('[WhatsApp] AISENSY_API_KEY not configured — skipping');
       return { success: false, skipped: true };
     }
 
-    const endpoint = `${COMBIRDS_BASE_URL}/v2`;
+    const endpoint = `${baseUrl}/v2`;
 
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${AISENSY_API_KEY}`,
+        "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        apiKey: AISENSY_API_KEY,
+        apiKey,
         campaignName: payload.templateName,
         destination: payload.to,
         userName: payload.userName || "Patient",

@@ -1,33 +1,43 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type CSSProperties, type ElementType } from 'react';
 import {
     Plug, CreditCard, MessageSquare, Brain, Mail, Database,
     ChevronDown, ChevronUp, Loader2, CheckCircle2, XCircle,
-    AlertTriangle, Eye, EyeOff, RefreshCw, Save, Power, Info,
-    ExternalLink, Shield,
+    AlertTriangle, Eye, EyeOff, RefreshCw, Save, Info,
+    Shield,
 } from 'lucide-react';
 import { AdminPage } from '@/app/admin/components/AdminPage';
 import {
-    getOrganizationSettings,
-    updateOrganizationSettings,
-} from '@/app/actions/admin-actions';
+    getAdminIntegrationSettings,
+    updateAdminIntegrationSettings,
+    testAdminIntegrationConnection,
+} from '@/app/actions/integration-actions';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 type IntegrationStatus = 'connected' | 'not_configured' | 'error';
+type ProductionReadiness = {
+    requiredOk: boolean;
+    missingRequired: string[];
+    missingRecommended: string[];
+    nodeEnv: string;
+};
+type IntegrationConfig = Record<string, string | boolean | null | undefined | ProductionReadiness> & {
+    production?: ProductionReadiness;
+};
 
 interface IntegrationDef {
     key: string;
     name: string;
     description: string;
-    icon: React.ElementType;
+    icon: ElementType;
     color: string;
     bgColor: string;
     borderColor: string;
     toggleField?: string;
-    statusCheck: (cfg: any) => IntegrationStatus;
+    statusCheck: (cfg: IntegrationConfig | null) => IntegrationStatus;
     fields: FieldDef[];
     hasTestButton?: boolean;
     envNote?: string;
@@ -56,8 +66,8 @@ const INTEGRATIONS: IntegrationDef[] = [
         toggleField: 'enable_razorpay',
         statusCheck: (cfg) => {
             if (!cfg?.enable_razorpay) return 'not_configured';
-            if (cfg?.razorpay_key_id && cfg?.razorpay_key_secret) return 'connected';
-            if (cfg?.razorpay_key_id && !cfg?.razorpay_key_secret) return 'error';
+            if (cfg?.razorpay_key_id && cfg?.razorpay_key_secret_configured) return 'connected';
+            if (cfg?.razorpay_key_id && !cfg?.razorpay_key_secret_configured) return 'error';
             return 'not_configured';
         },
         fields: [
@@ -77,8 +87,8 @@ const INTEGRATIONS: IntegrationDef[] = [
         toggleField: 'enable_whatsapp',
         statusCheck: (cfg) => {
             if (!cfg?.enable_whatsapp) return 'not_configured';
-            if (cfg?.whatsapp_phone_id && cfg?.whatsapp_api_token) return 'connected';
-            if (cfg?.whatsapp_phone_id && !cfg?.whatsapp_api_token) return 'error';
+            if (cfg?.whatsapp_phone_id && cfg?.whatsapp_api_token_configured) return 'connected';
+            if (cfg?.whatsapp_phone_id && !cfg?.whatsapp_api_token_configured) return 'error';
             return 'not_configured';
         },
         fields: [
@@ -97,7 +107,7 @@ const INTEGRATIONS: IntegrationDef[] = [
         toggleField: 'enable_ai_triage',
         statusCheck: (cfg) => {
             if (!cfg?.enable_ai_triage) return 'not_configured';
-            if (cfg?.openai_key) return 'connected';
+            if (cfg?.openai_key_configured) return 'connected';
             return 'not_configured';
         },
         fields: [
@@ -113,8 +123,8 @@ const INTEGRATIONS: IntegrationDef[] = [
         bgColor: 'bg-amber-50',
         borderColor: 'border-amber-500',
         statusCheck: (cfg) => {
-            if (cfg?.smtp_host && cfg?.smtp_user && cfg?.smtp_pass) return 'connected';
-            if (cfg?.smtp_host && (!cfg?.smtp_user || !cfg?.smtp_pass)) return 'error';
+            if (cfg?.smtp_host && cfg?.smtp_user && cfg?.smtp_pass_configured) return 'connected';
+            if (cfg?.smtp_host && cfg?.smtp_user && !cfg?.smtp_pass_configured) return 'error';
             return 'not_configured';
         },
         fields: [
@@ -134,7 +144,7 @@ const INTEGRATIONS: IntegrationDef[] = [
         borderColor: 'border-emerald-500',
         statusCheck: () => 'connected',
         fields: [],
-        envNote: 'Supabase credentials are configured via environment variables (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_KEY). Contact your system administrator to modify.',
+        envNote: 'Supabase credentials are configured via environment variables (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY). Contact your system administrator to modify.',
     },
 ];
 
@@ -180,7 +190,7 @@ function getCardBorderColor(status: IntegrationStatus) {
 /*  Main Component                                                     */
 /* ------------------------------------------------------------------ */
 export default function IntegrationDashboard() {
-    const [config, setConfig] = useState<any>(null);
+    const [config, setConfig] = useState<IntegrationConfig | null>(null);
     const [loading, setLoading] = useState(true);
     const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
     const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -195,14 +205,16 @@ export default function IntegrationDashboard() {
     const loadConfig = async () => {
         setLoading(true);
         try {
-            const res = await getOrganizationSettings();
+            const res = await getAdminIntegrationSettings();
             if (res.success && res.data) {
-                setConfig(res.data);
+                const data = res.data as IntegrationConfig;
+                setConfig(data);
                 // Initialize local field state from config
                 const fields: Record<string, string> = {};
                 INTEGRATIONS.forEach((integ) => {
                     integ.fields.forEach((f) => {
-                        fields[f.key] = res.data[f.key] || '';
+                        const value = data[f.key];
+                        fields[f.key] = data[`${f.key}_configured`] ? '' : (typeof value === 'string' ? value : '');
                     });
                 });
                 setLocalFields(fields);
@@ -237,13 +249,13 @@ export default function IntegrationDashboard() {
         setSavingKey(integration.key);
         setSaveSuccess(null);
         try {
-            const dataToSave: Record<string, any> = {};
+            const dataToSave: Record<string, string | null> = {};
             integration.fields.forEach((f) => {
                 dataToSave[f.key] = localFields[f.key] || null;
             });
-            const res = await updateOrganizationSettings(dataToSave);
+            const res = await updateAdminIntegrationSettings(dataToSave);
             if (res.success) {
-                setConfig((prev: any) => ({ ...prev, ...dataToSave }));
+                await loadConfig();
                 setSaveSuccess(integration.key);
                 setTimeout(() => setSaveSuccess(null), 3000);
             } else {
@@ -262,9 +274,9 @@ export default function IntegrationDashboard() {
         const nextValue = !config[integration.toggleField];
         setToggleSavingKey(integration.key);
         try {
-            const res = await updateOrganizationSettings({ [integration.toggleField]: nextValue });
+            const res = await updateAdminIntegrationSettings({ [integration.toggleField]: nextValue });
             if (res.success) {
-                setConfig((prev: any) => ({ ...prev, [integration.toggleField!]: nextValue }));
+                setConfig((prev) => ({ ...(prev || {}), [integration.toggleField!]: nextValue }));
             } else {
                 alert(res.error || 'Failed to update toggle.');
             }
@@ -275,15 +287,13 @@ export default function IntegrationDashboard() {
         setToggleSavingKey(null);
     };
 
-    /* Test connection (visual-only simulation) */
+    /* Test connection */
     const handleTestConnection = async (integration: IntegrationDef) => {
         setTestingKey(integration.key);
         setTestResults((prev) => ({ ...prev, [integration.key]: null }));
-        // Simulate network delay
-        await new Promise((r) => setTimeout(r, 1500));
-        // Simple check: if relevant fields are filled, show success
-        const allFieldsFilled = integration.fields.every((f) => localFields[f.key]?.trim());
-        setTestResults((prev) => ({ ...prev, [integration.key]: allFieldsFilled ? 'success' : 'failed' }));
+        const res = await testAdminIntegrationConnection(integration.key);
+        setTestResults((prev) => ({ ...prev, [integration.key]: res.success ? 'success' : 'failed' }));
+        if (!res.success && res.error) alert(res.error);
         setTestingKey(null);
     };
 
@@ -383,6 +393,33 @@ export default function IntegrationDashboard() {
                                 <p className="text-xs font-bold text-red-500 mt-2">Need attention</p>
                             </div>
                         </div>
+
+                        {config?.production && (
+                            <div className={`flex items-start gap-3 p-4 rounded-2xl border shadow-sm ${
+                                config.production.requiredOk
+                                    ? 'bg-emerald-50 border-emerald-200'
+                                    : 'bg-red-50 border-red-200'
+                            }`}>
+                                {config.production.requiredOk ? (
+                                    <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                                ) : (
+                                    <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                                )}
+                                <div>
+                                    <p className={`text-xs font-bold ${config.production.requiredOk ? 'text-emerald-800' : 'text-red-800'}`}>
+                                        Production readiness: {config.production.requiredOk ? 'core environment is configured' : 'missing required environment'}
+                                    </p>
+                                    <p className={`text-[11px] font-medium leading-relaxed mt-0.5 ${config.production.requiredOk ? 'text-emerald-700' : 'text-red-700'}`}>
+                                        {config.production.requiredOk
+                                            ? `Database and app secrets are present. Runtime mode: ${config.production.nodeEnv}.`
+                                            : `Missing required keys: ${config.production.missingRequired.join(', ')}.`}
+                                        {config.production.missingRecommended?.length > 0
+                                            ? ` Recommended: ${config.production.missingRecommended.join(', ')}.`
+                                            : ''}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
 
                         {/* ============== INTEGRATION CARDS GRID ============== */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -496,7 +533,7 @@ export default function IntegrationDashboard() {
                                                                             }}
                                                                             placeholder={field.placeholder}
                                                                             className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 font-mono focus:outline-none focus:ring-2 transition-all pr-10"
-                                                                            style={{ focusRingColor: 'var(--admin-primary)' } as any}
+                                                                            style={{ '--tw-ring-color': 'var(--admin-primary)' } as CSSProperties}
                                                                         />
                                                                         {(field.type === 'password' || field.masked) && (
                                                                             <button
@@ -583,7 +620,7 @@ export default function IntegrationDashboard() {
                             <div>
                                 <p className="text-xs font-bold text-gray-700">Security Notice</p>
                                 <p className="text-[11px] text-gray-500 font-medium leading-relaxed mt-0.5">
-                                    All API keys and credentials are stored encrypted in your organization's isolated database.
+                                    All API keys and credentials are stored encrypted in your organization&apos;s isolated database.
                                     Credentials are never exposed in client-side code or logs. Only administrators with the
                                     appropriate role can view or modify integration settings.
                                 </p>

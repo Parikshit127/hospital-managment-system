@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
+import { getRazorpaySigningSecret } from '@/app/lib/razorpay';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist'];
 
@@ -42,8 +43,9 @@ export async function POST(req: NextRequest) {
         }
 
         // 2. Verify HMAC SHA256 signature
+        const signingSecret = await getRazorpaySigningSecret(auth.context.organizationId);
         const expectedSignature = crypto
-            .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
+            .createHmac('sha256', signingSecret)
             .update(`${razorpay_order_id}|${razorpay_payment_id}`)
             .digest('hex');
 
@@ -190,10 +192,11 @@ export async function POST(req: NextRequest) {
         });
 
         return NextResponse.json({ success: true, data: payment });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Razorpay verify-payment error:', error);
+        const message = error instanceof Error ? error.message : 'Payment verification failed';
         return NextResponse.json(
-            { success: false, error: error.message || 'Payment verification failed' },
+            { success: false, error: message },
             { status: 500 }
         );
     }

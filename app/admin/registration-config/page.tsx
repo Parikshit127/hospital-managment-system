@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Settings, Loader2, Eye, EyeOff, CheckSquare, Square } from 'lucide-react';
-import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import { useToast } from '@/app/components/ui/Toast';
 import { getRegistrationFieldConfig, updateFieldConfig } from '@/app/actions/registration-config-actions';
 
@@ -47,7 +47,7 @@ export default function RegistrationConfigPage() {
   };
 
   return (
-    <AppShell
+    <AdminPage
       pageTitle="Registration Field Configuration"
       pageIcon={<Settings className="h-5 w-5" />}
       onRefresh={loadConfig}
@@ -141,6 +141,6 @@ export default function RegistrationConfigPage() {
           </div>
         </div>
       </div>
-    </AppShell>
+    </AdminPage>
   );
 }
