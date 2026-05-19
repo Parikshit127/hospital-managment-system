@@ -66,6 +66,7 @@ import { getOrCreateEncounterForAppointment } from "@/app/actions/emr-actions";
 import { TemplatePicker } from "@/app/components/clinical/TemplatePicker";
 import { PrescriptionPrint, type PrescriptionData } from "@/app/components/clinical/PrescriptionPrint";
 import { useToast } from "@/app/components/ui/Toast";
+import { PrintLetterhead } from "@/app/components/print/PrintLetterhead";
 
 export default function DoctorDashboard() {
   // ─── SESSION STATE ───
@@ -1022,21 +1023,16 @@ export default function DoctorDashboard() {
       {showPrescriptionModal && activePatient && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden print-area">
-            <div className="p-8 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-              <div>
-                <h2 className="text-2xl font-bold text-slate-900">
-                  Rx Prescription
-                </h2>
-                <p className="text-sm text-slate-500">Official Prescription</p>
-              </div>
-              <div className="text-right">
-                <h3 className="font-bold text-lg text-slate-900">
-                  Avani Hospital
-                </h3>
-                <p className="text-xs text-slate-500">
-                  {doctorName} &bull; {new Date().toLocaleDateString()}
-                </p>
-              </div>
+            <div className="p-8 border-b border-slate-200 bg-slate-50">
+              <PrintLetterhead
+                rightSlot={
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase">Doctor</p>
+                    <p className="font-bold text-slate-900">{doctorName}</p>
+                    <p className="text-xs text-slate-500">{new Date().toLocaleDateString()}</p>
+                  </div>
+                }
+              />
             </div>
             <div className="p-8 space-y-6">
               <div className="flex justify-between items-center bg-slate-50 p-4 rounded-lg border border-slate-200">

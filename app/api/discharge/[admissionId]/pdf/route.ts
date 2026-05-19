@@ -95,6 +95,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             }),
         ])
 
+        // Fetch org details for header
+        const org = await prisma.organization.findUnique({
+            where: { id: organizationId! },
+            select: { name: true, address: true, phone: true },
+        });
+        const hospitalName = org?.name || 'Axten Hospitals';
+        const hospitalAddress = org?.address || 'A Unit of TAH Global Healthcare Pvt. Ltd.';
+
         const patient = admission.patient || {}
         const admissionDate = admission.admission_date ? new Date(admission.admission_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'
         const dischargeDate = admission.discharge_date ? new Date(admission.discharge_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'
@@ -127,13 +135,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 
     <div style="max-width:800px;margin:0 auto;padding:40px;">
         <!-- Header -->
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;border-bottom:3px solid #7c3aed;padding-bottom:16px;">
-            <div>
-                <h1 style="font-size:22px;font-weight:900;color:#7c3aed;margin-bottom:2px;">Avani Hospital</h1>
-                <p style="font-size:10px;color:#6b7280;">Healthcare Excellence &bull; NABH Accredited</p>
-            </div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;border-bottom:3px solid #1e3a6e;padding-bottom:16px;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="267" height="80" style="display:block;flex-shrink:0;">
+              <text x="10" y="72" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="68" fill="#1e3a6e" letter-spacing="-2">Axten</text>
+              <rect x="10" y="80" width="60" height="8" fill="#f97316" rx="2"/>
+              <rect x="130" y="80" width="120" height="8" fill="#f97316" rx="2"/>
+              <text x="75" y="89" font-family="Arial, sans-serif" font-weight="700" font-size="16" fill="#1e3a6e" letter-spacing="6">HOSPITALS</text>
+              <text x="10" y="110" font-family="Arial, sans-serif" font-weight="400" font-size="12" fill="#1e3a6e">A Unit of TAH Global Healthcare Pvt. Ltd.</text>
+              <circle cx="360" cy="55" r="48" fill="none" stroke="#1e3a6e" stroke-width="3"/>
+              <circle cx="360" cy="55" r="42" fill="none" stroke="#1e3a6e" stroke-width="1"/>
+              <rect x="350" y="35" width="20" height="40" fill="none" stroke="#f97316" stroke-width="3" rx="3"/>
+              <rect x="340" y="45" width="40" height="20" fill="none" stroke="#f97316" stroke-width="3" rx="3"/>
+            </svg>
             <div style="text-align:right;">
-                <h2 style="font-size:18px;font-weight:800;color:#1f2937;">DISCHARGE SUMMARY</h2>
+                <h2 style="font-size:18px;font-weight:800;color:#1e3a6e;">DISCHARGE SUMMARY</h2>
                 <p style="font-size:11px;color:#6b7280;">Admission: ${admissionId}</p>
             </div>
         </div>
@@ -251,7 +266,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 
         <!-- Footer -->
         <div style="border-top:1px solid #e5e7eb;padding-top:12px;margin-top:30px;text-align:center;">
-            <p style="font-size:9px;color:#9ca3af;">This is a computer-generated document. &bull; Avani Hospital &bull; For queries contact reception</p>
+            <p style="font-size:9px;color:#9ca3af;">This is a computer-generated document. &bull; ${hospitalName} &bull; For queries contact reception</p>
         </div>
     </div>
 </body>

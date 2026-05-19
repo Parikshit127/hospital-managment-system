@@ -17,15 +17,24 @@ function PatientLoginForm() {
         <div className="min-h-screen bg-[#fafaf8] font-sans flex items-center justify-center p-4">
             <div className="max-w-md w-full bg-white rounded-2xl shadow-[var(--shadow-lg)] border border-gray-200/60 overflow-hidden">
                 {/* Header */}
-                <div className="bg-gradient-to-br from-teal-500 to-teal-600 p-8 text-center relative overflow-hidden">
-                    <div className="absolute top-0 right-0 translate-x-8 -translate-y-8 w-32 h-32 bg-teal-400 rounded-full opacity-30 blur-2xl"></div>
-                    <div className="absolute bottom-0 left-0 -translate-x-6 translate-y-6 w-24 h-24 bg-teal-300 rounded-full opacity-20 blur-2xl"></div>
+                <div className="bg-gradient-to-br from-[#1e3a6e] to-[#162d57] p-8 text-center relative overflow-hidden">
+                    <div className="absolute top-0 right-0 translate-x-8 -translate-y-8 w-32 h-32 bg-[#1e3a6e] rounded-full opacity-30 blur-2xl"></div>
+                    <div className="absolute bottom-0 left-0 -translate-x-6 translate-y-6 w-24 h-24 bg-[#f97316] rounded-full opacity-20 blur-2xl"></div>
                     <div className="relative z-10">
-                        <div className="w-14 h-14 bg-white/15 rounded-xl mx-auto flex items-center justify-center mb-4 backdrop-blur-sm border border-white/20 text-white shadow-md shadow-teal-800/10">
-                            <Activity className="h-7 w-7" />
-                        </div>
+                        {/* Inline SVG logo — white version for dark header */}
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" style={{ height: '48px', width: 'auto', margin: '0 auto 10px', display: 'block' }} aria-label="Axten Hospitals">
+                            <text x="10" y="72" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="68" fill="white" letterSpacing="-2">Axten</text>
+                            <rect x="10" y="80" width="60" height="8" fill="#f97316" rx="2"/>
+                            <rect x="130" y="80" width="120" height="8" fill="#f97316" rx="2"/>
+                            <text x="75" y="89" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="16" fill="white" letterSpacing="6">HOSPITALS</text>
+                            <text x="10" y="110" fontFamily="Arial, sans-serif" fontWeight="400" fontSize="12" fill="rgba(255,255,255,0.7)">A Unit of TAH Global Healthcare Pvt. Ltd.</text>
+                            <circle cx="360" cy="55" r="48" fill="none" stroke="white" strokeWidth="3"/>
+                            <circle cx="360" cy="55" r="42" fill="none" stroke="white" strokeWidth="1"/>
+                            <rect x="350" y="35" width="20" height="40" fill="none" stroke="#f97316" strokeWidth="3" rx="3"/>
+                            <rect x="340" y="45" width="40" height="20" fill="none" stroke="#f97316" strokeWidth="3" rx="3"/>
+                        </svg>
                         <h1 className="text-xl font-bold text-white mb-1 tracking-tight">Patient Portal</h1>
-                        <p className="text-teal-100 text-sm">Access your health records securely</p>
+                        <p className="text-blue-200 text-sm">Access your health records securely</p>
                     </div>
                 </div>
 

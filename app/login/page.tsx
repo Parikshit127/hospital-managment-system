@@ -334,12 +334,18 @@ function LoginForm() {
                 {/* ── LEFT HERO ── */}
                 <div className="hero">
                     <div className="brand">
-                        <div className="brand-icon">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                            </svg>
-                        </div>
-                        <span className="brand-name">Avani <span>OS</span></span>
+                        {/* Inline SVG — exact replica of /public/axten-logo.svg */}
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" style={{ height: '48px', width: 'auto' }} aria-label="Axten Hospitals">
+                            <text x="10" y="72" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="68" fill="#1e3a6e" letterSpacing="-2">Axten</text>
+                            <rect x="10" y="80" width="60" height="8" fill="#f97316" rx="2"/>
+                            <rect x="130" y="80" width="120" height="8" fill="#f97316" rx="2"/>
+                            <text x="75" y="89" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="16" fill="#1e3a6e" letterSpacing="6">HOSPITALS</text>
+                            <text x="10" y="110" fontFamily="Arial, sans-serif" fontWeight="400" fontSize="12" fill="#1e3a6e">A Unit of TAH Global Healthcare Pvt. Ltd.</text>
+                            <circle cx="360" cy="55" r="48" fill="none" stroke="#1e3a6e" strokeWidth="3"/>
+                            <circle cx="360" cy="55" r="42" fill="none" stroke="#1e3a6e" strokeWidth="1"/>
+                            <rect x="350" y="35" width="20" height="40" fill="none" stroke="#f97316" strokeWidth="3" rx="3"/>
+                            <rect x="340" y="45" width="40" height="20" fill="none" stroke="#f97316" strokeWidth="3" rx="3"/>
+                        </svg>
                     </div>
 
                     <div className="hero-body">

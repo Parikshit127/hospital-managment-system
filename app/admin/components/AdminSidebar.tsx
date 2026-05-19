@@ -61,19 +61,26 @@ export default function AdminSidebar() {
                 className="flex items-center gap-3 px-4 h-[60px] shrink-0"
                 style={{ borderBottom: '1px solid var(--admin-sidebar-border)' }}
             >
-                <div
-                    className="p-1.5 rounded-lg shrink-0"
-                    style={{ background: `linear-gradient(135deg, var(--admin-primary), var(--admin-primary-dark))` }}
-                >
-                    {branding.logo_url ? (
-                        <img src={branding.logo_url} alt="Logo" className="h-5 w-5 rounded object-cover" />
-                    ) : (
-                        <Building2 className="h-5 w-5 text-white" />
-                    )}
-                </div>
+                {/* Axten logo */}
+                {collapsed ? (
+                    <div className="shrink-0 flex items-center justify-center w-9 h-9">
+                        <svg width="36" height="36" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="26" cy="26" r="24" stroke="#1e3a6e" strokeWidth="2.5"/>
+                            <circle cx="26" cy="26" r="19" stroke="#1e3a6e" strokeWidth="1"/>
+                            <rect x="21" y="14" width="10" height="24" rx="2" stroke="#f97316" strokeWidth="2.5" fill="none"/>
+                            <rect x="14" y="21" width="24" height="10" rx="2" stroke="#f97316" strokeWidth="2.5" fill="none"/>
+                        </svg>
+                    </div>
+                ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" style={{ height: '36px', width: 'auto', flexShrink: 0 }} aria-label="Axten Hospitals">
+                        <text x="10" y="72" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="68" fill="#1e3a6e" letterSpacing="-2">Axten</text>
+                        <rect x="10" y="80" width="60" height="8" fill="#f97316" rx="2"/>
+                        <rect x="130" y="80" width="120" height="8" fill="#f97316" rx="2"/>
+                        <text x="75" y="89" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="16" fill="#1e3a6e" letterSpacing="6">HOSPITALS</text>
+                    </svg>
+                )}
                 {!collapsed && (
                     <div className="overflow-hidden">
-                        <p className="text-[13px] font-bold text-gray-900 truncate tracking-tight">{branding.portal_title}</p>
                         <p className="text-[10px] text-gray-500 tracking-wider font-medium">ADMIN PANEL</p>
                     </div>
                 )}

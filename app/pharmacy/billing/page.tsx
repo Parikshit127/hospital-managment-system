@@ -587,17 +587,27 @@ export default function PharmacyPage() {
             {showInvoiceModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md">
                     <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden print-area relative">
-                        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-teal-400 via-emerald-500 to-teal-400" />
+                        <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, #1e3a6e, #f97316, #1e3a6e)' }} />
 
                         {invoiceResult ? (
                             /* Invoice Generated - Show Receipt */
                             <>
-                                <div className="p-6 border-b border-dashed border-gray-200 text-center">
-                                    <div className="h-10 w-10 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-3">
-                                        <CheckCircle className="h-5 w-5 text-emerald-600" />
+                                <div className="p-6 border-b border-dashed border-gray-200">
+                                    {/* Letterhead */}
+                                    <div className="flex items-start justify-between pb-4 mb-4" style={{ borderBottom: '2px solid #1e3a6e' }}>
+                                        <img src="/axten-logo.svg" alt="Axten Hospitals" className="h-12 w-auto object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                        <div className="text-right">
+                                            <p className="text-xs font-black uppercase tracking-widest" style={{ color: '#1e3a6e' }}>Pharmacy Invoice</p>
+                                            <p className="text-xs font-mono text-gray-500 mt-0.5">{invoiceResult.invoice_number}</p>
+                                            <p className="text-xs text-gray-400">{new Date().toLocaleDateString('en-IN')}</p>
+                                        </div>
                                     </div>
-                                    <h2 className="text-lg font-black text-gray-900">Invoice Generated</h2>
-                                    <p className="text-xs text-gray-400 font-mono mt-1">{invoiceResult.invoice_number}</p>
+                                    <div className="flex items-center justify-center gap-2 mt-2">
+                                        <div className="h-8 w-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+                                            <CheckCircle className="h-4 w-4 text-emerald-600" />
+                                        </div>
+                                        <p className="text-sm font-black text-gray-900">Invoice Generated</p>
+                                    </div>
                                 </div>
                                 <div className="p-6 space-y-4">
                                     <div className="flex justify-between text-sm">

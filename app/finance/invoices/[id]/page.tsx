@@ -9,6 +9,7 @@ import { getIpdServices } from '@/app/actions/ipd-master-actions';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useToast } from '@/app/components/ui/Toast';
+import { PrintLetterhead } from '@/app/components/print/PrintLetterhead';
 
 export default function InvoiceDetailPage() {
     const params = useParams();
@@ -239,25 +240,23 @@ export default function InvoiceDetailPage() {
                     )}
 
                     {/* Hospital Branding Header */}
-                    <div className="relative z-10 flex flex-col md:flex-row justify-between items-start border-b-2 border-slate-900 pb-8 mb-8">
-                        <div>
-                            <h1 className="text-3xl font-black text-slate-900 tracking-tight">CITY HOSPITAL</h1>
-                            <p className="text-sm font-bold text-slate-500 mt-1">Multi-Specialty Healthcare Center</p>
-                            <p className="text-xs text-slate-500 mt-0.5">123 Health Avenue, Medical District, City - 400001</p>
-                            <p className="text-xs text-slate-500 mt-0.5">Phone: +91 99999 88888 | info@cityhospital.com</p>
-                            <p className="text-xs font-bold text-slate-600 mt-1 uppercase">GSTIN: 27AABCU9603R1ZE</p>
-                        </div>
-                        <div className="text-right mt-6 md:mt-0">
-                            <h2 className="text-3xl font-black text-slate-200 tracking-wider uppercase mb-2">TAX INVOICE</h2>
-                            <div className="text-sm font-mono text-slate-700"><span className="font-bold">Bill No:</span> {invoice.invoice_number}</div>
-                            <div className="text-sm font-mono text-slate-700"><span className="font-bold">Date:</span> {new Date(invoice.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-                            <div className="text-sm font-mono text-slate-700"><span className="font-bold">Type:</span> {invoice.invoice_type} BILLING</div>
-                            <div className="mt-2 text-right flex justify-end">
-                                <span className={`inline-flex px-3 py-1 text-[11px] uppercase tracking-wider font-bold rounded border print:text-black print:border-black ${statusStyle}`}>
-                                    {invoice.status}
-                                </span>
-                            </div>
-                        </div>
+                    <div className="relative z-10">
+                        <PrintLetterhead
+                            className="mb-8"
+                            rightSlot={
+                                <div className="mt-6 md:mt-0">
+                                    <h2 className="text-3xl font-black tracking-wider uppercase mb-2" style={{ color: '#1e3a6e', opacity: 0.15 }}>TAX INVOICE</h2>
+                                    <div className="text-sm font-mono text-slate-700"><span className="font-bold">Bill No:</span> {invoice.invoice_number}</div>
+                                    <div className="text-sm font-mono text-slate-700"><span className="font-bold">Date:</span> {new Date(invoice.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                                    <div className="text-sm font-mono text-slate-700"><span className="font-bold">Type:</span> {invoice.invoice_type} BILLING</div>
+                                    <div className="mt-2 text-right flex justify-end">
+                                        <span className={`inline-flex px-3 py-1 text-[11px] uppercase tracking-wider font-bold rounded border print:text-black print:border-black ${statusStyle}`}>
+                                            {invoice.status}
+                                        </span>
+                                    </div>
+                                </div>
+                            }
+                        />
                     </div>
 
                     {/* Patient Context Block */}
@@ -437,7 +436,7 @@ export default function InvoiceDetailPage() {
                                     <span className="text-slate-300 italic font-medium">Digital Signature</span>
                                 </div>
                                 <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Authorized Signatory</p>
-                                <p className="text-[9px] text-slate-400 font-bold">For City Hospital</p>
+                                <p className="text-[9px] text-slate-400 font-bold">For Axten Hospitals</p>
                             </div>
                         </div>
                     </div>

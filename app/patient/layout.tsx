@@ -55,17 +55,15 @@ export default async function PatientLayout({
                         <div className="flex justify-between items-center h-16">
                             <div className="flex items-center gap-6">
                                 <Link href="/patient/dashboard" className="flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
-                                        <Activity className="h-5 w-5" />
-                                    </div>
-                                    <div>
-                                        <h1 className="font-bold text-gray-900 text-lg leading-none tracking-tight">
-                                            {session.organization_name || 'Hospital OS'}
-                                        </h1>
-                                        <span className="text-[10px] font-bold tracking-widest text-emerald-500 uppercase">
-                                            Patient Portal
-                                        </span>
-                                    </div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" style={{ height: '36px', width: 'auto' }} aria-label="Axten Hospitals">
+                                        <text x="10" y="72" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="68" fill="#1e3a6e" letterSpacing="-2">Axten</text>
+                                        <rect x="10" y="80" width="60" height="8" fill="#f97316" rx="2"/>
+                                        <rect x="130" y="80" width="120" height="8" fill="#f97316" rx="2"/>
+                                        <text x="75" y="89" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="16" fill="#1e3a6e" letterSpacing="6">HOSPITALS</text>
+                                    </svg>
+                                    <span className="text-[10px] font-bold tracking-widest uppercase hidden sm:block" style={{ color: '#f97316' }}>
+                                        Patient Portal
+                                    </span>
                                 </Link>
 
                                 {/* Desktop Nav */}

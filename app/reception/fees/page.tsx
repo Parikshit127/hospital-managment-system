@@ -16,6 +16,7 @@ import {
     X
 } from "lucide-react";
 import { searchPatientsForReceipt, getAvailableServicesList, saveFeeReceipt } from "@/app/actions/fee-receipt-actions";
+import { PrintLetterhead } from "@/app/components/print/PrintLetterhead";
 
 const sanitizePhone = (value: string) => value.replace(/\D/g, '').slice(0, 10);
 const sanitizePatientName = (value: string) => value.replace(/[^a-zA-Z\s.'-]/g, '');
@@ -403,21 +404,15 @@ export default function GenerateReceiptPage() {
                     <div className="hidden print:block fixed inset-0 bg-white p-10 z-[100] text-black">
                         <div className="max-w-3xl mx-auto space-y-10">
                             {/* Hospital Header */}
-                            <div className="flex justify-between items-start border-b-2 border-black pb-8">
-                                <div className="space-y-2">
-                                    <h1 className="text-3xl font-black uppercase tracking-tighter">HOSPITAL RECEIPT</h1>
-                                    <div className="space-y-0.5 text-sm font-medium">
-                                        <p>Medical Center Address Line 1</p>
-                                        <p>City, State, PIN - 000000</p>
-                                        <p>Contact: +91 00000 00000</p>
+                            <PrintLetterhead
+                                rightSlot={
+                                    <div>
+                                        <p className="text-xl font-bold" style={{ color: '#1e3a6e' }}>{lastReceipt.invoice}</p>
+                                        <p className="text-sm font-bold text-gray-600">Receipt No: {lastReceipt.id}</p>
+                                        <p className="text-sm font-medium">{new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                                     </div>
-                                </div>
-                                <div className="text-right space-y-1">
-                                    <p className="text-xl font-bold">{lastReceipt.invoice}</p>
-                                    <p className="text-sm font-bold text-gray-600">Receipt No: {lastReceipt.id}</p>
-                                    <p className="text-sm font-medium">{new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                </div>
-                            </div>
+                                }
+                            />
 
                             {/* Patient Info */}
                             <div className="grid grid-cols-2 gap-8 py-4">
