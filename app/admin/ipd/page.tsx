@@ -230,13 +230,13 @@ export default function AdminIPDHub() {
                         <Link href="/admin/ipd-setup"
                             className="group bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-teal-300 transition-all flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-teal-50 rounded-xl"><ClipboardList className="h-5 w-5 text-teal-500" /></div>
+                                <div className="p-2 bg-orange-50 rounded-xl"><ClipboardList className="h-5 w-5 text-orange-500" /></div>
                                 <div>
                                     <h4 className="text-sm font-bold text-gray-900">Ward Rounds</h4>
                                     <p className="text-xs text-gray-400">Doctor rounds & notes</p>
                                 </div>
                             </div>
-                            <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-teal-500" />
+                            <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-orange-500" />
                         </Link>
                     </div>
                 </div>

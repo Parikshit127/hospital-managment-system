@@ -70,7 +70,7 @@ export default function NewEmployeePage() {
                             <input type="text" required value={form.name}
                                 onChange={e => setForm({ ...form, name: sanitizeName(e.target.value) })}
                                 maxLength={60}
-                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                                 placeholder="Full name" />
                         </div>
                         <div>
@@ -78,7 +78,7 @@ export default function NewEmployeePage() {
                             <input type="text" required value={form.designation}
                                 onChange={e => setForm({ ...form, designation: sanitizeName(e.target.value) })}
                                 maxLength={50}
-                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                                 placeholder="e.g. Nurse, Technician" />
                         </div>
                     </div>
@@ -88,14 +88,14 @@ export default function NewEmployeePage() {
                             <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Department ID</label>
                             <input type="text" value={form.departmentId}
                                 onChange={e => setForm({ ...form, departmentId: e.target.value })}
-                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                                 placeholder="Optional" />
                         </div>
                         <div>
                             <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Date of Joining *</label>
                             <input type="date" required value={form.dateOfJoining}
                                 onChange={e => setForm({ ...form, dateOfJoining: e.target.value })}
-                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                         </div>
                     </div>
 
@@ -107,7 +107,7 @@ export default function NewEmployeePage() {
                                 min="0"
                                 step="0.01"
                                 inputMode="decimal"
-                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                                 placeholder="0" />
                         </div>
                         <div>
@@ -117,14 +117,14 @@ export default function NewEmployeePage() {
                                 inputMode="numeric"
                                 pattern="[0-9]{10}"
                                 maxLength={10}
-                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                                 placeholder="Optional" />
                         </div>
                         <div>
                             <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Email</label>
                             <input type="email" value={form.email}
                                 onChange={e => setForm({ ...form, email: e.target.value })}
-                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                                 placeholder="Optional" />
                         </div>
                     </div>

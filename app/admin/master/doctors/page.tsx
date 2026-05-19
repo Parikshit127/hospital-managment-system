@@ -69,8 +69,8 @@ function FieldLabel({ label, badge }: { label: string; badge?: 'mandatory' | 'pr
   );
 }
 
-const inputCls = 'w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition';
-const selectCls = 'w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition';
+const inputCls = 'w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-teal-400 transition';
+const selectCls = 'w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-teal-400 transition';
 
 export default function DoctorMasterPage() {
   const [rows, setRows] = useState<any[]>([]);
@@ -175,13 +175,13 @@ export default function DoctorMasterPage() {
             type="text" value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             placeholder="Search by name, username, specialty…"
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
           />
         </div>
         <div className="flex items-center gap-2">
           <MasterImportButton type="doctor_master" onImportComplete={load} />
           <button onClick={openCreate}
-            className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-xl transition">
+            className="flex items-center gap-2 px-4 py-2.5 bg-orange-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-xl transition">
             <Plus className="h-4 w-4" /> Add Doctor
           </button>
         </div>
@@ -200,7 +200,7 @@ export default function DoctorMasterPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
-                <tr><td colSpan={10} className="text-center py-16"><Loader2 className="h-6 w-6 animate-spin text-teal-500 mx-auto" /></td></tr>
+                <tr><td colSpan={10} className="text-center py-16"><Loader2 className="h-6 w-6 animate-spin text-orange-500 mx-auto" /></td></tr>
               ) : rows.length === 0 ? (
                 <tr><td colSpan={10} className="text-center py-12 text-gray-400 text-sm">No doctors found</td></tr>
               ) : rows.map(r => (
@@ -221,7 +221,7 @@ export default function DoctorMasterPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
                       <button onClick={() => openEdit(r)} className="p-1.5 hover:bg-gray-100 rounded-lg transition" title="Edit">
-                        <Pencil className="h-4 w-4 text-teal-600" />
+                        <Pencil className="h-4 w-4 text-orange-600" />
                       </button>
                       {r.is_active && (
                         <button onClick={() => deactivate(r.id)} className="p-1.5 hover:bg-gray-100 rounded-lg transition" title="Deactivate">
@@ -410,7 +410,7 @@ export default function DoctorMasterPage() {
                 <div className="flex items-center gap-3 col-span-2 mt-1 p-3 bg-gray-50 rounded-xl border border-gray-200">
                   <input type="checkbox" id="is_active" checked={!!form.is_active}
                     onChange={e => set('is_active', e.target.checked)}
-                    className="w-4 h-4 text-teal-600 rounded border-gray-300 focus:ring-teal-500" />
+                    className="w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500" />
                   <label htmlFor="is_active" className="text-sm font-semibold text-gray-700">
                     Active — doctor appears in scheduling & billing
                   </label>
@@ -425,7 +425,7 @@ export default function DoctorMasterPage() {
                   Cancel
                 </button>
                 <button type="submit" disabled={submitting}
-                  className="flex-1 py-2.5 px-4 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50 transition flex items-center justify-center gap-2">
+                  className="flex-1 py-2.5 px-4 bg-orange-600 hover:bg-teal-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50 transition flex items-center justify-center gap-2">
                   {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                   {submitting ? 'Saving…' : mode === 'create' ? 'Create Doctor' : 'Save Changes'}
                 </button>

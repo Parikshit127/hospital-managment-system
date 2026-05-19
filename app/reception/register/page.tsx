@@ -30,7 +30,7 @@ type DuplicatePatient = {
 };
 
 const PATIENT_TYPE_BADGE: Record<string, string> = {
-    cash: 'bg-teal-100 text-teal-700',
+    cash: 'bg-orange-100 text-orange-700',
     corporate: 'bg-blue-100 text-blue-700',
     tpa_insurance: 'bg-amber-100 text-amber-700',
 };
@@ -265,7 +265,7 @@ export default function ReceptionPage() {
         setIsSubmitting(false);
     }
 
-    const inputClass = "w-full bg-white border border-gray-300 rounded-xl px-4 py-3.5 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/10 outline-none transition-all";
+    const inputClass = "w-full bg-white border border-gray-300 rounded-xl px-4 py-3.5 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10 outline-none transition-all";
     const inputWithIconClass = `${inputClass} pl-11`;
     const labelClass = "text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1";
     const selectClass = `${inputClass} appearance-none`;
@@ -290,14 +290,14 @@ export default function ReceptionPage() {
                         {/* Quick Stats Card */}
                         <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5">
                             <div className="flex items-center gap-2 mb-4">
-                                <div className="p-1.5 bg-teal-500/10 rounded-lg">
+                                <div className="p-1.5 bg-orange-500/10 rounded-lg">
                                     <Activity className="h-3.5 w-3.5 text-teal-400" />
                                 </div>
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Quick Info</span>
                             </div>
                             <div className="space-y-4">
                                 <div className="flex items-center gap-3 group">
-                                    <div className="h-8 w-8 bg-teal-500/10 rounded-lg flex items-center justify-center group-hover:bg-teal-500/20 transition-all">
+                                    <div className="h-8 w-8 bg-orange-500/10 rounded-lg flex items-center justify-center group-hover:bg-orange-500/20 transition-all">
                                         <ClipboardList className="h-4 w-4 text-teal-400" />
                                     </div>
                                     <div>
@@ -415,7 +415,7 @@ export default function ReceptionPage() {
                                 /* Registration Form */
                                 <form onSubmit={handleSubmit} className="p-8">
                                     <div className="flex items-center gap-3 mb-6">
-                                        <div className="p-2 bg-teal-500/10 rounded-xl">
+                                        <div className="p-2 bg-orange-500/10 rounded-xl">
                                             <UserPlus className="h-5 w-5 text-teal-400" />
                                         </div>
                                         <div>
@@ -490,7 +490,7 @@ export default function ReceptionPage() {
                                                         pattern="[0-9]{10}"
                                                         maxLength={10}
                                                         onBlur={handlePhoneBlur}
-                                                        className="w-full bg-white border border-gray-300 rounded-r-xl pl-10 pr-24 py-3.5 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/10 outline-none transition-all"
+                                                        className="w-full bg-white border border-gray-300 rounded-r-xl pl-10 pr-24 py-3.5 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10 outline-none transition-all"
                                                         placeholder="10-digit mobile"
                                                         onChange={handlePhoneChange}
                                                     />
@@ -615,7 +615,7 @@ export default function ReceptionPage() {
                                                     name="address"
                                                     required
                                                     rows={3}
-                                                    className="w-full bg-white border border-gray-300 rounded-xl pl-11 pr-4 py-3.5 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/10 outline-none transition-all resize-none"
+                                                    className="w-full bg-white border border-gray-300 rounded-xl pl-11 pr-4 py-3.5 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10 outline-none transition-all resize-none"
                                                     placeholder="House No, Street, City, State, PIN..."
                                                 />
                                             </div>
@@ -685,7 +685,7 @@ export default function ReceptionPage() {
                                                     className={`px-4 py-2.5 rounded-xl text-sm font-bold border transition-all ${
                                                         patientType === pt.value
                                                             ? pt.value === 'cash'
-                                                                ? 'bg-teal-500 border-teal-500 text-white shadow-md'
+                                                                ? 'bg-orange-500 border-orange-500 text-white shadow-md'
                                                                 : pt.value === 'corporate'
                                                                     ? 'bg-blue-500 border-blue-500 text-white shadow-md'
                                                                     : 'bg-amber-500 border-amber-500 text-white shadow-md'
@@ -791,7 +791,7 @@ export default function ReceptionPage() {
                                                 type="checkbox"
                                                 name="registration_consent"
                                                 required
-                                                className="mt-1 h-4 w-4 rounded border-gray-300 text-teal-500 focus:ring-teal-500/20"
+                                                className="mt-1 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500/20"
                                             />
                                             <div>
                                                 <span className="text-sm font-bold text-gray-700 group-hover:text-gray-900 transition-colors flex items-center gap-1.5">
@@ -891,7 +891,7 @@ export default function ReceptionPage() {
                                                 </span>
                                             )}
                                         </div>
-                                        <p className="text-xs font-mono text-teal-600 mt-0.5">{p.patient_id}</p>
+                                        <p className="text-xs font-mono text-orange-600 mt-0.5">{p.patient_id}</p>
                                         <p className="text-xs text-gray-500 mt-0.5">
                                             {[p.phone, p.age ? `${p.age}y` : null, p.gender, p.department].filter(Boolean).join(' · ')}
                                         </p>
@@ -907,7 +907,7 @@ export default function ReceptionPage() {
                                     <button
                                         type="button"
                                         onClick={() => router.push(`/reception/patient/${p.patient_id}`)}
-                                        className="flex items-center gap-1.5 px-3 py-2 bg-teal-500 hover:bg-teal-600 text-white text-xs font-bold rounded-lg transition-colors"
+                                        className="flex items-center gap-1.5 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-colors"
                                     >
                                         <UserCheck className="h-3.5 w-3.5" /> Open Profile
                                     </button>

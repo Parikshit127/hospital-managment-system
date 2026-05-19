@@ -94,7 +94,7 @@ export function AccessibleModal({ open, onClose, title, children, maxWidth = 'ma
             >
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 rounded-lg p-1 hover:bg-gray-100"
+                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 rounded-lg p-1 hover:bg-gray-100"
                     aria-label="Close dialog"
                 >
                     <X className="h-5 w-5" />

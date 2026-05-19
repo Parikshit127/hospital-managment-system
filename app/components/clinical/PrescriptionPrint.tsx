@@ -95,7 +95,7 @@ export function PrescriptionPrint({ data, onClose }: PrescriptionPrintProps) {
                     <div className="flex items-center gap-2">
                         <button
                             onClick={handlePrint}
-                            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700"
+                            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700"
                         >
                             <Printer className="h-4 w-4" /> Print / Save PDF
                         </button>

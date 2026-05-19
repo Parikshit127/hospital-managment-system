@@ -24,7 +24,7 @@ type Appointment = {
 const STATUS_COLOR: Record<string, string> = {
     Pending: 'bg-gray-100 text-gray-600',
     Confirmed: 'bg-blue-100 text-blue-700',
-    'Checked In': 'bg-teal-100 text-teal-700',
+    'Checked In': 'bg-orange-100 text-orange-700',
     'In Progress': 'bg-violet-100 text-violet-700',
     Completed: 'bg-emerald-100 text-emerald-700',
     Cancelled: 'bg-red-100 text-red-600',
@@ -103,9 +103,9 @@ export default function CheckInPage() {
                         <p className="text-2xl font-black text-gray-900">{appointments.length}</p>
                         <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">Total Today</p>
                     </div>
-                    <div className="bg-teal-50 border border-teal-200 rounded-2xl p-4 text-center">
-                        <p className="text-2xl font-black text-teal-700">{checkedInCount}</p>
-                        <p className="text-xs font-bold text-teal-500 uppercase tracking-wider mt-1">Checked In</p>
+                    <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 text-center">
+                        <p className="text-2xl font-black text-orange-700">{checkedInCount}</p>
+                        <p className="text-xs font-bold text-orange-500 uppercase tracking-wider mt-1">Checked In</p>
                     </div>
                     <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center">
                         <p className="text-2xl font-black text-amber-700">{pendingCount}</p>
@@ -137,7 +137,7 @@ export default function CheckInPage() {
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         placeholder="Search by name, patient ID, phone, or doctor..."
-                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/10"
+                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/10"
                     />
                 </div>
 
@@ -165,7 +165,7 @@ export default function CheckInPage() {
                                 <div
                                     key={appt.appointment_id}
                                     className={`bg-white border rounded-xl p-4 flex items-center justify-between gap-4 transition-all ${
-                                        appt.status === 'Checked In' ? 'border-teal-200 bg-teal-50/30' : 'border-gray-200 hover:border-gray-300'
+                                        appt.status === 'Checked In' ? 'border-orange-200 bg-orange-50/30' : 'border-gray-200 hover:border-gray-300'
                                     }`}
                                 >
                                     <div className="flex items-center gap-4 min-w-0">
@@ -179,7 +179,7 @@ export default function CheckInPage() {
                                                     {appt.status}
                                                 </span>
                                                 {appt.queue_token && (
-                                                    <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-teal-100 text-teal-700">
+                                                    <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">
                                                         Token #{appt.queue_token}
                                                     </span>
                                                 )}
@@ -197,7 +197,7 @@ export default function CheckInPage() {
                                                     <span>Dr. {appt.doctor_name}</span>
                                                 )}
                                                 {checkedInTime && (
-                                                    <span className="flex items-center gap-1 text-teal-600">
+                                                    <span className="flex items-center gap-1 text-orange-600">
                                                         <Clock className="h-3 w-3" /> In at {checkedInTime}
                                                     </span>
                                                 )}
@@ -209,14 +209,14 @@ export default function CheckInPage() {
                                         <button
                                             onClick={() => handleCheckIn(appt)}
                                             disabled={isChecking}
-                                            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 disabled:opacity-50 flex-shrink-0"
+                                            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 disabled:opacity-50 flex-shrink-0"
                                         >
                                             {isChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                                             Check In
                                         </button>
                                     )}
                                     {!canCheckIn && appt.status === 'Checked In' && (
-                                        <span className="text-xs font-bold text-teal-600 flex-shrink-0 flex items-center gap-1">
+                                        <span className="text-xs font-bold text-orange-600 flex-shrink-0 flex items-center gap-1">
                                             <CheckCircle2 className="h-4 w-4" /> Done
                                         </span>
                                     )}

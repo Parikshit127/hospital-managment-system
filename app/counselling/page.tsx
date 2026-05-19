@@ -143,7 +143,7 @@ export default function CounsellingPage() {
               onClick={() => setActiveTab(tab)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 activeTab === tab
-                  ? 'bg-teal-500 text-white shadow-sm'
+                  ? 'bg-orange-500 text-white shadow-sm'
                   : 'text-gray-500 hover:text-gray-800'
               }`}
             >
@@ -167,7 +167,7 @@ export default function CounsellingPage() {
                 {loading ? (
                   <tr>
                     <td colSpan={8} className="text-center py-16">
-                      <Loader2 className="h-6 w-6 animate-spin text-teal-500 mx-auto" />
+                      <Loader2 className="h-6 w-6 animate-spin text-orange-500 mx-auto" />
                     </td>
                   </tr>
                 ) : sessions.length === 0 ? (
@@ -199,7 +199,7 @@ export default function CounsellingPage() {
                     <td className="px-4 py-3">
                       <button
                         onClick={() => openUpdateModal(s)}
-                        className="text-xs font-bold text-teal-600 hover:text-teal-800 transition-colors"
+                        className="text-xs font-bold text-orange-600 hover:text-teal-800 transition-colors"
                       >
                         Update Status
                       </button>
@@ -231,7 +231,7 @@ export default function CounsellingPage() {
                   value={createForm.patientId}
                   onChange={e => setCreateForm(f => ({ ...f, patientId: e.target.value }))}
                   placeholder="e.g., PAT-001"
-                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -240,7 +240,7 @@ export default function CounsellingPage() {
                   <select
                     value={createForm.sessionType}
                     onChange={e => setCreateForm(f => ({ ...f, sessionType: e.target.value }))}
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   >
                     <option value="">Select type</option>
                     {SESSION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -253,7 +253,7 @@ export default function CounsellingPage() {
                     value={createForm.counsellorName}
                     onChange={e => setCreateForm(f => ({ ...f, counsellorName: e.target.value }))}
                     placeholder="e.g., Dr. Sharma"
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   />
                 </div>
               </div>
@@ -263,7 +263,7 @@ export default function CounsellingPage() {
                   type="datetime-local"
                   value={createForm.scheduledAt}
                   onChange={e => setCreateForm(f => ({ ...f, scheduledAt: e.target.value }))}
-                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -274,7 +274,7 @@ export default function CounsellingPage() {
                     value={createForm.financialEstimate}
                     onChange={e => setCreateForm(f => ({ ...f, financialEstimate: e.target.value }))}
                     placeholder="0"
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   />
                 </div>
                 <div>
@@ -284,7 +284,7 @@ export default function CounsellingPage() {
                     value={createForm.depositAdvised}
                     onChange={e => setCreateForm(f => ({ ...f, depositAdvised: e.target.value }))}
                     placeholder="0"
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   />
                 </div>
               </div>
@@ -318,7 +318,7 @@ export default function CounsellingPage() {
                 <select
                   value={updateForm.status}
                   onChange={e => setUpdateForm(f => ({ ...f, status: e.target.value }))}
-                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                 >
                   {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
@@ -330,7 +330,7 @@ export default function CounsellingPage() {
                   onChange={e => setUpdateForm(f => ({ ...f, outcome: e.target.value }))}
                   rows={3}
                   placeholder="Session outcome or notes..."
-                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500 resize-none"
+                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500 resize-none"
                 />
               </div>
               <button

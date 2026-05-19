@@ -125,7 +125,7 @@ export default function ClearancePage() {
                 <div className="flex gap-2 mt-3">
                   <button
                     onClick={() => setActionModal({ dept: key, type: 'Cleared' })}
-                    className="flex-1 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold py-2 rounded-xl transition-colors"
+                    className="flex-1 bg-orange-600 hover:bg-teal-700 text-white text-xs font-bold py-2 rounded-xl transition-colors"
                   >
                     Mark Cleared
                   </button>
@@ -163,14 +163,14 @@ export default function ClearancePage() {
                   value={staffName}
                   onChange={e => setStaffName(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleConfirm()}
-                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none"
+                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none"
                   placeholder="Staff / Doctor name"
                 />
               </div>
               <button
                 disabled={saving || !staffName.trim()}
                 onClick={handleConfirm}
-                className={`w-full text-white font-bold p-3 rounded-xl shadow-md transition-all disabled:opacity-60 ${actionModal.type === 'Cleared' ? 'bg-teal-600 hover:bg-teal-700' : 'bg-amber-500 hover:bg-amber-600'}`}
+                className={`w-full text-white font-bold p-3 rounded-xl shadow-md transition-all disabled:opacity-60 ${actionModal.type === 'Cleared' ? 'bg-orange-600 hover:bg-teal-700' : 'bg-amber-500 hover:bg-amber-600'}`}
               >
                 {saving ? 'Saving...' : `Confirm ${actionModal.type}`}
               </button>

@@ -96,7 +96,7 @@ export default function NursingAssessmentPage() {
 
         <div className="max-w-6xl mx-auto space-y-4">
           <div className="flex items-center gap-3">
-            <ClipboardList className="h-6 w-6 text-teal-600" />
+            <ClipboardList className="h-6 w-6 text-orange-600" />
             <h1 className="text-xl font-black text-gray-900">Nursing Assessment</h1>
           </div>
 
@@ -113,9 +113,9 @@ export default function NursingAssessmentPage() {
                 )}
                 {admissions.map((a: any) => (
                   <button key={a.admission_id} onClick={() => selectAdmission(a)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${selected?.admission_id === a.admission_id ? 'bg-teal-50 border-l-2 border-teal-500' : ''}`}>
-                    <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
-                      <User className="h-4 w-4 text-teal-600" />
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${selected?.admission_id === a.admission_id ? 'bg-orange-50 border-l-2 border-orange-500' : ''}`}>
+                    <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
+                      <User className="h-4 w-4 text-orange-600" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-bold text-gray-900 truncate">{a.patient?.full_name}</p>
@@ -143,7 +143,7 @@ export default function NursingAssessmentPage() {
                       <p className="text-xs text-gray-400">{selected.wardName} · Bed {selected.bed_id} · {selected.admission_id}</p>
                     </div>
                     <button onClick={() => setShowForm(v => !v)}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-teal-600 text-white text-xs font-bold rounded-xl hover:bg-teal-700">
+                      className="flex items-center gap-1.5 px-3 py-2 bg-orange-600 text-white text-xs font-bold rounded-xl hover:bg-teal-700">
                       {showForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
                       {showForm ? 'Cancel' : 'New Assessment'}
                     </button>
@@ -151,21 +151,21 @@ export default function NursingAssessmentPage() {
 
                   {/* New assessment form */}
                   {showForm && (
-                    <form onSubmit={handleSave} className="bg-teal-50 border border-teal-200 rounded-2xl p-5 space-y-4">
-                      <h3 className="text-xs font-black text-teal-700 uppercase tracking-widest">New Nursing Assessment</h3>
+                    <form onSubmit={handleSave} className="bg-orange-50 border border-orange-200 rounded-2xl p-5 space-y-4">
+                      <h3 className="text-xs font-black text-orange-700 uppercase tracking-widest">New Nursing Assessment</h3>
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="text-[10px] font-bold text-gray-500 uppercase">Assessment Type</label>
                           <select value={form.assessment_type} onChange={e => setForm(f => ({ ...f, assessment_type: e.target.value }))}
-                            className="w-full mt-1 text-xs border border-teal-200 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-teal-400">
+                            className="w-full mt-1 text-xs border border-orange-200 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-teal-400">
                             {ASSESSMENT_TYPES.map(t => <option key={t}>{t}</option>)}
                           </select>
                         </div>
                         <div>
                           <label className="text-[10px] font-bold text-gray-500 uppercase">Consciousness (AVPU)</label>
                           <select value={form.consciousness} onChange={e => setForm(f => ({ ...f, consciousness: e.target.value }))}
-                            className="w-full mt-1 text-xs border border-teal-200 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-teal-400">
+                            className="w-full mt-1 text-xs border border-orange-200 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-teal-400">
                             {CONSCIOUSNESS_OPTIONS.map(o => <option key={o}>{o}</option>)}
                           </select>
                         </div>
@@ -183,12 +183,12 @@ export default function NursingAssessmentPage() {
                               const val = e.target.value === '' ? 0 : Math.min(10, Math.max(0, parseInt(e.target.value) || 0));
                               setForm(f => ({ ...f, pain_score: val }));
                             }}
-                            className="w-full mt-1 text-xs border border-teal-200 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-teal-400" />
+                            className="w-full mt-1 text-xs border border-orange-200 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-teal-400" />
                         </div>
                         <div>
                           <label className="text-[10px] font-bold text-gray-500 uppercase">Mobility</label>
                           <select value={form.mobility} onChange={e => setForm(f => ({ ...f, mobility: e.target.value }))}
-                            className="w-full mt-1 text-xs border border-teal-200 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-teal-400">
+                            className="w-full mt-1 text-xs border border-orange-200 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-teal-400">
                             {MOBILITY_OPTIONS.map(o => <option key={o}>{o}</option>)}
                           </select>
                         </div>
@@ -211,7 +211,7 @@ export default function NursingAssessmentPage() {
                         <div>
                           <label className="text-[10px] font-bold text-gray-500 uppercase">Continence</label>
                           <select value={form.continence} onChange={e => setForm(f => ({ ...f, continence: e.target.value }))}
-                            className="w-full mt-1 text-xs border border-teal-200 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-teal-400">
+                            className="w-full mt-1 text-xs border border-orange-200 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-teal-400">
                             {CONTINENCE_OPTIONS.map(o => <option key={o}>{o}</option>)}
                           </select>
                         </div>
@@ -219,7 +219,7 @@ export default function NursingAssessmentPage() {
                           <label className="text-[10px] font-bold text-gray-500 uppercase">Nutrition Screen (MUST)</label>
                           <input type="text" placeholder="Score or notes" value={form.nutrition_screen}
                             onChange={e => setForm(f => ({ ...f, nutrition_screen: e.target.value }))}
-                            className="w-full mt-1 text-xs border border-teal-200 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-teal-400" />
+                            className="w-full mt-1 text-xs border border-orange-200 rounded-lg px-2 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-teal-400" />
                         </div>
                       </div>
 
@@ -227,11 +227,11 @@ export default function NursingAssessmentPage() {
                         <label className="text-[10px] font-bold text-gray-500 uppercase">Additional Notes / Care Plan</label>
                         <textarea rows={3} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                           placeholder="Document care plan items, skin assessment findings, safety measures…"
-                          className="w-full mt-1 text-xs border border-teal-200 rounded-lg p-2.5 resize-none bg-white focus:outline-none focus:ring-2 focus:ring-teal-400" />
+                          className="w-full mt-1 text-xs border border-orange-200 rounded-lg p-2.5 resize-none bg-white focus:outline-none focus:ring-2 focus:ring-teal-400" />
                       </div>
 
                       <button type="submit" disabled={saving}
-                        className="w-full py-2.5 bg-teal-600 text-white text-xs font-black rounded-xl hover:bg-teal-700 disabled:opacity-50">
+                        className="w-full py-2.5 bg-orange-600 text-white text-xs font-black rounded-xl hover:bg-teal-700 disabled:opacity-50">
                         {saving ? 'Saving…' : 'Save Assessment'}
                       </button>
                     </form>
@@ -250,7 +250,7 @@ export default function NursingAssessmentPage() {
                           <div key={a.id} className="px-5 py-4">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-teal-100 text-teal-700 rounded-full">{a.assessment_type}</span>
+                                <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full">{a.assessment_type}</span>
                                 <span className="text-[10px] text-gray-400">{new Date(a.created_at).toLocaleString('en-IN')}</span>
                               </div>
                               {a.fall_risk_score >= 51 && (

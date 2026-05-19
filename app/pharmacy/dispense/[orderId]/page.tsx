@@ -134,7 +134,7 @@ export default function DispensePage() {
                                                 newList[index].batch_no = e.target.value;
                                                 setDispenseList(newList);
                                             }}
-                                            className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-teal-500"
+                                            className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
                                         >
                                             <option value="">Select Batch</option>
                                             {item.available_batches.map((b: any) => (
@@ -153,7 +153,7 @@ export default function DispensePage() {
                                                 newList[index].batch_no = e.target.value;
                                                 setDispenseList(newList);
                                             }}
-                                            className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-teal-500"
+                                            className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
                                             placeholder="Scan/Type Batch"
                                         />
                                     )}
@@ -168,7 +168,7 @@ export default function DispensePage() {
                                             newList[index].dispense_qty = Number(e.target.value);
                                             setDispenseList(newList);
                                         }}
-                                        className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-teal-500"
+                                        className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
                                     />
                                 </div>
                             </div>

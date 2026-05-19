@@ -65,18 +65,18 @@ export default function AdminSidebar() {
                 {collapsed ? (
                     <div className="shrink-0 flex items-center justify-center w-9 h-9">
                         <svg width="36" height="36" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="26" cy="26" r="24" stroke="#1e3a6e" strokeWidth="2.5"/>
-                            <circle cx="26" cy="26" r="19" stroke="#1e3a6e" strokeWidth="1"/>
+                            <circle cx="26" cy="26" r="24" stroke="#ffffff" strokeWidth="2.5"/>
+                            <circle cx="26" cy="26" r="19" stroke="#ffffff" strokeWidth="1"/>
                             <rect x="21" y="14" width="10" height="24" rx="2" stroke="#f97316" strokeWidth="2.5" fill="none"/>
                             <rect x="14" y="21" width="24" height="10" rx="2" stroke="#f97316" strokeWidth="2.5" fill="none"/>
                         </svg>
                     </div>
                 ) : (
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" style={{ height: '36px', width: 'auto', flexShrink: 0 }} aria-label="Axten Hospitals">
-                        <text x="10" y="72" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="68" fill="#1e3a6e" letterSpacing="-2">Axten</text>
+                        <text x="10" y="72" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="68" fill="#ffffff" letterSpacing="-2">Axten</text>
                         <rect x="10" y="80" width="60" height="8" fill="#f97316" rx="2"/>
                         <rect x="130" y="80" width="120" height="8" fill="#f97316" rx="2"/>
-                        <text x="75" y="89" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="16" fill="#1e3a6e" letterSpacing="6">HOSPITALS</text>
+                        <text x="75" y="89" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="16" fill="#ffffff" letterSpacing="6">HOSPITALS</text>
                     </svg>
                 )}
                 {!collapsed && (
@@ -104,7 +104,7 @@ export default function AdminSidebar() {
                                         onClick={() => toggleSection(section.title)}
                                         className="flex items-center justify-between w-full px-2.5 mb-1.5 group"
                                     >
-                                        <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500 font-semibold group-hover:text-gray-700 transition-colors">
+                                        <p className="text-[10px] uppercase tracking-[0.14em] text-gray-500 font-semibold group-hover:text-gray-200 transition-colors">
                                             {section.title}
                                         </p>
                                         <ChevronDown
@@ -130,13 +130,12 @@ export default function AdminSidebar() {
                                                 title={collapsed ? item.label : undefined}
                                                 className={`flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] transition-all duration-150 ${
                                                     active
-                                                        ? 'font-semibold text-[#0d9488]'
-                                                        : 'font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                                                        ? 'font-semibold text-white'
+                                                        : 'font-medium text-gray-400 hover:text-gray-200 hover:bg-white/[0.06]'
                                                 } ${collapsed ? 'justify-center px-2' : ''}`}
                                                 style={active ? {
-                                                    backgroundColor: '#f0fdfa',
-                                                    color: '#0d9488',
-                                                    boxShadow: '0 0 0 1px rgba(13,148,136,0.1)',
+                                                    backgroundColor: 'var(--admin-primary-20)',
+                                                    color: 'var(--admin-primary-light)',
                                                 } : undefined}
                                             >
                                                 <Icon className={`h-[16px] w-[16px] shrink-0 ${active ? '' : 'opacity-70'}`} />
@@ -157,14 +156,14 @@ export default function AdminSidebar() {
                 <button
                     onClick={() => logout()}
                     title={collapsed ? 'Logout' : undefined}
-                    className={`flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-gray-600 hover:text-rose-600 hover:bg-rose-50 transition-all duration-150 ${collapsed ? 'justify-center px-2' : ''}`}
+                    className={`flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-gray-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-150 ${collapsed ? 'justify-center px-2' : ''}`}
                 >
                     <LogOut className="h-4 w-4 shrink-0" />
                     {!collapsed && <span>Logout</span>}
                 </button>
                 <button
                     onClick={() => setCollapsed(!collapsed)}
-                    className={`hidden lg:flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-all duration-150 ${collapsed ? 'justify-center px-2' : ''}`}
+                    className={`hidden lg:flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-gray-500 hover:text-white hover:bg-white/[0.06] transition-all duration-150 ${collapsed ? 'justify-center px-2' : ''}`}
                 >
                     {collapsed ? <ChevronRight className="h-4 w-4 shrink-0" /> : <ChevronLeft className="h-4 w-4 shrink-0" />}
                     {!collapsed && <span>Collapse</span>}

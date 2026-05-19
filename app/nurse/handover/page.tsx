@@ -87,7 +87,7 @@ export default function NurseHandoverPage() {
                             <div>
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Ward (Optional)</label>
                                 <select value={form.wardId} onChange={e => setForm({ ...form, wardId: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white">
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white">
                                     <option value="">Select Ward</option>
                                     {wards.map((w: any) => (
                                         <option key={w.id} value={w.id}>{w.ward_name}</option>
@@ -98,14 +98,14 @@ export default function NurseHandoverPage() {
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Incoming Nurse ID (Optional)</label>
                                 <input type="text" placeholder="Nurse ID"
                                     value={form.toNurseId} onChange={e => setForm({ ...form, toNurseId: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                             </div>
                         </div>
                         <div className="mb-4">
                             <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Handover Summary *</label>
                             <textarea rows={5} placeholder="Summarize key patient updates, pending tasks, critical observations..."
                                 value={form.summary} onChange={e => setForm({ ...form, summary: e.target.value })}
-                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 resize-none" />
+                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 resize-none" />
                         </div>
                         <button onClick={handleSubmit} disabled={submitting || !form.summary.trim()}
                             className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-sm font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50">
@@ -118,7 +118,7 @@ export default function NurseHandoverPage() {
                 {/* Handover History */}
                 {loading ? (
                     <div className="flex items-center justify-center py-16">
-                        <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
+                        <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
                     </div>
                 ) : handovers.length === 0 ? (
                     <div className="bg-white border border-gray-200 rounded-2xl p-16 text-center">

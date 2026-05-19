@@ -672,7 +672,7 @@ export default function DoctorDashboard() {
 
   // ─── INPUT STYLES ───
   const inputCls =
-    "w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400";
+    "w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400";
   const labelCls =
     "text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1 block mb-1.5";
 
@@ -1113,27 +1113,27 @@ export default function DoctorDashboard() {
                   <Video className="h-3 w-3" /> {pendingRequests.length} CALL REQUESTS
                 </button>
               )}
-              <span className="bg-teal-500/10 text-teal-400 text-[10px] px-2.5 py-1 rounded-lg font-black border border-teal-500/20">
+              <span className="bg-orange-500/10 text-teal-400 text-[10px] px-2.5 py-1 rounded-lg font-black border border-orange-500/20">
                 {filteredQueue.length}
               </span>
             </div>
           </div>
           {/* ── VIEW MODE TOGGLE ── */}
           <div className="flex mb-3 bg-gray-100 rounded-lg p-0.5">
-            <button className="flex-1 text-xs font-bold py-1.5 rounded-md transition-all bg-white text-teal-600 shadow-sm">
+            <button className="flex-1 text-xs font-bold py-1.5 rounded-md transition-all bg-white text-orange-600 shadow-sm">
               My Patients
             </button>
           </div>
           <div className="flex mb-3 bg-gray-100 rounded-lg p-0.5">
             <button
               onClick={() => setQueueDateRange("upcoming")}
-              className={`flex-1 text-xs font-bold py-1.5 rounded-md transition-all ${queueDateRange === "upcoming" ? "bg-white text-teal-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+              className={`flex-1 text-xs font-bold py-1.5 rounded-md transition-all ${queueDateRange === "upcoming" ? "bg-white text-orange-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
             >
               Upcoming
             </button>
             <button
               onClick={() => setQueueDateRange("all")}
-              className={`flex-1 text-xs font-bold py-1.5 rounded-md transition-all ${queueDateRange === "all" ? "bg-white text-teal-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+              className={`flex-1 text-xs font-bold py-1.5 rounded-md transition-all ${queueDateRange === "all" ? "bg-white text-orange-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
             >
               History + Upcoming
             </button>
@@ -1145,7 +1145,7 @@ export default function DoctorDashboard() {
               placeholder="Search patient..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none transition-all placeholder:text-gray-400 font-medium text-gray-900"
+              className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none transition-all placeholder:text-gray-400 font-medium text-gray-900"
             />
           </div>
         </div>
@@ -1175,7 +1175,7 @@ export default function DoctorDashboard() {
                 <div
                   key={p.appointment_id}
                   onClick={isSubmitting ? undefined : () => setActivePatient(p)}
-                  className={`p-4 rounded-xl cursor-pointer transition-all border group relative overflow-hidden ${activePatient?.appointment_id === p.appointment_id ? "bg-teal-500/10 border-teal-500/30 shadow-inner" : "bg-white hover:bg-gray-50 border-gray-200 hover:border-teal-500/20"} ${isSubmitting ? "opacity-50 pointer-events-none" : ""}`}
+                  className={`p-4 rounded-xl cursor-pointer transition-all border group relative overflow-hidden ${activePatient?.appointment_id === p.appointment_id ? "bg-orange-500/10 border-orange-500/30 shadow-inner" : "bg-white hover:bg-gray-50 border-gray-200 hover:border-orange-500/20"} ${isSubmitting ? "opacity-50 pointer-events-none" : ""}`}
                 >
                   {triageLevel === "Emergency" && (
                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500 rounded-l-xl"></div>
@@ -1207,7 +1207,7 @@ export default function DoctorDashboard() {
                         : "Time N/A"}
                     </span>
                   </div>
-                  <h4 className="font-bold text-sm truncate text-gray-800 group-hover:text-teal-600 transition-colors">
+                  <h4 className="font-bold text-sm truncate text-gray-800 group-hover:text-orange-600 transition-colors">
                     <Link
                       href={`/doctor/patient/${p.patient_id}?appointmentId=${encodeURIComponent(p.appointment_id || "")}`}
                       onClick={(e) => e.stopPropagation()}
@@ -1241,7 +1241,7 @@ export default function DoctorDashboard() {
           <button
             onClick={() => setShowWalkinModal(true)}
             disabled={isSubmitting}
-            className="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold hover:bg-gray-100 hover:text-teal-400 hover:border-teal-500/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold hover:bg-gray-100 hover:text-teal-400 hover:border-orange-500/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
           >
             <Plus className="h-4 w-4" /> Add Walk-in
           </button>
@@ -1253,7 +1253,7 @@ export default function DoctorDashboard() {
         {activePatient ? (
           <div className="flex-1 overflow-y-auto p-6 z-10 relative">
             {/* Patient Header Card */}
-            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6 mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 hover:border-teal-500/20 transition-all">
+            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6 mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 hover:border-orange-500/20 transition-all">
               <div className="flex items-center gap-5">
                 <div className="h-14 w-14 bg-gradient-to-br from-violet-500/20 to-indigo-500/20 rounded-2xl border border-gray-200 flex items-center justify-center">
                   <User className="h-7 w-7 text-violet-400" />
@@ -1263,12 +1263,12 @@ export default function DoctorDashboard() {
                     <h1 className="text-2xl font-black text-gray-900 tracking-tight">
                       <Link
                         href={`/doctor/patient/${activePatient.patient_id}?appointmentId=${encodeURIComponent(activePatient.appointment_id || "")}`}
-                        className="hover:text-teal-600 hover:underline underline-offset-4 transition-colors"
+                        className="hover:text-orange-600 hover:underline underline-offset-4 transition-colors"
                       >
                         {activePatient.full_name}
                       </Link>
                     </h1>
-                    <span className="bg-teal-500/10 text-teal-400 border border-teal-500/20 text-[10px] font-black px-2 py-1 rounded-lg">
+                    <span className="bg-orange-500/10 text-teal-400 border border-orange-500/20 text-[10px] font-black px-2 py-1 rounded-lg">
                       ID: {activePatient.digital_id || activePatient.patient_id}
                     </span>
                   </div>
@@ -1297,7 +1297,7 @@ export default function DoctorDashboard() {
                   value={activePatient.status || "Pending"}
                   onChange={(e) => handleStatusUpdate(e.target.value)}
                   disabled={isSubmitting}
-                  className="bg-white border border-gray-300 text-gray-900 text-sm rounded-xl focus:ring-teal-500 p-2.5 font-bold outline-none appearance-none"
+                  className="bg-white border border-gray-300 text-gray-900 text-sm rounded-xl focus:ring-orange-500 p-2.5 font-bold outline-none appearance-none"
                 >
                   {[
                     "Scheduled",
@@ -1368,7 +1368,7 @@ export default function DoctorDashboard() {
                         setActiveTab(tab);
                         if (tab === 'video-calls') refreshVideoRequests();
                     }}
-                    className={`px-4 py-4 text-sm font-bold border-b-2 flex items-center justify-center gap-2 transition-all outline-none text-center ${activeTab === tab ? "border-teal-400 text-teal-400 bg-teal-500/5 rounded-t-lg" : "border-transparent text-gray-400 hover:text-gray-600 rounded-t-lg"}`}
+                    className={`px-4 py-4 text-sm font-bold border-b-2 flex items-center justify-center gap-2 transition-all outline-none text-center ${activeTab === tab ? "border-teal-400 text-teal-400 bg-orange-500/5 rounded-t-lg" : "border-transparent text-gray-400 hover:text-gray-600 rounded-t-lg"}`}
                   >
                     {tab === "triage" && <Brain className="h-4 w-4" />}
                     {tab === "notes" && <FileText className="h-4 w-4" />}
@@ -1463,7 +1463,7 @@ export default function DoctorDashboard() {
                         {/* Vitals Row */}
                         {triageData.vitals && (
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:border-teal-500/20 transition-all">
+                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:border-orange-500/20 transition-all">
                               <HeartPulse className="h-5 w-5 text-rose-400 mx-auto mb-2" />
                               <span className="text-[10px] font-black text-gray-400 uppercase block">
                                 Blood Pressure
@@ -1472,7 +1472,7 @@ export default function DoctorDashboard() {
                                 {triageData.vitals.bloodPressure || "N/A"}
                               </span>
                             </div>
-                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:border-teal-500/20 transition-all">
+                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:border-orange-500/20 transition-all">
                               <Heart className="h-5 w-5 text-pink-400 mx-auto mb-2" />
                               <span className="text-[10px] font-black text-gray-400 uppercase block">
                                 Heart Rate
@@ -1483,7 +1483,7 @@ export default function DoctorDashboard() {
                                   : "N/A"}
                               </span>
                             </div>
-                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:border-teal-500/20 transition-all">
+                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:border-orange-500/20 transition-all">
                               <Thermometer className="h-5 w-5 text-orange-400 mx-auto mb-2" />
                               <span className="text-[10px] font-black text-gray-400 uppercase block">
                                 Temperature
@@ -1494,7 +1494,7 @@ export default function DoctorDashboard() {
                                   : "N/A"}
                               </span>
                             </div>
-                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:border-teal-500/20 transition-all">
+                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:border-orange-500/20 transition-all">
                               <Wind className="h-5 w-5 text-cyan-400 mx-auto mb-2" />
                               <span className="text-[10px] font-black text-gray-400 uppercase block">
                                 SpO2
@@ -1520,7 +1520,7 @@ export default function DoctorDashboard() {
                                 (s: string, i: number) => (
                                   <span
                                     key={i}
-                                    className="bg-teal-500/10 text-teal-400 border border-teal-500/20 text-xs font-bold px-3 py-1.5 rounded-lg"
+                                    className="bg-orange-500/10 text-teal-400 border border-orange-500/20 text-xs font-bold px-3 py-1.5 rounded-lg"
                                   >
                                     {s}
                                   </span>
@@ -1718,7 +1718,7 @@ export default function DoctorDashboard() {
                             }
 
                             const colorMap: Record<string, string> = {
-                              teal: "border-teal-500/20 bg-teal-500/[0.03]",
+                              teal: "border-orange-500/20 bg-orange-500/[0.03]",
                               cyan: "border-cyan-500/20 bg-cyan-500/[0.03]",
                               violet:
                                 "border-violet-500/20 bg-violet-500/[0.03]",
@@ -1889,7 +1889,7 @@ export default function DoctorDashboard() {
                               });
                               setShowPrescriptionPrint(true);
                             }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded-xl hover:bg-teal-100"
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-orange-600 bg-orange-50 border border-orange-200 rounded-xl hover:bg-orange-100"
                           >
                             <Printer className="h-3.5 w-3.5" /> Print Rx
                           </button>
@@ -1981,14 +1981,14 @@ export default function DoctorDashboard() {
                           return (
                             <div
                               key={i}
-                              className="bg-gray-50 border border-gray-200 p-5 rounded-xl hover:border-teal-500/20 transition-all"
+                              className="bg-gray-50 border border-gray-200 p-5 rounded-xl hover:border-orange-500/20 transition-all"
                             >
                               <div className="flex justify-between items-start mb-4">
                                 <div>
-                                  <p className="font-bold text-teal-600 text-lg flex items-center gap-2">
+                                  <p className="font-bold text-orange-600 text-lg flex items-center gap-2">
                                     {record.diagnosis || "No Diagnosis"}{" "}
                                     {isSoap && (
-                                      <span className="text-[10px] bg-teal-500/10 text-teal-500 px-2 py-0.5 rounded uppercase font-black tracking-wider">
+                                      <span className="text-[10px] bg-orange-500/10 text-orange-500 px-2 py-0.5 rounded uppercase font-black tracking-wider">
                                         SOAP Note
                                       </span>
                                     )}
@@ -2130,7 +2130,7 @@ export default function DoctorDashboard() {
                         </h3>
                         <button
                           onClick={() => fetchLabs(activePatient.patient_id)}
-                          className="text-teal-400 hover:bg-teal-500/10 p-2 rounded-lg transition-colors"
+                          className="text-teal-400 hover:bg-orange-500/10 p-2 rounded-lg transition-colors"
                         >
                           <RefreshCw
                             className={`h-4 w-4 ${loadingLabs ? "animate-spin" : ""}`}
@@ -2146,7 +2146,7 @@ export default function DoctorDashboard() {
                           labOrders.map((order) => (
                             <div
                               key={order.id}
-                              className="flex items-center justify-between bg-gray-50 border border-gray-200 p-4 rounded-xl hover:border-teal-500/20 transition-all"
+                              className="flex items-center justify-between bg-gray-50 border border-gray-200 p-4 rounded-xl hover:border-orange-500/20 transition-all"
                             >
                               <div className="flex items-center gap-4">
                                 <div
@@ -2224,7 +2224,7 @@ export default function DoctorDashboard() {
                                             {req.scheduled_at && (
                                                 <div className="text-right">
                                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Scheduled For</p>
-                                                    <p className="text-sm font-black text-teal-600 bg-teal-50 px-3 py-1 rounded-lg border border-teal-100">
+                                                    <p className="text-sm font-black text-orange-600 bg-orange-50 px-3 py-1 rounded-lg border border-teal-100">
                                                         {new Date(req.scheduled_at).toLocaleString()}
                                                     </p>
                                                 </div>
@@ -2345,7 +2345,7 @@ export default function DoctorDashboard() {
                                         ]);
                                       }
                                     }}
-                                    className="text-xs font-bold px-3 py-1.5 bg-gray-100 hover:bg-teal-50 border border-gray-200 hover:border-teal-500/30 text-gray-600 hover:text-teal-600 rounded-lg transition-all flex items-center gap-1 shadow-sm"
+                                    className="text-xs font-bold px-3 py-1.5 bg-gray-100 hover:bg-orange-50 border border-gray-200 hover:border-orange-500/30 text-gray-600 hover:text-orange-600 rounded-lg transition-all flex items-center gap-1 shadow-sm"
                                   >
                                     <Plus className="h-3 w-3" /> {m.brand_name}
                                   </button>
@@ -2514,7 +2514,7 @@ export default function DoctorDashboard() {
                           onClick={() =>
                             fetchPatientFollowUps(activePatient.patient_id)
                           }
-                          className="text-teal-500 hover:bg-teal-500/10 p-2 rounded-lg transition-colors"
+                          className="text-orange-500 hover:bg-orange-500/10 p-2 rounded-lg transition-colors"
                           title="Refresh follow-ups"
                         >
                           <RefreshCw
@@ -2567,20 +2567,20 @@ export default function DoctorDashboard() {
           <div className="flex-1 overflow-y-auto p-6">
             {/* ── MORNING BRIEFING CARD ── */}
             {morningSummary && showMorningSummary && (
-              <div className="mb-6 bg-gradient-to-br from-teal-50 to-emerald-50 border border-teal-200 rounded-2xl p-5">
+              <div className="mb-6 bg-gradient-to-br from-teal-50 to-emerald-50 border border-orange-200 rounded-2xl p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-sm font-black text-teal-800 flex items-center gap-2">
                       <Activity className="h-4 w-4" />
                       Good morning, Dr. {doctorName.split(' ')[0]} — Here&apos;s your day
                     </h3>
-                    <p className="text-xs text-teal-600 mt-0.5">
+                    <p className="text-xs text-orange-600 mt-0.5">
                       {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
                     </p>
                   </div>
                   <button
                     onClick={() => setShowMorningSummary(false)}
-                    className="p-1.5 hover:bg-teal-100 rounded-lg text-teal-400 transition-colors"
+                    className="p-1.5 hover:bg-orange-100 rounded-lg text-teal-400 transition-colors"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -2637,12 +2637,12 @@ export default function DoctorDashboard() {
                 {/* Today's schedule preview */}
                 {morningSummary.today.appointments.length > 0 && (
                   <div>
-                    <p className="text-[10px] font-black text-teal-700 uppercase tracking-wide mb-2">Today&apos;s Schedule</p>
+                    <p className="text-[10px] font-black text-orange-700 uppercase tracking-wide mb-2">Today&apos;s Schedule</p>
                     <div className="space-y-1.5">
                       {morningSummary.today.appointments.slice(0, 5).map((appt: any) => (
                         <div key={appt.appointment_id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-teal-100">
                           <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${appt.status === 'Checked In' ? 'bg-teal-500' : appt.status === 'Completed' ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                            <div className={`w-2 h-2 rounded-full ${appt.status === 'Checked In' ? 'bg-orange-500' : appt.status === 'Completed' ? 'bg-emerald-500' : 'bg-gray-300'}`} />
                             <span className="text-xs font-semibold text-gray-900">{appt.patient_name}</span>
                             {appt.reason && <span className="text-[10px] text-gray-400">· {appt.reason}</span>}
                           </div>
@@ -2651,7 +2651,7 @@ export default function DoctorDashboard() {
                               {new Date(appt.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
                             </span>
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                              appt.status === 'Checked In' ? 'bg-teal-50 text-teal-700' :
+                              appt.status === 'Checked In' ? 'bg-orange-50 text-orange-700' :
                               appt.status === 'Completed' ? 'bg-emerald-50 text-emerald-700' :
                               'bg-gray-100 text-gray-500'
                             }`}>{appt.status}</span>
@@ -2659,7 +2659,7 @@ export default function DoctorDashboard() {
                         </div>
                       ))}
                       {morningSummary.today.appointments.length > 5 && (
-                        <p className="text-[10px] text-teal-600 text-center font-semibold">
+                        <p className="text-[10px] text-orange-600 text-center font-semibold">
                           +{morningSummary.today.appointments.length - 5} more appointments
                         </p>
                       )}

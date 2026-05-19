@@ -144,7 +144,7 @@ export default function MedicalRecordsPage() {
                                                     <p className="text-xs font-bold text-gray-500 uppercase mb-2">Medical Notes</p>
                                                     {adm.medical_notes.map((n: any, i: number) => (
                                                         <div key={i} className="bg-gray-50 rounded-xl p-3 mb-2 text-sm text-gray-700">
-                                                            <span className="text-[10px] font-bold text-teal-600 uppercase">{n.note_type}</span>
+                                                            <span className="text-[10px] font-bold text-orange-600 uppercase">{n.note_type}</span>
                                                             <p className="mt-1">{n.details}</p>
                                                             <p className="text-[10px] text-gray-400 mt-1">{fmtDate(n.created_at)}</p>
                                                         </div>

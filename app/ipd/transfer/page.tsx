@@ -68,7 +68,7 @@ export default function TransferPage() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input
                             type="text" placeholder="Search admitted patient or bed..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
                         />
                     </div>
                 </div>
@@ -92,7 +92,7 @@ export default function TransferPage() {
                                     <td className="px-6 py-4"><span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded font-bold uppercase">{a.bed_id}</span></td>
                                     <td className="px-6 py-4 text-gray-500">{new Date(a.admission_date).toLocaleDateString()}</td>
                                     <td className="px-6 py-4 text-right">
-                                        <button onClick={() => { setSelectedAd(a); setModalOpen(true); }} className="text-teal-600 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg font-bold text-xs inline-flex items-center gap-1 transition-colors">
+                                        <button onClick={() => { setSelectedAd(a); setModalOpen(true); }} className="text-orange-600 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg font-bold text-xs inline-flex items-center gap-1 transition-colors">
                                             <MoveRight className="h-3 w-3" /> Initiate Transfer
                                         </button>
                                     </td>
@@ -119,7 +119,7 @@ export default function TransferPage() {
 
                             <div>
                                 <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Select Destination Bed *</label>
-                                <select required value={newBedId} onChange={e => setNewBedId(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-teal-500/20 text-sm font-medium outline-none">
+                                <select required value={newBedId} onChange={e => setNewBedId(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-orange-500/20 text-sm font-medium outline-none">
                                     <option value="">-- Assign new bed --</option>
                                     {beds.map(b => (
                                         <option key={b.bed_id} value={b.bed_id}>{b.wards?.ward_name} - {b.bed_id} ({b.wards?.ward_type})</option>
@@ -129,10 +129,10 @@ export default function TransferPage() {
 
                             <div>
                                 <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Clinical Reason *</label>
-                                <textarea required value={transferReason} onChange={e => setTransferReason(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl min-h-[80px] text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" placeholder="ICU step-down, patient request, clinical change..." />
+                                <textarea required value={transferReason} onChange={e => setTransferReason(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl min-h-[80px] text-sm focus:ring-2 focus:ring-orange-500/20 outline-none" placeholder="ICU step-down, patient request, clinical change..." />
                             </div>
 
-                            <button disabled={saving} type="submit" className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold p-3 rounded-xl shadow-md transition-all">Submit Transfer</button>
+                            <button disabled={saving} type="submit" className="w-full bg-orange-600 hover:bg-teal-700 text-white font-bold p-3 rounded-xl shadow-md transition-all">Submit Transfer</button>
                         </div>
                     </form>
                 </div>

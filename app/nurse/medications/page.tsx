@@ -147,7 +147,7 @@ export default function NurseMedicationsPage() {
                             placeholder="Search patient, medication, route..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                         />
                     </div>
                     <div className="flex items-center gap-2">
@@ -157,7 +157,7 @@ export default function NurseMedicationsPage() {
                                 key={mode}
                                 onClick={() => setFilterMode(mode)}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${filterMode === mode
-                                    ? 'bg-teal-50 text-teal-700 border border-teal-200'
+                                    ? 'bg-orange-50 text-orange-700 border border-orange-200'
                                     : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
                                     }`}
                             >
@@ -197,8 +197,8 @@ export default function NurseMedicationsPage() {
                                         <tr key={med.id} className={`hover:bg-gray-50 transition-colors ${isScheduled ? '' : 'opacity-70'}`}>
                                             <td className="px-6 py-4 font-bold text-gray-900">
                                                 <div className="flex items-center gap-2">
-                                                    <div className="h-7 w-7 bg-teal-50 rounded-lg flex items-center justify-center shrink-0">
-                                                        <User className="h-3.5 w-3.5 text-teal-500" />
+                                                    <div className="h-7 w-7 bg-orange-50 rounded-lg flex items-center justify-center shrink-0">
+                                                        <User className="h-3.5 w-3.5 text-orange-500" />
                                                     </div>
                                                     <div>
                                                         <p className="font-bold text-sm">{med.patientName}</p>

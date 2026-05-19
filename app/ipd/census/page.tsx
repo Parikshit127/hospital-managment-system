@@ -30,13 +30,13 @@ export default function CensusPage() {
             refreshing={refreshing}
         >
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div className="bg-white border hover:border-teal-500 transition-colors border-gray-200 shadow-sm rounded-2xl p-6 flex items-center justify-between">
+                <div className="bg-white border hover:border-orange-500 transition-colors border-gray-200 shadow-sm rounded-2xl p-6 flex items-center justify-between">
                     <div>
                         <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-1">Overall Occupancy</p>
                         <p className="text-3xl font-black text-gray-900">{overallRate}%</p>
                     </div>
-                    <div className="p-4 rounded-xl bg-teal-50">
-                        <Activity className="h-6 w-6 text-teal-600" />
+                    <div className="p-4 rounded-xl bg-orange-50">
+                        <Activity className="h-6 w-6 text-orange-600" />
                     </div>
                 </div>
                 <div className="bg-white border hover:border-emerald-500 transition-colors border-gray-200 shadow-sm rounded-2xl p-6 flex items-center justify-between">
@@ -86,7 +86,7 @@ export default function CensusPage() {
                                             <span className="font-bold text-gray-700">{w.occupancy_rate}%</span>
                                             <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
                                                 <div
-                                                    className={`h-full ${w.occupancy_rate > 90 ? 'bg-red-500' : w.occupancy_rate > 70 ? 'bg-amber-500' : 'bg-teal-500'}`}
+                                                    className={`h-full ${w.occupancy_rate > 90 ? 'bg-red-500' : w.occupancy_rate > 70 ? 'bg-amber-500' : 'bg-orange-500'}`}
                                                     style={{ width: `${w.occupancy_rate}%` }}
                                                 ></div>
                                             </div>

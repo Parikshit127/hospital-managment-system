@@ -72,10 +72,10 @@ const PRINT_CARDS: PrintCard[] = [
 
 const colorMap: Record<string, { bg: string; icon: string; btn: string; border: string }> = {
   teal: {
-    bg: "bg-teal-50",
-    icon: "bg-teal-100 text-teal-600",
-    btn: "bg-teal-600 hover:bg-teal-700 text-white",
-    border: "border-teal-100 hover:border-teal-200",
+    bg: "bg-orange-50",
+    icon: "bg-orange-100 text-orange-600",
+    btn: "bg-orange-600 hover:bg-teal-700 text-white",
+    border: "border-teal-100 hover:border-orange-200",
   },
   emerald: {
     bg: "bg-emerald-50",
@@ -139,7 +139,7 @@ export default function PrintCenterPage() {
       <div className="max-w-5xl mx-auto px-5 sm:px-8 py-8">
         {/* Header */}
         <div className="flex items-center gap-3 mb-8">
-          <div className="p-2.5 rounded-xl bg-teal-600 text-white shadow-md">
+          <div className="p-2.5 rounded-xl bg-orange-600 text-white shadow-md">
             <Printer className="h-5 w-5" />
           </div>
           <div>

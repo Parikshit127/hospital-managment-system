@@ -77,14 +77,14 @@ export default function NurseTasksPage() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input type="text" placeholder="Search tasks or patients..."
                             value={search} onChange={e => setSearch(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                            className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                     </div>
                     <div className="flex items-center gap-2">
                         <Filter className="h-4 w-4 text-gray-400" />
                         {(['pending', 'completed', 'all'] as const).map(f => (
                             <button key={f} onClick={() => setFilter(f)}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${filter === f
-                                    ? 'bg-teal-50 text-teal-700 border border-teal-200'
+                                    ? 'bg-orange-50 text-orange-700 border border-orange-200'
                                     : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
                                 }`}>
                                 {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -96,7 +96,7 @@ export default function NurseTasksPage() {
                 {/* Task List */}
                 {loading ? (
                     <div className="flex items-center justify-center py-16">
-                        <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
+                        <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
                     </div>
                 ) : filtered.length === 0 ? (
                     <div className="bg-white border border-gray-200 rounded-2xl p-16 text-center">

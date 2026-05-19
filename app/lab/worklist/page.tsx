@@ -72,7 +72,7 @@ export default function LabWorklistPage() {
                             placeholder="Scan or type barcode, patient name..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                         />
                     </div>
                     <div className="flex items-center gap-2">
@@ -81,7 +81,7 @@ export default function LabWorklistPage() {
                                 key={status}
                                 onClick={() => setFilterStatus(status)}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${filterStatus === status
-                                        ? 'bg-teal-50 text-teal-700 border border-teal-200'
+                                        ? 'bg-orange-50 text-orange-700 border border-orange-200'
                                         : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
                                     }`}
                             >
@@ -137,7 +137,7 @@ export default function LabWorklistPage() {
                                     <td className="px-6 py-4 text-right">
                                         <Link
                                             href={`/lab/sample/${order.order_id}`}
-                                            className="inline-flex items-center gap-1 text-teal-600 hover:text-teal-700 font-bold text-xs bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg transition-colors"
+                                            className="inline-flex items-center gap-1 text-orange-600 hover:text-orange-700 font-bold text-xs bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-colors"
                                         >
                                             Process Sample
                                             <ChevronRight className="h-3 w-3" />

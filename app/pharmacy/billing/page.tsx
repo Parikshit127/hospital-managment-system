@@ -271,8 +271,8 @@ export default function PharmacyPage() {
                             <div>
                                 <h1 className="text-lg font-black tracking-tight text-gray-900">Pharmacy & Billing</h1>
                                 <div className="flex gap-6 mt-1 text-sm font-bold text-gray-400">
-                                    <button onClick={() => setActiveTab('billing')} className={`pb-1 border-b-2 transition-all ${activeTab === 'billing' ? 'text-teal-500 border-teal-500' : 'border-transparent hover:text-gray-500'}`}>Inventory</button>
-                                    <button onClick={() => setActiveTab('orders')} className={`pb-1 border-b-2 transition-all ${activeTab === 'orders' ? 'text-teal-500 border-teal-500' : 'border-transparent hover:text-gray-500'}`}>
+                                    <button onClick={() => setActiveTab('billing')} className={`pb-1 border-b-2 transition-all ${activeTab === 'billing' ? 'text-orange-500 border-orange-500' : 'border-transparent hover:text-gray-500'}`}>Inventory</button>
+                                    <button onClick={() => setActiveTab('orders')} className={`pb-1 border-b-2 transition-all ${activeTab === 'orders' ? 'text-orange-500 border-orange-500' : 'border-transparent hover:text-gray-500'}`}>
                                         Doctor Orders
                                         {orderQueue.length > 0 && <span className="ml-2 bg-rose-500 text-white px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm">{orderQueue.length}</span>}
                                     </button>
@@ -288,10 +288,10 @@ export default function PharmacyPage() {
 
                         {activeTab === 'billing' && (
                             <div className="relative w-full group">
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 h-4 w-4 group-focus-within:text-teal-500 transition-colors" />
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 h-4 w-4 group-focus-within:text-orange-500 transition-colors" />
                                 <input
                                     value={search} onChange={e => setSearch(e.target.value)}
-                                    className="w-full pl-11 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none text-sm transition-all placeholder:text-gray-400 font-medium text-gray-900"
+                                    className="w-full pl-11 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none text-sm transition-all placeholder:text-gray-400 font-medium text-gray-900"
                                     placeholder="Search medicine by name or batch..."
                                 />
                             </div>
@@ -308,7 +308,7 @@ export default function PharmacyPage() {
                                     <span className="text-gray-400 font-bold">No incoming orders from doctors</span>
                                 </div>
                             ) : orderQueue.map(order => (
-                                <div key={order.id} className="bg-white border border-gray-200 shadow-sm p-6 rounded-2xl mb-4 hover:border-teal-500/20 transition-all relative overflow-hidden group">
+                                <div key={order.id} className="bg-white border border-gray-200 shadow-sm p-6 rounded-2xl mb-4 hover:border-orange-500/20 transition-all relative overflow-hidden group">
                                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-teal-400 to-emerald-500" />
                                     <div className="flex justify-between items-start mb-4 pl-2">
                                         <div>
@@ -408,7 +408,7 @@ export default function PharmacyPage() {
                                                     <button
                                                         onClick={() => addToCart(item)}
                                                         disabled={item.stock_count <= 0 || isExpired}
-                                                        className="bg-teal-50 border border-teal-200 hover:bg-teal-100 text-teal-600 p-1.5 rounded-lg transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                                                        className="bg-orange-50 border border-orange-200 hover:bg-orange-100 text-orange-600 p-1.5 rounded-lg transition-all disabled:opacity-20 disabled:cursor-not-allowed"
                                                     >
                                                         <Plus className="h-3.5 w-3.5" />
                                                     </button>
@@ -426,7 +426,7 @@ export default function PharmacyPage() {
                 <aside className="flex-[1.2] flex flex-col bg-white border-l border-gray-200 min-w-[380px] z-30 relative">
                     <div className="p-5 border-b border-gray-200">
                         <h2 className="text-sm font-black text-gray-700 mb-3 flex items-center gap-2 uppercase tracking-[0.12em]">
-                            <ShoppingCart className="h-4 w-4 text-teal-500" /> Current Bill
+                            <ShoppingCart className="h-4 w-4 text-orange-500" /> Current Bill
                         </h2>
 
                         {/* Patient selection */}
@@ -454,7 +454,7 @@ export default function PharmacyPage() {
                                     <input
                                         value={patientSearch}
                                         onChange={e => { setPatientSearch(e.target.value); setSelectedPatient(null); setPatientId(''); }}
-                                        className="w-full pl-9 pr-8 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400"
+                                        className="w-full pl-9 pr-8 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400"
                                         placeholder="Search by name, ID, phone..."
                                     />
                                     {selectedPatient && (
@@ -467,7 +467,7 @@ export default function PharmacyPage() {
                                             {patientSuggestions.map((p: any) => (
                                                 <button key={p.patient_id} type="button"
                                                     onClick={() => selectPatient(p)}
-                                                    className="w-full text-left px-4 py-2.5 hover:bg-teal-50 border-b border-gray-50 last:border-0 transition-colors"
+                                                    className="w-full text-left px-4 py-2.5 hover:bg-orange-50 border-b border-gray-50 last:border-0 transition-colors"
                                                 >
                                                     <p className="text-sm font-bold text-gray-900">{p.full_name}</p>
                                                     <p className="text-[10px] text-gray-400 font-mono">{p.patient_id} · {p.phone}</p>
@@ -476,12 +476,12 @@ export default function PharmacyPage() {
                                         </div>
                                     )}
                                     {selectedPatient && (
-                                        <div className="mt-1.5 px-3 py-2 bg-teal-50 border border-teal-200 rounded-lg flex items-center justify-between">
+                                        <div className="mt-1.5 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg flex items-center justify-between">
                                             <div>
                                                 <p className="text-xs font-bold text-teal-800">{selectedPatient.full_name}</p>
-                                                <p className="text-[10px] font-mono text-teal-500">{selectedPatient.patient_id}</p>
+                                                <p className="text-[10px] font-mono text-orange-500">{selectedPatient.patient_id}</p>
                                             </div>
-                                            <CheckCircle className="h-4 w-4 text-teal-500 flex-shrink-0" />
+                                            <CheckCircle className="h-4 w-4 text-orange-500 flex-shrink-0" />
                                         </div>
                                     )}
                                 </div>
@@ -501,7 +501,7 @@ export default function PharmacyPage() {
                         ) : cart.map(item => {
                             const itemTax = item.unit_price * item.quantity * item.gst_percent / 100;
                             return (
-                                <div key={item.batch_id} className="p-3 bg-gray-50 rounded-xl border border-gray-200 group hover:border-teal-200 transition-colors">
+                                <div key={item.batch_id} className="p-3 bg-gray-50 rounded-xl border border-gray-200 group hover:border-orange-200 transition-colors">
                                     <div className="flex justify-between items-start">
                                         <div className="flex-1 min-w-0">
                                             <h4 className="text-sm font-bold text-gray-700 truncate">{item.medicine_name}</h4>
@@ -565,7 +565,7 @@ export default function PharmacyPage() {
                                 <button
                                     key={m.id}
                                     onClick={() => setPaymentMethod(m.id)}
-                                    className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${paymentMethod === m.id ? 'bg-teal-50 border-teal-300 text-teal-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                                    className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${paymentMethod === m.id ? 'bg-orange-50 border-teal-300 text-orange-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
                                 >
                                     <m.icon className="h-3.5 w-3.5" /> {m.label}
                                 </button>
@@ -672,8 +672,8 @@ export default function PharmacyPage() {
                             /* Confirm Payment */
                             <>
                                 <div className="p-6 border-b border-gray-200 text-center">
-                                    <div className="h-10 w-10 bg-teal-100 rounded-xl flex items-center justify-center mx-auto mb-3">
-                                        <IndianRupee className="h-5 w-5 text-teal-600" />
+                                    <div className="h-10 w-10 bg-orange-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+                                        <IndianRupee className="h-5 w-5 text-orange-600" />
                                     </div>
                                     <h2 className="text-lg font-black text-gray-900">Confirm Payment</h2>
                                     <p className="text-xs text-gray-400 mt-1">Patient: <span className="font-bold text-gray-600">{patientId}</span></p>
@@ -704,7 +704,7 @@ export default function PharmacyPage() {
                                     <div className="flex gap-2 pt-2">
                                         {PAYMENT_METHODS.map(m => (
                                             <button key={m.id} onClick={() => setPaymentMethod(m.id)}
-                                                className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${paymentMethod === m.id ? 'bg-teal-50 border-teal-300 text-teal-700' : 'bg-white border-gray-200 text-gray-500'}`}>
+                                                className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${paymentMethod === m.id ? 'bg-orange-50 border-teal-300 text-orange-700' : 'bg-white border-gray-200 text-gray-500'}`}>
                                                 <m.icon className="h-3.5 w-3.5" /> {m.label}
                                             </button>
                                         ))}
@@ -741,17 +741,17 @@ export default function PharmacyPage() {
                                 <div className="space-y-4">
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Brand Name</label>
-                                        <input value={invForm.brand_name} onChange={e => setInvForm({ ...invForm, brand_name: e.target.value })} className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-bold text-gray-900 placeholder:text-gray-400" placeholder="e.g. Dolo 650" />
+                                        <input value={invForm.brand_name} onChange={e => setInvForm({ ...invForm, brand_name: e.target.value })} className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-bold text-gray-900 placeholder:text-gray-400" placeholder="e.g. Dolo 650" />
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Generic Name</label>
-                                        <input value={invForm.generic_name} onChange={e => setInvForm({ ...invForm, generic_name: e.target.value })} className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400" placeholder="e.g. Paracetamol" />
+                                        <input value={invForm.generic_name} onChange={e => setInvForm({ ...invForm, generic_name: e.target.value })} className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400" placeholder="e.g. Paracetamol" />
                                     </div>
                                 </div>
                             ) : (
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Select Medicine</label>
-                                    <select value={invForm.medicine_id} onChange={e => setInvForm({ ...invForm, medicine_id: e.target.value })} className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none font-bold text-gray-900 appearance-none">
+                                    <select value={invForm.medicine_id} onChange={e => setInvForm({ ...invForm, medicine_id: e.target.value })} className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-bold text-gray-900 appearance-none">
                                         <option value="">Choose from list...</option>
                                         {uniqueMedicines.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
                                     </select>
@@ -761,26 +761,26 @@ export default function PharmacyPage() {
                             <div className="grid grid-cols-2 gap-5 pt-2">
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Batch No</label>
-                                    <input value={invForm.batch_no} onChange={e => setInvForm({ ...invForm, batch_no: e.target.value })} className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none font-mono font-medium text-gray-900 placeholder:text-gray-400" placeholder="B-123" />
+                                    <input value={invForm.batch_no} onChange={e => setInvForm({ ...invForm, batch_no: e.target.value })} className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-mono font-medium text-gray-900 placeholder:text-gray-400" placeholder="B-123" />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Stock Qty</label>
-                                    <input value={invForm.stock} onChange={e => setInvForm({ ...invForm, stock: e.target.value })} type="number" className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none font-bold text-gray-900 placeholder:text-gray-400" placeholder="0" />
+                                    <input value={invForm.stock} onChange={e => setInvForm({ ...invForm, stock: e.target.value })} type="number" className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-bold text-gray-900 placeholder:text-gray-400" placeholder="0" />
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-5">
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Expiry Date</label>
-                                    <input value={invForm.expiry} onChange={e => setInvForm({ ...invForm, expiry: e.target.value })} type="date" className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none font-medium text-gray-900" />
+                                    <input value={invForm.expiry} onChange={e => setInvForm({ ...invForm, expiry: e.target.value })} type="date" className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-medium text-gray-900" />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Unit Price (₹)</label>
-                                    <input value={invForm.price} onChange={e => setInvForm({ ...invForm, price: e.target.value })} type="number" step="0.01" className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none font-bold text-gray-900 placeholder:text-gray-400" placeholder="0.00" />
+                                    <input value={invForm.price} onChange={e => setInvForm({ ...invForm, price: e.target.value })} type="number" step="0.01" className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-bold text-gray-900 placeholder:text-gray-400" placeholder="0.00" />
                                 </div>
                             </div>
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Rack Location</label>
-                                <input value={invForm.rack} onChange={e => setInvForm({ ...invForm, rack: e.target.value })} className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none font-medium text-gray-900 placeholder:text-gray-400" placeholder="Optional (e.g. A-4)" />
+                                <input value={invForm.rack} onChange={e => setInvForm({ ...invForm, rack: e.target.value })} className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-medium text-gray-900 placeholder:text-gray-400" placeholder="Optional (e.g. A-4)" />
                             </div>
                         </div>
 
@@ -841,7 +841,7 @@ export default function PharmacyPage() {
                             <div className="flex gap-2 mb-3">
                                 {PAYMENT_METHODS.map(m => (
                                     <button key={m.id} onClick={() => setPaymentMethod(m.id)}
-                                        className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${paymentMethod === m.id ? 'bg-teal-50 border-teal-300 text-teal-700' : 'bg-white border-gray-200 text-gray-500'}`}>
+                                        className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${paymentMethod === m.id ? 'bg-orange-50 border-teal-300 text-orange-700' : 'bg-white border-gray-200 text-gray-500'}`}>
                                         <m.icon className="h-3.5 w-3.5" /> {m.label}
                                     </button>
                                 ))}

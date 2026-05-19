@@ -92,12 +92,12 @@ export default function OverviewTab({ patient, insurancePolicies, pillReminders 
         {/* Contact Info */}
         <div className="bg-white border border-gray-200 rounded-2xl p-5">
           <h3 className="font-black text-gray-800 text-lg mb-4 flex items-center gap-2">
-            <Phone className="h-5 w-5 text-teal-600" />
+            <Phone className="h-5 w-5 text-orange-600" />
             Contact Information
           </h3>
           <div className="space-y-3">
             <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl p-3">
-              <Phone className="h-4 w-4 text-teal-600 shrink-0" />
+              <Phone className="h-4 w-4 text-orange-600 shrink-0" />
               <div>
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Phone</p>
                 <p className="text-sm font-semibold text-gray-800">{patient.phone || 'N/A'}</p>
@@ -252,7 +252,7 @@ export default function OverviewTab({ patient, insurancePolicies, pillReminders 
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
                       <div
-                        className="bg-teal-500 h-2 rounded-full transition-all"
+                        className="bg-orange-500 h-2 rounded-full transition-all"
                         style={{ width: `${Math.min(ratio, 100)}%` }}
                       />
                     </div>

@@ -125,7 +125,7 @@ export default function MedicationAdminPage() {
                     </div>
                     <div className="ml-auto">
                         <button onClick={() => setShowAddModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 transition-colors">
+                            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 transition-colors">
                             <Plus className="h-4 w-4" /> Schedule Medication
                         </button>
                     </div>
@@ -133,7 +133,7 @@ export default function MedicationAdminPage() {
 
                 {/* Medication list */}
                 {loading ? (
-                    <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-teal-500" /></div>
+                    <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-orange-500" /></div>
                 ) : filtered.length === 0 ? (
                     <div className="bg-white border border-gray-200 rounded-2xl p-16 text-center">
                         <Pill className="h-10 w-10 text-gray-200 mx-auto mb-3" />
@@ -272,7 +272,7 @@ export default function MedicationAdminPage() {
                         </label>
                         <div className="flex gap-3 pt-2">
                             <button onClick={handleAddMed} disabled={addLoading}
-                                className="flex-1 py-2.5 bg-teal-600 text-white font-bold text-sm rounded-xl hover:bg-teal-700 disabled:opacity-60 transition-colors">
+                                className="flex-1 py-2.5 bg-orange-600 text-white font-bold text-sm rounded-xl hover:bg-teal-700 disabled:opacity-60 transition-colors">
                                 {addLoading ? 'Scheduling...' : 'Schedule'}
                             </button>
                             <button onClick={() => setShowAddModal(false)}

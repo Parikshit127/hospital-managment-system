@@ -14,8 +14,8 @@ import {
 // All 5 room types from the document
 const ROOM_TYPES = ["Major OT", "Minor OT", "Cath Lab", "Endoscopy Suite", "Day Surgery"];
 
-const inputCls  = "w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500";
-const selectCls = "w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500";
+const inputCls  = "w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500";
+const selectCls = "w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500";
 const labelCls  = "block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5";
 
 const EMPTY_ROOM = { room_name: "", room_type: "Major OT", floor: "", wing: "", equipment: "" };
@@ -130,7 +130,7 @@ export default function OTMasterSetupPage() {
       <div className="flex items-center gap-2 mb-4">
         {(["rooms", "surgeries"] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize ${tab === t ? "bg-teal-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize ${tab === t ? "bg-orange-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
             {t === "rooms" ? "OT Rooms" : "Surgery Master"}
           </button>
         ))}
@@ -142,7 +142,7 @@ export default function OTMasterSetupPage() {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <p className="text-sm text-gray-500">{rooms.length} room{rooms.length !== 1 ? "s" : ""} configured</p>
-            <button onClick={openCreateRoom} className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-xl transition">
+            <button onClick={openCreateRoom} className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-xl transition">
               <Plus className="h-4 w-4" /> Add OT Room
             </button>
           </div>
@@ -181,7 +181,7 @@ export default function OTMasterSetupPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <button onClick={() => openEditRoom(r)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-teal-600 transition" title="Edit">
+                          <button onClick={() => openEditRoom(r)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-orange-600 transition" title="Edit">
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
                           <button onClick={() => onToggleRoom(r.id, r.is_active)}
@@ -213,7 +213,7 @@ export default function OTMasterSetupPage() {
               <div><label className={labelCls}>Anesth. (₹)</label><input type="number" value={masterForm.anesthesia_fee} onChange={e => setMasterForm({ ...masterForm, anesthesia_fee: e.target.value })} placeholder="0" className={inputCls} /></div>
               <div><label className={labelCls}>OT (₹)</label><input type="number" value={masterForm.ot_charges} onChange={e => setMasterForm({ ...masterForm, ot_charges: e.target.value })} placeholder="0" className={inputCls} /></div>
             </div>
-            <button type="submit" className="w-full px-4 py-2.5 bg-teal-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 transition">Add Surgery</button>
+            <button type="submit" className="w-full px-4 py-2.5 bg-orange-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 transition">Add Surgery</button>
           </form>
 
           <div className="lg:col-span-2 bg-white border border-gray-200 rounded-2xl p-5">
@@ -295,7 +295,7 @@ export default function OTMasterSetupPage() {
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3 shrink-0">
               <button onClick={() => setRoomModalOpen(false)} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-gray-700 text-sm font-semibold hover:bg-gray-50 transition">Cancel</button>
               <button onClick={handleSaveRoom} disabled={roomSaving || !roomForm.room_name.trim()}
-                className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold disabled:opacity-50 transition flex items-center justify-center gap-2">
+                className="flex-1 py-2.5 bg-orange-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold disabled:opacity-50 transition flex items-center justify-center gap-2">
                 {roomSaving && <Loader2 className="h-4 w-4 animate-spin" />}
                 {roomSaving ? "Saving…" : editingRoomId ? "Save Changes" : "Add Room"}
               </button>

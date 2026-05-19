@@ -286,7 +286,7 @@ export default function AppointmentsPage() {
     const getStatusColor = (status: string) => {
         const map: Record<string, string> = {
             'Scheduled': 'bg-blue-50 text-blue-700 border-blue-200',
-            'Checked In': 'bg-teal-50 text-teal-700 border-teal-200',
+            'Checked In': 'bg-orange-50 text-orange-700 border-orange-200',
             'In Progress': 'bg-violet-50 text-violet-700 border-violet-200',
             'Completed': 'bg-emerald-50 text-emerald-700 border-emerald-200',
             'Cancelled': 'bg-red-50 text-red-700 border-red-200',
@@ -344,11 +344,11 @@ export default function AppointmentsPage() {
                         </button>
                     </div>
                     <button onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
-                        className="px-3 py-2 text-xs font-bold text-teal-600 bg-teal-50 rounded-xl hover:bg-teal-100">
+                        className="px-3 py-2 text-xs font-bold text-orange-600 bg-orange-50 rounded-xl hover:bg-orange-100">
                         Today
                     </button>
                     <select value={selectedDoctor} onChange={e => setSelectedDoctor(e.target.value)}
-                        className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500">
+                        className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500">
                         <option value="">All Doctors</option>
                         {doctors.map((d: any) => (
                             <option key={d.id} value={d.id}>{d.name} — {d.specialty || 'General'}</option>
@@ -390,7 +390,7 @@ export default function AppointmentsPage() {
                             <tbody className="divide-y divide-gray-100">
                                 {loading ? (
                                     <tr><td colSpan={8} className="text-center py-16">
-                                        <Loader2 className="h-6 w-6 animate-spin text-teal-500 mx-auto" />
+                                        <Loader2 className="h-6 w-6 animate-spin text-orange-500 mx-auto" />
                                     </td></tr>
                                 ) : appointments.length === 0 ? (
                                     <tr><td colSpan={8} className="text-center py-16">
@@ -400,7 +400,7 @@ export default function AppointmentsPage() {
                                 ) : appointments.map((appt: any) => (
                                     <tr key={appt.appointment_id} className="hover:bg-gray-50">
                                         <td className="px-4 py-3">
-                                            <span className="text-xs font-mono font-bold text-teal-600">{appt.appointment_id}</span>
+                                            <span className="text-xs font-mono font-bold text-orange-600">{appt.appointment_id}</span>
                                         </td>
                                         <td className="px-4 py-3">
                                             <p className="font-medium text-gray-900">{appt.patient?.full_name || 'Unknown'}</p>
@@ -428,7 +428,7 @@ export default function AppointmentsPage() {
                                                     </span>
                                                 )}
                                                 {appt.payment_mode === 'FREE' && (
-                                                    <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full bg-teal-50 text-teal-600">
+                                                    <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full bg-orange-50 text-orange-600">
                                                         Free
                                                     </span>
                                                 )}
@@ -478,7 +478,7 @@ export default function AppointmentsPage() {
                                                 ? 'bg-red-50 text-red-400 border-red-200'
                                                 : slot.is_free
                                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200 cursor-pointer hover:bg-emerald-100'
-                                                    : 'bg-teal-50 text-teal-700 border-teal-200 cursor-pointer hover:bg-teal-100'
+                                                    : 'bg-orange-50 text-orange-700 border-orange-200 cursor-pointer hover:bg-orange-100'
                                             }`}>
                                         {slot.start_time}
                                         <span className="block text-[9px] mt-0.5 opacity-70">
@@ -515,9 +515,9 @@ export default function AppointmentsPage() {
                             <div>
                                 <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Patient</label>
                                 {bookForm.patientId ? (
-                                    <div className="flex items-center justify-between bg-teal-50 rounded-xl px-3 py-2">
-                                        <span className="text-sm font-medium text-teal-700">{bookForm.patientSearch}</span>
-                                        <button onClick={() => setBookForm(f => ({ ...f, patientId: '', patientSearch: '' }))} className="text-teal-500 hover:text-teal-700">
+                                    <div className="flex items-center justify-between bg-orange-50 rounded-xl px-3 py-2">
+                                        <span className="text-sm font-medium text-orange-700">{bookForm.patientSearch}</span>
+                                        <button onClick={() => setBookForm(f => ({ ...f, patientId: '', patientSearch: '' }))} className="text-orange-500 hover:text-orange-700">
                                             <X className="h-3.5 w-3.5" />
                                         </button>
                                     </div>
@@ -527,7 +527,7 @@ export default function AppointmentsPage() {
                                         <input type="text" value={bookForm.patientSearch}
                                             onChange={e => setBookForm(f => ({ ...f, patientSearch: e.target.value }))}
                                             placeholder="Search patient by name or ID..."
-                                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500" />
+                                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500" />
                                         {patientResults.length > 0 && (
                                             <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-10 max-h-40 overflow-y-auto">
                                                 {patientResults.map((p: any) => (
@@ -551,7 +551,7 @@ export default function AppointmentsPage() {
                                         const doc = doctors.find((d: any) => d.id === e.target.value);
                                         setBookForm(f => ({ ...f, doctorId: e.target.value, doctorName: doc?.name || '', department: doc?.specialty || '' }));
                                     }}
-                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500">
+                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500">
                                     <option value="">Select Doctor</option>
                                     {doctors.map((d: any) => (
                                         <option key={d.id} value={d.id}>{d.name} — {d.specialty || 'General'}</option>
@@ -563,7 +563,7 @@ export default function AppointmentsPage() {
                                 <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Date</label>
                                 <input type="date" value={bookForm.date || selectedDate}
                                     onChange={e => setBookForm(f => ({ ...f, date: e.target.value, slotId: '' }))}
-                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500" />
+                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500" />
                             </div>
 
                             {/* Slot Selection */}
@@ -578,7 +578,7 @@ export default function AppointmentsPage() {
                                         <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto p-1">
                                             {availableSlots.map((slot: any) => (
                                                 <button key={slot.id} onClick={() => setBookForm(f => ({ ...f, slotId: slot.id }))}
-                                                    className={`py-2 text-xs font-bold rounded-xl border transition-all ${bookForm.slotId === slot.id ? 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white border-transparent shadow-md' : slot.is_free ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:border-emerald-400' : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-teal-400 hover:text-teal-600 hover:bg-white'}`}>
+                                                    className={`py-2 text-xs font-bold rounded-xl border transition-all ${bookForm.slotId === slot.id ? 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white border-transparent shadow-md' : slot.is_free ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:border-emerald-400' : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-teal-400 hover:text-orange-600 hover:bg-white'}`}>
                                                     {slot.start_time}
                                                     {slot.is_free && <span className="block text-[8px] mt-0.5 font-normal opacity-80">Free</span>}
                                                 </button>
@@ -594,7 +594,7 @@ export default function AppointmentsPage() {
                                     {[{ v: 'NEW_OPD', l: 'New OPD' }, { v: 'FOLLOW_UP', l: 'Follow-up' }, { v: 'EHC', l: 'EHC' }].map(t => (
                                         <button key={t.v} type="button"
                                             onClick={() => setBookForm(f => ({ ...f, appointmentType: t.v, parentAppointmentId: t.v !== 'FOLLOW_UP' ? '' : f.parentAppointmentId }))}
-                                            className={`flex-1 py-2 text-xs font-bold rounded-xl border transition-all ${bookForm.appointmentType === t.v ? 'bg-teal-500 text-white border-transparent' : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-teal-400'}`}>
+                                            className={`flex-1 py-2 text-xs font-bold rounded-xl border transition-all ${bookForm.appointmentType === t.v ? 'bg-orange-500 text-white border-transparent' : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-teal-400'}`}>
                                             {t.l}
                                         </button>
                                     ))}
@@ -607,7 +607,7 @@ export default function AppointmentsPage() {
                                     <input type="text" value={bookForm.parentAppointmentId}
                                         onChange={e => setBookForm(f => ({ ...f, parentAppointmentId: e.target.value }))}
                                         placeholder="e.g., APT-000123"
-                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500" />
+                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500" />
                                 </div>
                             )}
                             {/* Reason */}
@@ -616,7 +616,7 @@ export default function AppointmentsPage() {
                                 <input type="text" value={bookForm.reasonForVisit}
                                     onChange={e => setBookForm(f => ({ ...f, reasonForVisit: e.target.value }))}
                                     placeholder="e.g., Follow-up consultation"
-                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500" />
+                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500" />
                             </div>
                             <button onClick={handleBook} disabled={booking || !bookForm.patientId || !bookForm.doctorId}
                                 className="w-full py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-sm font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
@@ -669,7 +669,7 @@ export default function AppointmentsPage() {
                             <div>
                                 <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Doctor</label>
                                 <select value={bulkForm.doctorId} onChange={e => setBulkForm(f => ({ ...f, doctorId: e.target.value }))}
-                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500">
+                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500">
                                     <option value="">Select Doctor</option>
                                     {doctors.map((d: any) => (
                                         <option key={d.id} value={d.id}>{d.name}</option>
@@ -680,29 +680,29 @@ export default function AppointmentsPage() {
                                 <div>
                                     <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Start Date</label>
                                     <input type="date" value={bulkForm.startDate} onChange={e => setBulkForm(f => ({ ...f, startDate: e.target.value }))}
-                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500" />
+                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500" />
                                 </div>
                                 <div>
                                     <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">End Date</label>
                                     <input type="date" value={bulkForm.endDate} onChange={e => setBulkForm(f => ({ ...f, endDate: e.target.value }))}
-                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500" />
+                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500" />
                                 </div>
                             </div>
                             <div className="grid grid-cols-3 gap-3">
                                 <div>
                                     <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Start Time</label>
                                     <input type="time" value={bulkForm.startTime} onChange={e => setBulkForm(f => ({ ...f, startTime: e.target.value }))}
-                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500" />
+                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500" />
                                 </div>
                                 <div>
                                     <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">End Time</label>
                                     <input type="time" value={bulkForm.endTime} onChange={e => setBulkForm(f => ({ ...f, endTime: e.target.value }))}
-                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500" />
+                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500" />
                                 </div>
                                 <div>
                                     <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Duration (min)</label>
                                     <select value={bulkForm.slotDuration} onChange={e => setBulkForm(f => ({ ...f, slotDuration: Number(e.target.value) }))}
-                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500">
+                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500">
                                         <option value={10}>10 min</option>
                                         <option value={15}>15 min</option>
                                         <option value={20}>20 min</option>
@@ -714,7 +714,7 @@ export default function AppointmentsPage() {
                             <div>
                                 <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Buffer Between Slots (min)</label>
                                 <select value={bulkForm.bufferMinutes} onChange={e => setBulkForm(f => ({ ...f, bufferMinutes: Number(e.target.value) }))}
-                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500">
+                                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500">
                                     <option value={0}>No buffer</option>
                                     <option value={5}>5 min</option>
                                     <option value={10}>10 min</option>
@@ -730,15 +730,15 @@ export default function AppointmentsPage() {
                                 </div>
                                 <button type="button"
                                     onClick={() => setBulkForm(f => ({ ...f, isFree: !f.isFree }))}
-                                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${bulkForm.isFree ? 'bg-teal-500' : 'bg-gray-300'}`}>
+                                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${bulkForm.isFree ? 'bg-orange-500' : 'bg-gray-300'}`}>
                                     <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${bulkForm.isFree ? 'translate-x-4' : 'translate-x-0.5'}`} />
                                 </button>
                             </div>
 
                             {/* Slot Preview */}
                             {slotPreview && (
-                                <div className="bg-teal-50 border border-teal-200 rounded-xl px-4 py-3">
-                                    <p className="text-sm font-bold text-teal-700">
+                                <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3">
+                                    <p className="text-sm font-bold text-orange-700">
                                         This will create <span className="text-teal-900">{slotPreview.count} slots</span> across {slotPreview.days} day{slotPreview.days !== 1 ? 's' : ''}
                                     </p>
                                 </div>

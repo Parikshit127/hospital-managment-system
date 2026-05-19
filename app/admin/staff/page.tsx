@@ -37,7 +37,7 @@ const roleLabelMap: Record<string, string> = Object.fromEntries(ROLES.map(r => [
 
 const roleColorMap: Record<string, string> = {
     admin: 'bg-violet-50 text-violet-700 border border-violet-200',
-    doctor: 'bg-teal-50 text-teal-700 border border-teal-200',
+    doctor: 'bg-orange-50 text-orange-700 border border-orange-200',
     receptionist: 'bg-blue-50 text-blue-700 border border-blue-200',
     lab_technician: 'bg-amber-50 text-amber-700 border border-amber-200',
     pharmacist: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
@@ -49,8 +49,8 @@ const roleColorMap: Record<string, string> = {
     coordinator: 'bg-sky-50 text-sky-700 border border-sky-200',
 };
 
-const inputCls = 'w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500';
-const selectCls = 'w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500';
+const inputCls = 'w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500';
+const selectCls = 'w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500';
 
 function SectionLabel({ label, badge }: { label: string; badge: 'mandatory' | 'preferred' | 'optional' }) {
     const colors = { mandatory: 'bg-red-50 text-red-600 border-red-200', preferred: 'bg-amber-50 text-amber-600 border-amber-200', optional: 'bg-gray-100 text-gray-500 border-gray-200' };
@@ -215,14 +215,14 @@ export default function StaffManagement() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input type="text" value={searchInput} onChange={e => setSearchInput(e.target.value)}
                             placeholder="Search by name, username, or email..."
-                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500" />
+                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500" />
                     </div>
                     <div className="flex items-center gap-2">
                         <Filter className="h-4 w-4 text-gray-400" />
-                        <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value); setPage(1); }} className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500">
+                        <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value); setPage(1); }} className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500">
                             {ALL_ROLES_FILTER.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                         </select>
-                        <select value={activeFilter} onChange={e => { setActiveFilter(e.target.value as any); setPage(1); }} className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500">
+                        <select value={activeFilter} onChange={e => { setActiveFilter(e.target.value as any); setPage(1); }} className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500">
                             <option value="">All Status</option>
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>
@@ -241,14 +241,14 @@ export default function StaffManagement() {
                             </tr></thead>
                             <tbody className="divide-y divide-gray-100">
                                 {loading && users.length === 0 ? (
-                                    <tr><td colSpan={8} className="text-center py-16"><Loader2 className="h-6 w-6 animate-spin text-teal-500 mx-auto" /><p className="text-gray-400 text-xs mt-2">Loading staff...</p></td></tr>
+                                    <tr><td colSpan={8} className="text-center py-16"><Loader2 className="h-6 w-6 animate-spin text-orange-500 mx-auto" /><p className="text-gray-400 text-xs mt-2">Loading staff...</p></td></tr>
                                 ) : users.length === 0 ? (
                                     <tr><td colSpan={8} className="text-center py-16"><Users className="h-8 w-8 text-gray-300 mx-auto mb-2" /><p className="text-gray-400 text-sm font-medium">No staff found</p></td></tr>
                                 ) : users.map((user: any) => (
                                     <tr key={user.id} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${user.is_active ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-400'}`}>{(user.name || user.username || '?').charAt(0).toUpperCase()}</div>
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${user.is_active ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-400'}`}>{(user.name || user.username || '?').charAt(0).toUpperCase()}</div>
                                                 <div><p className={`font-medium text-sm ${user.is_active ? 'text-gray-900' : 'text-gray-400'}`}>{user.name || '-'}</p>{user.designation && <p className="text-[10px] text-gray-400">{user.designation}</p>}</div>
                                             </div>
                                         </td>
@@ -260,7 +260,7 @@ export default function StaffManagement() {
                                         <td className="px-4 py-3 text-gray-400 text-xs">{new Date(user.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-1">
-                                                <button onClick={() => openEdit(user)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-teal-600 transition-colors" title="Edit"><Pencil className="h-3.5 w-3.5" /></button>
+                                                <button onClick={() => openEdit(user)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-orange-600 transition-colors" title="Edit"><Pencil className="h-3.5 w-3.5" /></button>
                                                 <button onClick={() => openResetPassword(user)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-amber-600 transition-colors" title="Reset Password"><KeyRound className="h-3.5 w-3.5" /></button>
                                                 <button onClick={() => handleToggle(user.id)} className={`p-1.5 hover:bg-gray-100 rounded-lg transition-colors ${user.is_active ? 'text-gray-400 hover:text-rose-600' : 'text-gray-400 hover:text-emerald-600'}`} title={user.is_active ? 'Deactivate' : 'Activate'}><Power className="h-3.5 w-3.5" /></button>
                                             </div>

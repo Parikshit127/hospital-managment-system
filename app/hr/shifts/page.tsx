@@ -109,19 +109,19 @@ export default function HRShiftsPage() {
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Shift Name *</label>
                                 <input type="text" placeholder="e.g. Morning Shift"
                                     value={patternForm.name} onChange={e => setPatternForm({ ...patternForm, name: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                             </div>
                             <div>
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Start Time</label>
                                 <input type="time" value={patternForm.startTime}
                                     onChange={e => setPatternForm({ ...patternForm, startTime: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                             </div>
                             <div>
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">End Time</label>
                                 <input type="time" value={patternForm.endTime}
                                     onChange={e => setPatternForm({ ...patternForm, endTime: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                             </div>
                         </div>
                         <button onClick={handleAddPattern} disabled={saving}
@@ -145,7 +145,7 @@ export default function HRShiftsPage() {
                             <div>
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Employee *</label>
                                 <select value={assignForm.employeeId} onChange={e => setAssignForm({ ...assignForm, employeeId: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white">
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white">
                                     <option value="">Select Employee</option>
                                     {employees.map((emp: any) => (
                                         <option key={emp.id} value={emp.id}>{emp.name} ({emp.employee_code})</option>
@@ -155,7 +155,7 @@ export default function HRShiftsPage() {
                             <div>
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Shift Pattern *</label>
                                 <select value={assignForm.shiftPatternId} onChange={e => setAssignForm({ ...assignForm, shiftPatternId: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white">
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white">
                                     <option value="">Select Shift</option>
                                     {patterns.map((p: any) => (
                                         <option key={p.id} value={p.id}>{p.name} ({p.start_time} - {p.end_time})</option>
@@ -168,13 +168,13 @@ export default function HRShiftsPage() {
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Start Date *</label>
                                 <input type="date" value={assignForm.startDate}
                                     onChange={e => setAssignForm({ ...assignForm, startDate: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                             </div>
                             <div>
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">End Date *</label>
                                 <input type="date" value={assignForm.endDate}
                                     onChange={e => setAssignForm({ ...assignForm, endDate: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                             </div>
                         </div>
                         <button onClick={handleAssign} disabled={saving}
@@ -192,7 +192,7 @@ export default function HRShiftsPage() {
                     </div>
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
-                            <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
+                            <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
                         </div>
                     ) : patterns.length === 0 ? (
                         <div className="p-12 text-center text-gray-400">
@@ -205,7 +205,7 @@ export default function HRShiftsPage() {
                                 <div key={p.id} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                                     <p className="text-sm font-black text-gray-900">{p.name}</p>
                                     <div className="flex items-center gap-2 mt-2">
-                                        <Clock className="h-3.5 w-3.5 text-teal-500" />
+                                        <Clock className="h-3.5 w-3.5 text-orange-500" />
                                         <span className="text-xs text-gray-600 font-medium">{p.start_time} - {p.end_time}</span>
                                     </div>
                                 </div>
@@ -219,7 +219,7 @@ export default function HRShiftsPage() {
                     <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                         <h3 className="text-sm font-black text-gray-900">Shift Roster</h3>
                         <input type="date" value={date} onChange={e => setDate(e.target.value)}
-                            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-teal-500" />
+                            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-orange-500" />
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
@@ -245,7 +245,7 @@ export default function HRShiftsPage() {
                                         </td>
                                         <td className="px-4 py-3 text-gray-600">{a.employee?.designation || '-'}</td>
                                         <td className="px-4 py-3">
-                                            <span className="px-2 py-0.5 bg-teal-50 text-teal-700 text-[10px] font-bold rounded-full border border-teal-200">
+                                            <span className="px-2 py-0.5 bg-orange-50 text-orange-700 text-[10px] font-bold rounded-full border border-orange-200">
                                                 {a.shift_pattern?.name || 'N/A'}
                                             </span>
                                         </td>

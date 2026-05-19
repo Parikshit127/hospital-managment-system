@@ -114,7 +114,7 @@ export default function EmployeeDetailPage() {
         return (
             <AppShell pageTitle="Employee Detail" pageIcon={<User className="h-5 w-5" />}>
                 <div className="flex items-center justify-center py-20">
-                    <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+                    <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
                     <span className="ml-3 text-gray-500 font-medium">Loading employee details...</span>
                 </div>
             </AppShell>
@@ -127,7 +127,7 @@ export default function EmployeeDetailPage() {
                 <div className="flex flex-col items-center justify-center py-20">
                     <AlertCircle className="h-12 w-12 text-red-400 mb-4" />
                     <p className="text-gray-600 font-bold text-lg">Employee not found</p>
-                    <Link href="/hr/employees" className="mt-4 text-sm text-teal-600 font-bold hover:underline">
+                    <Link href="/hr/employees" className="mt-4 text-sm text-orange-600 font-bold hover:underline">
                         Back to Employees
                     </Link>
                 </div>
@@ -235,7 +235,7 @@ export default function EmployeeDetailPage() {
                                         type="text"
                                         value={editForm.name}
                                         onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                                     />
                                 </div>
                                 <div>
@@ -244,7 +244,7 @@ export default function EmployeeDetailPage() {
                                         type="text"
                                         value={editForm.designation}
                                         onChange={(e) => setEditForm({ ...editForm, designation: e.target.value })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                                     />
                                 </div>
                                 <div>
@@ -253,7 +253,7 @@ export default function EmployeeDetailPage() {
                                         type="number"
                                         value={editForm.salaryBasic}
                                         onChange={(e) => setEditForm({ ...editForm, salaryBasic: Number(e.target.value) })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                                     />
                                 </div>
                                 <div>
@@ -262,7 +262,7 @@ export default function EmployeeDetailPage() {
                                         type="text"
                                         value={editForm.phone}
                                         onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                                     />
                                 </div>
                                 <div>
@@ -271,7 +271,7 @@ export default function EmployeeDetailPage() {
                                         type="email"
                                         value={editForm.email}
                                         onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                                     />
                                 </div>
                                 <div className="flex gap-2 pt-2">

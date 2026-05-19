@@ -27,7 +27,7 @@ export default function HRReportsPage() {
         return (
             <AppShell pageTitle="HR Reports" pageIcon={<BarChart3 className="h-5 w-5" />}>
                 <div className="flex items-center justify-center py-24">
-                    <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
+                    <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
                     <span className="ml-3 text-gray-500 font-medium">Generating reports...</span>
                 </div>
             </AppShell>
@@ -66,7 +66,7 @@ export default function HRReportsPage() {
                             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Today Present</span>
                             <Clock className="h-4 w-4 text-teal-400" />
                         </div>
-                        <p className="text-2xl font-black text-teal-600">{data.todayPresent || 0}</p>
+                        <p className="text-2xl font-black text-orange-600">{data.todayPresent || 0}</p>
                     </div>
                     <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
                         <div className="flex items-center justify-between mb-2">
@@ -121,7 +121,7 @@ export default function HRReportsPage() {
                     <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
                         <div className="px-6 py-4 border-b border-gray-100">
                             <h3 className="text-sm font-black text-gray-900 flex items-center gap-2">
-                                <Clock className="h-4 w-4 text-teal-500" /> Attendance Overview
+                                <Clock className="h-4 w-4 text-orange-500" /> Attendance Overview
                             </h3>
                         </div>
                         <div className="p-6">

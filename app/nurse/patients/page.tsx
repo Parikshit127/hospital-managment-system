@@ -114,7 +114,7 @@ export default function NursePatientsPage() {
         );
     });
 
-    const inputCls = "w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400";
+    const inputCls = "w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400";
     const labelCls = "text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1 block mb-1.5";
 
     return (
@@ -173,9 +173,9 @@ export default function NursePatientsPage() {
 
                             {/* Diagnosis */}
                             {selectedPatient.diagnosis && (
-                                <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
+                                <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
                                     <p className="text-[10px] font-black text-teal-400 uppercase tracking-wider mb-1">Diagnosis</p>
-                                    <p className="text-sm font-bold text-teal-700">{selectedPatient.diagnosis}</p>
+                                    <p className="text-sm font-bold text-orange-700">{selectedPatient.diagnosis}</p>
                                 </div>
                             )}
 
@@ -239,7 +239,7 @@ export default function NursePatientsPage() {
                                 ) : (
                                     <div className="space-y-3">
                                         {notes.map((note: any, i: number) => (
-                                            <div key={note.id || i} className="bg-white border border-gray-200 rounded-xl p-4 hover:border-teal-500/20 transition-all">
+                                            <div key={note.id || i} className="bg-white border border-gray-200 rounded-xl p-4 hover:border-orange-500/20 transition-all">
                                                 <div className="flex items-center justify-between mb-2">
                                                     <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-violet-50 text-violet-500 border border-violet-200">
                                                         {note.note_type || 'General'}
@@ -269,7 +269,7 @@ export default function NursePatientsPage() {
                             placeholder="Search patient name, diagnosis, doctor..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                         />
                     </div>
                     <div className="flex items-center gap-2">
@@ -277,7 +277,7 @@ export default function NursePatientsPage() {
                         <select
                             value={selectedWard ?? ''}
                             onChange={e => setSelectedWard(e.target.value ? Number(e.target.value) : undefined)}
-                            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                         >
                             <option value="">All Wards</option>
                             {wards.map((w: any) => (
@@ -317,8 +317,8 @@ export default function NursePatientsPage() {
                                         onClick={() => openPatientModal(p)}
                                     >
                                         <td className="px-6 py-4 font-bold text-gray-900 flex items-center gap-2">
-                                            <div className="h-8 w-8 bg-teal-50 rounded-lg flex items-center justify-center shrink-0">
-                                                <User className="h-4 w-4 text-teal-500" />
+                                            <div className="h-8 w-8 bg-orange-50 rounded-lg flex items-center justify-center shrink-0">
+                                                <User className="h-4 w-4 text-orange-500" />
                                             </div>
                                             {p.patientName}
                                         </td>
@@ -353,7 +353,7 @@ export default function NursePatientsPage() {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <button className="inline-flex items-center gap-1 text-teal-600 hover:text-teal-700 font-bold text-xs bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg transition-colors">
+                                            <button className="inline-flex items-center gap-1 text-orange-600 hover:text-orange-700 font-bold text-xs bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-colors">
                                                 <FileText className="h-3 w-3" /> View / Notes
                                             </button>
                                         </td>

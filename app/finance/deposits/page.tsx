@@ -169,7 +169,7 @@ export default function DepositsPage() {
                         </div>
                         <div className="bg-white rounded-xl border border-gray-200 p-5">
                             <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-teal-50 rounded-lg"><ArrowUpRight className="h-5 w-5 text-teal-600" /></div>
+                                <div className="p-2 bg-orange-50 rounded-lg"><ArrowUpRight className="h-5 w-5 text-orange-600" /></div>
                                 <span className="text-sm text-gray-500">Applied to Bills</span>
                             </div>
                             <p className="text-2xl font-bold text-gray-900">{fmt(stats?.totalApplied || 0)}</p>
@@ -229,7 +229,7 @@ export default function DepositsPage() {
                                                 <td className="px-5 py-3 text-sm font-medium text-gray-900">{d.deposit_number}</td>
                                                 <td className="px-5 py-3 text-sm text-gray-600">{d.patient_id}</td>
                                                 <td className="px-5 py-3 text-sm font-semibold text-gray-900 text-right">{fmt(Number(d.amount))}</td>
-                                                <td className="px-5 py-3 text-sm text-teal-600 text-right">{fmt(Number(d.applied_amount || 0))}</td>
+                                                <td className="px-5 py-3 text-sm text-orange-600 text-right">{fmt(Number(d.applied_amount || 0))}</td>
                                                 <td className="px-5 py-3 text-sm text-amber-600 text-right">{fmt(Number(d.refunded_amount || 0))}</td>
                                                 <td className="px-5 py-3 text-sm font-semibold text-emerald-600 text-right">{fmt(available)}</td>
                                                 <td className="px-5 py-3 text-sm text-gray-600">{d.payment_method}</td>

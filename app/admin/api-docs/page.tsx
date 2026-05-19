@@ -376,12 +376,12 @@ export default function ApiDocsPage() {
     return (
         <div className="min-h-screen p-4 sm:p-6 lg:p-8 bg-[#fafaf8]">
             {/* Hero Header */}
-            <div className="relative mb-8 overflow-hidden rounded-3xl border border-[#14b8a6]/20 bg-white p-6 sm:p-8 shadow-2xl shadow-[#14b8a6]/10">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-[#14b8a6]/20 via-transparent to-transparent" />
+            <div className="relative mb-8 overflow-hidden rounded-3xl border border-[#f97316]/20 bg-white p-6 sm:p-8 shadow-2xl shadow-[#f97316]/10">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-[#f97316]/20 via-transparent to-transparent" />
                 <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjAzIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30" />
                 <div className="relative flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                     <div className="flex items-start gap-4">
-                        <div className="p-3 rounded-2xl bg-gradient-to-br from-[#14b8a6] to-[#0d9488] shadow-xl shadow-[#14b8a6]/30 ring-1 ring-[#14b8a6]/20">
+                        <div className="p-3 rounded-2xl bg-gradient-to-br from-[#f97316] to-[#ea580c] shadow-xl shadow-[#f97316]/30 ring-1 ring-[#f97316]/20">
                             <BookOpen className="h-6 w-6 text-white" />
                         </div>
                         <div>
@@ -390,15 +390,15 @@ export default function ApiDocsPage() {
                                 Explore available endpoints, manage API keys, and test integrations for your Hospital OS instance.
                             </p>
                             <div className="flex items-center gap-3 mt-4">
-                                <span className="inline-flex items-center gap-1.5 text-xs text-[#0d9488] bg-[#14b8a6]/10 backdrop-blur-sm px-3 py-1.5 rounded-full border border-[#14b8a6]/20">
+                                <span className="inline-flex items-center gap-1.5 text-xs text-[#ea580c] bg-[#f97316]/10 backdrop-blur-sm px-3 py-1.5 rounded-full border border-[#f97316]/20">
                                     <Lock className="h-3 w-3" />
                                     API Key Auth
                                 </span>
-                                <span className="inline-flex items-center gap-1.5 text-xs text-[#0d9488] bg-[#14b8a6]/10 backdrop-blur-sm px-3 py-1.5 rounded-full border border-[#14b8a6]/20">
+                                <span className="inline-flex items-center gap-1.5 text-xs text-[#ea580c] bg-[#f97316]/10 backdrop-blur-sm px-3 py-1.5 rounded-full border border-[#f97316]/20">
                                     <Zap className="h-3 w-3" />
                                     REST / JSON
                                 </span>
-                                <span className="inline-flex items-center gap-1.5 text-xs text-[#0d9488] bg-[#14b8a6]/10 backdrop-blur-sm px-3 py-1.5 rounded-full border border-[#14b8a6]/20">
+                                <span className="inline-flex items-center gap-1.5 text-xs text-[#ea580c] bg-[#f97316]/10 backdrop-blur-sm px-3 py-1.5 rounded-full border border-[#f97316]/20">
                                     <Shield className="h-3 w-3" />
                                     Multi-tenant
                                 </span>
@@ -408,16 +408,16 @@ export default function ApiDocsPage() {
 
                     {/* Quick Stats */}
                     <div className="flex gap-3 sm:gap-4">
-                        <div className="text-center px-5 py-3 bg-gradient-to-br from-[#14b8a6]/10 to-[#0d9488]/5 backdrop-blur-sm rounded-2xl border border-[#14b8a6]/20 shadow-lg shadow-[#14b8a6]/10">
-                            <p className="text-2xl font-bold bg-gradient-to-br from-[#14b8a6] to-[#0d9488] bg-clip-text text-transparent">{stats.activeKeys}</p>
+                        <div className="text-center px-5 py-3 bg-gradient-to-br from-[#f97316]/10 to-[#ea580c]/5 backdrop-blur-sm rounded-2xl border border-[#f97316]/20 shadow-lg shadow-[#f97316]/10">
+                            <p className="text-2xl font-bold bg-gradient-to-br from-[#f97316] to-[#ea580c] bg-clip-text text-transparent">{stats.activeKeys}</p>
                             <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mt-1">Active Keys</p>
                         </div>
-                        <div className="text-center px-5 py-3 bg-gradient-to-br from-[#14b8a6]/10 to-[#0d9488]/5 backdrop-blur-sm rounded-2xl border border-[#14b8a6]/20 shadow-lg shadow-[#14b8a6]/10">
-                            <p className="text-2xl font-bold bg-gradient-to-br from-[#14b8a6] to-[#0d9488] bg-clip-text text-transparent">{stats.totalApiCalls}</p>
+                        <div className="text-center px-5 py-3 bg-gradient-to-br from-[#f97316]/10 to-[#ea580c]/5 backdrop-blur-sm rounded-2xl border border-[#f97316]/20 shadow-lg shadow-[#f97316]/10">
+                            <p className="text-2xl font-bold bg-gradient-to-br from-[#f97316] to-[#ea580c] bg-clip-text text-transparent">{stats.totalApiCalls}</p>
                             <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mt-1">API Calls</p>
                         </div>
-                        <div className="text-center px-5 py-3 bg-gradient-to-br from-[#14b8a6]/10 to-[#0d9488]/5 backdrop-blur-sm rounded-2xl border border-[#14b8a6]/20 shadow-lg shadow-[#14b8a6]/10">
-                            <p className="text-2xl font-bold bg-gradient-to-br from-[#14b8a6] to-[#0d9488] bg-clip-text text-transparent">{stats.recentClaims}</p>
+                        <div className="text-center px-5 py-3 bg-gradient-to-br from-[#f97316]/10 to-[#ea580c]/5 backdrop-blur-sm rounded-2xl border border-[#f97316]/20 shadow-lg shadow-[#f97316]/10">
+                            <p className="text-2xl font-bold bg-gradient-to-br from-[#f97316] to-[#ea580c] bg-clip-text text-transparent">{stats.recentClaims}</p>
                             <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mt-1">Claims</p>
                         </div>
                     </div>
@@ -431,7 +431,7 @@ export default function ApiDocsPage() {
                         onClick={() => setActiveTab('hims')}
                         className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
                             activeTab === 'hims'
-                                ? 'bg-gradient-to-r from-[#14b8a6] to-[#0d9488] text-white shadow-lg shadow-blue-500/30'
+                                ? 'bg-gradient-to-r from-[#f97316] to-[#ea580c] text-white shadow-lg shadow-blue-500/30'
                                 : 'text-gray-400 hover:text-gray-900 hover:bg-gray-50'
                         }`}
                     >
@@ -442,7 +442,7 @@ export default function ApiDocsPage() {
                         onClick={() => setActiveTab('external')}
                         className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
                             activeTab === 'external'
-                                ? 'bg-gradient-to-r from-[#14b8a6] to-[#0d9488] text-white shadow-lg shadow-blue-500/30'
+                                ? 'bg-gradient-to-r from-[#f97316] to-[#ea580c] text-white shadow-lg shadow-blue-500/30'
                                 : 'text-gray-400 hover:text-gray-900 hover:bg-gray-50'
                         }`}
                     >
@@ -472,7 +472,7 @@ export default function ApiDocsPage() {
                                 <Server className="h-5 w-5 text-emerald-300" />
                             </div>
                             <div>
-                                <h2 className="text-lg font-bold text-[#0d9488] mb-2">Hospital Information Management System</h2>
+                                <h2 className="text-lg font-bold text-[#ea580c] mb-2">Hospital Information Management System</h2>
                                 <p className="text-sm text-gray-600 leading-relaxed">
                                     Internal APIs powering Hospital OS. Used for payment processing,
                                     report generation, data import, and system health monitoring.
@@ -587,7 +587,7 @@ export default function ApiDocsPage() {
                                     setGeneratedKey('');
                                     setNewKeyLabel('');
                                 }}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#14b8a6] to-[#0d9488] hover:from-[#0d9488] hover:to-[#0f766e] text-white text-sm font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-blue-500/30"
+                                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#f97316] to-[#ea580c] hover:from-[#ea580c] hover:to-[#c2410c] text-white text-sm font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-blue-500/30"
                             >
                                 <Plus className="h-4 w-4" />
                                 Generate Key
@@ -774,7 +774,7 @@ export default function ApiDocsPage() {
                                             />
                                             <button
                                                 onClick={copyKey}
-                                                className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-[#14b8a6] to-[#0d9488] hover:from-[#0d9488] hover:to-[#0f766e] text-white text-xs font-medium rounded-xl transition-all shadow-sm"
+                                                className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-[#f97316] to-[#ea580c] hover:from-[#ea580c] hover:to-[#c2410c] text-white text-xs font-medium rounded-xl transition-all shadow-sm"
                                             >
                                                 {keyCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                                                 {keyCopied ? 'Copied!' : 'Copy'}
@@ -800,7 +800,7 @@ export default function ApiDocsPage() {
                                 <button
                                     onClick={handleCreateKey}
                                     disabled={!newKeyLabel.trim() || loading}
-                                    className="px-5 py-2 bg-gradient-to-r from-[#14b8a6] to-[#0d9488] hover:from-[#0d9488] hover:to-[#0f766e] disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-all shadow-sm shadow-blue-500/20"
+                                    className="px-5 py-2 bg-gradient-to-r from-[#f97316] to-[#ea580c] hover:from-[#ea580c] hover:to-[#c2410c] disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-all shadow-sm shadow-blue-500/20"
                                 >
                                     {loading ? 'Generating...' : 'Generate Key'}
                                 </button>

@@ -163,7 +163,7 @@ export default function LabPage() {
                     </div>
                     <div className="relative hidden md:block mr-2">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 h-4 w-4" />
-                        <input className="bg-white border border-gray-300 rounded-xl pl-9 pr-4 py-2 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 w-64 outline-none transition-all placeholder:text-gray-400 font-medium text-gray-900" placeholder="Search orders..." />
+                        <input className="bg-white border border-gray-300 rounded-xl pl-9 pr-4 py-2 text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 w-64 outline-none transition-all placeholder:text-gray-400 font-medium text-gray-900" placeholder="Search orders..." />
                     </div>
                 </div>
 
@@ -264,7 +264,7 @@ export default function LabPage() {
 
                         <div className="px-6 py-5 border-b border-gray-200 flex justify-between items-center">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-teal-500/10 rounded-lg">
+                                <div className="p-2 bg-orange-500/10 rounded-lg">
                                     <Cloud className="h-5 w-5 text-teal-400" />
                                 </div>
                                 <div>
@@ -297,7 +297,7 @@ export default function LabPage() {
                                     <input
                                         value={resultValue}
                                         onChange={(e) => setResultValue(e.target.value)}
-                                        className="w-full bg-white border border-gray-300 rounded-xl pl-10 pr-4 py-3 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-bold text-gray-900 transition-all placeholder:text-gray-400"
+                                        className="w-full bg-white border border-gray-300 rounded-xl pl-10 pr-4 py-3 text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-bold text-gray-900 transition-all placeholder:text-gray-400"
                                         placeholder="Enter numeric result (e.g. 12.5 g/dL)"
                                         autoFocus
                                     />
@@ -309,7 +309,7 @@ export default function LabPage() {
                                 <textarea
                                     value={remarks}
                                     onChange={(e) => setRemarks(e.target.value)}
-                                    className="w-full bg-white border border-gray-300 rounded-xl p-4 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none resize-none transition-all font-medium text-gray-900 placeholder:text-gray-400"
+                                    className="w-full bg-white border border-gray-300 rounded-xl p-4 text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none resize-none transition-all font-medium text-gray-900 placeholder:text-gray-400"
                                     placeholder="Add clinical observations or notes..."
                                     rows={3}
                                 ></textarea>

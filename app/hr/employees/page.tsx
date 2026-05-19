@@ -90,7 +90,7 @@ export default function EmployeeListPage() {
                             placeholder="Search by name, code, or email..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                         />
                     </div>
                     <div className="relative">
@@ -100,7 +100,7 @@ export default function EmployeeListPage() {
                             placeholder="Filter by designation..."
                             value={designation}
                             onChange={(e) => setDesignation(e.target.value)}
-                            className="w-full sm:w-48 pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                            className="w-full sm:w-48 pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                         />
                     </div>
                     <div className="flex items-center gap-2">
@@ -129,14 +129,14 @@ export default function EmployeeListPage() {
             <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
                 {loading ? (
                     <div className="flex items-center justify-center py-20">
-                        <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+                        <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
                         <span className="ml-3 text-gray-500 font-medium">Loading employees...</span>
                     </div>
                 ) : error ? (
                     <div className="flex flex-col items-center justify-center py-20">
                         <AlertCircle className="h-12 w-12 text-red-400 mb-4" />
                         <p className="text-gray-600 font-bold">Failed to load employees</p>
-                        <button onClick={loadData} className="mt-3 text-sm text-teal-600 font-bold hover:underline">Retry</button>
+                        <button onClick={loadData} className="mt-3 text-sm text-orange-600 font-bold hover:underline">Retry</button>
                     </div>
                 ) : employees.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20">

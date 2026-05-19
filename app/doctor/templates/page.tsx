@@ -372,7 +372,7 @@ export default function DoctorTemplates() {
                         <span
                           className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md mt-1.5 inline-block ${
                             template.type === "Clinical Note"
-                              ? "bg-teal-500/10 text-teal-600 border border-teal-500/20"
+                              ? "bg-orange-500/10 text-orange-600 border border-orange-500/20"
                               : template.type === "Lab Order"
                                 ? "bg-amber-500/10 text-amber-600 border border-amber-500/20"
                                 : "bg-violet-500/10 text-violet-600 border border-violet-500/20"

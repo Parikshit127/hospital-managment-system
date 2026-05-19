@@ -129,7 +129,7 @@ export default function ReceptionDashboard() {
         const map: Record<string, string> = {
             'Pending': 'bg-amber-50 text-amber-700 border border-amber-200',
             'Scheduled': 'bg-blue-50 text-blue-700 border border-blue-200',
-            'Checked In': 'bg-teal-50 text-teal-700 border border-teal-200',
+            'Checked In': 'bg-orange-50 text-orange-700 border border-orange-200',
             'In Progress': 'bg-violet-50 text-violet-700 border border-violet-200',
             'Completed': 'bg-emerald-50 text-emerald-700 border border-emerald-200',
             'Admitted': 'bg-rose-50 text-rose-700 border border-rose-200',
@@ -169,14 +169,14 @@ export default function ReceptionDashboard() {
                     <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Today's Registrations</span>
-                            <div className="p-1.5 bg-teal-50 rounded-lg"><UserPlus className="h-3.5 w-3.5 text-teal-500" /></div>
+                            <div className="p-1.5 bg-orange-50 rounded-lg"><UserPlus className="h-3.5 w-3.5 text-orange-500" /></div>
                         </div>
                         <p className="text-2xl font-black text-gray-900">{stats?.todayRegistrations || 0}</p>
                     </div>
                     <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Today's Appointments</span>
-                            <div className="p-1.5 bg-teal-50 rounded-lg"><Calendar className="h-3.5 w-3.5 text-teal-500" /></div>
+                            <div className="p-1.5 bg-orange-50 rounded-lg"><Calendar className="h-3.5 w-3.5 text-orange-500" /></div>
                         </div>
                         <p className="text-2xl font-black text-gray-900">{stats?.todayAppointments || 0}</p>
                     </div>
@@ -207,7 +207,7 @@ export default function ReceptionDashboard() {
                 <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1 w-fit">
                     <button
                         onClick={() => setActiveTab('arrivals')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'arrivals' ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'arrivals' ? 'bg-white text-orange-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                     >
                         <Bell className="h-3.5 w-3.5" />
                         Expected Today
@@ -219,7 +219,7 @@ export default function ReceptionDashboard() {
                     </button>
                     <button
                         onClick={() => setActiveTab('patients')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'patients' ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'patients' ? 'bg-white text-orange-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                     >
                         <Users className="h-3.5 w-3.5" />
                         All Patients
@@ -234,13 +234,13 @@ export default function ReceptionDashboard() {
                                 <h3 className="text-sm font-bold text-gray-900">Expected Today — Not Yet Checked In</h3>
                                 <p className="text-xs text-gray-400 mt-0.5">Patients with appointments today who haven&apos;t arrived yet</p>
                             </div>
-                            <button onClick={loadArrivals} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-teal-600 transition-colors">
+                            <button onClick={loadArrivals} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-orange-600 transition-colors">
                                 <Activity className="h-4 w-4" />
                             </button>
                         </div>
                         {arrivalsLoading ? (
                             <div className="flex items-center justify-center py-12">
-                                <Loader2 className="h-5 w-5 animate-spin text-teal-500" />
+                                <Loader2 className="h-5 w-5 animate-spin text-orange-500" />
                             </div>
                         ) : expectedArrivals.length === 0 ? (
                             <div className="text-center py-12">
@@ -256,7 +256,7 @@ export default function ReceptionDashboard() {
                                     return (
                                         <div key={arrival.appointment_id} className={`flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors ${isLate ? 'bg-rose-50/30' : ''}`}>
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isLate ? 'bg-rose-500' : isOverdue ? 'bg-amber-500' : 'bg-teal-500'}`} />
+                                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isLate ? 'bg-rose-500' : isOverdue ? 'bg-amber-500' : 'bg-orange-500'}`} />
                                                 <div>
                                                     <p className="text-sm font-semibold text-gray-900">{arrival.patient_name}</p>
                                                     <p className="text-xs text-gray-400">
@@ -275,14 +275,14 @@ export default function ReceptionDashboard() {
                                                     ) : isOverdue ? (
                                                         <p className="text-[10px] text-amber-600 font-semibold">{arrival.minutes_overdue}m late</p>
                                                     ) : (
-                                                        <p className="text-[10px] text-teal-600 font-semibold">
+                                                        <p className="text-[10px] text-orange-600 font-semibold">
                                                             in {Math.abs(arrival.minutes_overdue)}m
                                                         </p>
                                                     )}
                                                 </div>
                                                 {arrival.patient_phone && (
                                                     <a href={`tel:${arrival.patient_phone}`}
-                                                        className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-teal-600 transition-colors"
+                                                        className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-orange-600 transition-colors"
                                                         title="Call patient">
                                                         <Phone className="h-3.5 w-3.5" />
                                                     </a>
@@ -290,7 +290,7 @@ export default function ReceptionDashboard() {
                                                 <button
                                                     onClick={() => handleCheckIn(arrival.appointment_id)}
                                                     disabled={checkingIn === arrival.appointment_id}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-xs font-bold rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50"
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 text-white text-xs font-bold rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50"
                                                 >
                                                     {checkingIn === arrival.appointment_id ? (
                                                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -318,7 +318,7 @@ export default function ReceptionDashboard() {
                             value={searchInput}
                             onChange={e => setSearchInput(e.target.value)}
                             placeholder="Search by name, patient ID, or phone..."
-                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
                         />
                     </div>
                     <div className="flex items-center gap-2">
@@ -326,7 +326,7 @@ export default function ReceptionDashboard() {
                         <select
                             value={department}
                             onChange={e => { setDepartment(e.target.value); setPage(1); }}
-                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500"
+                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
                         >
                             <option value="">All Departments</option>
                             <option value="General Medicine">General Medicine</option>
@@ -341,7 +341,7 @@ export default function ReceptionDashboard() {
                         <select
                             value={dateRange}
                             onChange={e => { setDateRange(e.target.value as any); setPage(1); }}
-                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500"
+                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
                         >
                             <option value="all">All Time</option>
                             <option value="today">Today</option>
@@ -385,7 +385,7 @@ export default function ReceptionDashboard() {
                                 ) : patients.map((patient: any) => (
                                     <tr key={patient.patient_id} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-4 py-3">
-                                            <span className="text-xs font-mono font-bold text-teal-600">{patient.patient_id}</span>
+                                            <span className="text-xs font-mono font-bold text-orange-600">{patient.patient_id}</span>
                                         </td>
                                         <td className="px-4 py-3 font-medium text-gray-900">{patient.full_name}</td>
                                         <td className="px-4 py-3 text-gray-500">
@@ -422,7 +422,7 @@ export default function ReceptionDashboard() {
                                         <td className="px-4 py-3">
                                             <button
                                                 onClick={() => openPatientDetail(patient.patient_id)}
-                                                className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-teal-600 transition-colors"
+                                                className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-orange-600 transition-colors"
                                                 title="View Details"
                                             >
                                                 <Eye className="h-4 w-4" />
@@ -476,7 +476,7 @@ export default function ReceptionDashboard() {
 
                         {detailLoading ? (
                             <div className="flex items-center justify-center py-16">
-                                <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
+                                <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
                             </div>
                         ) : patientDetail ? (
                             <div className="p-6 space-y-6">
@@ -484,7 +484,7 @@ export default function ReceptionDashboard() {
                                 <div className="bg-gray-50 rounded-xl p-4 space-y-3">
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-lg font-bold text-gray-900">{patientDetail.patient.full_name}</h3>
-                                        <span className="text-xs font-mono font-bold text-teal-600 bg-teal-50 px-2 py-1 rounded-lg">
+                                        <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-lg">
                                             {patientDetail.patient.patient_id}
                                         </span>
                                     </div>
@@ -511,7 +511,7 @@ export default function ReceptionDashboard() {
                                 {/* Appointment History */}
                                 <div>
                                     <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-3">
-                                        <Calendar className="h-4 w-4 text-teal-500" /> Appointment History
+                                        <Calendar className="h-4 w-4 text-orange-500" /> Appointment History
                                     </h4>
                                     {patientDetail.appointments?.length > 0 ? (
                                         <div className="space-y-2">
@@ -602,7 +602,7 @@ export default function ReceptionDashboard() {
 
                                 <div className="pt-6 mt-6 border-t border-gray-100 flex justify-end">
                                     <Link href={`/reception/patient/${patientDetail.patient.patient_id}`}
-                                        className="flex items-center gap-2 px-6 py-2.5 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 transition-colors shadow-sm hover:shadow">
+                                        className="flex items-center gap-2 px-6 py-2.5 bg-orange-600 text-white font-bold rounded-xl hover:bg-teal-700 transition-colors shadow-sm hover:shadow">
                                         Open Full Profile <ArrowRight className="h-4 w-4" />
                                     </Link>
                                 </div>

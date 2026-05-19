@@ -141,7 +141,7 @@ export default function IPDJourneyTab({ admissions }: IPDJourneyTabProps) {
                 {medicalNotes.length > 0 && (
                   <div>
                     <h4 className="text-sm font-black text-gray-700 mb-3 flex items-center gap-2">
-                      <ClipboardList className="h-4 w-4 text-teal-600" />
+                      <ClipboardList className="h-4 w-4 text-orange-600" />
                       Medical Notes
                     </h4>
                     <div className="space-y-2">
@@ -153,7 +153,7 @@ export default function IPDJourneyTab({ admissions }: IPDJourneyTabProps) {
                             className="bg-gray-50 border border-gray-200 rounded-xl p-3"
                           >
                             <div className="flex items-center justify-between mb-1">
-                              <span className="bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                              <span className="bg-orange-50 text-orange-700 border border-orange-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
                                 {noteType}
                               </span>
                               <span className="text-[10px] text-gray-400 font-semibold">

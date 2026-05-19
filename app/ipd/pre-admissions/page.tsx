@@ -8,7 +8,7 @@ import { getAdmissionBookings, createAdmissionBooking } from '@/app/actions/ipd-
 
 const STATUS_COLORS: Record<string, string> = {
   Booked: 'bg-blue-50 text-blue-700',
-  Confirmed: 'bg-teal-50 text-teal-700',
+  Confirmed: 'bg-orange-50 text-orange-700',
   Admitted: 'bg-emerald-50 text-emerald-700',
   Cancelled: 'bg-red-50 text-red-700',
 };
@@ -104,7 +104,7 @@ export default function PreAdmissionsPage() {
           <h2 className="font-bold text-gray-900 text-sm">All Bookings</h2>
           <button
             onClick={() => setModalOpen(true)}
-            className="inline-flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors"
+            className="inline-flex items-center gap-1.5 bg-orange-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors"
           >
             <Plus className="h-3.5 w-3.5" /> New Booking
           </button>
@@ -142,7 +142,7 @@ export default function PreAdmissionsPage() {
                       href={`/api/ipd/facesheet/${b.patient_id}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-teal-600 hover:underline text-xs font-bold"
+                      className="text-orange-600 hover:underline text-xs font-bold"
                     >
                       Facesheet
                     </a>
@@ -160,7 +160,7 @@ export default function PreAdmissionsPage() {
           <form onSubmit={handleSubmit} className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
             <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
               <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                <CalendarClock className="h-5 w-5 text-teal-600" /> New Pre-Admission Booking
+                <CalendarClock className="h-5 w-5 text-orange-600" /> New Pre-Admission Booking
               </h3>
               <button type="button" onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-700 transition-colors">
                 <X className="h-5 w-5" />
@@ -171,47 +171,47 @@ export default function PreAdmissionsPage() {
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Patient ID *</label>
                   <input required value={form.patientId} onChange={e => setForm(f => ({ ...f, patientId: e.target.value }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" placeholder="PT-XXXXXX" />
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none" placeholder="PT-XXXXXX" />
                 </div>
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Expected Date *</label>
                   <input required type="date" value={form.expectedDate} onChange={e => setForm(f => ({ ...f, expectedDate: e.target.value }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" />
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Bed Category *</label>
                   <select required value={form.bedCategory} onChange={e => setForm(f => ({ ...f, bedCategory: e.target.value }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none bg-white">
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none bg-white">
                     {BED_CATEGORIES.map(c => <option key={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Department *</label>
                   <input required value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" placeholder="e.g. Cardiology" />
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none" placeholder="e.g. Cardiology" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Doctor Name</label>
                   <input value={form.doctorName} onChange={e => setForm(f => ({ ...f, doctorName: e.target.value }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" placeholder="Dr. Name" />
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none" placeholder="Dr. Name" />
                 </div>
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Estimated Cost (₹)</label>
                   <input type="number" min="0" value={form.estimatedCost} onChange={e => setForm(f => ({ ...f, estimatedCost: e.target.value }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" placeholder="0" />
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none" placeholder="0" />
                 </div>
               </div>
               <div>
                 <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Notes</label>
                 <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none min-h-[72px]" placeholder="Additional notes..." />
+                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none min-h-[72px]" placeholder="Additional notes..." />
               </div>
               <button disabled={saving} type="submit"
-                className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold p-3 rounded-xl shadow-md transition-all">
+                className="w-full bg-orange-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold p-3 rounded-xl shadow-md transition-all">
                 {saving ? 'Creating...' : 'Create Booking'}
               </button>
             </div>

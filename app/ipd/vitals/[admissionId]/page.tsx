@@ -147,7 +147,7 @@ export default function IPDVitalsPage() {
                 {/* Record vitals button */}
                 <div className="flex justify-end">
                     <button onClick={() => setShowForm(v => !v)}
-                        className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 transition-colors">
+                        className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 transition-colors">
                         <Plus className="h-4 w-4" /> Record Vitals
                     </button>
                 </div>
@@ -199,7 +199,7 @@ export default function IPDVitalsPage() {
                         </div>
                         <div className="flex gap-3 pt-1">
                             <button onClick={handleSave} disabled={saving}
-                                className="flex items-center gap-2 px-5 py-2 bg-teal-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 disabled:opacity-60 transition-colors">
+                                className="flex items-center gap-2 px-5 py-2 bg-orange-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 disabled:opacity-60 transition-colors">
                                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
                                 Save Vitals
                             </button>
@@ -233,7 +233,7 @@ export default function IPDVitalsPage() {
                         <span className="text-xs text-gray-400">{vitals.length} entries</span>
                     </div>
                     {loading ? (
-                        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-teal-500" /></div>
+                        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-orange-500" /></div>
                     ) : vitals.length === 0 ? (
                         <p className="text-center text-gray-400 text-sm py-12">No vitals recorded yet</p>
                     ) : (

@@ -78,7 +78,7 @@ export default function HRAttendancePage() {
                     <div className="flex items-center gap-3">
                         <Calendar className="h-4 w-4 text-gray-400" />
                         <input type="date" value={date} onChange={e => setDate(e.target.value)}
-                            className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                            className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                     </div>
                     {unmarked > 0 && (
                         <button onClick={handleBulkPresent} disabled={saving === -1}
@@ -126,7 +126,7 @@ export default function HRAttendancePage() {
                             <tbody>
                                 {loading ? (
                                     <tr><td colSpan={6} className="px-4 py-12 text-center">
-                                        <Loader2 className="h-6 w-6 animate-spin text-teal-500 mx-auto" />
+                                        <Loader2 className="h-6 w-6 animate-spin text-orange-500 mx-auto" />
                                     </td></tr>
                                 ) : records.length === 0 ? (
                                     <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-400">
@@ -161,13 +161,13 @@ export default function HRAttendancePage() {
                                                 <input type="time"
                                                     defaultValue={att?.check_in ? new Date(att.check_in).toTimeString().slice(0, 5) : ''}
                                                     onBlur={e => e.target.value && handleTimeUpdate(emp.id, 'checkIn', e.target.value)}
-                                                    className="px-2 py-1 border border-gray-200 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+                                                    className="px-2 py-1 border border-gray-200 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-orange-500" />
                                             </td>
                                             <td className="px-4 py-3 text-center">
                                                 <input type="time"
                                                     defaultValue={att?.check_out ? new Date(att.check_out).toTimeString().slice(0, 5) : ''}
                                                     onBlur={e => e.target.value && handleTimeUpdate(emp.id, 'checkOut', e.target.value)}
-                                                    className="px-2 py-1 border border-gray-200 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+                                                    className="px-2 py-1 border border-gray-200 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-orange-500" />
                                             </td>
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center justify-center gap-1">
@@ -179,7 +179,7 @@ export default function HRAttendancePage() {
                                                                 <button key={s} onClick={() => handleMark(emp.id, s)}
                                                                     className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors ${
                                                                         status === s
-                                                                            ? 'bg-teal-50 text-teal-700 border-teal-200'
+                                                                            ? 'bg-orange-50 text-orange-700 border-orange-200'
                                                                             : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
                                                                     }`}>
                                                                     {s === 'Present' ? 'P' : s === 'Absent' ? 'A' : s === 'Half-Day' ? 'H' : 'L'}

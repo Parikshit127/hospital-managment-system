@@ -40,8 +40,8 @@ const PRICING_TIERS = [
     { value: 'Critical', label: 'Critical (+100%)' },
 ];
 
-const inputCls = 'w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500';
-const selectCls = 'w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500';
+const inputCls = 'w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500';
+const selectCls = 'w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500';
 const labelCls = 'block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5';
 
 const EMPTY_WARD = { ward_name: '', ward_type: 'General', department_id: '', floor_number: '', cost_per_day: '', nursing_charge: '' };
@@ -164,7 +164,7 @@ export function WardManager({ wards, departments, organizationId }: { wards: any
                     <h2 className="text-lg font-black text-gray-800">Hospital Wards</h2>
                     <p className="text-xs text-gray-500 font-medium">Configure wards, floors, charges, and bed capacity.</p>
                 </div>
-                <button onClick={openCreateWard} className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-xl transition">
+                <button onClick={openCreateWard} className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-xl transition">
                     <Plus className="h-4 w-4" /> New Ward
                 </button>
             </div>
@@ -188,7 +188,7 @@ export function WardManager({ wards, departments, organizationId }: { wards: any
                             <div className={`p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors ${isExpanded ? 'bg-gray-50/50 border-b border-gray-100' : ''}`}
                                 onClick={() => setExpandedWard(isExpanded ? null : ward.ward_id)}>
                                 <div className="flex items-center gap-4">
-                                    <div className={`p-2.5 rounded-xl ${ward.is_active ? 'bg-teal-50 text-teal-600' : 'bg-gray-100 text-gray-400'}`}>
+                                    <div className={`p-2.5 rounded-xl ${ward.is_active ? 'bg-orange-50 text-orange-600' : 'bg-gray-100 text-gray-400'}`}>
                                         <Building2 className="h-5 w-5" />
                                     </div>
                                     <div>
@@ -210,9 +210,9 @@ export function WardManager({ wards, departments, organizationId }: { wards: any
                                         <p className="text-xs font-black text-gray-700">{occupiedCount}/{beds.length} Occupied</p>
                                         <p className="text-[10px] text-emerald-500 font-bold">{available} Available</p>
                                     </div>
-                                    <button onClick={(e) => openEditWard(ward, e)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-teal-600 transition" title="Edit ward"><Pencil className="h-4 w-4" /></button>
+                                    <button onClick={(e) => openEditWard(ward, e)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-orange-600 transition" title="Edit ward"><Pencil className="h-4 w-4" /></button>
                                     <button onClick={(e) => handleToggleActive(ward.ward_id, ward.is_active, e)}
-                                        className={`text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all ${ward.is_active ? 'bg-white border-rose-200 text-rose-600 hover:bg-rose-50' : 'bg-teal-500 text-white border-teal-600 hover:bg-teal-400'}`}>
+                                        className={`text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all ${ward.is_active ? 'bg-white border-rose-200 text-rose-600 hover:bg-rose-50' : 'bg-orange-500 text-white border-teal-600 hover:bg-teal-400'}`}>
                                         {ward.is_active ? 'Deactivate' : 'Activate'}
                                     </button>
                                     {isExpanded ? <ChevronUp className="h-5 w-5 text-gray-400" /> : <ChevronDown className="h-5 w-5 text-gray-400" />}
@@ -296,7 +296,7 @@ export function WardManager({ wards, departments, organizationId }: { wards: any
                         <div className="px-6 py-4 border-t border-gray-100 flex gap-3 shrink-0">
                             <button onClick={() => setWardModalOpen(false)} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-gray-700 text-sm font-semibold hover:bg-gray-50 transition">Cancel</button>
                             <button onClick={handleSaveWard} disabled={submitting || !wardForm.ward_name.trim()}
-                                className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold disabled:opacity-50 transition flex items-center justify-center gap-2">
+                                className="flex-1 py-2.5 bg-orange-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold disabled:opacity-50 transition flex items-center justify-center gap-2">
                                 {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                                 {submitting ? 'Saving…' : editingWardId ? 'Save Changes' : 'Create Ward'}
                             </button>
@@ -364,7 +364,7 @@ export function WardManager({ wards, departments, organizationId }: { wards: any
                         <div className="px-6 py-4 border-t border-gray-100 flex gap-3 shrink-0">
                             <button onClick={() => setBedsModalOpen(false)} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-gray-700 text-sm font-semibold hover:bg-gray-50 transition">Cancel</button>
                             <button onClick={handleBulkAdd} disabled={submitting}
-                                className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold disabled:opacity-50 transition flex items-center justify-center gap-2">
+                                className="flex-1 py-2.5 bg-orange-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold disabled:opacity-50 transition flex items-center justify-center gap-2">
                                 {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                                 {submitting ? 'Adding…' : 'Generate Beds'}
                             </button>

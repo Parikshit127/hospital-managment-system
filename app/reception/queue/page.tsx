@@ -130,7 +130,7 @@ export default function QueueManagementPage() {
                 {/* Doctor Queues */}
                 {loading && queues.length === 0 ? (
                     <div className="flex items-center justify-center py-16">
-                        <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
+                        <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
                     </div>
                 ) : queues.length === 0 ? (
                     <div className="bg-white border border-gray-200 rounded-2xl p-16 text-center">
@@ -152,7 +152,7 @@ export default function QueueManagementPage() {
                                             <p className="text-[10px] text-gray-400">
                                                 {queue.department || 'General'}
                                                 {queue.avgConsultMinutes && (
-                                                    <span className="ml-2 text-teal-500">~{queue.avgConsultMinutes}m/patient</span>
+                                                    <span className="ml-2 text-orange-500">~{queue.avgConsultMinutes}m/patient</span>
                                                 )}
                                             </p>
                                         </div>

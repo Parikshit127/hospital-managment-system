@@ -78,7 +78,7 @@ export default function NotificationsPage() {
             headerActions={
                 unreadCount > 0 ? (
                     <button onClick={handleMarkAllRead}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors">
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-orange-600 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors">
                         <CheckCheck className="h-3.5 w-3.5" /> Mark all read
                     </button>
                 ) : null
@@ -93,7 +93,7 @@ export default function NotificationsPage() {
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                             placeholder="Search notifications…"
-                            className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400"
+                            className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-teal-400"
                         />
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -101,7 +101,7 @@ export default function NotificationsPage() {
                         {(['all', 'unread'] as const).map(f => (
                             <button key={f} onClick={() => setFilter(f)}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${filter === f
-                                    ? 'bg-teal-50 text-teal-700 border border-teal-200'
+                                    ? 'bg-orange-50 text-orange-700 border border-orange-200'
                                     : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
                                 }`}>
                                 {f === 'all' ? 'All' : `Unread (${unreadCount})`}
@@ -113,7 +113,7 @@ export default function NotificationsPage() {
                 {/* Notification List */}
                 {loading ? (
                     <div className="flex items-center justify-center py-16">
-                        <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
+                        <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
                     </div>
                 ) : filtered.length === 0 ? (
                     <div className="bg-white border border-gray-200 rounded-2xl p-16 text-center">
@@ -135,7 +135,7 @@ export default function NotificationsPage() {
                                             {new Date(n.created_at).toLocaleString()}
                                         </span>
                                         {n.link && (
-                                            <Link href={n.link} className="text-[10px] text-teal-500 font-bold flex items-center gap-0.5 hover:text-teal-600">
+                                            <Link href={n.link} className="text-[10px] text-orange-500 font-bold flex items-center gap-0.5 hover:text-orange-600">
                                                 View <ExternalLink className="h-2 w-2" />
                                             </Link>
                                         )}
@@ -144,7 +144,7 @@ export default function NotificationsPage() {
                                 <div className="flex items-center gap-1 shrink-0">
                                     {!n.is_read && (
                                         <button onClick={() => handleMarkRead(n.id)}
-                                            className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-teal-600 transition-colors" title="Mark as read">
+                                            className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-orange-600 transition-colors" title="Mark as read">
                                             <CheckCircle2 className="h-3.5 w-3.5" />
                                         </button>
                                     )}

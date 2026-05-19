@@ -12,7 +12,7 @@ interface BrandingData {
 }
 
 const defaultBranding: BrandingData = {
-    primary_color: '#0d9488',
+    primary_color: '#ea580c',
     secondary_color: '#1c1917',
     logo_url: null,
     portal_title: 'Hospital OS',
@@ -51,7 +51,7 @@ function hexToHSL(hex: string): { h: number; s: number; l: number } {
 }
 
 function generateCSSVariables(branding: BrandingData): string {
-    const primary = hexToHSL(branding.primary_color || '#0d9488');
+    const primary = hexToHSL(branding.primary_color || '#ea580c');
     const secondary = hexToHSL(branding.secondary_color || '#1c1917');
 
     return `

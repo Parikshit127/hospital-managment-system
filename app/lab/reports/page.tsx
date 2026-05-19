@@ -49,7 +49,7 @@ export default function LabReportsPage() {
             onRefresh={loadData}
             refreshing={refreshing}
             headerActions={
-                <select value={days} onChange={e => setDays(Number(e.target.value))} className="bg-white border border-gray-200 text-sm font-bold text-gray-700 py-1.5 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20">
+                <select value={days} onChange={e => setDays(Number(e.target.value))} className="bg-white border border-gray-200 text-sm font-bold text-gray-700 py-1.5 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20">
                     <option value={7}>Last 7 Days</option>
                     <option value={30}>Last 30 Days</option>
                 </select>
@@ -58,7 +58,7 @@ export default function LabReportsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6">
                     <div className="flex items-center gap-2 mb-4">
-                        <Clock className="h-5 w-5 text-teal-600" />
+                        <Clock className="h-5 w-5 text-orange-600" />
                         <h3 className="font-bold text-gray-900">Order Trends</h3>
                     </div>
                     <Line data={trendsData} options={chartOptions} />

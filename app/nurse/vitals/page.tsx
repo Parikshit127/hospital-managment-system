@@ -139,7 +139,7 @@ export default function NurseVitalsPage() {
         p.patientName?.toLowerCase().includes(patientSearch.toLowerCase())
     );
 
-    const inputCls = "w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400";
+    const inputCls = "w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400";
     const labelCls = "text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1 block mb-1.5";
 
     return (
@@ -168,7 +168,7 @@ export default function NurseVitalsPage() {
                                         if (!e.target.value) clearPatient();
                                     }}
                                     onFocus={() => setShowPatientDropdown(true)}
-                                    className="w-full pl-9 pr-10 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400"
+                                    className="w-full pl-9 pr-10 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400"
                                 />
                                 {selectedPatient && (
                                     <button
@@ -204,13 +204,13 @@ export default function NurseVitalsPage() {
                             </div>
 
                             {selectedPatient && (
-                                <div className="mt-3 bg-teal-50 border border-teal-200 rounded-xl p-3 flex items-center gap-3">
-                                    <div className="p-2 bg-teal-100 rounded-lg">
-                                        <User className="h-4 w-4 text-teal-600" />
+                                <div className="mt-3 bg-orange-50 border border-orange-200 rounded-xl p-3 flex items-center gap-3">
+                                    <div className="p-2 bg-orange-100 rounded-lg">
+                                        <User className="h-4 w-4 text-orange-600" />
                                     </div>
                                     <div>
-                                        <p className="text-sm font-bold text-teal-700">{selectedPatient.patientName}</p>
-                                        <p className="text-[10px] text-teal-500">
+                                        <p className="text-sm font-bold text-orange-700">{selectedPatient.patientName}</p>
+                                        <p className="text-[10px] text-orange-500">
                                             {selectedPatient.wardName} &middot; Bed {selectedPatient.bedId || 'N/A'} &middot; Dr. {selectedPatient.doctorName || 'Unassigned'}
                                         </p>
                                     </div>
@@ -367,7 +367,7 @@ export default function NurseVitalsPage() {
                     <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden sticky top-24">
                         <div className="px-6 py-4 border-b border-gray-200 bg-gray-50/50">
                             <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                                <Clock className="h-4 w-4 text-teal-500" /> Recent Vitals
+                                <Clock className="h-4 w-4 text-orange-500" /> Recent Vitals
                             </h3>
                             {selectedPatient && (
                                 <p className="text-[10px] text-gray-400 mt-0.5">For {selectedPatient.patientName}</p>
@@ -392,7 +392,7 @@ export default function NurseVitalsPage() {
                             ) : (
                                 <div className="space-y-3">
                                     {recentVitals.map((v: any, i: number) => (
-                                        <div key={v.id || i} className="bg-gray-50 border border-gray-200 rounded-xl p-4 hover:border-teal-500/20 transition-all">
+                                        <div key={v.id || i} className="bg-gray-50 border border-gray-200 rounded-xl p-4 hover:border-orange-500/20 transition-all">
                                             <div className="flex items-center justify-between mb-3">
                                                 <span className="text-[10px] font-black text-gray-400 uppercase">
                                                     {v.created_at ? new Date(v.created_at).toLocaleString() : ''}

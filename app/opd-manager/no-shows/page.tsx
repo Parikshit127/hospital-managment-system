@@ -95,7 +95,7 @@ export default function NoShowsPage() {
                             onClick={() => setTab(t)}
                             className={`px-4 py-2.5 text-sm font-bold capitalize transition-all border-b-2 -mb-px ${
                                 tab === t
-                                    ? 'border-teal-500 text-teal-600'
+                                    ? 'border-orange-500 text-orange-600'
                                     : 'border-transparent text-gray-400 hover:text-gray-600'
                             }`}
                         >

@@ -16,7 +16,7 @@ interface KPICardProps {
 
 const colorMap: Record<KPIColor, { iconBg: string; accent: string }> = {
     blue: { iconBg: 'bg-sky-50 text-sky-600 ring-1 ring-sky-100', accent: 'text-sky-600' },
-    teal: { iconBg: 'bg-teal-50 text-teal-600 ring-1 ring-teal-100', accent: 'text-teal-600' },
+    teal: { iconBg: 'bg-orange-50 text-orange-600 ring-1 ring-teal-100', accent: 'text-orange-600' },
     violet: { iconBg: 'bg-violet-50 text-violet-600 ring-1 ring-violet-100', accent: 'text-violet-600' },
     amber: { iconBg: 'bg-amber-50 text-amber-600 ring-1 ring-amber-100', accent: 'text-amber-600' },
     emerald: { iconBg: 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100', accent: 'text-emerald-600' },

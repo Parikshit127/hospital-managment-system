@@ -146,7 +146,7 @@ export function AllergyManager({ patientId, readonly }: AllergyManagerProps) {
                     {!showAddForm ? (
                         <button
                             onClick={() => setShowAddForm(true)}
-                            className="flex items-center gap-1.5 text-xs font-bold text-teal-600 hover:text-teal-700"
+                            className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700"
                         >
                             <Plus className="h-3.5 w-3.5" /> Add Allergy
                         </button>
@@ -157,7 +157,7 @@ export function AllergyManager({ patientId, readonly }: AllergyManagerProps) {
                                 <div>
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider block mb-1">Allergen *</label>
                                     <input
-                                        className="w-full text-sm border border-gray-300 rounded-lg px-2.5 py-1.5 outline-none focus:border-teal-500"
+                                        className="w-full text-sm border border-gray-300 rounded-lg px-2.5 py-1.5 outline-none focus:border-orange-500"
                                         value={form.allergen_name}
                                         onChange={e => setForm(f => ({ ...f, allergen_name: e.target.value }))}
                                         placeholder="e.g. Penicillin"
@@ -184,7 +184,7 @@ export function AllergyManager({ patientId, readonly }: AllergyManagerProps) {
                                 <div>
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider block mb-1">Reaction</label>
                                     <input
-                                        className="w-full text-sm border border-gray-300 rounded-lg px-2.5 py-1.5 outline-none focus:border-teal-500"
+                                        className="w-full text-sm border border-gray-300 rounded-lg px-2.5 py-1.5 outline-none focus:border-orange-500"
                                         value={form.reaction}
                                         onChange={e => setForm(f => ({ ...f, reaction: e.target.value }))}
                                         placeholder="e.g. Anaphylaxis"
@@ -192,7 +192,7 @@ export function AllergyManager({ patientId, readonly }: AllergyManagerProps) {
                                 </div>
                             </div>
                             <div className="flex gap-2">
-                                <button onClick={handleAdd} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-xs font-bold rounded-lg hover:bg-teal-700 disabled:opacity-50">
+                                <button onClick={handleAdd} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 text-white text-xs font-bold rounded-lg hover:bg-teal-700 disabled:opacity-50">
                                     {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
                                     Add
                                 </button>

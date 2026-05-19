@@ -49,7 +49,7 @@ export default function PharmacyDashboardPage() {
                                         <div className={`p-2.5 rounded-xl ${kpi.bg}`}>
                                             <Icon className={`h-5 w-5 ${kpi.color}`} />
                                         </div>
-                                        <ArrowUpRight className="h-4 w-4 text-gray-300 group-hover:text-teal-500 transition-colors" />
+                                        <ArrowUpRight className="h-4 w-4 text-gray-300 group-hover:text-orange-500 transition-colors" />
                                     </div>
                                     <p className="text-2xl font-black text-gray-900 tracking-tight">{kpi.value}</p>
                                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">{kpi.label}</p>
@@ -63,7 +63,7 @@ export default function PharmacyDashboardPage() {
                         {/* Revenue Trend */}
                         <div className="lg:col-span-2 bg-white border border-gray-200 rounded-2xl p-6">
                             <h3 className="text-sm font-black text-gray-700 mb-4 flex items-center gap-2">
-                                <BarChart3 className="h-4 w-4 text-teal-500" /> Revenue Trend (7 Days)
+                                <BarChart3 className="h-4 w-4 text-orange-500" /> Revenue Trend (7 Days)
                             </h3>
                             <div className="flex items-end gap-2 h-40">
                                 {data.revenueByDay?.map((day: any, i: number) => {
@@ -109,7 +109,7 @@ export default function PharmacyDashboardPage() {
                                     <span className="text-xl font-black text-gray-600">{data.expiring90Count}</span>
                                 </div>
                             </div>
-                            <Link href="/pharmacy/returns" className="block mt-4 text-center text-xs font-bold text-teal-600 hover:text-teal-700 transition-colors">
+                            <Link href="/pharmacy/returns" className="block mt-4 text-center text-xs font-bold text-orange-600 hover:text-orange-700 transition-colors">
                                 Manage Expiry Write-offs →
                             </Link>
                         </div>
@@ -185,8 +185,8 @@ export default function PharmacyDashboardPage() {
                             <div className="bg-white border border-gray-200 rounded-2xl p-6">
                                 <h3 className="text-sm font-black text-gray-700 mb-4">Quick Links</h3>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <Link href="/pharmacy/billing" className="flex flex-col items-center justify-center p-3 bg-gray-50 hover:bg-teal-50 border border-gray-200 hover:border-teal-200 rounded-xl transition-colors">
-                                        <ShoppingCart className="h-5 w-5 text-teal-600 mb-1.5" />
+                                    <Link href="/pharmacy/billing" className="flex flex-col items-center justify-center p-3 bg-gray-50 hover:bg-orange-50 border border-gray-200 hover:border-orange-200 rounded-xl transition-colors">
+                                        <ShoppingCart className="h-5 w-5 text-orange-600 mb-1.5" />
                                         <span className="text-[10px] font-bold text-gray-700">Billing</span>
                                     </Link>
                                     <Link href="/pharmacy/purchase-orders" className="flex flex-col items-center justify-center p-3 bg-gray-50 hover:bg-indigo-50 border border-gray-200 hover:border-indigo-200 rounded-xl transition-colors">

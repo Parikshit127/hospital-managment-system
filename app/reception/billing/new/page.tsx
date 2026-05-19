@@ -11,7 +11,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 const PT_BADGE: Record<string, string> = {
-    cash: 'bg-teal-100 text-teal-700',
+    cash: 'bg-orange-100 text-orange-700',
     corporate: 'bg-blue-100 text-blue-700',
     tpa_insurance: 'bg-amber-100 text-amber-700',
 };
@@ -237,9 +237,9 @@ export default function ReceptionGenerateBillPage() {
                                             value={searchQuery}
                                             onChange={e => setSearchQuery(e.target.value)}
                                             placeholder="Search by Name, Phone, or ID..."
-                                            className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500/20 font-medium outline-none transition-all placeholder:text-gray-400"
+                                            className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 font-medium outline-none transition-all placeholder:text-gray-400"
                                         />
-                                        {searching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-teal-500 animate-spin" />}
+                                        {searching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-orange-500 animate-spin" />}
                                     </div>
 
                                     {patients.length > 0 && (
@@ -251,7 +251,7 @@ export default function ReceptionGenerateBillPage() {
                                                     className="p-3 hover:bg-slate-50 cursor-pointer flex justify-between items-center transition-colors group"
                                                 >
                                                     <div>
-                                                        <p className="font-bold text-slate-900 group-hover:text-teal-600 transition-colors">{p.full_name}</p>
+                                                        <p className="font-bold text-slate-900 group-hover:text-orange-600 transition-colors">{p.full_name}</p>
                                                         <p className="text-xs text-gray-500">{p.age} Y · {p.gender} · {p.phone}</p>
                                                     </div>
                                                     <span className="text-[10px] font-mono bg-slate-100 px-2 py-1 rounded text-slate-600 font-bold">{p.patient_id}</span>
@@ -262,10 +262,10 @@ export default function ReceptionGenerateBillPage() {
                                 </div>
                             ) : (
                                 <div className="space-y-3">
-                                    <div className="flex items-center justify-between p-4 bg-teal-50 border border-teal-100 rounded-xl">
+                                    <div className="flex items-center justify-between p-4 bg-orange-50 border border-teal-100 rounded-xl">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center">
-                                                <CheckCircle className="h-6 w-6 text-teal-600" />
+                                            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
+                                                <CheckCircle className="h-6 w-6 text-orange-600" />
                                             </div>
                                             <div>
                                                 <div className="flex items-center gap-2">
@@ -276,7 +276,7 @@ export default function ReceptionGenerateBillPage() {
                                                         </span>
                                                     )}
                                                 </div>
-                                                <p className="text-xs text-teal-700">{selectedPatient.patient_id} · {selectedPatient.phone}</p>
+                                                <p className="text-xs text-orange-700">{selectedPatient.patient_id} · {selectedPatient.phone}</p>
                                                 {selectedPatient.patient_type === 'corporate' && selectedPatient.corporate && (
                                                     <p className="text-xs text-blue-600 font-bold mt-0.5">
                                                         {selectedPatient.corporate.company_name} · {Number(selectedPatient.corporate.discount_percentage)}% discount
@@ -294,7 +294,7 @@ export default function ReceptionGenerateBillPage() {
                                         </div>
                                         <button
                                             onClick={() => { setSelectedPatient(null); setSearchQuery(''); setBillSplit(null); setPreAuthBlocked(false); }}
-                                            className="text-xs font-bold text-teal-600 hover:text-teal-800 underline"
+                                            className="text-xs font-bold text-orange-600 hover:text-teal-800 underline"
                                         >Change Patient</button>
                                     </div>
                                     {/* Pre-auth blocking warning */}
@@ -519,7 +519,7 @@ export default function ReceptionGenerateBillPage() {
                                 <button 
                                     onClick={handleGenerateBill}
                                     disabled={!selectedPatient || items.length === 0 || isSaving || preAuthBlocked}
-                                    className="w-full py-4 bg-teal-500 hover:bg-teal-400 text-slate-900 font-black uppercase tracking-wider rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                    className="w-full py-4 bg-orange-500 hover:bg-teal-400 text-slate-900 font-black uppercase tracking-wider rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
                                     {isSaving && <Loader2 className="h-5 w-5 animate-spin" />}
                                     Generate & View Bill

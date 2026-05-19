@@ -213,9 +213,9 @@ export default function AnalyticsSLAPage() {
         {
             id: 'opd-wait',
             module: 'OPD',
-            moduleColor: 'text-teal-500',
-            moduleBg: 'bg-teal-500/8',
-            icon: <Clock className="h-4 w-4 text-teal-500" />,
+            moduleColor: 'text-orange-500',
+            moduleBg: 'bg-orange-500/8',
+            icon: <Clock className="h-4 w-4 text-orange-500" />,
             label: 'Avg Wait Time',
             value: avgWaitTime,
             unit: 'min',
@@ -227,9 +227,9 @@ export default function AnalyticsSLAPage() {
         {
             id: 'opd-patients',
             module: 'OPD',
-            moduleColor: 'text-teal-500',
-            moduleBg: 'bg-teal-500/8',
-            icon: <Users className="h-4 w-4 text-teal-500" />,
+            moduleColor: 'text-orange-500',
+            moduleBg: 'bg-orange-500/8',
+            icon: <Users className="h-4 w-4 text-orange-500" />,
             label: 'Patients Today',
             value: stats?.totalPatientsToday ?? 0,
             target: `Total: ${stats?.totalPatientsAll ?? 0}`,
@@ -240,9 +240,9 @@ export default function AnalyticsSLAPage() {
         {
             id: 'opd-noshow',
             module: 'OPD',
-            moduleColor: 'text-teal-500',
-            moduleBg: 'bg-teal-500/8',
-            icon: <XCircle className="h-4 w-4 text-teal-500" />,
+            moduleColor: 'text-orange-500',
+            moduleBg: 'bg-orange-500/8',
+            icon: <XCircle className="h-4 w-4 text-orange-500" />,
             label: 'No-Show Rate',
             value: noShowRate,
             unit: '%',
@@ -551,7 +551,7 @@ export default function AnalyticsSLAPage() {
                                                         </span>
                                                         {card.trendValue && (
                                                             <div className={`flex items-center gap-0.5 text-[10px] font-bold ${
-                                                                card.trend === 'up' ? 'text-emerald-500' : card.trend === 'down' ? 'text-teal-500' : 'text-gray-400'
+                                                                card.trend === 'up' ? 'text-emerald-500' : card.trend === 'down' ? 'text-orange-500' : 'text-gray-400'
                                                             }`}>
                                                                 {card.trend === 'up' ? (
                                                                     <ArrowUpRight className="h-3 w-3" />
@@ -593,7 +593,7 @@ export default function AnalyticsSLAPage() {
                                                     const heightPct = (item.count / maxCount) * 100;
                                                     return (
                                                         <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
-                                                            <span className="text-[10px] font-black text-teal-500">{item.count}</span>
+                                                            <span className="text-[10px] font-black text-orange-500">{item.count}</span>
                                                             <div
                                                                 className="w-full rounded-t-lg bg-gradient-to-t from-teal-600/80 to-teal-400/60 transition-all duration-700 hover:from-teal-500 hover:to-teal-300 cursor-pointer"
                                                                 style={{ height: `${Math.max(heightPct, 8)}%` }}
@@ -606,7 +606,7 @@ export default function AnalyticsSLAPage() {
                                             </div>
                                             <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                                                 <span className="text-xs font-bold text-gray-400">Total Registrations</span>
-                                                <span className="text-sm font-black text-teal-500">
+                                                <span className="text-sm font-black text-orange-500">
                                                     {patientFlow.reduce((s: number, p: any) => s + p.count, 0)}
                                                 </span>
                                             </div>

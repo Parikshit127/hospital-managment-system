@@ -203,10 +203,10 @@ export default function DoctorOverviewDashboard() {
                 Total Consultations
               </p>
               <div className="mt-3 flex items-center justify-between">
-                <h2 className="text-3xl font-black text-teal-600">
+                <h2 className="text-3xl font-black text-orange-600">
                   {patients.length}
                 </h2>
-                <Activity className="h-6 w-6 text-teal-500" />
+                <Activity className="h-6 w-6 text-orange-500" />
               </div>
             </article>
 
@@ -260,7 +260,7 @@ export default function DoctorOverviewDashboard() {
                   placeholder="Search by patient name, ID, digital ID, or phone"
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
-                  className="w-full border border-gray-300 rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                  className="w-full border border-gray-300 rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                 />
               </div>
 
@@ -272,7 +272,7 @@ export default function DoctorOverviewDashboard() {
                   type="date"
                   value={comingDate}
                   onChange={(event) => setComingDate(event.target.value)}
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                 />
               </div>
 
@@ -285,7 +285,7 @@ export default function DoctorOverviewDashboard() {
                   onChange={(event) =>
                     setSortBy(event.target.value as typeof sortBy)
                   }
-                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white"
                 >
                   <option value="date_desc">Date: Newest First</option>
                   <option value="date_asc">Date: Oldest First</option>

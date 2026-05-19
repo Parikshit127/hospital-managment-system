@@ -105,11 +105,11 @@ export default function DischargePage() {
 
                 {/* KPI Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-teal-500/30 transition-all overflow-hidden">
-                        <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/5 rounded-full blur-2xl group-hover:bg-teal-500/10 transition-all" />
+                    <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-orange-500/30 transition-all overflow-hidden">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-orange-500/5 rounded-full blur-2xl group-hover:bg-orange-500/10 transition-all" />
                         <div className="flex items-center justify-between mb-3">
                             <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Total Admissions</span>
-                            <div className="p-1.5 bg-teal-500/10 rounded-lg">
+                            <div className="p-1.5 bg-orange-500/10 rounded-lg">
                                 <Users className="h-3.5 w-3.5 text-teal-400" />
                             </div>
                         </div>
@@ -200,7 +200,7 @@ export default function DischargePage() {
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-[0.1em] border ${patient.status === 'Admitted'
-                                                ? 'bg-teal-500/10 text-teal-400 border-teal-500/20'
+                                                ? 'bg-orange-500/10 text-teal-400 border-orange-500/20'
                                                 : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                                                 }`}>
                                                 {patient.status}
@@ -274,12 +274,12 @@ export default function DischargePage() {
                             {/* Checklist */}
                             <div className="space-y-3">
                                 <label className="flex items-center gap-3 p-3 bg-emerald-500/5 border border-emerald-500/10 rounded-xl">
-                                    <input type="checkbox" checked={checklist.medical} disabled className="h-4 w-4 rounded border-gray-300 bg-white text-teal-500 focus:ring-teal-500" />
+                                    <input type="checkbox" checked={checklist.medical} disabled className="h-4 w-4 rounded border-gray-300 bg-white text-orange-500 focus:ring-orange-500" />
                                     <span className="text-sm font-medium text-gray-500">Medical Clearance Approved</span>
                                     <CheckCircle className="h-3.5 w-3.5 text-emerald-400 ml-auto" />
                                 </label>
                                 <label className="flex items-center gap-3 p-3 bg-emerald-500/5 border border-emerald-500/10 rounded-xl">
-                                    <input type="checkbox" checked={checklist.meds} disabled className="h-4 w-4 rounded border-gray-300 bg-white text-teal-500 focus:ring-teal-500" />
+                                    <input type="checkbox" checked={checklist.meds} disabled className="h-4 w-4 rounded border-gray-300 bg-white text-orange-500 focus:ring-orange-500" />
                                     <span className="text-sm font-medium text-gray-500">Medications Prepared</span>
                                     <CheckCircle className="h-3.5 w-3.5 text-emerald-400 ml-auto" />
                                 </label>
@@ -288,7 +288,7 @@ export default function DischargePage() {
                                         type="checkbox"
                                         checked={checklist.billing}
                                         onChange={(e) => setChecklist(prev => ({ ...prev, billing: e.target.checked }))}
-                                        className="h-4 w-4 rounded border-gray-300 bg-white text-teal-500 focus:ring-teal-500"
+                                        className="h-4 w-4 rounded border-gray-300 bg-white text-orange-500 focus:ring-orange-500"
                                     />
                                     <span className="text-sm font-bold text-gray-700">Final Bill Cleared?</span>
                                 </label>
@@ -297,7 +297,7 @@ export default function DischargePage() {
                                         type="checkbox"
                                         checked={checklist.followup}
                                         onChange={(e) => setChecklist(prev => ({ ...prev, followup: e.target.checked }))}
-                                        className="h-4 w-4 rounded border-gray-300 bg-white text-teal-500 focus:ring-teal-500"
+                                        className="h-4 w-4 rounded border-gray-300 bg-white text-orange-500 focus:ring-orange-500"
                                     />
                                     <span className="text-sm font-bold text-gray-700">Follow-up Scheduled</span>
                                 </label>
@@ -309,7 +309,7 @@ export default function DischargePage() {
                                 <textarea
                                     value={notes}
                                     onChange={(e) => setNotes(e.target.value)}
-                                    className="w-full bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 placeholder:text-gray-300 p-3 outline-none font-medium text-gray-900 resize-none"
+                                    className="w-full bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 placeholder:text-gray-300 p-3 outline-none font-medium text-gray-900 resize-none"
                                     placeholder="Enter discharge notes..."
                                     rows={2}
                                 />

@@ -106,7 +106,7 @@ export function QuickEntryConsole({ admissionId, patientName }: { admissionId: s
                         onClick={() => setActiveTab(tab.id)}
                         className={`flex items-center gap-2 px-4 py-3 text-sm font-bold rounded-xl transition-all whitespace-nowrap ${
                             activeTab === tab.id 
-                            ? 'bg-white text-teal-600 shadow-sm border border-gray-200 ring-1 ring-teal-500/10' 
+                            ? 'bg-white text-orange-600 shadow-sm border border-gray-200 ring-1 ring-orange-500/10' 
                             : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
                         }`}
                     >
@@ -172,7 +172,7 @@ export function QuickEntryConsole({ admissionId, patientName }: { admissionId: s
                 {/* DOCTOR ROUND TAB */}
                 {activeTab === 'Doctor Round' && (
                     <div className="max-w-2xl mx-auto h-full flex flex-col animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        <div className="flex-1 bg-white border border-gray-200 rounded-2xl p-2 shadow-inner focus-within:ring-2 focus-within:ring-teal-500 focus-within:border-teal-500 transition-all flex flex-col">
+                        <div className="flex-1 bg-white border border-gray-200 rounded-2xl p-2 shadow-inner focus-within:ring-2 focus-within:ring-orange-500 focus-within:border-orange-500 transition-all flex flex-col">
                             <textarea 
                                 className="w-full h-full p-4 resize-none bg-transparent outline-none text-slate-700 min-h-[300px]"
                                 placeholder="Enter clinical notes, new observations, or changes in medication..."

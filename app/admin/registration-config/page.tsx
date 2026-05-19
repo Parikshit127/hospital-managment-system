@@ -74,7 +74,7 @@ export default function RegistrationConfigPage() {
                 {loading ? (
                   <tr>
                     <td colSpan={5} className="text-center py-16">
-                      <Loader2 className="h-6 w-6 animate-spin text-teal-500 mx-auto" />
+                      <Loader2 className="h-6 w-6 animate-spin text-orange-500 mx-auto" />
                     </td>
                   </tr>
                 ) : fields.length === 0 ? (
@@ -100,7 +100,7 @@ export default function RegistrationConfigPage() {
                         disabled={updating === field.id + 'is_visible'}
                         className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all disabled:opacity-50 ${
                           field.is_visible
-                            ? 'bg-teal-50 text-teal-700 hover:bg-teal-100'
+                            ? 'bg-orange-50 text-orange-700 hover:bg-orange-100'
                             : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                         }`}
                       >

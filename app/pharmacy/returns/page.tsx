@@ -122,7 +122,7 @@ export default function ReturnsPage() {
                                     type="text"
                                     value={form.medicine_name || searchQuery}
                                     onChange={(e) => { setSearchQuery(e.target.value); setForm({ ...form, medicine_name: '', medicine_id: '' }); }}
-                                    className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 font-bold text-gray-900 placeholder:text-gray-400 placeholder:font-medium"
+                                    className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 font-bold text-gray-900 placeholder:text-gray-400 placeholder:font-medium"
                                     placeholder="Search by medicine name..."
                                 />
                             </div>
@@ -145,7 +145,7 @@ export default function ReturnsPage() {
                                             <div className="flex items-center gap-2 mt-0.5">
                                                 {m.generic_name && <span className="text-[10px] text-gray-500">{m.generic_name}</span>}
                                                 {m.batches?.length > 0 && (
-                                                    <span className="text-[10px] bg-teal-50 text-teal-600 px-1.5 py-0.5 rounded font-bold border border-teal-100">
+                                                    <span className="text-[10px] bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded font-bold border border-teal-100">
                                                         {m.batches.reduce((s: number, b: any) => s + b.current_stock, 0)} in stock
                                                     </span>
                                                 )}
@@ -163,7 +163,7 @@ export default function ReturnsPage() {
                                     required
                                     value={form.batch_id} 
                                     onChange={e => setForm({ ...form, batch_id: e.target.value })}
-                                    className="w-full py-3 px-4 bg-white border border-gray-300 rounded-xl text-sm font-mono font-bold focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none text-gray-900"
+                                    className="w-full py-3 px-4 bg-white border border-gray-300 rounded-xl text-sm font-mono font-bold focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none text-gray-900"
                                 >
                                     <option value="">Select Batch...</option>
                                     {(form as any).available_batches?.map((b: any) => (
@@ -176,7 +176,7 @@ export default function ReturnsPage() {
                             <div>
                                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.12em] mb-1.5 ml-1">Quantity *</label>
                                 <input required type="number" min="1" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })}
-                                    className="w-full py-3 px-4 bg-white border border-gray-300 rounded-xl text-sm font-bold focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none text-gray-900 placeholder:text-gray-400"
+                                    className="w-full py-3 px-4 bg-white border border-gray-300 rounded-xl text-sm font-bold focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none text-gray-900 placeholder:text-gray-400"
                                     placeholder="0" />
                             </div>
                         </div>
@@ -189,7 +189,7 @@ export default function ReturnsPage() {
                                 </label>
                                 <input value={form.invoice_id} onChange={e => setForm({ ...form, invoice_id: e.target.value })}
                                     type="number"
-                                    className="w-full py-3 px-4 bg-white border border-gray-300 rounded-xl text-sm font-mono font-medium focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none text-gray-900 placeholder:text-gray-400"
+                                    className="w-full py-3 px-4 bg-white border border-gray-300 rounded-xl text-sm font-mono font-medium focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none text-gray-900 placeholder:text-gray-400"
                                     placeholder="Optional — enter original invoice ID for refund" />
                             </div>
                         )}
@@ -197,7 +197,7 @@ export default function ReturnsPage() {
                         <div>
                             <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.12em] mb-1.5 ml-1">Reason / Notes *</label>
                             <textarea required value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })}
-                                className="w-full py-3 px-4 bg-white border border-gray-300 rounded-xl text-sm font-medium focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none h-20 resize-none text-gray-900 placeholder:text-gray-400"
+                                className="w-full py-3 px-4 bg-white border border-gray-300 rounded-xl text-sm font-medium focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none h-20 resize-none text-gray-900 placeholder:text-gray-400"
                                 placeholder={returnType === 'Expired' ? 'e.g. Expired on shelf, batch not rotated' : 'e.g. Patient returned unopened strip, adverse reaction'} />
                         </div>
 

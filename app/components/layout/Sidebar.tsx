@@ -558,18 +558,18 @@ export function Sidebar({ session }: SidebarProps) {
         {collapsed ? (
           <div className="shrink-0 flex items-center justify-center w-9 h-9">
             <svg width="36" height="36" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="26" cy="26" r="24" stroke="#1e3a6e" strokeWidth="2.5"/>
-              <circle cx="26" cy="26" r="19" stroke="#1e3a6e" strokeWidth="1"/>
+              <circle cx="26" cy="26" r="24" stroke="#ffffff" strokeWidth="2.5"/>
+              <circle cx="26" cy="26" r="19" stroke="#ffffff" strokeWidth="1"/>
               <rect x="21" y="14" width="10" height="24" rx="2" stroke="#f97316" strokeWidth="2.5" fill="none"/>
               <rect x="14" y="21" width="24" height="10" rx="2" stroke="#f97316" strokeWidth="2.5" fill="none"/>
             </svg>
           </div>
         ) : (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" style={{ height: '36px', width: 'auto', flexShrink: 0 }} aria-label="Axten Hospitals">
-            <text x="10" y="72" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="68" fill="#1e3a6e" letterSpacing="-2">Axten</text>
+            <text x="10" y="72" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="68" fill="#ffffff" letterSpacing="-2">Axten</text>
             <rect x="10" y="80" width="60" height="8" fill="#f97316" rx="2"/>
             <rect x="130" y="80" width="120" height="8" fill="#f97316" rx="2"/>
-            <text x="75" y="89" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="16" fill="#1e3a6e" letterSpacing="6">HOSPITALS</text>
+            <text x="75" y="89" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="16" fill="#ffffff" letterSpacing="6">HOSPITALS</text>
           </svg>
         )}
         {!collapsed && (

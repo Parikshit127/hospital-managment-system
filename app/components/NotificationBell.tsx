@@ -96,7 +96,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                         <h3 className="text-sm font-black text-gray-900">Notifications</h3>
                         {unreadCount > 0 && (
                             <button onClick={handleMarkAllRead}
-                                className="text-[10px] font-bold text-teal-600 hover:text-teal-700 flex items-center gap-1">
+                                className="text-[10px] font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1">
                                 <CheckCheck className="h-3 w-3" /> Mark all read
                             </button>
                         )}
@@ -125,7 +125,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                                                 <span className="text-[9px] text-gray-300 font-medium">{timeAgo(n.created_at)}</span>
                                                 {n.link && (
                                                     <Link href={n.link} onClick={() => setOpen(false)}
-                                                        className="text-[9px] text-teal-500 font-bold flex items-center gap-0.5 hover:text-teal-600">
+                                                        className="text-[9px] text-orange-500 font-bold flex items-center gap-0.5 hover:text-orange-600">
                                                         View <ExternalLink className="h-2 w-2" />
                                                     </Link>
                                                 )}
@@ -146,7 +146,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                     {/* Footer */}
                     <div className="px-4 py-2.5 border-t border-gray-100 text-center">
                         <Link href="/notifications" onClick={() => setOpen(false)}
-                            className="text-xs font-bold text-teal-600 hover:text-teal-700">
+                            className="text-xs font-bold text-orange-600 hover:text-orange-700">
                             View all notifications
                         </Link>
                     </div>

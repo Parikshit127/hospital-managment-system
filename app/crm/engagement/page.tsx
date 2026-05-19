@@ -42,7 +42,7 @@ export default function CRMEngagementPage() {
     <AppShell pageTitle="Patient Engagement" pageIcon={<HeartHandshake className="h-5 w-5" />} onRefresh={loadData} refreshing={loading}>
       {loading ? (
         <div className="flex items-center justify-center py-24">
-          <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+          <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
         </div>
       ) : (
         <div className="space-y-6">
@@ -60,7 +60,7 @@ export default function CRMEngagementPage() {
           </div>
 
           {/* RFM Explanation Banner */}
-          <div className="bg-teal-50 border border-teal-200 rounded-2xl px-5 py-4">
+          <div className="bg-orange-50 border border-orange-200 rounded-2xl px-5 py-4">
             <p className="text-xs font-semibold text-teal-800">
               <span className="font-black">RFM Scoring: </span>
               Patients are scored by Recency, Frequency, and Monetary value. At Risk = no visit in 60+ days. Lapsed = 90+ days. Lost = 180+ days.
@@ -106,7 +106,7 @@ export default function CRMEngagementPage() {
                         {p.next_followup ? new Date(p.next_followup).toLocaleDateString('en-IN') : '—'}
                       </td>
                       <td className="px-4 py-3">
-                        <button className="text-xs font-bold text-teal-600 hover:text-teal-700 border border-teal-200 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg transition-colors">
+                        <button className="text-xs font-bold text-orange-600 hover:text-orange-700 border border-orange-200 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-lg transition-colors">
                           Schedule Follow-up
                         </button>
                       </td>

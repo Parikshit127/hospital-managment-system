@@ -85,7 +85,7 @@ export default function SuppliersPage() {
         >
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {suppliers.length > 0 ? suppliers.map((sup: any) => (
-                    <div key={sup.id} className="bg-white border border-gray-200 rounded-2xl p-5 transition-all hover:border-teal-200 group">
+                    <div key={sup.id} className="bg-white border border-gray-200 rounded-2xl p-5 transition-all hover:border-orange-200 group">
                         <div className="flex justify-between items-start mb-3">
                             <div>
                                 <h3 className="font-black text-gray-900 text-base">{sup.name}</h3>
@@ -121,7 +121,7 @@ export default function SuppliersPage() {
                         </div>
 
                         <div className="mt-4 flex justify-end">
-                            <button onClick={() => openEdit(sup)} className="text-teal-600 text-xs font-bold bg-teal-50 hover:bg-teal-100 py-1.5 px-3 rounded-lg transition-colors flex items-center gap-1.5">
+                            <button onClick={() => openEdit(sup)} className="text-orange-600 text-xs font-bold bg-orange-50 hover:bg-orange-100 py-1.5 px-3 rounded-lg transition-colors flex items-center gap-1.5">
                                 <Pencil className="h-3 w-3" /> Edit
                             </button>
                         </div>
@@ -131,7 +131,7 @@ export default function SuppliersPage() {
                         <Users className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                         <h3 className="font-bold text-gray-900 mb-1">No Suppliers Found</h3>
                         <p className="text-sm mb-4">Click "Add Supplier" to create your first vendor.</p>
-                        <button onClick={openCreate} className="inline-flex items-center gap-2 bg-teal-500 text-white font-bold py-2 px-4 rounded-xl text-sm">
+                        <button onClick={openCreate} className="inline-flex items-center gap-2 bg-orange-500 text-white font-bold py-2 px-4 rounded-xl text-sm">
                             <Plus className="h-4 w-4" /> Add Supplier
                         </button>
                     </div>
@@ -152,14 +152,14 @@ export default function SuppliersPage() {
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Supplier Name *</label>
                                 <input value={form.name} onChange={e => setForm({ ...form, name: sanitizeName(e.target.value) })}
                                     maxLength={80}
-                                    className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-bold text-gray-900 placeholder:text-gray-400"
+                                    className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-bold text-gray-900 placeholder:text-gray-400"
                                     placeholder="e.g. MedSupply India Pvt Ltd" />
                             </div>
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Contact Person</label>
                                 <input value={form.contact_person} onChange={e => setForm({ ...form, contact_person: sanitizePerson(e.target.value) })}
                                     maxLength={60}
-                                    className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none font-medium text-gray-900 placeholder:text-gray-400"
+                                    className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-medium text-gray-900 placeholder:text-gray-400"
                                     placeholder="Name" />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
@@ -169,13 +169,13 @@ export default function SuppliersPage() {
                                         inputMode="numeric"
                                         maxLength={10}
                                         pattern="[0-9]{10}"
-                                        className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none font-medium text-gray-900 placeholder:text-gray-400"
+                                        className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-medium text-gray-900 placeholder:text-gray-400"
                                         placeholder="9876543210" />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Email</label>
                                     <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} type="email"
-                                        className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none font-medium text-gray-900 placeholder:text-gray-400"
+                                        className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-medium text-gray-900 placeholder:text-gray-400"
                                         placeholder="email@supplier.com" />
                                 </div>
                             </div>
@@ -184,7 +184,7 @@ export default function SuppliersPage() {
                                     <input value={form.gst_no} onChange={e => setForm({ ...form, gst_no: sanitizeGST(e.target.value) })}
                                         maxLength={15}
                                         pattern="[0-9A-Z]{15}"
-                                    className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none font-mono font-medium text-gray-900 placeholder:text-gray-400"
+                                    className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-mono font-medium text-gray-900 placeholder:text-gray-400"
                                     placeholder="e.g. 27AABCU9603R1ZM" />
                             </div>
                         </div>

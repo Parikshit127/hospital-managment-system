@@ -126,7 +126,7 @@ export default function TokenDisplayPage() {
                         onClick={() => setAudioEnabled(!audioEnabled)}
                         className={`p-2.5 rounded-xl border transition-all ${
                             audioEnabled
-                                ? 'bg-teal-500/20 border-teal-500/40 text-teal-400'
+                                ? 'bg-orange-500/20 border-orange-500/40 text-teal-400'
                                 : 'bg-slate-700/50 border-slate-600 text-slate-500'
                         }`}
                         title={audioEnabled ? 'Mute announcements' : 'Enable audio announcements'}
@@ -241,7 +241,7 @@ export default function TokenDisplayPage() {
                     </p>
                     <div className="flex items-center gap-3">
                         {audioEnabled && (
-                            <span className="text-xs text-teal-500 flex items-center gap-1">
+                            <span className="text-xs text-orange-500 flex items-center gap-1">
                                 <Volume2 className="h-3 w-3" /> Audio On
                             </span>
                         )}

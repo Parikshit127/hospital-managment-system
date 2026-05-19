@@ -11,7 +11,7 @@ const statusColors: Record<string, string> = {
   New: 'bg-blue-50 text-blue-700 border-blue-200',
   Contacted: 'bg-violet-50 text-violet-700 border-violet-200',
   Interested: 'bg-amber-50 text-amber-700 border-amber-200',
-  Appointment_Booked: 'bg-teal-50 text-teal-700 border-teal-200',
+  Appointment_Booked: 'bg-orange-50 text-orange-700 border-orange-200',
   Converted: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   Lost: 'bg-red-50 text-red-700 border-red-200',
 };
@@ -90,7 +90,7 @@ export default function CRMDashboardPage() {
     <AppShell pageTitle="CRM Dashboard" pageIcon={<LayoutDashboard className="h-5 w-5" />} onRefresh={loadData} refreshing={loading}>
       {loading ? (
         <div className="flex items-center justify-center py-24">
-          <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+          <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
         </div>
       ) : (
         <div className="space-y-6">
@@ -145,7 +145,7 @@ export default function CRMDashboardPage() {
                   {sourceBreakdown.map((s) => (
                     <div key={s.source} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-teal-500">{sourceIcon(s.source)}</span>
+                        <span className="text-orange-500">{sourceIcon(s.source)}</span>
                         <span className="text-xs font-medium text-gray-700">{s.source}</span>
                       </div>
                       <div className="flex items-center gap-3">
@@ -163,7 +163,7 @@ export default function CRMDashboardPage() {
           <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
               <h3 className="text-sm font-bold text-gray-900">Recent Leads</h3>
-              <Link href="/crm/leads" className="text-xs font-bold text-teal-600 hover:text-teal-700 flex items-center gap-1">
+              <Link href="/crm/leads" className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1">
                 View All <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
@@ -195,7 +195,7 @@ export default function CRMDashboardPage() {
                         {lead.last_contacted ? new Date(lead.last_contacted).toLocaleDateString('en-IN') : '—'}
                       </td>
                       <td className="px-4 py-3">
-                        <Link href={`/crm/leads/${lead.id}`} className="text-xs font-bold text-teal-600 hover:text-teal-700">
+                        <Link href={`/crm/leads/${lead.id}`} className="text-xs font-bold text-orange-600 hover:text-orange-700">
                           View
                         </Link>
                       </td>
@@ -210,7 +210,7 @@ export default function CRMDashboardPage() {
           <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-gray-900">Recent Campaigns</h3>
-              <Link href="/crm/campaigns" className="text-xs font-bold text-teal-600 hover:text-teal-700 flex items-center gap-1">
+              <Link href="/crm/campaigns" className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1">
                 View All <ArrowRight className="h-3 w-3" />
               </Link>
             </div>

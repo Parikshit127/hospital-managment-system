@@ -59,8 +59,8 @@ export default function LabDashboardPage() {
                 <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6">
                     <h3 className="text-sm font-bold text-gray-900 mb-4">Turnaround Time (TAT)</h3>
                     <div className="flex items-center gap-4 mb-4">
-                        <div className="p-4 bg-teal-50 rounded-xl">
-                            <Clock className="h-8 w-8 text-teal-600" />
+                        <div className="p-4 bg-orange-50 rounded-xl">
+                            <Clock className="h-8 w-8 text-orange-600" />
                         </div>
                         <div>
                             <p className="text-xs text-gray-500 font-medium">Average TAT (Today)</p>

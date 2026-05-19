@@ -48,11 +48,11 @@ function EditableField({
                         value={editValue}
                         onChange={e => setEditValue(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
-                        className="flex-1 px-2 py-1 text-sm border border-teal-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white"
+                        className="flex-1 px-2 py-1 text-sm border border-teal-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white"
                         autoFocus
                     />
                     <button onClick={handleSave} disabled={saving}
-                        className="p-1 text-teal-600 hover:bg-teal-50 rounded">
+                        className="p-1 text-orange-600 hover:bg-orange-50 rounded">
                         {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                     </button>
                     <button onClick={() => { setEditing(false); setEditValue(value); }}
@@ -195,7 +195,7 @@ export default function PatientProfilePage() {
         const map: Record<string, string> = {
             'Pending': 'bg-amber-50 text-amber-700 border-amber-200',
             'Scheduled': 'bg-blue-50 text-blue-700 border-blue-200',
-            'Checked In': 'bg-teal-50 text-teal-700 border-teal-200',
+            'Checked In': 'bg-orange-50 text-orange-700 border-orange-200',
             'In Progress': 'bg-violet-50 text-violet-700 border-violet-200',
             'Completed': 'bg-emerald-50 text-emerald-700 border-emerald-200',
             'Cancelled': 'bg-red-50 text-red-700 border-red-200',
@@ -228,7 +228,7 @@ export default function PatientProfilePage() {
         return (
             <AppShell pageTitle="Patient Profile" pageIcon={<User className="h-5 w-5" />} headerActions={headerActions}>
                 <div className="flex items-center justify-center py-32">
-                    <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+                    <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
                 </div>
             </AppShell>
         );
@@ -280,7 +280,7 @@ export default function PatientProfilePage() {
     // Build timeline from all data sources
     const timelineEvents = [
         // Registration event
-        { type: 'registration', title: 'Patient Registered', subtitle: `ID: ${patient.patient_id}`, date: formatDate(patient.created_at), sortDate: new Date(patient.created_at), color: 'bg-teal-500' },
+        { type: 'registration', title: 'Patient Registered', subtitle: `ID: ${patient.patient_id}`, date: formatDate(patient.created_at), sortDate: new Date(patient.created_at), color: 'bg-orange-500' },
         // Appointments
         ...(data.appointments || []).map((a: any) => ({
             type: 'appointment',
@@ -323,7 +323,7 @@ export default function PatientProfilePage() {
                         <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div>
                                 <span className="text-[10px] font-semibold text-gray-400 uppercase">Patient ID</span>
-                                <p className="text-sm font-mono font-bold text-teal-600">{patient.patient_id}</p>
+                                <p className="text-sm font-mono font-bold text-orange-600">{patient.patient_id}</p>
                             </div>
                             <EditableField label="Full Name" value={patient.full_name || ''} field="full_name" patientId={patientId} onSave={loadData} />
                             <EditableField label="Phone" value={patient.phone || ''} field="phone" patientId={patientId} onSave={loadData} type="tel" />
@@ -353,7 +353,7 @@ export default function PatientProfilePage() {
                     ].map(tab => (
                         <button key={tab.key} onClick={() => setActiveTab(tab.key as typeof activeTab)}
                             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === tab.key
-                                ? 'bg-teal-50 text-teal-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}>
+                                ? 'bg-orange-50 text-orange-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}>
                             {tab.icon} {tab.label}
                         </button>
                     ))}
@@ -471,7 +471,7 @@ export default function PatientProfilePage() {
                             <tbody className="divide-y divide-gray-100">
                                 {data.appointments?.map((appt: any) => (
                                     <tr key={appt.appointment_id} className="hover:bg-gray-50">
-                                        <td className="px-4 py-3 text-xs font-mono text-teal-600">{appt.appointment_id}</td>
+                                        <td className="px-4 py-3 text-xs font-mono text-orange-600">{appt.appointment_id}</td>
                                         <td className="px-4 py-3 text-xs text-gray-500">{formatDate(appt.appointment_date)}</td>
                                         <td className="px-4 py-3 text-gray-700">{appt.doctor_name || '-'}</td>
                                         <td className="px-4 py-3 text-gray-500">{appt.department || '-'}</td>
@@ -569,7 +569,7 @@ export default function PatientProfilePage() {
                                 <tbody className="divide-y divide-gray-100">
                                     {(data.invoices || []).map((inv: any) => (
                                         <tr key={inv.id} className="hover:bg-gray-50">
-                                            <td className="px-4 py-3 text-xs font-mono font-bold text-teal-600">{inv.invoice_number}</td>
+                                            <td className="px-4 py-3 text-xs font-mono font-bold text-orange-600">{inv.invoice_number}</td>
                                             <td className="px-4 py-3 text-xs text-gray-500">{inv.invoice_type}</td>
                                             <td className="px-4 py-3 text-xs text-gray-500">{formatDate(inv.created_at)}</td>
                                             <td className="px-4 py-3 text-gray-900">₹{Number(inv.net_amount).toFixed(2)}</td>
@@ -583,7 +583,7 @@ export default function PatientProfilePage() {
                                             <td className="px-4 py-3 text-right">
                                                 {inv.balance_due > 0 && (
                                                     <button onClick={() => setShowPaymentModal(inv.id)} disabled={processLoading}
-                                                        className="px-3 py-1.5 bg-teal-50 text-teal-700 text-xs font-bold rounded-lg hover:bg-teal-100 transition-colors shadow-sm">
+                                                        className="px-3 py-1.5 bg-orange-50 text-orange-700 text-xs font-bold rounded-lg hover:bg-orange-100 transition-colors shadow-sm">
                                                         Pay
                                                     </button>
                                                 )}
@@ -700,11 +700,11 @@ export default function PatientProfilePage() {
                         <form onSubmit={handleAddDues} className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Amount (₹)</label>
-                                <input type="number" required min="1" value={dueForm.amount} onChange={e => setDueForm({...dueForm, amount: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-gray-50 font-mono text-lg" placeholder="e.g. 500" />
+                                <input type="number" required min="1" value={dueForm.amount} onChange={e => setDueForm({...dueForm, amount: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-50 font-mono text-lg" placeholder="e.g. 500" />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Description / Tag</label>
-                                <input type="text" required value={dueForm.description} onChange={e => setDueForm({...dueForm, description: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-gray-50" placeholder="e.g. Extra Consumables" />
+                                <input type="text" required value={dueForm.description} onChange={e => setDueForm({...dueForm, description: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-50" placeholder="e.g. Extra Consumables" />
                             </div>
                             <div className="flex gap-3 mt-6">
                                 <button type="button" onClick={() => setShowDuesModal(false)} className="flex-1 py-2 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
@@ -725,11 +725,11 @@ export default function PatientProfilePage() {
                         <form onSubmit={handlePayment} className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Amount to Collect (₹)</label>
-                                <input type="number" required min="1" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-gray-50 font-mono text-lg text-emerald-600" placeholder="Amount" />
+                                <input type="number" required min="1" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-50 font-mono text-lg text-emerald-600" placeholder="Amount" />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Payment Method</label>
-                                <select value={paymentForm.method} onChange={e => setPaymentForm({...paymentForm, method: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-gray-50 font-medium">
+                                <select value={paymentForm.method} onChange={e => setPaymentForm({...paymentForm, method: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-50 font-medium">
                                     <option>Cash</option>
                                     <option>Card</option>
                                     <option>UPI</option>
@@ -738,7 +738,7 @@ export default function PatientProfilePage() {
                             </div>
                             <div className="flex gap-3 mt-6">
                                 <button type="button" onClick={() => setShowPaymentModal(null)} className="flex-1 py-2 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
-                                <button type="submit" disabled={processLoading} className="flex-1 py-2 flex justify-center items-center gap-2 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 disabled:opacity-50 transition-colors">
+                                <button type="submit" disabled={processLoading} className="flex-1 py-2 flex justify-center items-center gap-2 bg-orange-600 text-white font-bold rounded-xl hover:bg-teal-700 disabled:opacity-50 transition-colors">
                                     {processLoading && <Loader2 className="h-4 w-4 animate-spin" />}
                                     Collect
                                 </button>

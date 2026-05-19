@@ -42,15 +42,15 @@ export function BottomNavBar({ role = 'patient' }: BottomNavBarProps) {
                         <Link key={item.href} href={item.href}
                             className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-colors min-w-[56px] ${
                                 isActive
-                                    ? 'text-teal-600'
+                                    ? 'text-orange-600'
                                     : 'text-gray-400 hover:text-gray-600'
                             }`}>
-                            <span className={isActive ? 'text-teal-600' : 'text-gray-400'}>{item.icon}</span>
-                            <span className={`text-[9px] font-bold ${isActive ? 'text-teal-600' : 'text-gray-400'}`}>
+                            <span className={isActive ? 'text-orange-600' : 'text-gray-400'}>{item.icon}</span>
+                            <span className={`text-[9px] font-bold ${isActive ? 'text-orange-600' : 'text-gray-400'}`}>
                                 {item.label}
                             </span>
                             {isActive && (
-                                <div className="absolute bottom-1 h-0.5 w-8 bg-teal-500 rounded-full" />
+                                <div className="absolute bottom-1 h-0.5 w-8 bg-orange-500 rounded-full" />
                             )}
                         </Link>
                     );

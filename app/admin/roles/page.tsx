@@ -43,7 +43,7 @@ const MODULES = ['opd', 'ipd', 'lab', 'pharmacy', 'finance', 'insurance', 'hr', 
 const ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'export'];
 
 const MODULE_META: Record<string, { label: string; color: string; bg: string }> = {
-    opd: { label: 'OPD', color: 'text-teal-700', bg: 'bg-teal-50 border-teal-200' },
+    opd: { label: 'OPD', color: 'text-orange-700', bg: 'bg-orange-50 border-orange-200' },
     ipd: { label: 'IPD', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
     lab: { label: 'Lab', color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' },
     pharmacy: { label: 'Pharmacy', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
@@ -340,7 +340,7 @@ export default function RolesPermissionsPage() {
             <button
                 onClick={openCreateModal}
                 className="flex items-center gap-2 px-4 py-2 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md transition-all"
-                style={{ background: `linear-gradient(135deg, var(--admin-primary, #0d9488), var(--admin-primary-light, #10b981))` }}
+                style={{ background: `linear-gradient(135deg, var(--admin-primary, #ea580c), var(--admin-primary-light, #10b981))` }}
             >
                 <Plus className="h-3.5 w-3.5" /> Create Custom Role
             </button>
@@ -386,7 +386,7 @@ export default function RolesPermissionsPage() {
                                 onChange={e => setSearchQuery(e.target.value)}
                                 placeholder="Search roles..."
                                 className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-1"
-                                style={{ borderColor: searchQuery ? 'var(--admin-primary, #0d9488)' : undefined }}
+                                style={{ borderColor: searchQuery ? 'var(--admin-primary, #ea580c)' : undefined }}
                             />
                         </div>
                     )}
@@ -394,7 +394,7 @@ export default function RolesPermissionsPage() {
                     {/* Loading */}
                     {loading && roles.length === 0 && (
                         <div className="flex flex-col items-center justify-center py-20">
-                            <Loader2 className="h-8 w-8 animate-spin mb-3" style={{ color: 'var(--admin-primary, #0d9488)' }} />
+                            <Loader2 className="h-8 w-8 animate-spin mb-3" style={{ color: 'var(--admin-primary, #ea580c)' }} />
                             <p className="text-sm font-medium text-gray-400">Loading roles...</p>
                         </div>
                     )}
@@ -411,7 +411,7 @@ export default function RolesPermissionsPage() {
                                 onClick={handleSeed}
                                 disabled={seeding}
                                 className="inline-flex items-center gap-2 px-6 py-3 text-white text-sm font-bold rounded-xl shadow-md hover:shadow-lg disabled:opacity-50 transition-all"
-                                style={{ background: `linear-gradient(135deg, var(--admin-primary, #0d9488), var(--admin-primary-light, #10b981))` }}
+                                style={{ background: `linear-gradient(135deg, var(--admin-primary, #ea580c), var(--admin-primary-light, #10b981))` }}
                             >
                                 {seeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sprout className="h-4 w-4" />}
                                 Seed System Roles
@@ -457,7 +457,7 @@ export default function RolesPermissionsPage() {
                         </button>
                         <div className="flex-1" />
                         <div className="flex items-center gap-2 text-xs text-gray-500 font-medium">
-                            <span className="font-bold" style={{ color: 'var(--admin-primary, #0d9488)' }}>
+                            <span className="font-bold" style={{ color: 'var(--admin-primary, #ea580c)' }}>
                                 {selectedPerms}
                             </span>
                             <span>of {totalPerms} permissions selected</span>
@@ -487,7 +487,7 @@ export default function RolesPermissionsPage() {
                                             value={editName}
                                             onChange={e => setEditName(e.target.value)}
                                             className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 font-bold focus:outline-none focus:ring-1"
-                                            style={{ '--tw-ring-color': 'var(--admin-primary, #0d9488)' } as React.CSSProperties}
+                                            style={{ '--tw-ring-color': 'var(--admin-primary, #ea580c)' } as React.CSSProperties}
                                         />
                                     )}
                                 </div>
@@ -503,7 +503,7 @@ export default function RolesPermissionsPage() {
                                             onChange={e => setEditDescription(e.target.value)}
                                             rows={2}
                                             className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-1 resize-none"
-                                            style={{ '--tw-ring-color': 'var(--admin-primary, #0d9488)' } as React.CSSProperties}
+                                            style={{ '--tw-ring-color': 'var(--admin-primary, #ea580c)' } as React.CSSProperties}
                                             placeholder="Describe this role's purpose..."
                                         />
                                     )}
@@ -534,7 +534,7 @@ export default function RolesPermissionsPage() {
                                             value={editDataScope}
                                             onChange={e => setEditDataScope(e.target.value)}
                                             className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-1"
-                                            style={{ '--tw-ring-color': 'var(--admin-primary, #0d9488)' } as React.CSSProperties}
+                                            style={{ '--tw-ring-color': 'var(--admin-primary, #ea580c)' } as React.CSSProperties}
                                         >
                                             {Object.entries(DATA_SCOPE_META).map(([val, meta]) => (
                                                 <option key={val} value={val}>{meta.label} -- {meta.desc}</option>
@@ -557,7 +557,7 @@ export default function RolesPermissionsPage() {
                                     onClick={selectAll}
                                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all hover:shadow-sm"
                                     style={{
-                                        color: 'var(--admin-primary, #0d9488)',
+                                        color: 'var(--admin-primary, #ea580c)',
                                         background: 'var(--admin-primary-10, rgba(13,148,136,0.1))',
                                     }}
                                 >
@@ -684,7 +684,7 @@ export default function RolesPermissionsPage() {
                                                                                     : 'border-gray-300 bg-white hover:border-gray-400'
                                                                             } ${editingRole.is_system ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                                                                             style={checked ? {
-                                                                                background: 'var(--admin-primary, #0d9488)',
+                                                                                background: 'var(--admin-primary, #ea580c)',
                                                                             } : undefined}
                                                                         >
                                                                             {checked && (
@@ -710,7 +710,7 @@ export default function RolesPermissionsPage() {
                                                                         : 'text-white hover:opacity-90'
                                                                 }`}
                                                                 style={!allModuleSelected ? {
-                                                                    background: 'var(--admin-primary, #0d9488)',
+                                                                    background: 'var(--admin-primary, #ea580c)',
                                                                 } : undefined}
                                                             >
                                                                 {allModuleSelected ? (
@@ -767,7 +767,7 @@ export default function RolesPermissionsPage() {
                     {!editingRole.is_system && (
                         <div className="flex items-center justify-between bg-white rounded-2xl border border-gray-200 shadow-sm px-6 py-4 sticky bottom-4 z-20">
                             <div className="text-sm text-gray-500">
-                                <span className="font-bold" style={{ color: 'var(--admin-primary, #0d9488)' }}>{selectedPerms}</span> permissions selected across{' '}
+                                <span className="font-bold" style={{ color: 'var(--admin-primary, #ea580c)' }}>{selectedPerms}</span> permissions selected across{' '}
                                 <span className="font-bold">{MODULES.filter(m => (permissionsByModule[m] || []).some(p => editPermissions.has(p.key))).length}</span> modules
                             </div>
                             <div className="flex items-center gap-3">
@@ -781,7 +781,7 @@ export default function RolesPermissionsPage() {
                                     onClick={handleSaveMatrix}
                                     disabled={saving}
                                     className="flex items-center gap-2 px-5 py-2.5 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md disabled:opacity-50 transition-all"
-                                    style={{ background: `linear-gradient(135deg, var(--admin-primary, #0d9488), var(--admin-primary-light, #10b981))` }}
+                                    style={{ background: `linear-gradient(135deg, var(--admin-primary, #ea580c), var(--admin-primary-light, #10b981))` }}
                                 >
                                     {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                                     Save Permissions
@@ -819,7 +819,7 @@ export default function RolesPermissionsPage() {
                                 onChange={e => { setFormName(e.target.value); setFormSlug(toSlug(e.target.value)); }}
                                 className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-1"
                                 placeholder="e.g. Billing Clerk"
-                                style={{ '--tw-ring-color': 'var(--admin-primary, #0d9488)' } as React.CSSProperties}
+                                style={{ '--tw-ring-color': 'var(--admin-primary, #ea580c)' } as React.CSSProperties}
                             />
                         </div>
                         <div>
@@ -830,7 +830,7 @@ export default function RolesPermissionsPage() {
                                 onChange={e => setFormSlug(toSlug(e.target.value))}
                                 className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-mono text-gray-500 focus:outline-none focus:ring-1"
                                 placeholder="auto_generated"
-                                style={{ '--tw-ring-color': 'var(--admin-primary, #0d9488)' } as React.CSSProperties}
+                                style={{ '--tw-ring-color': 'var(--admin-primary, #ea580c)' } as React.CSSProperties}
                             />
                         </div>
                         <div>
@@ -841,7 +841,7 @@ export default function RolesPermissionsPage() {
                                 rows={2}
                                 className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-1 resize-none"
                                 placeholder="Describe the purpose of this role..."
-                                style={{ '--tw-ring-color': 'var(--admin-primary, #0d9488)' } as React.CSSProperties}
+                                style={{ '--tw-ring-color': 'var(--admin-primary, #ea580c)' } as React.CSSProperties}
                             />
                         </div>
                         <div>
@@ -850,7 +850,7 @@ export default function RolesPermissionsPage() {
                                 value={formDataScope}
                                 onChange={e => setFormDataScope(e.target.value)}
                                 className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-1"
-                                style={{ '--tw-ring-color': 'var(--admin-primary, #0d9488)' } as React.CSSProperties}
+                                style={{ '--tw-ring-color': 'var(--admin-primary, #ea580c)' } as React.CSSProperties}
                             >
                                 {Object.entries(DATA_SCOPE_META).map(([val, meta]) => (
                                     <option key={val} value={val}>{meta.label} -- {meta.desc}</option>
@@ -868,7 +868,7 @@ export default function RolesPermissionsPage() {
                                 onClick={handleCreate}
                                 disabled={saving}
                                 className="flex items-center gap-2 px-4 py-2.5 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md disabled:opacity-50 transition-all"
-                                style={{ background: `linear-gradient(135deg, var(--admin-primary, #0d9488), var(--admin-primary-light, #10b981))` }}
+                                style={{ background: `linear-gradient(135deg, var(--admin-primary, #ea580c), var(--admin-primary-light, #10b981))` }}
                             >
                                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
                                 Create Role
@@ -896,7 +896,7 @@ export default function RolesPermissionsPage() {
                                 onChange={e => { setFormName(e.target.value); setFormSlug(toSlug(e.target.value)); }}
                                 className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-1"
                                 placeholder="e.g. Senior Doctor"
-                                style={{ '--tw-ring-color': 'var(--admin-primary, #0d9488)' } as React.CSSProperties}
+                                style={{ '--tw-ring-color': 'var(--admin-primary, #ea580c)' } as React.CSSProperties}
                             />
                         </div>
                         <div>
@@ -907,7 +907,7 @@ export default function RolesPermissionsPage() {
                                 onChange={e => setFormSlug(toSlug(e.target.value))}
                                 className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-mono text-gray-500 focus:outline-none focus:ring-1"
                                 placeholder="auto_generated"
-                                style={{ '--tw-ring-color': 'var(--admin-primary, #0d9488)' } as React.CSSProperties}
+                                style={{ '--tw-ring-color': 'var(--admin-primary, #ea580c)' } as React.CSSProperties}
                             />
                         </div>
                         <div>
@@ -918,7 +918,7 @@ export default function RolesPermissionsPage() {
                                 rows={2}
                                 className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-1 resize-none"
                                 placeholder="Optional description..."
-                                style={{ '--tw-ring-color': 'var(--admin-primary, #0d9488)' } as React.CSSProperties}
+                                style={{ '--tw-ring-color': 'var(--admin-primary, #ea580c)' } as React.CSSProperties}
                             />
                         </div>
                         <div>
@@ -927,7 +927,7 @@ export default function RolesPermissionsPage() {
                                 value={formDataScope}
                                 onChange={e => setFormDataScope(e.target.value)}
                                 className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-1"
-                                style={{ '--tw-ring-color': 'var(--admin-primary, #0d9488)' } as React.CSSProperties}
+                                style={{ '--tw-ring-color': 'var(--admin-primary, #ea580c)' } as React.CSSProperties}
                             >
                                 {Object.entries(DATA_SCOPE_META).map(([val, meta]) => (
                                     <option key={val} value={val}>{meta.label} -- {meta.desc}</option>
@@ -945,7 +945,7 @@ export default function RolesPermissionsPage() {
                                 onClick={handleClone}
                                 disabled={saving}
                                 className="flex items-center gap-2 px-4 py-2.5 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md disabled:opacity-50 transition-all"
-                                style={{ background: `linear-gradient(135deg, var(--admin-primary, #0d9488), var(--admin-primary-light, #10b981))` }}
+                                style={{ background: `linear-gradient(135deg, var(--admin-primary, #ea580c), var(--admin-primary-light, #10b981))` }}
                             >
                                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
                                 Clone Role
@@ -1029,7 +1029,7 @@ function RoleCard({
                 className="h-1 w-full"
                 style={{ background: role.is_system
                     ? 'linear-gradient(90deg, #3b82f6, #6366f1)'
-                    : `linear-gradient(90deg, var(--admin-primary, #0d9488), var(--admin-primary-light, #10b981))`
+                    : `linear-gradient(90deg, var(--admin-primary, #ea580c), var(--admin-primary-light, #10b981))`
                 }}
             />
 
@@ -1093,7 +1093,7 @@ function RoleCard({
                         onClick={onEdit}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all hover:shadow-sm"
                         style={{
-                            color: 'var(--admin-primary, #0d9488)',
+                            color: 'var(--admin-primary, #ea580c)',
                             background: 'var(--admin-primary-10, rgba(13,148,136,0.1))',
                         }}
                     >

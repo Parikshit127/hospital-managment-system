@@ -57,7 +57,7 @@ export default function PharmacyOrdersPage() {
                             placeholder="Search by patient name..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                         />
                     </div>
                 </div>
@@ -120,7 +120,7 @@ export default function PharmacyOrdersPage() {
                                         {order.status === 'Pending' ? (
                                             <Link
                                                 href={`/pharmacy/dispense/${order.id}`}
-                                                className="inline-flex items-center gap-1 text-teal-600 hover:text-teal-700 font-bold text-xs bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg transition-colors"
+                                                className="inline-flex items-center gap-1 text-orange-600 hover:text-orange-700 font-bold text-xs bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-colors"
                                             >
                                                 Start Dispensing
                                                 <ChevronRight className="h-3 w-3" />

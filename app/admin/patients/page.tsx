@@ -157,7 +157,7 @@ export default function AdminPatientsPage() {
       label: "Total Patients",
       value: stats?.totalPatients ?? "-",
       icon: Users,
-      cls: "text-teal-600 bg-teal-50 border-teal-100",
+      cls: "text-orange-600 bg-orange-50 border-teal-100",
     },
     {
       label: "Currently Admitted",
@@ -244,7 +244,7 @@ export default function AdminPatientsPage() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search by name, ID, or phone..."
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
             />
           </div>
 
@@ -257,7 +257,7 @@ export default function AdminPatientsPage() {
                   setDepartment(e.target.value);
                   setPage(1);
                 }}
-                className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500"
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
               >
                 <option value="">All Departments</option>
                 {departments.map((d: any) => (
@@ -276,7 +276,7 @@ export default function AdminPatientsPage() {
                   setBloodGroup(e.target.value);
                   setPage(1);
                 }}
-                className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500"
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
               >
                 <option value="">All Blood Groups</option>
                 {BLOOD_GROUPS.map((bg) => (
@@ -293,7 +293,7 @@ export default function AdminPatientsPage() {
                 setDateRange(e.target.value as DateRange);
                 setPage(1);
               }}
-              className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500"
+              className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
             >
               <option value="all">All Time</option>
               <option value="today">Today</option>
@@ -308,7 +308,7 @@ export default function AdminPatientsPage() {
                 setSelectedDate(e.target.value);
                 setPage(1);
               }}
-              className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500"
+              className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
             />
 
             <select
@@ -316,7 +316,7 @@ export default function AdminPatientsPage() {
               onChange={(e) =>
                 setPatientState(e.target.value as PatientStateFilter)
               }
-              className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500"
+              className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
             >
               <option value="all">All Status</option>
               <option value="admitted">Admitted</option>
@@ -354,7 +354,7 @@ export default function AdminPatientsPage() {
                 {loading && patients.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="text-center py-16">
-                      <Loader2 className="h-6 w-6 animate-spin text-teal-500 mx-auto" />
+                      <Loader2 className="h-6 w-6 animate-spin text-orange-500 mx-auto" />
                       <p className="text-gray-400 text-xs mt-2">
                         Loading patient list...
                       </p>
@@ -389,13 +389,13 @@ export default function AdminPatientsPage() {
                       >
                         <td className="px-4 py-3">
                           <div className="flex items-start gap-3">
-                            <span className="p-2 rounded-lg bg-teal-50 text-teal-700 border border-teal-100">
+                            <span className="p-2 rounded-lg bg-orange-50 text-orange-700 border border-teal-100">
                               <UserRound className="h-4 w-4" />
                             </span>
                             <div>
                               <Link
                                 href={detailHref}
-                                className="font-semibold text-gray-900 hover:text-teal-700 hover:underline"
+                                className="font-semibold text-gray-900 hover:text-orange-700 hover:underline"
                               >
                                 {patient.full_name}
                               </Link>

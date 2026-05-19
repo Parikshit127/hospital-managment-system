@@ -20,7 +20,7 @@ interface PatientSummaryBarProps {
 }
 
 const PT_BADGE: Record<string, string> = {
-    cash: 'bg-teal-100 text-teal-700',
+    cash: 'bg-orange-100 text-orange-700',
     corporate: 'bg-blue-100 text-blue-700',
     tpa_insurance: 'bg-amber-100 text-amber-700',
 };

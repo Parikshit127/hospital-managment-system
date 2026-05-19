@@ -5,7 +5,7 @@ import { ExternalLink, ChevronDown, ChevronRight, Loader2, LayoutGrid, X, LogIn 
 
 const PORTALS = [
     { role: 'doctor',           label: 'Doctor',          color: 'bg-blue-500',    dot: 'bg-blue-400',    path: '/doctor/dashboard' },
-    { role: 'receptionist',     label: 'Reception',       color: 'bg-teal-500',    dot: 'bg-teal-400',    path: '/reception' },
+    { role: 'receptionist',     label: 'Reception',       color: 'bg-orange-500',    dot: 'bg-teal-400',    path: '/reception' },
     { role: 'nurse',            label: 'Nurse',           color: 'bg-pink-500',    dot: 'bg-pink-400',    path: '/nurse/dashboard' },
     { role: 'ipd_manager',      label: 'IPD Manager',     color: 'bg-purple-500',  dot: 'bg-purple-400',  path: '/ipd' },
     { role: 'opd_manager',      label: 'OPD Manager',     color: 'bg-indigo-500',  dot: 'bg-indigo-400',  path: '/opd-manager/dashboard' },
@@ -98,9 +98,9 @@ export default function PortalSwitcher({ collapsed }: { collapsed: boolean }) {
             <button
                 onClick={() => { setOpen(!open); setExpandedRole(null); }}
                 title={collapsed ? 'Portal Access' : undefined}
-                className={`flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-all duration-150 text-gray-600 hover:text-gray-900 hover:bg-gray-100 ${collapsed ? 'justify-center px-2' : ''}`}
+                className={`flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-all duration-150 text-gray-400 hover:text-white hover:bg-white/[0.06] ${collapsed ? 'justify-center px-2' : ''}`}
             >
-                <LayoutGrid className="h-[16px] w-[16px] shrink-0 text-[#14b8a6]" />
+                <LayoutGrid className="h-[16px] w-[16px] shrink-0 text-[#f97316]" />
                 {!collapsed && (
                     <>
                         <span className="truncate flex-1 text-left">Portal Access</span>
@@ -117,7 +117,7 @@ export default function PortalSwitcher({ collapsed }: { collapsed: boolean }) {
                     {/* Header */}
                     <div className="flex items-center justify-between px-4 py-3 border-b border-[#e8e6e3]">
                         <div className="flex items-center gap-2">
-                            <LayoutGrid className="w-4 h-4 text-[#14b8a6]" />
+                            <LayoutGrid className="w-4 h-4 text-[#f97316]" />
                             <span className="text-sm font-semibold text-gray-900">Portal Access</span>
                         </div>
                         <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-900 transition-colors">
@@ -163,8 +163,8 @@ export default function PortalSwitcher({ collapsed }: { collapsed: boolean }) {
                                                     onClick={() => handleOpenPortal(portal.path)}
                                                     className="flex items-center gap-2 w-full px-6 py-2 hover:bg-white/[0.05] transition-colors group"
                                                 >
-                                                    <ExternalLink className="w-3.5 h-3.5 text-[#14b8a6] shrink-0" />
-                                                    <span className="text-xs text-[#0d9488] group-hover:text-[#14b8a6]">
+                                                    <ExternalLink className="w-3.5 h-3.5 text-[#f97316] shrink-0" />
+                                                    <span className="text-xs text-[#ea580c] group-hover:text-[#f97316]">
                                                         Open {portal.label} Portal
                                                     </span>
                                                 </button>
@@ -198,11 +198,11 @@ export default function PortalSwitcher({ collapsed }: { collapsed: boolean }) {
 
                                                 {/* Status / Loading */}
                                                 {impersonating === user.id ? (
-                                                    <Loader2 className="w-3.5 h-3.5 text-[#14b8a6] animate-spin shrink-0" />
+                                                    <Loader2 className="w-3.5 h-3.5 text-[#f97316] animate-spin shrink-0" />
                                                 ) : !user.is_active ? (
                                                     <span className="text-[10px] text-red-400 shrink-0">Inactive</span>
                                                 ) : (
-                                                    <LogIn className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#14b8a6] shrink-0 transition-colors" />
+                                                    <LogIn className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#f97316] shrink-0 transition-colors" />
                                                 )}
                                             </button>
                                         ))}

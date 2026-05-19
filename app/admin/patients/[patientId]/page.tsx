@@ -125,7 +125,7 @@ export default function AdminPatientDetailsPage() {
 
   const headerActions = patient ? (
     <div className="flex items-center gap-2">
-      <span className="text-xs font-black uppercase tracking-wider bg-teal-500/10 text-teal-700 border border-teal-500/20 px-3 py-1 rounded-lg">
+      <span className="text-xs font-black uppercase tracking-wider bg-orange-500/10 text-orange-700 border border-orange-500/20 px-3 py-1 rounded-lg">
         {patient.patient_id}
       </span>
       <button onClick={handleArchive} disabled={archiving || deleting}
@@ -201,7 +201,7 @@ export default function AdminPatientDetailsPage() {
 
         {loading ? (
           <div className="bg-white border border-gray-200 rounded-2xl p-16 text-center">
-            <Loader2 className="h-8 w-8 animate-spin text-teal-500 mx-auto" />
+            <Loader2 className="h-8 w-8 animate-spin text-orange-500 mx-auto" />
             <p className="text-gray-400 text-sm mt-3">
               Loading patient details...
             </p>
@@ -220,8 +220,8 @@ export default function AdminPatientDetailsPage() {
             <div className="bg-white border border-gray-200 rounded-2xl p-6">
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                 <div className="flex items-start gap-4">
-                  <span className="h-12 w-12 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center flex-shrink-0">
-                    <User className="h-6 w-6 text-teal-600" />
+                  <span className="h-12 w-12 rounded-2xl bg-orange-50 border border-teal-100 flex items-center justify-center flex-shrink-0">
+                    <User className="h-6 w-6 text-orange-600" />
                   </span>
                   <div>
                     <h1 className="text-xl md:text-2xl font-black text-gray-900">
@@ -302,7 +302,7 @@ export default function AdminPatientDetailsPage() {
                         onClick={() => setActiveTab(tab.key)}
                         className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${
                           isActive
-                            ? "border-teal-500 text-teal-700 bg-teal-50/30"
+                            ? "border-orange-500 text-orange-700 bg-orange-50/30"
                             : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50"
                         }`}
                       >

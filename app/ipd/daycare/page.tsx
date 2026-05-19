@@ -172,7 +172,7 @@ export default function DaycarePage() {
                 onClick={() => setActiveTab(tab.key)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 ${
                   activeTab === tab.key
-                    ? 'bg-teal-600 text-white'
+                    ? 'bg-orange-600 text-white'
                     : 'text-gray-500 hover:bg-gray-100'
                 }`}
               >
@@ -187,7 +187,7 @@ export default function DaycarePage() {
           </div>
           <button
             onClick={() => setModalOpen(true)}
-            className="inline-flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors"
+            className="inline-flex items-center gap-1.5 bg-orange-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors"
           >
             <Plus className="h-3.5 w-3.5" /> New Daycare Booking
           </button>
@@ -260,7 +260,7 @@ export default function DaycarePage() {
                             });
                             setBillModal(b);
                           }}
-                          className="inline-flex items-center gap-1 text-teal-600 hover:text-teal-800 text-xs font-bold"
+                          className="inline-flex items-center gap-1 text-orange-600 hover:text-teal-800 text-xs font-bold"
                         >
                           <Receipt className="h-3.5 w-3.5" /> Bill
                         </button>
@@ -280,7 +280,7 @@ export default function DaycarePage() {
           <form onSubmit={handleSubmit} className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
             <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
               <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                <Clock className="h-5 w-5 text-teal-600" /> New Daycare Booking
+                <Clock className="h-5 w-5 text-orange-600" /> New Daycare Booking
               </h3>
               <button type="button" onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-700 transition-colors">
                 <X className="h-5 w-5" />
@@ -301,7 +301,7 @@ export default function DaycarePage() {
                       const val = e.target.value.replace(/[^a-zA-Z\s.\-'()]/g, '');
                       setForm(f => ({ ...f, patient_name: val }));
                     }}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none"
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none"
                     placeholder="Full name"
                   />
                 </div>
@@ -315,7 +315,7 @@ export default function DaycarePage() {
                     maxLength={50}
                     value={form.patient_id}
                     onChange={e => setForm(f => ({ ...f, patient_id: e.target.value.trim() }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none"
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none"
                     placeholder="PT-XXXXXX"
                   />
                 </div>
@@ -334,7 +334,7 @@ export default function DaycarePage() {
                     const val = e.target.value.replace(/[^a-zA-Z0-9\s.,\-()\/]/g, '');
                     setForm(f => ({ ...f, procedure_name: val }));
                   }}
-                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none"
+                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none"
                   placeholder="e.g. Cataract Surgery, Colonoscopy"
                 />
               </div>
@@ -351,7 +351,7 @@ export default function DaycarePage() {
                       const val = e.target.value.replace(/[^a-zA-Z\s.\-']/g, '');
                       setForm(f => ({ ...f, doctor_name: val }));
                     }}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none"
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none"
                     placeholder="Dr. Name"
                   />
                 </div>
@@ -363,7 +363,7 @@ export default function DaycarePage() {
                     min={new Date().toISOString().slice(0, 10)}
                     value={form.scheduled_date}
                     onChange={e => setForm(f => ({ ...f, scheduled_date: e.target.value }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none"
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none"
                   />
                 </div>
               </div>
@@ -381,7 +381,7 @@ export default function DaycarePage() {
                     const num = Math.min(24, Math.max(1, Number(val) || 1));
                     setForm(f => ({ ...f, duration_hours: val === '' ? '' : String(num) }));
                   }}
-                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none"
+                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none"
                 />
               </div>
               <div>
@@ -390,14 +390,14 @@ export default function DaycarePage() {
                   maxLength={500}
                   value={form.notes}
                   onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none min-h-[72px]"
+                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none min-h-[72px]"
                   placeholder="Additional notes..."
                 />
               </div>
               <button
                 disabled={saving}
                 type="submit"
-                className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold p-3 rounded-xl shadow-md transition-all"
+                className="w-full bg-orange-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold p-3 rounded-xl shadow-md transition-all"
               >
                 {saving ? 'Creating...' : 'Create Daycare Booking'}
               </button>
@@ -411,7 +411,7 @@ export default function DaycarePage() {
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
             <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
               <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                <Receipt className="h-5 w-5 text-teal-600" /> Daycare Billing
+                <Receipt className="h-5 w-5 text-orange-600" /> Daycare Billing
               </h3>
               <button type="button" onClick={() => setBillModal(null)} className="text-gray-400 hover:text-gray-700">
                 <X className="h-5 w-5" />
@@ -419,7 +419,7 @@ export default function DaycarePage() {
             </div>
             <div className="p-6 space-y-4">
               {/* Summary */}
-              <div className="bg-teal-50 border border-teal-200 rounded-xl p-3 space-y-1 text-sm">
+              <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 space-y-1 text-sm">
                 <p className="font-black text-gray-800">{(() => { const m = (billModal.notes||'').match(/Patient:\s*([^|]+)/); return m ? m[1].trim() : billModal.patient_id; })()}</p>
                 <p className="text-gray-500">Procedure: <span className="font-bold text-gray-700">{billModal.department}</span></p>
                 <p className="text-gray-500">Date: <span className="font-bold text-gray-700">{new Date(billModal.expected_date).toLocaleDateString('en-IN')}</span></p>
@@ -436,7 +436,7 @@ export default function DaycarePage() {
                   step={1}
                   value={billForm.unitPrice}
                   onChange={e => setBillForm(f => ({ ...f, unitPrice: e.target.value.replace(/[^0-9.]/g, '') }))}
-                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none"
+                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none"
                   placeholder="e.g. 2500"
                 />
               </div>
@@ -451,7 +451,7 @@ export default function DaycarePage() {
                   step={1}
                   value={billForm.discount}
                   onChange={e => setBillForm(f => ({ ...f, discount: e.target.value.replace(/[^0-9.]/g, '') }))}
-                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none"
+                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none"
                   placeholder="0"
                 />
               </div>
@@ -460,7 +460,7 @@ export default function DaycarePage() {
               {billForm.unitPrice && (
                 <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 flex justify-between items-center">
                   <span className="text-xs font-bold text-gray-500 uppercase">Net Payable</span>
-                  <span className="text-lg font-black text-teal-700">
+                  <span className="text-lg font-black text-orange-700">
                     ₹{Math.max(0, (parseFloat(billForm.unitPrice) || 0) - (parseFloat(billForm.discount) || 0)).toLocaleString('en-IN')}
                   </span>
                 </div>
@@ -477,7 +477,7 @@ export default function DaycarePage() {
                       onClick={() => setBillForm(f => ({ ...f, paymentMethod: m }))}
                       className={`py-2 rounded-xl text-xs font-bold border transition-colors ${
                         billForm.paymentMethod === m
-                          ? 'bg-teal-600 border-teal-600 text-white'
+                          ? 'bg-orange-600 border-teal-600 text-white'
                           : 'bg-white border-gray-200 text-gray-600 hover:border-teal-400'
                       }`}
                     >
@@ -499,7 +499,7 @@ export default function DaycarePage() {
                   type="button"
                   disabled={billing || !billForm.unitPrice}
                   onClick={handleBill}
-                  className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                  className="flex-1 py-2.5 bg-orange-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2"
                 >
                   {billing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
                   {billing ? 'Creating Invoice…' : 'Generate Invoice & Collect'}

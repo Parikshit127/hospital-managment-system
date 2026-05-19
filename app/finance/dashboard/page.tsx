@@ -258,7 +258,7 @@ export default function FinanceDashboard() {
                                                     <tr key={inv.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
                                                         <td className="px-5 py-3.5 text-xs font-bold text-gray-700 font-mono">{inv.invoice_number}</td>
                                                         <td className="px-5 py-3.5"><p className="text-xs font-bold text-gray-700">{inv.patient?.full_name || inv.patient_id}</p><p className="text-[10px] text-gray-400">{inv.patient_id}</p></td>
-                                                        <td className="px-5 py-3.5"><span className={`text-[10px] font-black px-2 py-0.5 rounded ${inv.invoice_type === 'IPD' ? 'bg-violet-500/10 text-violet-400' : 'bg-teal-500/10 text-teal-400'}`}>{inv.invoice_type}</span></td>
+                                                        <td className="px-5 py-3.5"><span className={`text-[10px] font-black px-2 py-0.5 rounded ${inv.invoice_type === 'IPD' ? 'bg-violet-500/10 text-violet-400' : 'bg-orange-500/10 text-teal-400'}`}>{inv.invoice_type}</span></td>
                                                         <td className="px-5 py-3.5 text-right text-xs font-black text-gray-700">{'\u20B9'}{Number(inv.net_amount).toLocaleString()}</td>
                                                         <td className="px-5 py-3.5 text-right text-xs font-bold text-emerald-400">{'\u20B9'}{Number(inv.paid_amount).toLocaleString()}</td>
                                                         <td className="px-5 py-3.5 text-right text-xs font-bold text-amber-400">{'\u20B9'}{Number(inv.balance_due).toLocaleString()}</td>
@@ -271,7 +271,7 @@ export default function FinanceDashboard() {
                                                                     <button onClick={() => { setPaymentModal(inv); setPaymentForm({ ...paymentForm, amount: String(Number(inv.balance_due)) }); }} className="p-1.5 hover:bg-emerald-500/10 rounded-lg" title="Pay"><CreditCard className="h-3.5 w-3.5 text-emerald-400/60" /></button>
                                                                 )}
                                                                 {inv.status === 'Draft' && (<>
-                                                                    <button onClick={() => handleFinalize(inv.id)} className="p-1.5 hover:bg-teal-500/10 rounded-lg" title="Finalize"><CheckCircle className="h-3.5 w-3.5 text-teal-400/60" /></button>
+                                                                    <button onClick={() => handleFinalize(inv.id)} className="p-1.5 hover:bg-orange-500/10 rounded-lg" title="Finalize"><CheckCircle className="h-3.5 w-3.5 text-teal-400/60" /></button>
                                                                     <button onClick={() => handleCancel(inv.id)} className="p-1.5 hover:bg-rose-500/10 rounded-lg" title="Cancel"><XCircle className="h-3.5 w-3.5 text-rose-400/60" /></button>
                                                                 </>)}
                                                             </div>

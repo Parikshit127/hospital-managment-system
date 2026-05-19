@@ -162,7 +162,7 @@ export default function InsuranceDashboard() {
             Approved: 'text-emerald-400 bg-emerald-500/10',
             Rejected: 'text-rose-400 bg-rose-500/10',
             PartiallyApproved: 'text-orange-400 bg-orange-500/10',
-            Settled: 'text-teal-400 bg-teal-500/10',
+            Settled: 'text-teal-400 bg-orange-500/10',
             Disputed: 'text-purple-400 bg-purple-500/10',
         };
         return map[status] || 'text-gray-500 bg-gray-100';
@@ -258,11 +258,11 @@ export default function InsuranceDashboard() {
                                 </div>
                             </div>
 
-                            <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-teal-500/30 transition-all overflow-hidden">
-                                <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/5 rounded-full blur-2xl" />
+                            <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-orange-500/30 transition-all overflow-hidden">
+                                <div className="absolute top-0 right-0 w-24 h-24 bg-orange-500/5 rounded-full blur-2xl" />
                                 <div className="flex items-center justify-between mb-3">
                                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Approved Total</span>
-                                    <div className="p-1.5 bg-teal-500/10 rounded-lg"><Wallet className="h-3.5 w-3.5 text-teal-400" /></div>
+                                    <div className="p-1.5 bg-orange-500/10 rounded-lg"><Wallet className="h-3.5 w-3.5 text-teal-400" /></div>
                                 </div>
                                 <p className="text-3xl font-black text-gray-900 tracking-tight">
                                     {'\u20B9'}{((stats?.approvedTotal || 0) / 1000).toFixed(1)}K

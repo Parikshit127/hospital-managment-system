@@ -3,7 +3,7 @@
 import React from 'react';
 import { FlaskConical, Loader2, RefreshCw } from 'lucide-react';
 
-const inputCls = "w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400";
+const inputCls = "w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400";
 
 interface LabTabProps {
     labOrders: any[];
@@ -40,11 +40,11 @@ export function LabTab({ labOrders, selectedTest, setSelectedTest, loadingLabs, 
             <div>
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="font-black text-gray-700 text-lg">Lab History</h3>
-                    <button onClick={onRefresh} className="text-teal-400 hover:bg-teal-500/10 p-2 rounded-lg transition-colors"><RefreshCw className={`h-4 w-4 ${loadingLabs ? 'animate-spin' : ''}`} /></button>
+                    <button onClick={onRefresh} className="text-teal-400 hover:bg-orange-500/10 p-2 rounded-lg transition-colors"><RefreshCw className={`h-4 w-4 ${loadingLabs ? 'animate-spin' : ''}`} /></button>
                 </div>
                 <div className="space-y-3">
                     {labOrders.length === 0 ? <div className="bg-gray-100 border border-dashed border-gray-300 rounded-xl p-8 text-center text-gray-400 text-sm font-bold">No lab orders found.</div> : labOrders.map(order => (
-                        <div key={order.id} className="flex items-center justify-between bg-gray-50 border border-gray-200 p-4 rounded-xl hover:border-teal-500/20 transition-all">
+                        <div key={order.id} className="flex items-center justify-between bg-gray-50 border border-gray-200 p-4 rounded-xl hover:border-orange-500/20 transition-all">
                             <div className="flex items-center gap-4">
                                 <div className={`h-3 w-3 rounded-full ${order.status === 'Completed' ? 'bg-emerald-500 shadow-emerald-500/30' : 'bg-amber-500 shadow-amber-500/30'} shadow-sm`} />
                                 <div><p className="font-bold text-gray-700">{order.test_type}</p><p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">{order.barcode && <span className="font-mono bg-gray-100 px-1 rounded border border-gray-200">#{order.barcode}</span>}<span className="text-gray-200">&bull;</span>{new Date(order.created_at).toLocaleDateString()}</p></div>

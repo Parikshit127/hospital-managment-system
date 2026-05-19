@@ -137,7 +137,7 @@ export default function ProcessSamplePage() {
                             <button
                                 onClick={() => handleUpdateStatus('Received')}
                                 disabled={saving || status === 'Received' || status === 'Processing' || status === 'Completed'}
-                                className={`w-full flex items-center justify-between p-4 rounded-xl border ${status === 'Pending' ? 'bg-white border-gray-200 hover:border-teal-500 text-gray-700 group transition-all' :
+                                className={`w-full flex items-center justify-between p-4 rounded-xl border ${status === 'Pending' ? 'bg-white border-gray-200 hover:border-orange-500 text-gray-700 group transition-all' :
                                         'bg-gray-50 border-transparent text-gray-400'
                                     }`}
                             >
@@ -148,7 +148,7 @@ export default function ProcessSamplePage() {
                             <button
                                 onClick={() => handleUpdateStatus('Processing')}
                                 disabled={saving || status === 'Processing' || status === 'Completed'}
-                                className={`w-full flex items-center justify-between p-4 rounded-xl border ${status === 'Received' ? 'bg-white border-gray-200 hover:border-teal-500 text-gray-700 group transition-all' :
+                                className={`w-full flex items-center justify-between p-4 rounded-xl border ${status === 'Received' ? 'bg-white border-gray-200 hover:border-orange-500 text-gray-700 group transition-all' :
                                         status === 'Processing' ? 'bg-blue-50 border-blue-200 text-blue-800' :
                                             'bg-gray-50 border-transparent text-gray-400'
                                     }`}
@@ -180,7 +180,7 @@ export default function ProcessSamplePage() {
                                 value={resultData}
                                 onChange={(e) => setResultData(e.target.value)}
                                 disabled={status === 'Completed'}
-                                className="w-full h-32 p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 focus:bg-white transition-all resize-none disabled:opacity-75 disabled:cursor-not-allowed"
+                                className="w-full h-32 p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 focus:bg-white transition-all resize-none disabled:opacity-75 disabled:cursor-not-allowed"
                                 placeholder={`Enter ${order.test_type} results here...`}
                             />
                         </div>

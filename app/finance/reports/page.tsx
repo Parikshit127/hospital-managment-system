@@ -451,7 +451,7 @@ function SummaryCard({ label, value, color }: { label: string; value: string; co
 function StatusBadge({ status }: { status: string }) {
     const map: Record<string, string> = {
         Submitted: 'bg-blue-50 text-blue-700', Approved: 'bg-emerald-50 text-emerald-700',
-        Settled: 'bg-teal-50 text-teal-700', Rejected: 'bg-red-50 text-red-700',
+        Settled: 'bg-orange-50 text-orange-700', Rejected: 'bg-red-50 text-red-700',
     };
     return <span className={`px-2 py-1 rounded-full text-xs font-medium ${map[status] || 'bg-gray-100 text-gray-600'}`}>{status}</span>;
 }

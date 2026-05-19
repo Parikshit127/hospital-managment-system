@@ -40,7 +40,7 @@ export function NursingActionWorkspace({ admission }: { admission: any }) {
                         <Activity className="h-4 w-4" />
                         <span className="text-xs font-bold">Dr. {admission.doctor_name || 'Unassigned'}</span>
                     </div>
-                    <button className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-full transition-colors relative">
+                    <button className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-full transition-colors relative">
                         <Bell className="h-5 w-5" />
                         <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border border-white"></span>
                     </button>

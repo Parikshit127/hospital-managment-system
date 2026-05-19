@@ -298,7 +298,7 @@ export default function IPDDashboard() {
                 </Link>
             )}
             <Link href="/ipd/nursing-assessment" className="px-4 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl text-xs font-bold transition-all shadow-sm hidden md:flex items-center gap-1.5">
-                <ClipboardCheck className="h-3.5 w-3.5 text-teal-500" /> Nursing
+                <ClipboardCheck className="h-3.5 w-3.5 text-orange-500" /> Nursing
             </Link>
             <Link href="/ipd/audit-trail" className="px-4 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl text-xs font-bold transition-all shadow-sm hidden md:flex items-center gap-1.5">
                 <ScrollText className="h-3.5 w-3.5 text-gray-500" /> Audit Trail
@@ -568,13 +568,13 @@ export default function IPDDashboard() {
                 </div>
               </div>
 
-              <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-teal-500/30 transition-all overflow-hidden">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/5 rounded-full blur-2xl" />
+              <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-orange-500/30 transition-all overflow-hidden">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-orange-500/5 rounded-full blur-2xl" />
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">
                     Discharged
                   </span>
-                  <div className="p-1.5 bg-teal-500/10 rounded-lg">
+                  <div className="p-1.5 bg-orange-500/10 rounded-lg">
                     <CheckCircle className="h-3.5 w-3.5 text-teal-400" />
                   </div>
                 </div>
@@ -598,12 +598,12 @@ export default function IPDDashboard() {
                   <p className="text-[10px] text-rose-400">Fast-path admit</p>
                 </div>
               </Link>
-              <Link href="/ipd/nursing-assessment" className="flex items-center gap-3 p-4 bg-teal-50 border border-teal-200 rounded-2xl hover:bg-teal-100 transition-all group">
-                <div className="p-2 bg-teal-500/10 rounded-xl group-hover:bg-teal-500/20 transition-all">
-                  <ClipboardCheck className="h-4 w-4 text-teal-500" />
+              <Link href="/ipd/nursing-assessment" className="flex items-center gap-3 p-4 bg-orange-50 border border-orange-200 rounded-2xl hover:bg-orange-100 transition-all group">
+                <div className="p-2 bg-orange-500/10 rounded-xl group-hover:bg-orange-500/20 transition-all">
+                  <ClipboardCheck className="h-4 w-4 text-orange-500" />
                 </div>
                 <div>
-                  <p className="text-xs font-black text-teal-700">Nursing</p>
+                  <p className="text-xs font-black text-orange-700">Nursing</p>
                   <p className="text-[10px] text-teal-400">Assessments</p>
                 </div>
               </Link>
@@ -1281,7 +1281,7 @@ export default function IPDDashboard() {
                   setNoteForm({ ...noteForm, details: e.target.value })
                 }
                 rows={4}
-                className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-teal-500/50 focus:outline-none"
+                className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-orange-500/50 focus:outline-none"
                 placeholder="Note details..."
               />
             </div>

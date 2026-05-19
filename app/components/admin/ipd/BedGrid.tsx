@@ -16,8 +16,8 @@ const STATUS_OPTIONS = [
 const BED_CATEGORIES = ['General', 'Semi-Private', 'Private', 'Deluxe', 'Suite', 'ICU'];
 const PRICING_TIERS  = ['Base', 'Premium', 'Critical'];
 
-const inputCls  = 'w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500';
-const selectCls = 'w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500';
+const inputCls  = 'w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500';
+const selectCls = 'w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500';
 const labelCls  = 'block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5';
 
 function getStatusStyle(status: string) {
@@ -195,7 +195,7 @@ export function BedGrid({ beds, wardName }: { beds: any[]; wardName: string }) {
                                 Cancel
                             </button>
                             <button onClick={handleSave} disabled={saving}
-                                className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold disabled:opacity-50 transition flex items-center justify-center gap-2">
+                                className="flex-1 py-2.5 bg-orange-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold disabled:opacity-50 transition flex items-center justify-center gap-2">
                                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                                 {saving ? 'Saving…' : 'Save Changes'}
                             </button>

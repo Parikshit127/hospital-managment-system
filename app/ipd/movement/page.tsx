@@ -80,7 +80,7 @@ export default function MovementPage() {
           </h2>
           <button
             onClick={() => setModalOpen(true)}
-            className="inline-flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors"
+            className="inline-flex items-center gap-1.5 bg-orange-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors"
           >
             <Plus className="h-3.5 w-3.5" /> Record Movement
           </button>
@@ -101,8 +101,8 @@ export default function MovementPage() {
               </div>
               <div className="flex items-center gap-2 my-2">
                 <span className="text-sm font-bold text-gray-700">{m.from_location}</span>
-                <ArrowRight className="h-4 w-4 text-teal-500 shrink-0" />
-                <span className="text-sm font-bold text-teal-700">{m.to_location}</span>
+                <ArrowRight className="h-4 w-4 text-orange-500 shrink-0" />
+                <span className="text-sm font-bold text-orange-700">{m.to_location}</span>
               </div>
               {m.purpose && <p className="text-xs text-gray-500 mb-1">Purpose: {m.purpose}</p>}
               {m.escort_name && <p className="text-xs text-gray-500 mb-2">Escort: {m.escort_name}</p>}
@@ -125,7 +125,7 @@ export default function MovementPage() {
           <form onSubmit={handleSubmit} className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
             <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
               <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                <ArrowLeftRight className="h-5 w-5 text-teal-600" /> Record Patient Movement
+                <ArrowLeftRight className="h-5 w-5 text-orange-600" /> Record Patient Movement
               </h3>
               <button type="button" onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-700 transition-colors">
                 <X className="h-5 w-5" />
@@ -139,7 +139,7 @@ export default function MovementPage() {
                     type="text" inputMode="text" autoComplete="off" spellCheck={false} maxLength={30}
                     value={form.admissionId}
                     onChange={e => setForm(f => ({ ...f, admissionId: e.target.value.replace(/[^a-zA-Z0-9\-]/g, '').toUpperCase() }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" placeholder="IPD-XXXXXXXX-XXXX" />
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none" placeholder="IPD-XXXXXXXX-XXXX" />
                 </div>
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Patient ID *</label>
@@ -147,13 +147,13 @@ export default function MovementPage() {
                     type="text" inputMode="text" autoComplete="off" spellCheck={false} maxLength={30}
                     value={form.patientId}
                     onChange={e => setForm(f => ({ ...f, patientId: e.target.value.replace(/[^a-zA-Z0-9\-]/g, '').toUpperCase() }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" placeholder="PT-XXXX" />
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none" placeholder="PT-XXXX" />
                 </div>
               </div>
               <div>
                 <label className="block text-xs uppercase font-bold text-gray-500 mb-1">From Location *</label>
                 <select required value={form.fromLocation} onChange={e => setForm(f => ({ ...f, fromLocation: e.target.value }))}
-                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none bg-white">
+                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none bg-white">
                   <option value="">Select location</option>
                   {FROM_LOCATIONS.map(d => <option key={d}>{d}</option>)}
                 </select>
@@ -161,7 +161,7 @@ export default function MovementPage() {
               <div>
                 <label className="block text-xs uppercase font-bold text-gray-500 mb-1">To Location *</label>
                 <select required value={form.toLocation} onChange={e => setForm(f => ({ ...f, toLocation: e.target.value }))}
-                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none bg-white">
+                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none bg-white">
                   {DESTINATIONS.map(d => <option key={d}>{d}</option>)}
                 </select>
               </div>
@@ -172,7 +172,7 @@ export default function MovementPage() {
                     type="text" inputMode="text" maxLength={100}
                     value={form.purpose}
                     onChange={e => setForm(f => ({ ...f, purpose: e.target.value.replace(/[^a-zA-Z0-9\s.,\-()]/g, '') }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" placeholder="e.g. MRI Scan" />
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none" placeholder="e.g. MRI Scan" />
                 </div>
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Escort Name</label>
@@ -180,11 +180,11 @@ export default function MovementPage() {
                     type="text" inputMode="text" maxLength={60}
                     value={form.escortName}
                     onChange={e => setForm(f => ({ ...f, escortName: e.target.value.replace(/[^a-zA-Z\s.\-']/g, '') }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" placeholder="Staff name" />
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none" placeholder="Staff name" />
                 </div>
               </div>
               <button disabled={saving} type="submit"
-                className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold p-3 rounded-xl shadow-md transition-all">
+                className="w-full bg-orange-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold p-3 rounded-xl shadow-md transition-all">
                 {saving ? 'Recording...' : 'Record Movement'}
               </button>
             </div>

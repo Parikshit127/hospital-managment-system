@@ -50,7 +50,7 @@ const roleLabelMap: Record<string, string> = {
 };
 
 const MODULE_META: Record<string, { label: string; icon: any; href: string; color: string }> = {
-    opd: { label: 'OPD', icon: Stethoscope, href: '/admin/opd', color: 'text-teal-500' },
+    opd: { label: 'OPD', icon: Stethoscope, href: '/admin/opd', color: 'text-orange-500' },
     ipd: { label: 'IPD', icon: Bed, href: '/admin/ipd', color: 'text-violet-500' },
     lab: { label: 'Lab', icon: FlaskConical, href: '/admin/lab', color: 'text-amber-500' },
     pharmacy: { label: 'Pharmacy', icon: Pill, href: '/admin/pharmacy', color: 'text-cyan-500' },
@@ -142,7 +142,7 @@ export default function AdminDashboard() {
             'CREATE_PATIENT': 'text-emerald-500 bg-emerald-500/10',
             'AI_TRIAGE': 'text-violet-500 bg-violet-500/10',
             'ORDER_LAB': 'text-amber-500 bg-amber-500/10',
-            'PRESCRIBE': 'text-teal-500 bg-teal-500/10',
+            'PRESCRIBE': 'text-orange-500 bg-orange-500/10',
             'DISCHARGE_PATIENT': 'text-rose-500 bg-rose-500/10',
             'PROCESS_DISCHARGE': 'text-rose-500 bg-rose-500/10',
         };
@@ -828,7 +828,7 @@ export default function AdminDashboard() {
                     {/* QUICK ACTIONS ROW */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {[
-                            { href: '/admin/opd', icon: Zap, title: 'OPD Management', subtitle: 'Appointments, triage & queues', color: 'text-teal-500', bg: 'bg-teal-500/10' },
+                            { href: '/admin/opd', icon: Zap, title: 'OPD Management', subtitle: 'Appointments, triage & queues', color: 'text-orange-500', bg: 'bg-orange-500/10' },
                             { href: '/admin/ipd', icon: Bed, title: 'IPD Management', subtitle: 'Beds, admissions & care', color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
                             { href: '/admin/finance', icon: DollarSign, title: 'Finance & Billing', subtitle: 'Invoices, payments & revenue', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
                             { href: '/admin/lab', icon: FlaskConical, title: 'Lab Management', subtitle: 'Test orders & result upload', color: 'text-amber-500', bg: 'bg-amber-500/10' },

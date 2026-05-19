@@ -46,7 +46,7 @@ export default function OPDManagerAppointmentsPage() {
         return (
             <AppShell pageTitle="Appointments" pageIcon={<CalendarCheck className="h-5 w-5" />}>
                 <div className="flex items-center justify-center py-24">
-                    <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
+                    <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
                     <span className="ml-3 text-gray-500 font-medium">Loading appointment data...</span>
                 </div>
             </AppShell>
@@ -87,7 +87,7 @@ export default function OPDManagerAppointmentsPage() {
                             onChange={(e) => setSearchTerm(e.target.value)}
                             type="text"
                             placeholder="Search by patient, doctor, department, or reason..."
-                            className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500/20 text-sm font-medium outline-none transition-colors"
+                            className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500/20 text-sm font-medium outline-none transition-colors"
                         />
                     </div>
                     <div className="flex items-center gap-2">

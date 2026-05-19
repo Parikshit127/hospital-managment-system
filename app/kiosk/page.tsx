@@ -69,7 +69,7 @@ export default function KioskPage() {
                                     onKeyDown={handleKey}
                                     placeholder="e.g. 9876543210"
                                     autoFocus
-                                    className="w-full pl-12 pr-4 py-5 text-2xl font-bold border-2 border-gray-200 rounded-2xl outline-none focus:border-teal-500 tracking-widest"
+                                    className="w-full pl-12 pr-4 py-5 text-2xl font-bold border-2 border-gray-200 rounded-2xl outline-none focus:border-orange-500 tracking-widest"
                                 />
                             </div>
                         </div>
@@ -77,7 +77,7 @@ export default function KioskPage() {
                         <button
                             onClick={handleCheckIn}
                             disabled={loading || phone.length < 10}
-                            className="w-full py-5 bg-teal-600 text-white text-xl font-black rounded-2xl hover:bg-teal-700 disabled:opacity-40 flex items-center justify-center gap-3 transition-all"
+                            className="w-full py-5 bg-orange-600 text-white text-xl font-black rounded-2xl hover:bg-teal-700 disabled:opacity-40 flex items-center justify-center gap-3 transition-all"
                         >
                             {loading ? (
                                 <><Loader2 className="h-6 w-6 animate-spin" /> Checking in...</>
@@ -99,16 +99,16 @@ export default function KioskPage() {
                         </div>
                         <div>
                             <p className="text-gray-500 font-bold text-sm uppercase tracking-wider mb-2">Your Token Number</p>
-                            <p className="text-8xl font-black text-teal-600 leading-none">#{result.tokenNumber}</p>
+                            <p className="text-8xl font-black text-orange-600 leading-none">#{result.tokenNumber}</p>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="bg-gray-50 rounded-2xl p-4">
                                 <p className="text-xs font-bold text-gray-400 uppercase">Queue Position</p>
                                 <p className="text-3xl font-black text-gray-800 mt-1">{result.position}</p>
                             </div>
-                            <div className="bg-teal-50 rounded-2xl p-4">
-                                <p className="text-xs font-bold text-teal-500 uppercase">Est. Wait</p>
-                                <p className="text-3xl font-black text-teal-700 mt-1">~{result.estimatedWait}m</p>
+                            <div className="bg-orange-50 rounded-2xl p-4">
+                                <p className="text-xs font-bold text-orange-500 uppercase">Est. Wait</p>
+                                <p className="text-3xl font-black text-orange-700 mt-1">~{result.estimatedWait}m</p>
                             </div>
                         </div>
                         <p className="text-sm text-gray-400">Please take a seat. You will be called when it&apos;s your turn.</p>

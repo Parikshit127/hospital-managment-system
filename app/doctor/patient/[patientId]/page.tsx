@@ -161,7 +161,7 @@ export default function DoctorPatientDetailsPage() {
         return {
           label: "Clinical Note",
           icon: ClipboardList,
-          style: "bg-teal-50 text-teal-700 border-teal-200",
+          style: "bg-orange-50 text-orange-700 border-orange-200",
         };
       case "lab_order":
         return {
@@ -366,7 +366,7 @@ export default function DoctorPatientDetailsPage() {
               <ArrowLeft className="h-4 w-4" /> Back to Dashboard
             </Link>
             {patient && (
-              <span className="text-xs font-black uppercase tracking-wider bg-teal-500/10 text-teal-700 border border-teal-500/20 px-3 py-1 rounded-lg">
+              <span className="text-xs font-black uppercase tracking-wider bg-orange-500/10 text-orange-700 border border-orange-500/20 px-3 py-1 rounded-lg">
                 Patient ID: {patient.patient_id}
               </span>
             )}
@@ -409,7 +409,7 @@ export default function DoctorPatientDetailsPage() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                     <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-teal-600" />
+                      <Phone className="h-4 w-4 text-orange-600" />
                       <span>{patient.phone || "N/A"}</span>
                     </div>
                     <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 flex items-center gap-2">
@@ -436,7 +436,7 @@ export default function DoctorPatientDetailsPage() {
                     label: "Clinical Notes",
                     value: clinicalNotes.length,
                     icon: ClipboardList,
-                    cls: "text-teal-600 bg-teal-50 border-teal-100",
+                    cls: "text-orange-600 bg-orange-50 border-teal-100",
                   },
                   {
                     label: "Labs",

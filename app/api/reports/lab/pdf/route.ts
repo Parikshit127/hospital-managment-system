@@ -92,14 +92,14 @@ function renderLabReport(order: any, patient: any, barcode: string): NextRespons
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; background: #fff; font-size: 12px; padding: 24px; max-width: 800px; margin: 0 auto; }
         @media print { body { margin: 0; padding: 16px; } .no-print { display: none !important; } }
-        .header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #0d9488; padding-bottom: 16px; }
-        .header h1 { font-size: 18px; font-weight: 900; color: #0d9488; }
+        .header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #ea580c; padding-bottom: 16px; }
+        .header h1 { font-size: 18px; font-weight: 900; color: #ea580c; }
         .header p { font-size: 10px; color: #6b7280; margin-top: 4px; }
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; background: #f9fafb; padding: 12px; border-radius: 8px; }
         .info-item label { font-size: 9px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; }
         .info-item p { font-size: 12px; font-weight: 600; color: #1f2937; margin-top: 2px; }
-        .result-box { background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 8px; padding: 16px; margin-top: 20px; }
-        .result-box h3 { font-size: 10px; font-weight: 800; color: #0d9488; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+        .result-box { background: #fff7ed; border: 1px solid #99f6e4; border-radius: 8px; padding: 16px; margin-top: 20px; }
+        .result-box h3 { font-size: 10px; font-weight: 800; color: #ea580c; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
         .result-value { font-size: 16px; font-weight: 900; color: #1f2937; }
         .status { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 700; }
         .status-completed { background: #d1fae5; color: #065f46; }
@@ -109,7 +109,7 @@ function renderLabReport(order: any, patient: any, barcode: string): NextRespons
 </head>
 <body>
     <div class="no-print" style="background:#f3f4f6;padding:12px;text-align:center;margin-bottom:20px;">
-        <button onclick="window.print()" style="padding:8px 24px;background:#0d9488;color:white;border:none;border-radius:8px;font-weight:bold;cursor:pointer;font-size:14px;">
+        <button onclick="window.print()" style="padding:8px 24px;background:#ea580c;color:white;border:none;border-radius:8px;font-weight:bold;cursor:pointer;font-size:14px;">
             Print / Download PDF
         </button>
     </div>

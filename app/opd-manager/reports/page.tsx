@@ -72,7 +72,7 @@ export default function OPDManagerReportsPage() {
         return (
             <AppShell pageTitle="OPD Reports" pageIcon={<BarChart3 className="h-5 w-5" />}>
                 <div className="flex items-center justify-center py-24">
-                    <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
+                    <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
                     <span className="ml-3 text-gray-500 font-medium">Generating reports...</span>
                 </div>
             </AppShell>
@@ -104,7 +104,7 @@ export default function OPDManagerReportsPage() {
                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Checked In</span>
                             <UserCheck className="h-4 w-4 text-teal-400" />
                         </div>
-                        <p className="text-2xl font-black text-teal-600">{totalCheckedIn}</p>
+                        <p className="text-2xl font-black text-orange-600">{totalCheckedIn}</p>
                     </div>
                     <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
                         <div className="flex items-center justify-between mb-2">
@@ -270,7 +270,7 @@ export default function OPDManagerReportsPage() {
             <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                     <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                        <Stethoscope className="h-4 w-4 text-teal-500" /> Doctor Performance Summary
+                        <Stethoscope className="h-4 w-4 text-orange-500" /> Doctor Performance Summary
                     </h3>
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{utilization.length} active doctors</span>
                 </div>

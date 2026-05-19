@@ -567,14 +567,14 @@ function BookAppointmentContent() {
                             ? "bg-emerald-500 text-white border-emerald-500 shadow-md"
                             : slot.is_available
                               ? isFreeSlot
-                                ? "bg-teal-50 border-teal-300 text-teal-700 hover:border-teal-500"
+                                ? "bg-orange-50 border-teal-300 text-orange-700 hover:border-orange-500"
                                 : "bg-white border-emerald-200 text-emerald-700 hover:border-emerald-400 hover:bg-emerald-50"
                               : "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
                           }`}
                       >
                         {slot.start_time}
                         {isFreeSlot && !isSelected && (
-                          <span className="block text-[9px] font-normal text-teal-600 mt-0.5">Free</span>
+                          <span className="block text-[9px] font-normal text-orange-600 mt-0.5">Free</span>
                         )}
                       </button>
                     );
@@ -738,13 +738,13 @@ function BookAppointmentContent() {
             </div>
           )}
           {selectedSlotIsFree && (
-            <div className="bg-teal-50 border border-teal-200 rounded-2xl px-5 py-4 flex items-center gap-3">
-              <div className="h-8 w-8 bg-teal-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                <CreditCard className="h-4 w-4 text-teal-600" />
+            <div className="bg-orange-50 border border-orange-200 rounded-2xl px-5 py-4 flex items-center gap-3">
+              <div className="h-8 w-8 bg-orange-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                <CreditCard className="h-4 w-4 text-orange-600" />
               </div>
               <div>
                 <p className="text-sm font-bold text-teal-800">Free Consultation Slot</p>
-                <p className="text-xs text-teal-600 mt-0.5">No payment required for this appointment.</p>
+                <p className="text-xs text-orange-600 mt-0.5">No payment required for this appointment.</p>
               </div>
             </div>
           )}
@@ -970,9 +970,9 @@ function BookAppointmentContent() {
             </div>
           )}
           {selectedSlotIsFree && (
-            <div className="bg-teal-50 border border-teal-200 rounded-2xl px-5 py-4 max-w-sm mx-auto text-left">
+            <div className="bg-orange-50 border border-orange-200 rounded-2xl px-5 py-4 max-w-sm mx-auto text-left">
               <p className="text-sm font-bold text-teal-800">Free Appointment</p>
-              <p className="text-xs text-teal-700 mt-1">No payment is required for this consultation slot.</p>
+              <p className="text-xs text-orange-700 mt-1">No payment is required for this consultation slot.</p>
             </div>
           )}
 

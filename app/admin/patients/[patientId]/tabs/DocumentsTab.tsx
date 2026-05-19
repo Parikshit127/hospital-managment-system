@@ -53,7 +53,7 @@ const getDocIconColor = (type: string) => {
     case 'Profile Photo':
       return 'bg-indigo-50 text-indigo-600 border-indigo-200';
     case 'Consent Form':
-      return 'bg-teal-50 text-teal-600 border-teal-200';
+      return 'bg-orange-50 text-orange-600 border-orange-200';
     case 'ID Card':
       return 'bg-violet-50 text-violet-600 border-violet-200';
     case 'Lab Report':
@@ -154,7 +154,7 @@ export default function DocumentsTab({ patient, admissions, labOrders }: Documen
               href={doc.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-lg text-xs font-bold hover:bg-teal-100 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 text-orange-700 border border-orange-200 rounded-lg text-xs font-bold hover:bg-orange-100 transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5" />
               View Document

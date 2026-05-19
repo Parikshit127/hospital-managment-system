@@ -83,11 +83,17 @@ export function AppShell({
   }
 
   return (
-    <div className="flex h-screen" style={{ backgroundColor: "var(--admin-bg)" }}>
+    <div className="flex h-screen relative" style={{ backgroundColor: "var(--admin-bg)" }}>
+      {/* Global Ambient Background */}
+      <div className="blob b1" />
+      <div className="blob b2" />
+      <div className="blob b3" />
+      <div className="grid-bg" />
+
       <Sidebar session={session} />
 
       {/* Main content area */}
-      <div className="flex-1 overflow-y-auto flex flex-col min-w-0">
+      <div className="flex-1 overflow-y-auto flex flex-col min-w-0 relative z-10">
         {/* Header bar */}
         {pageTitle && (
           <header

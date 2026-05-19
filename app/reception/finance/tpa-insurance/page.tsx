@@ -100,7 +100,7 @@ export default function TpaInsurancePage() {
         await load();
     }
 
-    const inputClass = "w-full bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 font-medium placeholder:text-gray-400 focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/10 outline-none transition-all";
+    const inputClass = "w-full bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 font-medium placeholder:text-gray-400 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10 outline-none transition-all";
     const labelClass = "text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]";
 
     return (
@@ -166,7 +166,7 @@ export default function TpaInsurancePage() {
                                         <td className="px-4 py-3">
                                             <button onClick={() => toggleActive(p)}>
                                                 {p.is_active
-                                                    ? <ToggleRight className="h-5 w-5 text-teal-500" />
+                                                    ? <ToggleRight className="h-5 w-5 text-orange-500" />
                                                     : <ToggleLeft className="h-5 w-5 text-gray-300" />}
                                             </button>
                                         </td>

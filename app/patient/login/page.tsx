@@ -41,7 +41,7 @@ function PatientLoginForm() {
                 {/* Form Section */}
                 <div className="p-8">
                     {setupSuccess && (
-                        <div className="mb-6 bg-teal-50 border border-teal-100 text-teal-700 rounded-xl p-4 text-sm font-medium">
+                        <div className="mb-6 bg-orange-50 border border-teal-100 text-orange-700 rounded-xl p-4 text-sm font-medium">
                             Password setup complete. You can now sign in.
                         </div>
                     )}
@@ -64,7 +64,7 @@ function PatientLoginForm() {
                                     type="text"
                                     required
                                     placeholder="e.g. AVN-2024-00001 or email"
-                                    className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15 transition-all outline-none text-sm shadow-sm hover:border-gray-300"
+                                    className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all outline-none text-sm shadow-sm hover:border-gray-300"
                                 />
                             </div>
                         </div>
@@ -80,12 +80,12 @@ function PatientLoginForm() {
                                     type={showPassword ? 'text' : 'password'}
                                     required
                                     placeholder="Enter your portal password"
-                                    className="w-full pl-11 pr-14 py-3 bg-white border border-gray-200 rounded-xl focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15 transition-all outline-none text-sm shadow-sm hover:border-gray-300"
+                                    className="w-full pl-11 pr-14 py-3 bg-white border border-gray-200 rounded-xl focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 transition-all outline-none text-sm shadow-sm hover:border-gray-300"
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-teal-600 transition-colors text-[10px] font-bold uppercase tracking-wide"
+                                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-orange-600 transition-colors text-[10px] font-bold uppercase tracking-wide"
                                 >
                                     {showPassword ? 'HIDE' : 'SHOW'}
                                 </button>
@@ -95,7 +95,7 @@ function PatientLoginForm() {
                         <button
                             type="submit"
                             disabled={isPending}
-                            className="w-full bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white font-semibold py-3.5 rounded-xl transition-all shadow-md shadow-teal-600/20 hover:shadow-lg hover:shadow-teal-600/25 disabled:opacity-70 disabled:cursor-not-allowed mt-1"
+                            className="w-full bg-orange-600 hover:bg-teal-700 active:bg-teal-800 text-white font-semibold py-3.5 rounded-xl transition-all shadow-md shadow-teal-600/20 hover:shadow-lg hover:shadow-teal-600/25 disabled:opacity-70 disabled:cursor-not-allowed mt-1"
                         >
                             {isPending ? 'Verifying...' : 'Access My Portal'}
                         </button>
@@ -104,7 +104,7 @@ function PatientLoginForm() {
                     <div className="mt-6 text-center space-y-3">
                         <Link
                             href="/patient/forgot-password"
-                            className="block text-sm font-semibold text-teal-600 hover:text-teal-700 transition-colors"
+                            className="block text-sm font-semibold text-orange-600 hover:text-orange-700 transition-colors"
                         >
                             Forgot Password?
                         </Link>

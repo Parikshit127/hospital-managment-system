@@ -3,7 +3,7 @@
 import React from 'react';
 import { Pill, Plus, Printer, Loader2, CheckCircle2 } from 'lucide-react';
 
-const inputCls = "w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400";
+const inputCls = "w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400";
 
 interface PharmacyTabProps {
     medicines: any[];
@@ -66,7 +66,7 @@ export function PharmacyTab({ medicines, pharmacyCart, selectedMedicine, setSele
                         </div>
                         <div className="space-y-4 text-sm">
                             <div className="flex justify-between py-2 border-b border-gray-200"><span className="text-gray-500 font-medium">Total Requested</span><span className="font-bold bg-gray-100 px-2 py-0.5 rounded-lg text-gray-500 border border-gray-200">{pharmacyOrderResult.bill_summary?.total_items_requested}</span></div>
-                            <div className="flex justify-between py-2 border-b border-gray-200"><span className="text-gray-500 font-medium">Items Dispensed</span><span className="font-bold text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded-lg">{pharmacyOrderResult.bill_summary?.items_dispensed}</span></div>
+                            <div className="flex justify-between py-2 border-b border-gray-200"><span className="text-gray-500 font-medium">Items Dispensed</span><span className="font-bold text-teal-400 bg-orange-500/10 px-2 py-0.5 rounded-lg">{pharmacyOrderResult.bill_summary?.items_dispensed}</span></div>
                             <div className="flex justify-between py-2 border-b border-gray-200"><span className="text-gray-500 font-medium">Unavailable</span><span className="font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-lg">{pharmacyOrderResult.bill_summary?.items_missing}</span></div>
                             <div className="pt-6 flex justify-between items-end"><span className="font-bold text-gray-300 uppercase text-[10px] tracking-[0.15em] block">Total Bill</span><span className="text-3xl font-black text-gray-900 tracking-tight">{'\u20B9'}{pharmacyOrderResult.bill_summary?.total_amount_to_collect}</span></div>
                             <button onClick={onPrintPrescription} className="w-full mt-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 border border-gray-200 flex items-center justify-center gap-2"><Printer className="h-4 w-4" /> Print Receipt</button>

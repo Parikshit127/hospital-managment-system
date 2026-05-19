@@ -118,7 +118,7 @@ export default function EndpointCard({
                                 onClick={() => setActiveTab(tab.key as typeof activeTab)}
                                 className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all duration-200 ${
                                     activeTab === tab.key
-                                        ? 'text-white bg-gradient-to-r from-[#14b8a6] to-[#0d9488] shadow-sm'
+                                        ? 'text-white bg-gradient-to-r from-[#f97316] to-[#ea580c] shadow-sm'
                                         : 'text-gray-400 hover:text-gray-900 hover:bg-gray-50'
                                 }`}
                             >

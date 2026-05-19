@@ -28,7 +28,7 @@ export default function CRMReportsPage() {
     return (
       <AppShell pageTitle="CRM Reports" pageIcon={<BarChart3 className="h-5 w-5" />} onRefresh={loadReports} refreshing={loading}>
         <div className="flex items-center justify-center py-24">
-          <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+          <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
         </div>
       </AppShell>
     );

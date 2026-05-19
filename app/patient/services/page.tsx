@@ -54,8 +54,8 @@ const SERVICES = [
         title: 'Vaccination',
         subtitle: 'Book vaccination appointments',
         icon: Syringe,
-        color: 'bg-teal-500',
-        light: 'bg-teal-50 border-teal-200',
+        color: 'bg-orange-500',
+        light: 'bg-orange-50 border-orange-200',
         href: '/patient/appointments/book?type=vaccination',
     },
     {

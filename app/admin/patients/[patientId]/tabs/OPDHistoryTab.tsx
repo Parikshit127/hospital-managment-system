@@ -128,7 +128,7 @@ export default function OPDHistoryTab({
       {/* CLINICAL NOTES */}
       <section>
         <h3 className="font-black text-gray-800 text-lg mb-4 flex items-center gap-2">
-          <ClipboardList className="h-5 w-5 text-teal-600" />
+          <ClipboardList className="h-5 w-5 text-orange-600" />
           Clinical Notes
         </h3>
         {clinicalEHRs.length === 0 ? (

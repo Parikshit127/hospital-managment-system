@@ -68,7 +68,7 @@ export default function ApiTestPanel({ method, path, defaultBody }: ApiTestPanel
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     placeholder="Enter your API key (zx_...)"
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-[#e8e6e3] rounded-xl text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#14b8a6]/50 focus:ring-1 focus:ring-[#14b8a6]/20 font-mono transition-all"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-[#e8e6e3] rounded-xl text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#f97316]/50 focus:ring-1 focus:ring-[#f97316]/20 font-mono transition-all"
                 />
             </div>
 
@@ -81,7 +81,7 @@ export default function ApiTestPanel({ method, path, defaultBody }: ApiTestPanel
                     value={body}
                     onChange={(e) => setBody(e.target.value)}
                     rows={10}
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-[#e8e6e3] rounded-xl text-xs text-gray-800 font-mono focus:outline-none focus:border-[#14b8a6]/50 focus:ring-1 focus:ring-[#14b8a6]/20 resize-y leading-relaxed transition-all"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-[#e8e6e3] rounded-xl text-xs text-gray-800 font-mono focus:outline-none focus:border-[#f97316]/50 focus:ring-1 focus:ring-[#f97316]/20 resize-y leading-relaxed transition-all"
                 />
             </div>
 
@@ -89,7 +89,7 @@ export default function ApiTestPanel({ method, path, defaultBody }: ApiTestPanel
             <button
                 onClick={handleSend}
                 disabled={loading}
-                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#14b8a6] to-[#0d9488] hover:from-[#0d9488] hover:to-[#0f766e] disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-all shadow-sm shadow-blue-500/20"
+                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#f97316] to-[#ea580c] hover:from-[#ea580c] hover:to-[#c2410c] disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-all shadow-sm shadow-blue-500/20"
             >
                 {loading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />

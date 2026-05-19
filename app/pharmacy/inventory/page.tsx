@@ -77,7 +77,7 @@ export default function PharmacyInventoryPage() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input
                             type="text" placeholder="Search medicines..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
                         />
                     </div>
                     <button onClick={() => setFilterLow(!filterLow)} className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${filterLow ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
@@ -126,7 +126,7 @@ export default function PharmacyInventoryPage() {
                                 <input required type="number" placeholder="Unit Price" className="w-full p-2 border rounded-lg text-sm" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} />
                                 <input required type="date" className="w-full p-2 border rounded-lg text-sm text-gray-500" value={form.expiry} onChange={e => setForm({ ...form, expiry: e.target.value })} />
                             </div>
-                            <button type="submit" className="w-full bg-teal-600 text-white font-bold p-2 rounded-lg">Save Item</button>
+                            <button type="submit" className="w-full bg-orange-600 text-white font-bold p-2 rounded-lg">Save Item</button>
                         </div>
                     </form>
                 </div>

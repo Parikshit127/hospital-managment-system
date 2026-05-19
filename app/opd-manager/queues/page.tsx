@@ -87,7 +87,7 @@ export default function OPDManagerQueuesPage() {
         return (
             <AppShell pageTitle="Live Queues" pageIcon={<ListOrdered className="h-5 w-5" />}>
                 <div className="flex items-center justify-center py-24">
-                    <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
+                    <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
                     <span className="ml-3 text-gray-500 font-medium">Loading live queues...</span>
                 </div>
             </AppShell>
@@ -281,7 +281,7 @@ export default function OPDManagerQueuesPage() {
                                     placeholder="Search doctors by name or specialty..."
                                     value={doctorSearch}
                                     onChange={(e) => setDoctorSearch(e.target.value)}
-                                    className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300 transition-colors"
+                                    className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-teal-300 transition-colors"
                                 />
                             </div>
                         </div>
@@ -293,7 +293,7 @@ export default function OPDManagerQueuesPage() {
                                     key={doc.doctorId}
                                     className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all border ${
                                         selectedDoctor === doc.doctorId
-                                            ? 'bg-teal-50 border-teal-300'
+                                            ? 'bg-orange-50 border-teal-300'
                                             : 'bg-gray-50 border-gray-100 hover:bg-gray-100'
                                     }`}
                                 >

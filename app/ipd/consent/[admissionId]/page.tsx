@@ -77,7 +77,7 @@ export default function ConsentPage() {
         </div>
         <button
           onClick={() => setModalOpen(true)}
-          className="inline-flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors"
+          className="inline-flex items-center gap-1.5 bg-orange-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors"
         >
           <Plus className="h-3.5 w-3.5" /> Add Consent
         </button>
@@ -124,7 +124,7 @@ export default function ConsentPage() {
           <form onSubmit={handleSubmit} className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
             <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
               <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                <FileText className="h-5 w-5 text-teal-600" /> Add Patient Consent
+                <FileText className="h-5 w-5 text-orange-600" /> Add Patient Consent
               </h3>
               <button type="button" onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-700 transition-colors">
                 <X className="h-5 w-5" />
@@ -134,22 +134,22 @@ export default function ConsentPage() {
               <div>
                 <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Consent Type *</label>
                 <select required value={form.consentType} onChange={e => setForm(f => ({ ...f, consentType: e.target.value }))}
-                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none bg-white">
+                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none bg-white">
                   {CONSENT_TYPES.map(t => <option key={t}>{t}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Witness Name</label>
                 <input value={form.witnessName} onChange={e => setForm(f => ({ ...f, witnessName: e.target.value }))}
-                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none" placeholder="Witness full name" />
+                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none" placeholder="Witness full name" />
               </div>
               <div>
                 <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Notes</label>
                 <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 outline-none min-h-[72px]" placeholder="Additional notes..." />
+                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none min-h-[72px]" placeholder="Additional notes..." />
               </div>
               <button disabled={saving} type="submit"
-                className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold p-3 rounded-xl shadow-md transition-all">
+                className="w-full bg-orange-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold p-3 rounded-xl shadow-md transition-all">
                 {saving ? 'Saving...' : 'Record Consent'}
               </button>
             </div>

@@ -51,7 +51,7 @@ export default function AdminHRHub() {
                 <div className="space-y-8">
                     {loading && !stats ? (
                         <div className="flex items-center justify-center py-20">
-                            <Loader2 className="h-6 w-6 animate-spin text-teal-600" />
+                            <Loader2 className="h-6 w-6 animate-spin text-orange-600" />
                         </div>
                     ) : (
                         <>
@@ -72,12 +72,12 @@ export default function AdminHRHub() {
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                     {stats?.roleBreakdown?.map((rb: any) => (
-                                        <div key={rb.role} className="bg-white border border-gray-100 shadow-sm rounded-3xl p-6 flex items-center justify-between group hover:border-teal-200 transition-all">
+                                        <div key={rb.role} className="bg-white border border-gray-100 shadow-sm rounded-3xl p-6 flex items-center justify-between group hover:border-orange-200 transition-all">
                                             <div className="space-y-1">
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{rb.role}</p>
-                                                <p className="text-2xl font-black text-gray-900 group-hover:text-teal-600 transition-colors">{rb.count}</p>
+                                                <p className="text-2xl font-black text-gray-900 group-hover:text-orange-600 transition-colors">{rb.count}</p>
                                             </div>
-                                            <div className="p-3 bg-gray-50 rounded-2xl group-hover:bg-teal-50 transition-colors">
+                                            <div className="p-3 bg-gray-50 rounded-2xl group-hover:bg-orange-50 transition-colors">
                                                 {rb.role.toLowerCase().includes('doctor') ? <Stethoscope className="h-5 w-5 text-blue-500" /> : 
                                                  rb.role.toLowerCase().includes('reception') ? <Users className="h-5 w-5 text-emerald-500" /> :
                                                  rb.role.toLowerCase().includes('finance') ? <BarChart3 className="h-5 w-5 text-orange-500" /> :
@@ -93,7 +93,7 @@ export default function AdminHRHub() {
                                 <div className="bg-white border border-gray-100 shadow-sm rounded-[2.5rem] overflow-hidden">
                                     <div className="p-8 border-b border-gray-50 flex items-center justify-between bg-gray-50/20">
                                         <div className="flex items-center gap-3">
-                                            <div className="p-3 bg-teal-600 text-white rounded-2xl shadow-lg shadow-teal-100"><Users className="h-5 w-5" /></div>
+                                            <div className="p-3 bg-orange-600 text-white rounded-2xl shadow-lg shadow-teal-100"><Users className="h-5 w-5" /></div>
                                             <div>
                                                 <h3 className="text-xl font-bold text-gray-900">Hospital Personnel Directory</h3>
                                                 <p className="text-xs text-gray-400 font-medium">Complete list of active staff and their system roles</p>
@@ -113,15 +113,15 @@ export default function AdminHRHub() {
                                             </thead>
                                             <tbody className="divide-y divide-gray-50">
                                                 {stats?.staffList?.map((emp: any) => (
-                                                    <tr key={emp.id} className="group hover:bg-teal-50/30 transition-colors">
+                                                    <tr key={emp.id} className="group hover:bg-orange-50/30 transition-colors">
                                                         <td className="py-5 px-8">
-                                                            <p className="text-sm font-bold text-gray-900 group-hover:text-teal-600 transition-colors uppercase">{emp.name}</p>
+                                                            <p className="text-sm font-bold text-gray-900 group-hover:text-orange-600 transition-colors uppercase">{emp.name}</p>
                                                         </td>
                                                         <td className="py-5 px-8">
                                                             <p className="text-[10px] font-mono font-bold text-gray-500 bg-gray-50 px-2 py-1 rounded-md inline-block">{emp.code}</p>
                                                         </td>
                                                         <td className="py-5 px-8">
-                                                            <span className="px-3 py-1 bg-teal-50 text-teal-700 text-[10px] font-black uppercase rounded-full border border-teal-100">
+                                                            <span className="px-3 py-1 bg-orange-50 text-orange-700 text-[10px] font-black uppercase rounded-full border border-teal-100">
                                                                 {emp.role}
                                                             </span>
                                                         </td>

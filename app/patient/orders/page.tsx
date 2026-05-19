@@ -23,7 +23,7 @@ const STATUS_STYLE: Record<string, string> = {
     Dispatched: 'bg-purple-100 text-purple-700',
     Delivered: 'bg-emerald-100 text-emerald-700',
     Scheduled: 'bg-indigo-100 text-indigo-700',
-    'Checked In': 'bg-teal-100 text-teal-700',
+    'Checked In': 'bg-orange-100 text-orange-700',
 };
 
 const TYPE_ICON = {

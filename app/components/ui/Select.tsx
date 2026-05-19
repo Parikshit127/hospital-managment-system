@@ -25,7 +25,7 @@ export function Select({ label, options, placeholder, error, className = '', ...
             )}
             <div className="relative">
                 <select
-                    className={`w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 appearance-none focus:outline-none focus:ring-2 focus:ring-teal-500/15 focus:border-teal-500 transition-all duration-200 pr-10 shadow-sm hover:border-gray-300 ${error ? 'border-rose-300 hover:border-rose-300' : ''} ${className}`}
+                    className={`w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 appearance-none focus:outline-none focus:ring-2 focus:ring-orange-500/15 focus:border-orange-500 transition-all duration-200 pr-10 shadow-sm hover:border-gray-300 ${error ? 'border-rose-300 hover:border-rose-300' : ''} ${className}`}
                     {...props}
                 >
                     {placeholder && (

@@ -44,7 +44,7 @@ export default function AdminOPDHub() {
         const map: Record<string, string> = {
             'Pending': 'bg-amber-50 text-amber-700 border border-amber-200',
             'Scheduled': 'bg-blue-50 text-blue-700 border border-blue-200',
-            'Checked In': 'bg-teal-50 text-teal-700 border border-teal-200',
+            'Checked In': 'bg-orange-50 text-orange-700 border border-orange-200',
             'In Progress': 'bg-violet-50 text-violet-700 border border-violet-200',
             'Completed': 'bg-emerald-50 text-emerald-700 border border-emerald-200',
             'Cancelled': 'bg-gray-100 text-gray-500 border border-gray-200',
@@ -214,13 +214,13 @@ export default function AdminOPDHub() {
                         <Link href="/doctor/dashboard"
                             className="group bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-teal-300 transition-all flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-teal-50 rounded-xl"><Stethoscope className="h-5 w-5 text-teal-500" /></div>
+                                <div className="p-2 bg-orange-50 rounded-xl"><Stethoscope className="h-5 w-5 text-orange-500" /></div>
                                 <div>
                                     <h4 className="text-sm font-bold text-gray-900">Doctor Console</h4>
                                     <p className="text-xs text-gray-400">Clinical workspace</p>
                                 </div>
                             </div>
-                            <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-teal-500" />
+                            <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-orange-500" />
                         </Link>
                     </div>
                 </div>

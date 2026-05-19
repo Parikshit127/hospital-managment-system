@@ -17,7 +17,7 @@ const statusColors: Record<string, string> = {
   New: 'bg-blue-50 text-blue-700 border-blue-200',
   Contacted: 'bg-violet-50 text-violet-700 border-violet-200',
   Interested: 'bg-amber-50 text-amber-700 border-amber-200',
-  Appointment_Booked: 'bg-teal-50 text-teal-700 border-teal-200',
+  Appointment_Booked: 'bg-orange-50 text-orange-700 border-orange-200',
   Converted: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   Lost: 'bg-red-50 text-red-700 border-red-200',
 };
@@ -135,7 +135,7 @@ export default function LeadDetailPage() {
     return (
       <AppShell pageTitle="Lead Detail" pageIcon={<Users className="h-5 w-5" />}>
         <div className="flex items-center justify-center py-24">
-          <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+          <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
         </div>
       </AppShell>
     );
@@ -157,7 +157,7 @@ export default function LeadDetailPage() {
           {/* Info Card */}
           <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+              <span className="text-[10px] font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200">
                 {lead.lead_number}
               </span>
               <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full border ${statusColors[lead.status] || 'bg-gray-100 text-gray-600'}`}>
@@ -167,8 +167,8 @@ export default function LeadDetailPage() {
 
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-full bg-teal-50 flex items-center justify-center shrink-0">
-                  <Users className="h-4 w-4 text-teal-600" />
+                <div className="h-8 w-8 rounded-full bg-orange-50 flex items-center justify-center shrink-0">
+                  <Users className="h-4 w-4 text-orange-600" />
                 </div>
                 <div>
                   <p className="text-xs text-gray-400">Name</p>
@@ -234,17 +234,17 @@ export default function LeadDetailPage() {
                   const isCurrent = idx === currentStageIndex;
                   return (
                     <div key={stage} className="flex items-center gap-3">
-                      <div className={`h-5 w-5 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold ${isCompleted ? 'bg-emerald-500 text-white' : isCurrent ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
+                      <div className={`h-5 w-5 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold ${isCompleted ? 'bg-emerald-500 text-white' : isCurrent ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
                         {isCompleted ? <Check className="h-3 w-3" /> : idx + 1}
                       </div>
-                      <span className={`text-xs font-medium ${isCurrent ? 'text-teal-700 font-bold' : isCompleted ? 'text-emerald-700' : 'text-gray-400'}`}>
+                      <span className={`text-xs font-medium ${isCurrent ? 'text-orange-700 font-bold' : isCompleted ? 'text-emerald-700' : 'text-gray-400'}`}>
                         {stage.replace('_', ' ')}
                       </span>
                       {isCurrent && idx < funnelStages.length - 1 && (
                         <button
                           onClick={() => handleStatusAdvance(funnelStages[idx + 1])}
                           disabled={updatingStatus}
-                          className="ml-auto text-[10px] font-bold text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 px-2 py-0.5 rounded-full border border-teal-200"
+                          className="ml-auto text-[10px] font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-2 py-0.5 rounded-full border border-orange-200"
                         >
                           Advance
                         </button>
@@ -286,7 +286,7 @@ export default function LeadDetailPage() {
                 <p className="text-gray-400 text-sm">No activities yet</p>
                 <button
                   onClick={() => setShowActivityModal(true)}
-                  className="mt-3 text-xs font-bold text-teal-600 hover:text-teal-700"
+                  className="mt-3 text-xs font-bold text-orange-600 hover:text-orange-700"
                 >
                   Log first activity
                 </button>
@@ -306,7 +306,7 @@ export default function LeadDetailPage() {
                             <span className="text-[10px] text-gray-400">({act.direction})</span>
                           )}
                           {act.outcome && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                            <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-orange-50 text-orange-700 border border-orange-200">
                               {act.outcome}
                             </span>
                           )}
@@ -344,7 +344,7 @@ export default function LeadDetailPage() {
                   <select
                     value={activityForm.activityType}
                     onChange={e => setActivityForm(f => ({ ...f, activityType: e.target.value }))}
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   >
                     {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
@@ -354,7 +354,7 @@ export default function LeadDetailPage() {
                   <select
                     value={activityForm.direction}
                     onChange={e => setActivityForm(f => ({ ...f, direction: e.target.value }))}
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   >
                     {DIRECTIONS.map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
@@ -367,7 +367,7 @@ export default function LeadDetailPage() {
                   onChange={e => setActivityForm(f => ({ ...f, content: e.target.value }))}
                   placeholder="Describe what happened..."
                   rows={3}
-                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500 resize-none"
+                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500 resize-none"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -376,7 +376,7 @@ export default function LeadDetailPage() {
                   <select
                     value={activityForm.outcome}
                     onChange={e => setActivityForm(f => ({ ...f, outcome: e.target.value }))}
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   >
                     <option value="">Select outcome</option>
                     {OUTCOMES.map(o => <option key={o} value={o}>{o}</option>)}
@@ -388,7 +388,7 @@ export default function LeadDetailPage() {
                     type="text"
                     value={activityForm.performedBy}
                     onChange={e => setActivityForm(f => ({ ...f, performedBy: e.target.value }))}
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   />
                 </div>
               </div>

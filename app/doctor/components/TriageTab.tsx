@@ -53,7 +53,7 @@ export function TriageTab({ triageData, loadingTriage, onProceedToNotes }: Triag
     });
 
     const hasParsed = Object.keys(parsed).length > 0;
-    const colorMap: Record<string, string> = { teal: 'border-teal-500/20 bg-teal-500/[0.03]', cyan: 'border-cyan-500/20 bg-cyan-500/[0.03]', violet: 'border-violet-500/20 bg-violet-500/[0.03]', amber: 'border-amber-500/20 bg-amber-500/[0.03]', rose: 'border-rose-500/20 bg-rose-500/[0.03]', emerald: 'border-emerald-500/20 bg-emerald-500/[0.03]' };
+    const colorMap: Record<string, string> = { teal: 'border-orange-500/20 bg-orange-500/[0.03]', cyan: 'border-cyan-500/20 bg-cyan-500/[0.03]', violet: 'border-violet-500/20 bg-violet-500/[0.03]', amber: 'border-amber-500/20 bg-amber-500/[0.03]', rose: 'border-rose-500/20 bg-rose-500/[0.03]', emerald: 'border-emerald-500/20 bg-emerald-500/[0.03]' };
     const textColorMap: Record<string, string> = { teal: 'text-teal-400', cyan: 'text-cyan-400', violet: 'text-violet-400', amber: 'text-amber-400', rose: 'text-rose-400', emerald: 'text-emerald-400' };
 
     return (
@@ -79,22 +79,22 @@ export function TriageTab({ triageData, loadingTriage, onProceedToNotes }: Triag
             {/* Vitals Row */}
             {triageData.vitals && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:border-teal-500/20 transition-all">
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:border-orange-500/20 transition-all">
                         <HeartPulse className="h-5 w-5 text-rose-400 mx-auto mb-2" />
                         <span className="text-[10px] font-black text-gray-400 uppercase block">Blood Pressure</span>
                         <span className="text-lg font-black text-gray-700">{triageData.vitals.bloodPressure || 'N/A'}</span>
                     </div>
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:border-teal-500/20 transition-all">
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:border-orange-500/20 transition-all">
                         <Heart className="h-5 w-5 text-pink-400 mx-auto mb-2" />
                         <span className="text-[10px] font-black text-gray-400 uppercase block">Heart Rate</span>
                         <span className="text-lg font-black text-gray-700">{triageData.vitals.heartRate ? `${triageData.vitals.heartRate} BPM` : 'N/A'}</span>
                     </div>
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:border-teal-500/20 transition-all">
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:border-orange-500/20 transition-all">
                         <Thermometer className="h-5 w-5 text-orange-400 mx-auto mb-2" />
                         <span className="text-[10px] font-black text-gray-400 uppercase block">Temperature</span>
                         <span className="text-lg font-black text-gray-700">{triageData.vitals.temperature ? `${triageData.vitals.temperature}°C` : 'N/A'}</span>
                     </div>
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:border-teal-500/20 transition-all">
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:border-orange-500/20 transition-all">
                         <Wind className="h-5 w-5 text-cyan-400 mx-auto mb-2" />
                         <span className="text-[10px] font-black text-gray-400 uppercase block">SpO2</span>
                         <span className="text-lg font-black text-gray-700">{triageData.vitals.oxygenSat ? `${triageData.vitals.oxygenSat}%` : 'N/A'}</span>
@@ -107,7 +107,7 @@ export function TriageTab({ triageData, loadingTriage, onProceedToNotes }: Triag
                     <h4 className="font-black text-gray-500 text-xs uppercase tracking-wider mb-3 flex items-center gap-2"><Activity className="h-4 w-4 text-teal-400" /> Reported Symptoms</h4>
                     <div className="flex flex-wrap gap-2">
                         {triageData.symptoms?.map((s: string, i: number) => (
-                            <span key={i} className="bg-teal-500/10 text-teal-400 border border-teal-500/20 text-xs font-bold px-3 py-1.5 rounded-lg">{s}</span>
+                            <span key={i} className="bg-orange-500/10 text-teal-400 border border-orange-500/20 text-xs font-bold px-3 py-1.5 rounded-lg">{s}</span>
                         ))}
                     </div>
                     <div className="mt-3 text-xs text-gray-400"><span className="font-bold">Duration:</span> {triageData.duration || 'Not specified'} &middot; <span className="font-bold">Severity:</span> {triageData.severity || 'N/A'}</div>

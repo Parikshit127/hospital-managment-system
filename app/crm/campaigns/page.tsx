@@ -83,7 +83,7 @@ export default function CampaignsPage() {
             <tbody className="divide-y divide-gray-50">
               {loading ? (
                 <tr><td colSpan={7} className="text-center py-16">
-                  <Loader2 className="h-6 w-6 animate-spin text-teal-500 mx-auto" />
+                  <Loader2 className="h-6 w-6 animate-spin text-orange-500 mx-auto" />
                 </td></tr>
               ) : campaigns.length === 0 ? (
                 <tr><td colSpan={7} className="text-center py-16">
@@ -139,7 +139,7 @@ export default function CampaignsPage() {
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   placeholder="e.g., Monsoon Health Checkup"
-                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -148,7 +148,7 @@ export default function CampaignsPage() {
                   <select
                     value={form.campaignType}
                     onChange={e => setForm(f => ({ ...f, campaignType: e.target.value }))}
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   >
                     <option value="">Select type</option>
                     {CAMPAIGN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -160,7 +160,7 @@ export default function CampaignsPage() {
                     type="datetime-local"
                     value={form.scheduledAt}
                     onChange={e => setForm(f => ({ ...f, scheduledAt: e.target.value }))}
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   />
                 </div>
               </div>
@@ -171,7 +171,7 @@ export default function CampaignsPage() {
                   value={form.targetAudience}
                   onChange={e => setForm(f => ({ ...f, targetAudience: e.target.value }))}
                   placeholder="e.g., Diabetic patients, All patients"
-                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                 />
               </div>
               <div>
@@ -181,7 +181,7 @@ export default function CampaignsPage() {
                   onChange={e => setForm(f => ({ ...f, messageTemplate: e.target.value }))}
                   placeholder="Dear {name}, we are pleased to offer..."
                   rows={4}
-                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500 resize-none"
+                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500 resize-none"
                 />
               </div>
               <button

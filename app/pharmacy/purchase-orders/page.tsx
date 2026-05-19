@@ -89,7 +89,7 @@ export default function PurchaseOrdersPage() {
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         {po.status !== 'Received' ? (
-                                            <button onClick={() => handleOpenReceive(po)} className="text-teal-600 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1 inline-flex">
+                                            <button onClick={() => handleOpenReceive(po)} className="text-orange-600 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1 inline-flex">
                                                 <Truck className="h-3 w-3" /> Receive Stock
                                             </button>
                                         ) : (
@@ -116,7 +116,7 @@ export default function PurchaseOrdersPage() {
                         </div>
                         <div className="p-6 overflow-y-auto flex-1 space-y-4">
                             {receiveData.map((item, idx) => (
-                                <div key={item.itemId} className="p-4 border border-teal-100 bg-teal-50/30 rounded-xl grid grid-cols-12 gap-4 items-center">
+                                <div key={item.itemId} className="p-4 border border-teal-100 bg-orange-50/30 rounded-xl grid grid-cols-12 gap-4 items-center">
                                     <div className="col-span-12 md:col-span-3">
                                         <p className="font-bold text-sm text-gray-900">{item.medicine}</p>
                                         <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Ordered: {item.ordered}</p>
@@ -138,7 +138,7 @@ export default function PurchaseOrdersPage() {
                         </div>
                         <div className="p-4 border-t bg-white flex justify-end gap-3 shrinkage-0">
                             <button type="button" onClick={() => setReceiveModal(null)} className="px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-xl">Cancel</button>
-                            <button type="submit" className="px-6 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-sm transition-colors shadow-sm flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Save into Inventory</button>
+                            <button type="submit" className="px-6 py-2 bg-orange-600 hover:bg-teal-700 text-white font-bold rounded-xl text-sm transition-colors shadow-sm flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Save into Inventory</button>
                         </div>
                     </form>
                 </div>

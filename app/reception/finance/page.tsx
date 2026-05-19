@@ -426,7 +426,7 @@ export default function ReceptionFinancePage() {
                                                                 <td className="px-4 py-3 text-gray-700">₹{Number(c.credit_limit).toLocaleString('en-IN')}</td>
                                                                 <td className="px-4 py-3"><span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">{Number(c.discount_percentage)}%</span></td>
                                                                 <td className="px-4 py-3 text-gray-600">{c.payment_terms_days}d</td>
-                                                                <td className="px-4 py-3"><button onClick={() => toggleCorp(c)}>{c.is_active ? <ToggleRight className="h-5 w-5 text-teal-500" /> : <ToggleLeft className="h-5 w-5 text-gray-300" />}</button></td>
+                                                                <td className="px-4 py-3"><button onClick={() => toggleCorp(c)}>{c.is_active ? <ToggleRight className="h-5 w-5 text-orange-500" /> : <ToggleLeft className="h-5 w-5 text-gray-300" />}</button></td>
                                                                 <td className="px-4 py-3"><button onClick={() => openCorpEdit(c)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-all"><Edit2 className="h-3.5 w-3.5" /></button></td>
                                                             </tr>
                                                         ))}
@@ -473,7 +473,7 @@ export default function ReceptionFinancePage() {
                                                                 <td className="px-4 py-3 capitalize text-gray-600 text-xs">{p.claim_submission_mode}</td>
                                                                 <td className="px-4 py-3"><span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{Number(p.default_discount_percentage)}%</span></td>
                                                                 <td className="px-4 py-3 text-gray-600">{p.payment_terms_days}d</td>
-                                                                <td className="px-4 py-3"><button onClick={() => toggleTpa(p)}>{p.is_active ? <ToggleRight className="h-5 w-5 text-teal-500" /> : <ToggleLeft className="h-5 w-5 text-gray-300" />}</button></td>
+                                                                <td className="px-4 py-3"><button onClick={() => toggleTpa(p)}>{p.is_active ? <ToggleRight className="h-5 w-5 text-orange-500" /> : <ToggleLeft className="h-5 w-5 text-gray-300" />}</button></td>
                                                                 <td className="px-4 py-3"><button onClick={() => openTpaEdit(p)} className="p-1.5 text-gray-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition-all"><Edit2 className="h-3.5 w-3.5" /></button></td>
                                                             </tr>
                                                         ))}

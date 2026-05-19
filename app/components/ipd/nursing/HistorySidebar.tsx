@@ -41,7 +41,7 @@ export function HistorySidebar({ notes }: { notes: any[] }) {
         <div className="h-full flex flex-col">
             <div className="p-5 border-b border-gray-200 bg-gray-50/50 backdrop-blur-sm sticky top-0 z-10">
                 <h3 className="text-sm font-black text-gray-800 flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-teal-500" /> 
+                    <Activity className="h-4 w-4 text-orange-500" /> 
                     Patient Timeline History
                 </h3>
             </div>
@@ -86,7 +86,7 @@ export function HistorySidebar({ notes }: { notes: any[] }) {
                 
                 {notes.length >= 10 && (
                     <div className="mt-8 text-center pb-4">
-                        <button className="text-[11px] font-black tracking-widest text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 px-4 py-2 rounded-full transition-colors uppercase">
+                        <button className="text-[11px] font-black tracking-widest text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-4 py-2 rounded-full transition-colors uppercase">
                             Load Older History
                         </button>
                     </div>

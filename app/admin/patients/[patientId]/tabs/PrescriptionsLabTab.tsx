@@ -271,7 +271,7 @@ export default function PrescriptionsLabTab({
                             href={lab.report_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-teal-600 hover:underline text-xs"
+                            className="text-orange-600 hover:underline text-xs"
                           >
                             View Report
                           </a>

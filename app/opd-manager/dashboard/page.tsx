@@ -46,7 +46,7 @@ export default function OPDManagerDashboardPage() {
 
     const kpis = [
         { label: 'Total Appointments', value: dashboard?.totalAppointments || 0, icon: CalendarCheck, color: 'text-indigo-500', bg: 'bg-indigo-50' },
-        { label: 'Checked In', value: dashboard?.checkedInCount || 0, icon: UserCheck, color: 'text-teal-500', bg: 'bg-teal-50' },
+        { label: 'Checked In', value: dashboard?.checkedInCount || 0, icon: UserCheck, color: 'text-orange-500', bg: 'bg-orange-50' },
         { label: 'In Progress', value: dashboard?.inProgressCount || 0, icon: Activity, color: 'text-violet-500', bg: 'bg-violet-50' },
         { label: 'Completed', value: dashboard?.completedCount || 0, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-50' },
         { label: 'Avg Wait Time', value: dashboard?.avgWait ? `${dashboard.avgWait}m` : '0m', icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50' },
@@ -60,7 +60,7 @@ export default function OPDManagerDashboardPage() {
         return (
             <AppShell pageTitle="OPD Manager Dashboard" pageIcon={<LayoutDashboard className="h-5 w-5" />}>
                 <div className="flex items-center justify-center py-24">
-                    <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
+                    <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
                     <span className="ml-3 text-gray-500 font-medium">Loading dashboard...</span>
                 </div>
             </AppShell>
@@ -158,7 +158,7 @@ export default function OPDManagerDashboardPage() {
                         <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                             <Stethoscope className="h-4 w-4 text-indigo-500" /> Doctor Utilization
                         </h3>
-                        <Link href="/opd-manager/doctors" className="text-xs font-bold text-teal-600 hover:text-teal-700">
+                        <Link href="/opd-manager/doctors" className="text-xs font-bold text-orange-600 hover:text-orange-700">
                             View All
                         </Link>
                     </div>
@@ -203,7 +203,7 @@ export default function OPDManagerDashboardPage() {
                         <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                             <Clock className="h-4 w-4 text-amber-500" /> Wait Time by Department
                         </h3>
-                        <Link href="/opd-manager/reports" className="text-xs font-bold text-teal-600 hover:text-teal-700">
+                        <Link href="/opd-manager/reports" className="text-xs font-bold text-orange-600 hover:text-orange-700">
                             Full Report
                         </Link>
                     </div>
@@ -248,7 +248,7 @@ export default function OPDManagerDashboardPage() {
                 <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6 mt-6">
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                            <Activity className="h-4 w-4 text-teal-500" /> Peak Hours (Last 7 Days)
+                            <Activity className="h-4 w-4 text-orange-500" /> Peak Hours (Last 7 Days)
                         </h3>
                         <span className="text-xs text-gray-400">Appointment distribution by hour</span>
                     </div>

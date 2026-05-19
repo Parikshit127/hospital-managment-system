@@ -80,7 +80,7 @@ export function ICD10Search({ selected, onChange, disabled }: ICD10SearchProps) 
     }
 
     const TYPE_COLOR: Record<string, string> = {
-        primary: 'bg-teal-100 text-teal-700 border-teal-200',
+        primary: 'bg-orange-100 text-orange-700 border-orange-200',
         secondary: 'bg-blue-100 text-blue-700 border-blue-200',
         rule_out: 'bg-amber-100 text-amber-700 border-amber-200',
     };
@@ -116,7 +116,7 @@ export function ICD10Search({ selected, onChange, disabled }: ICD10SearchProps) 
                 <div className="relative">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        {loading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-teal-500 animate-spin" />}
+                        {loading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-orange-500 animate-spin" />}
                         <input
                             type="text"
                             value={query}
@@ -124,7 +124,7 @@ export function ICD10Search({ selected, onChange, disabled }: ICD10SearchProps) 
                             onFocus={() => query.length < 2 && setShowDropdown(true)}
                             onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
                             placeholder="Search ICD-10 codes or diagnoses..."
-                            className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-medium outline-none focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/10"
+                            className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-medium outline-none focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10"
                         />
                     </div>
 
@@ -138,7 +138,7 @@ export function ICD10Search({ selected, onChange, disabled }: ICD10SearchProps) 
                                             key={c.code}
                                             type="button"
                                             onMouseDown={() => addCode(c.code, c.name)}
-                                            className="w-full text-left px-3 py-2 hover:bg-teal-50 transition-colors flex items-center gap-2"
+                                            className="w-full text-left px-3 py-2 hover:bg-orange-50 transition-colors flex items-center gap-2"
                                         >
                                             <Star className="h-3 w-3 text-amber-400 flex-shrink-0" />
                                             <span className="font-mono text-xs text-gray-500 w-16 flex-shrink-0">{c.code}</span>
@@ -154,7 +154,7 @@ export function ICD10Search({ selected, onChange, disabled }: ICD10SearchProps) 
                                         key={r.code}
                                         type="button"
                                         onMouseDown={() => addCode(r.code, r.name)}
-                                        className="w-full text-left px-3 py-2 hover:bg-teal-50 transition-colors flex items-center gap-2"
+                                        className="w-full text-left px-3 py-2 hover:bg-orange-50 transition-colors flex items-center gap-2"
                                     >
                                         <span className="font-mono text-xs text-gray-500 w-16 flex-shrink-0">{r.code}</span>
                                         <span className="text-xs text-gray-700 truncate">{r.name}</span>

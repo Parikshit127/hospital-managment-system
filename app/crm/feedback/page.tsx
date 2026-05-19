@@ -8,7 +8,7 @@ import { getFeedbackAnalysis } from '@/app/actions/crm-actions';
 
 const ratingBarColor: Record<number, string> = {
   5: 'bg-emerald-500',
-  4: 'bg-teal-500',
+  4: 'bg-orange-500',
   3: 'bg-amber-500',
   2: 'bg-orange-500',
   1: 'bg-red-500',
@@ -66,7 +66,7 @@ export default function CRMFeedbackPage() {
     <AppShell pageTitle="Feedback Analysis" pageIcon={<Star className="h-5 w-5" />} onRefresh={loadData} refreshing={loading}>
       {loading ? (
         <div className="flex items-center justify-center py-24">
-          <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+          <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
         </div>
       ) : (
         <div className="space-y-6">

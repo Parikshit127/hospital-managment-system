@@ -31,7 +31,7 @@ const TABS: { id: Tab; label: string }[] = [
     { id: 'plan', label: 'P — Plan' },
 ];
 
-const inputCls = "w-full p-3 bg-white border border-gray-300 rounded-xl text-sm font-medium outline-none focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/10 resize-none";
+const inputCls = "w-full p-3 bg-white border border-gray-300 rounded-xl text-sm font-medium outline-none focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10 resize-none";
 const labelCls = "text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] block mb-1.5";
 
 export function SOAPNoteForm({ encounterId, patientId, doctorId, initialData, onSaved }: SOAPNoteFormProps) {
@@ -175,7 +175,7 @@ export function SOAPNoteForm({ encounterId, patientId, doctorId, initialData, on
                             onClick={() => setActiveTab(tab.id)}
                             className={`px-4 py-3 text-xs font-black uppercase tracking-wider whitespace-nowrap transition-all ${
                                 activeTab === tab.id
-                                    ? 'border-b-2 border-teal-500 text-teal-600 bg-teal-50/50'
+                                    ? 'border-b-2 border-orange-500 text-orange-600 bg-orange-50/50'
                                     : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
                             }`}
                         >
@@ -276,7 +276,7 @@ export function SOAPNoteForm({ encounterId, patientId, doctorId, initialData, on
                                             <div className="col-span-2 md:col-span-4 flex justify-end">
                                                 <button
                                                     onClick={handleSaveVitals}
-                                                    className="px-4 py-2 bg-teal-600 text-white text-xs font-bold rounded-lg hover:bg-teal-700"
+                                                    className="px-4 py-2 bg-orange-600 text-white text-xs font-bold rounded-lg hover:bg-teal-700"
                                                 >
                                                     Save Vitals
                                                 </button>

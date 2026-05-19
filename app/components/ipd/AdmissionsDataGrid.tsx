@@ -140,7 +140,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                 <div className="relative w-full md:w-96">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <input 
-                        className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                        className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all"
                         placeholder="Search by Name, IPD ID, or Mobile..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
@@ -154,7 +154,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                             <button
                                 key={status}
                                 onClick={() => setStatusFilter(status as any)}
-                                className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${statusFilter === status ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${statusFilter === status ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                             >
                                 {status}
                             </button>
@@ -164,7 +164,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                     {/* Ward Filter */}
                     <div className="shrink-0 w-48">
                         <select 
-                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:outline-none focus:border-teal-500"
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:outline-none focus:border-orange-500"
                             value={wardFilter}
                             onChange={(e) => setWardFilter(e.target.value)}
                         >
@@ -193,7 +193,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                         <tbody className="divide-y divide-gray-100">
                             {filteredAdmissions.length > 0 ? (
                                 filteredAdmissions.map((adm) => (
-                                    <tr key={adm.admission_id} className="hover:bg-teal-50/30 transition-colors group">
+                                    <tr key={adm.admission_id} className="hover:bg-orange-50/30 transition-colors group">
                                         {/* Identity */}
                                         <td className="px-5 py-4">
                                             <Link href={`/ipd/admission/${adm.admission_id}`}>
@@ -202,7 +202,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                                                         {adm.patient?.full_name?.charAt(0) || 'P'}
                                                     </div>
                                                     <div>
-                                                        <p className="text-sm font-black text-gray-800 group-hover/name:text-teal-700 transition-colors">{adm.patient?.full_name || 'Unknown'}</p>
+                                                        <p className="text-sm font-black text-gray-800 group-hover/name:text-orange-700 transition-colors">{adm.patient?.full_name || 'Unknown'}</p>
                                                         <p className="text-[10px] text-gray-500 font-mono mt-0.5 max-w-[150px] truncate" title={adm.admission_id}>
                                                             {adm.admission_id}
                                                         </p>
@@ -247,8 +247,8 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                                         <td className="px-5 py-4">
                                             <div className="flex flex-col gap-1.5">
                                                 <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500">
-                                                    <Calendar className="h-3 w-3 text-teal-500" />
-                                                    <span className="text-teal-600">In: {new Date(adm.admission_date).toLocaleDateString()}</span>
+                                                    <Calendar className="h-3 w-3 text-orange-500" />
+                                                    <span className="text-orange-600">In: {new Date(adm.admission_date).toLocaleDateString()}</span>
                                                 </div>
                                                 {adm.expected_discharge_date && adm.status === 'Admitted' && (
                                                     <div className="flex items-center gap-1.5 text-[10px] font-bold">
@@ -290,7 +290,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                                                         <XCircle className="h-4 w-4" />
                                                     </button>
                                                     <Link href={`/ipd/nursing-station/${adm.admission_id}`}>
-                                                        <button className="inline-flex items-center gap-2 bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm hover:shadow transition-all group-hover:scale-105 active:scale-95">
+                                                        <button className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm hover:shadow transition-all group-hover:scale-105 active:scale-95">
                                                             <Activity className="h-4 w-4" />
                                                             Nursing Action
                                                             <ArrowRight className="h-3 w-3 opacity-50" />

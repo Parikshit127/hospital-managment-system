@@ -146,7 +146,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                 <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
                     <a 
                         href="/reception/billing/new"
-                        className="w-full md:w-auto px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-black rounded-xl text-sm transition-colors shadow-sm text-center flex items-center justify-center gap-2"
+                        className="w-full md:w-auto px-5 py-2.5 bg-orange-600 hover:bg-teal-700 text-white font-black rounded-xl text-sm transition-colors shadow-sm text-center flex items-center justify-center gap-2"
                     >
                         <FileText className="h-4 w-4" /> Generate New Bill
                     </a>
@@ -160,13 +160,13 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                             placeholder="Search Patient Name or ID..."
                             value={search}
                             onChange={e => { setSearch(e.target.value); setPage(1); }}
-                            className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm font-medium"
+                            className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm font-medium"
                         />
                     </div>
                     <select
                         value={filter}
                         onChange={e => { setFilter(e.target.value as any); setPage(1); }}
-                        className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-teal-500"
+                        className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-orange-500"
                     >
                         <option value="ALL">All Accounts</option>
                         <option value="ACTIVE">Active Balance Due</option>
@@ -194,7 +194,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                             {loading && data.length === 0 ? (
                                 <tr>
                                     <td colSpan={7} className="py-20 text-center">
-                                        <Loader2 className="h-8 w-8 animate-spin text-teal-500 mx-auto" />
+                                        <Loader2 className="h-8 w-8 animate-spin text-orange-500 mx-auto" />
                                         <p className="text-sm text-gray-400 mt-2 font-medium">Scanning Master Data...</p>
                                     </td>
                                 </tr>
@@ -224,7 +224,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                             >
                                                 <td className="px-6 py-4">
                                                     <p className="font-bold text-gray-900">{patient.full_name}</p>
-                                                    <p className="text-xs font-mono text-teal-600 mt-0.5">{patient.patient_id}</p>
+                                                    <p className="text-xs font-mono text-orange-600 mt-0.5">{patient.patient_id}</p>
                                                 </td>
                                                 <td className="px-6 py-4 text-gray-500">
                                                     {patient.age} Y · {patient.gender} · {patient.phone}
@@ -256,7 +256,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                                             
                                                             <div className="flex items-center justify-between mb-6">
                                                                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                                                                    <FileText className="h-4 w-4 text-teal-500" /> Account Details: {patient.full_name}
+                                                                    <FileText className="h-4 w-4 text-orange-500" /> Account Details: {patient.full_name}
                                                                 </h3>
                                                                 <div className="flex gap-2">
                                                                     <button onClick={() => setDuesModal(patient.patient_id)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 shadow-sm">
@@ -290,7 +290,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                                                                                     <div className="flex-1">
                                                                                                         <p className="font-medium text-slate-800">{item.description}</p>
                                                                                                         <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-0.5">
-                                                                                                            <span className="font-mono text-teal-600/70">{item.invoice_number}</span> • 
+                                                                                                            <span className="font-mono text-orange-600/70">{item.invoice_number}</span> • 
                                                                                                             <span>{formatDate(item.date)}</span>
                                                                                                         </div>
                                                                                                     </div>
@@ -320,7 +320,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                                                         </div>
                                                                         <div className="p-3 space-y-2">
                                                                             {patient.invoices?.filter((inv:any) => inv.balance_due > 0 && inv.status !== 'Cancelled').map((inv: any) => (
-                                                                                <div key={inv.id} className="flex flex-col gap-2 p-3 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-teal-200 transition-colors">
+                                                                                <div key={inv.id} className="flex flex-col gap-2 p-3 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-orange-200 transition-colors">
                                                                                     <div className="flex justify-between items-start">
                                                                                         <div>
                                                                                             <p className="text-[10px] font-mono font-bold text-slate-500">{inv.invoice_number}</p>
@@ -335,7 +335,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                                                                     <div className="flex gap-2 mt-1">
                                                                                         <button 
                                                                                             onClick={() => setPaymentModal({ invoice_id: inv.id, patient_id: patient.patient_id, max: inv.balance_due })}
-                                                                                            className="flex-1 py-1.5 bg-teal-50 text-teal-700 text-xs font-bold rounded-md hover:bg-teal-100">
+                                                                                            className="flex-1 py-1.5 bg-orange-50 text-orange-700 text-xs font-bold rounded-md hover:bg-orange-100">
                                                                                             Accept Payment
                                                                                         </button>
                                                                                         {role === 'admin' && (
@@ -424,16 +424,16 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                 <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[9999]">
                     <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
                         <h3 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
-                            <CreditCard className="h-5 w-5 text-teal-600" /> Collect Payment
+                            <CreditCard className="h-5 w-5 text-orange-600" /> Collect Payment
                         </h3>
                         <form onSubmit={handlePayment} className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Amount to Collect (₹)</label>
-                                <input type="number" required min="1" max={paymentModal.max} step="0.01" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-slate-50 font-mono text-lg text-teal-700 font-bold" placeholder={`Max: ₹${Number(paymentModal.max).toFixed(2)}`} />
+                                <input type="number" required min="1" max={paymentModal.max} step="0.01" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-slate-50 font-mono text-lg text-orange-700 font-bold" placeholder={`Max: ₹${Number(paymentModal.max).toFixed(2)}`} />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Payment Method</label>
-                                <select value={paymentForm.method} onChange={e => setPaymentForm({...paymentForm, method: e.target.value})} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-slate-50 font-medium">
+                                <select value={paymentForm.method} onChange={e => setPaymentForm({...paymentForm, method: e.target.value})} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-slate-50 font-medium">
                                     <option>Cash</option>
                                     <option>Card</option>
                                     <option>UPI</option>
@@ -442,7 +442,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                             </div>
                             <div className="flex gap-3 mt-6">
                                 <button type="button" onClick={() => setPaymentModal(null)} className="flex-1 py-2.5 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors">Cancel</button>
-                                <button type="submit" disabled={processLoading} className="flex-1 py-2.5 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 disabled:opacity-50 transition-colors flex justify-center items-center gap-2">
+                                <button type="submit" disabled={processLoading} className="flex-1 py-2.5 bg-orange-600 text-white font-bold rounded-xl hover:bg-teal-700 disabled:opacity-50 transition-colors flex justify-center items-center gap-2">
                                     {processLoading && <Loader2 className="h-4 w-4 animate-spin" />} Confirm
                                 </button>
                             </div>
@@ -461,15 +461,15 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                         <form onSubmit={handleAddDues} className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Amount (₹)</label>
-                                <input type="number" required min="1" step="0.01" value={dueForm.amount} onChange={e => setDueForm({...dueForm, amount: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-slate-50 font-mono text-lg" placeholder="e.g. 500" />
+                                <input type="number" required min="1" step="0.01" value={dueForm.amount} onChange={e => setDueForm({...dueForm, amount: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-slate-50 font-mono text-lg" placeholder="e.g. 500" />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Description / Category</label>
-                                <input type="text" required value={dueForm.description} onChange={e => setDueForm({...dueForm, description: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-slate-50 font-medium" placeholder="e.g. Extra Consumables" />
+                                <input type="text" required value={dueForm.description} onChange={e => setDueForm({...dueForm, description: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-slate-50 font-medium" placeholder="e.g. Extra Consumables" />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Internal Department Tag</label>
-                                <select value={dueForm.department} onChange={e => setDueForm({...dueForm, department: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-slate-50 font-medium text-sm">
+                                <select value={dueForm.department} onChange={e => setDueForm({...dueForm, department: e.target.value})} className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-slate-50 font-medium text-sm">
                                     <option value="General">General</option>
                                     <option value="Diagnostics">Diagnostics</option>
                                     <option value="Pharmacy">Pharmacy</option>

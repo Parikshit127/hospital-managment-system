@@ -71,7 +71,7 @@ export default function ReferralsPage() {
             <tbody className="divide-y divide-gray-50">
               {loading ? (
                 <tr><td colSpan={8} className="text-center py-16">
-                  <Loader2 className="h-6 w-6 animate-spin text-teal-500 mx-auto" />
+                  <Loader2 className="h-6 w-6 animate-spin text-orange-500 mx-auto" />
                 </td></tr>
               ) : referrals.length === 0 ? (
                 <tr><td colSpan={8} className="text-center py-16">
@@ -82,8 +82,8 @@ export default function ReferralsPage() {
                 <tr key={r.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="h-7 w-7 rounded-full bg-teal-50 flex items-center justify-center shrink-0">
-                        <UserCheck className="h-3.5 w-3.5 text-teal-600" />
+                      <div className="h-7 w-7 rounded-full bg-orange-50 flex items-center justify-center shrink-0">
+                        <UserCheck className="h-3.5 w-3.5 text-orange-600" />
                       </div>
                       <span className="font-medium text-gray-900">{r.doctor_name}</span>
                     </div>
@@ -131,7 +131,7 @@ export default function ReferralsPage() {
                   value={form.doctorName}
                   onChange={e => setForm(f => ({ ...f, doctorName: e.target.value }))}
                   placeholder="Dr. Rajesh Kumar"
-                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -142,7 +142,7 @@ export default function ReferralsPage() {
                     value={form.specialty}
                     onChange={e => setForm(f => ({ ...f, specialty: e.target.value }))}
                     placeholder="e.g., Cardiology"
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   />
                 </div>
                 <div>
@@ -152,7 +152,7 @@ export default function ReferralsPage() {
                     value={form.hospital}
                     onChange={e => setForm(f => ({ ...f, hospital: e.target.value }))}
                     placeholder="Hospital name"
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   />
                 </div>
               </div>
@@ -164,7 +164,7 @@ export default function ReferralsPage() {
                     value={form.phone}
                     onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                     placeholder="Mobile number"
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   />
                 </div>
                 <div>
@@ -177,7 +177,7 @@ export default function ReferralsPage() {
                     min="0"
                     max="100"
                     step="0.5"
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   />
                 </div>
               </div>
@@ -188,7 +188,7 @@ export default function ReferralsPage() {
                   value={form.email}
                   onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   placeholder="doctor@example.com"
-                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                 />
               </div>
               <button

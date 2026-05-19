@@ -67,7 +67,7 @@ export default function NursingStationPage() {
 
                         <button
                             onClick={() => { setCurrentTask(task); setModalOpen(true); }}
-                            className="w-full text-center flex items-center justify-center gap-2 bg-gray-50 hover:bg-teal-50 hover:text-teal-700 text-gray-700 border border-gray-200 hover:border-teal-200 font-bold py-2 rounded-xl transition-colors text-sm"
+                            className="w-full text-center flex items-center justify-center gap-2 bg-gray-50 hover:bg-orange-50 hover:text-orange-700 text-gray-700 border border-gray-200 hover:border-orange-200 font-bold py-2 rounded-xl transition-colors text-sm"
                         >
                             <ClipboardCheck className="h-4 w-4" /> Mark Completed
                         </button>
@@ -90,16 +90,16 @@ export default function NursingStationPage() {
                             <button type="button" onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-900">&times;</button>
                         </div>
                         <div className="p-6">
-                            <p className="text-sm mb-4 font-medium text-gray-700">Add any nursing notes or vitals readings for <strong className="text-teal-700 uppercase">{currentTask?.task_type}</strong> completion:</p>
+                            <p className="text-sm mb-4 font-medium text-gray-700">Add any nursing notes or vitals readings for <strong className="text-orange-700 uppercase">{currentTask?.task_type}</strong> completion:</p>
                             <textarea
                                 value={notes}
                                 onChange={(e) => setNotes(e.target.value)}
                                 placeholder="E.g., BP 120/80, Temp normal..."
-                                className="w-full p-3 border border-gray-200 rounded-xl mb-4 h-24 focus:ring-2 focus:ring-teal-500/20 text-sm"
+                                className="w-full p-3 border border-gray-200 rounded-xl mb-4 h-24 focus:ring-2 focus:ring-orange-500/20 text-sm"
                             />
                             <div className="flex gap-3 justify-end">
                                 <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-bold">Cancel</button>
-                                <button type="submit" className="px-5 py-2 flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-lg text-sm">
+                                <button type="submit" className="px-5 py-2 flex items-center gap-2 bg-orange-600 hover:bg-teal-700 text-white font-bold rounded-lg text-sm">
                                     <CheckCircle className="h-4 w-4" /> Save Completion
                                 </button>
                             </div>

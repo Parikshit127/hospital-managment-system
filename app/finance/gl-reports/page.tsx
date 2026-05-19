@@ -228,7 +228,7 @@ export default function GLReportsPage() {
                   <select
                     value={selectedAccountId}
                     onChange={(e) => setSelectedAccountId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500/15 focus:border-teal-500 transition-all duration-200 shadow-sm"
+                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500/15 focus:border-orange-500 transition-all duration-200 shadow-sm"
                   >
                     {glAccounts.map((acc) => (
                       <option key={acc.id} value={acc.id}>

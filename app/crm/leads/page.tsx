@@ -14,7 +14,7 @@ const statusColors: Record<string, string> = {
   New: 'bg-blue-50 text-blue-700 border-blue-200',
   Contacted: 'bg-violet-50 text-violet-700 border-violet-200',
   Interested: 'bg-amber-50 text-amber-700 border-amber-200',
-  Appointment_Booked: 'bg-teal-50 text-teal-700 border-teal-200',
+  Appointment_Booked: 'bg-orange-50 text-orange-700 border-orange-200',
   Converted: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   Lost: 'bg-red-50 text-red-700 border-red-200',
 };
@@ -102,13 +102,13 @@ export default function LeadsPage() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search name or phone..."
-              className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-teal-500 w-56"
+              className="pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 w-56"
             />
           </div>
           <select
             value={filterStatus}
             onChange={e => setFilterStatus(e.target.value)}
-            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500"
+            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
           >
             <option value="">All Statuses</option>
             {STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
@@ -116,7 +116,7 @@ export default function LeadsPage() {
           <select
             value={filterSource}
             onChange={e => setFilterSource(e.target.value)}
-            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-teal-500"
+            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
           >
             <option value="">All Sources</option>
             {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -137,7 +137,7 @@ export default function LeadsPage() {
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
                   <tr><td colSpan={9} className="text-center py-16">
-                    <Loader2 className="h-6 w-6 animate-spin text-teal-500 mx-auto" />
+                    <Loader2 className="h-6 w-6 animate-spin text-orange-500 mx-auto" />
                   </td></tr>
                 ) : filtered.length === 0 ? (
                   <tr><td colSpan={9} className="text-center py-16">
@@ -147,7 +147,7 @@ export default function LeadsPage() {
                 ) : filtered.map((lead: any) => (
                   <tr key={lead.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
-                      <span className="text-xs font-mono font-bold text-teal-600">{lead.lead_number}</span>
+                      <span className="text-xs font-mono font-bold text-orange-600">{lead.lead_number}</span>
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-900">{lead.name}</td>
                     <td className="px-4 py-3 text-gray-600 text-xs font-mono">{lead.phone}</td>
@@ -166,7 +166,7 @@ export default function LeadsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <Link href={`/crm/leads/${lead.id}`} className="text-xs font-bold text-teal-600 hover:text-teal-700 whitespace-nowrap">
+                        <Link href={`/crm/leads/${lead.id}`} className="text-xs font-bold text-orange-600 hover:text-orange-700 whitespace-nowrap">
                           View
                         </Link>
                         <div className="relative group">
@@ -216,7 +216,7 @@ export default function LeadsPage() {
                     value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                     placeholder="Patient name"
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   />
                 </div>
                 <div>
@@ -226,7 +226,7 @@ export default function LeadsPage() {
                     value={form.phone}
                     onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                     placeholder="Mobile number"
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   />
                 </div>
               </div>
@@ -237,7 +237,7 @@ export default function LeadsPage() {
                   value={form.email}
                   onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   placeholder="email@example.com"
-                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -246,7 +246,7 @@ export default function LeadsPage() {
                   <select
                     value={form.source}
                     onChange={e => setForm(f => ({ ...f, source: e.target.value }))}
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   >
                     <option value="">Select source</option>
                     {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -259,7 +259,7 @@ export default function LeadsPage() {
                     value={form.departmentInterest}
                     onChange={e => setForm(f => ({ ...f, departmentInterest: e.target.value }))}
                     placeholder="e.g., Cardiology"
-                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"
                   />
                 </div>
               </div>
@@ -270,7 +270,7 @@ export default function LeadsPage() {
                   onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                   placeholder="Additional notes..."
                   rows={3}
-                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-teal-500 resize-none"
+                  className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500 resize-none"
                 />
               </div>
               <button

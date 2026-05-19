@@ -516,7 +516,7 @@ export default function AdmissionDetailPage() {
 
                 {/* ── Header Card ── */}
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-1.5 h-full bg-teal-500 rounded-l-2xl" />
+                    <div className="absolute top-0 left-0 w-1.5 h-full bg-orange-500 rounded-l-2xl" />
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div className="pl-2">
                             <div className="flex items-center gap-3 flex-wrap">
@@ -556,7 +556,7 @@ export default function AdmissionDetailPage() {
                                     {data.status === 'Admitted' && !showDoctorForm && (
                                         <button
                                             onClick={() => { setNewDoctorName(data.doctor_name || ''); setShowDoctorForm(true); }}
-                                            className="ml-0.5 p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-teal-600"
+                                            className="ml-0.5 p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-orange-600"
                                         >
                                             <Pencil className="h-3 w-3" />
                                         </button>
@@ -601,7 +601,7 @@ export default function AdmissionDetailPage() {
                                     onFocus={() => setShowDoctorSuggestions(true)}
                                     onBlur={() => setTimeout(() => setShowDoctorSuggestions(false), 150)}
                                     placeholder="Type to search doctors..."
-                                    className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 w-64"
+                                    className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 w-64"
                                     autoFocus
                                     onKeyDown={e => {
                                         if (e.key === 'Enter') { e.preventDefault(); handleChangeDoctor(); }
@@ -627,7 +627,7 @@ export default function AdmissionDetailPage() {
                                                     setNewDoctorName(d.name);
                                                     setShowDoctorSuggestions(false);
                                                 }}
-                                                className="w-full text-left px-3 py-2 hover:bg-teal-50 border-b border-gray-100 last:border-b-0"
+                                                className="w-full text-left px-3 py-2 hover:bg-orange-50 border-b border-gray-100 last:border-b-0"
                                             >
                                                 <p className="text-xs font-bold text-gray-800">Dr. {d.name}</p>
                                                 <p className="text-[10px] text-gray-500">
@@ -642,7 +642,7 @@ export default function AdmissionDetailPage() {
                             <button
                                 onClick={handleChangeDoctor}
                                 disabled={savingDoctor || !newDoctorName.trim()}
-                                className="px-4 py-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors"
+                                className="px-4 py-1.5 bg-orange-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors"
                             >
                                 {savingDoctor ? 'Saving...' : 'Save'}
                             </button>
@@ -667,7 +667,7 @@ export default function AdmissionDetailPage() {
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`flex items-center gap-2 px-5 py-3.5 text-xs font-bold whitespace-nowrap transition-colors border-b-2 ${
                                         activeTab === tab.id
-                                            ? 'border-teal-500 text-teal-700 bg-teal-50/50'
+                                            ? 'border-orange-500 text-orange-700 bg-orange-50/50'
                                             : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
                                     }`}
                                 >
@@ -687,7 +687,7 @@ export default function AdmissionDetailPage() {
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     <StatCard label="Days Admitted" value={`${daysAdmitted} day${daysAdmitted !== 1 ? 's' : ''}`} icon={<CalendarDays className="h-4 w-4 text-blue-500" />} color="blue" />
                                     <StatCard label="Ward / Bed" value={data.bed?.wards?.ward_name || 'Unassigned'} sub={data.bed_id || '—'} icon={<Bed className="h-4 w-4 text-indigo-500" />} color="indigo" />
-                                    <StatCard label="Est. Bed Cost" value={`₹${estimatedBedCost.toLocaleString()}`} sub={wardCostPerDay ? `₹${wardCostPerDay}/day` : 'Rate not set'} icon={<TrendingUp className="h-4 w-4 text-teal-500" />} color="teal" />
+                                    <StatCard label="Est. Bed Cost" value={`₹${estimatedBedCost.toLocaleString()}`} sub={wardCostPerDay ? `₹${wardCostPerDay}/day` : 'Rate not set'} icon={<TrendingUp className="h-4 w-4 text-orange-500" />} color="teal" />
                                     <StatCard label="Nursing Tasks" value={`${data.nursing_tasks?.filter((t: any) => t.status === 'Completed').length || 0} / ${data.nursing_tasks?.length || 0}`} sub="completed" icon={<HeartPulse className="h-4 w-4 text-purple-500" />} color="purple" />
                                 </div>
 
@@ -802,10 +802,10 @@ export default function AdmissionDetailPage() {
                                         const Icon = link.icon;
                                         return (
                                             <Link key={link.href} href={link.href}>
-                                                <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl hover:border-teal-300 hover:bg-teal-50/50 transition-colors cursor-pointer group">
-                                                    <Icon className="h-4 w-4 text-gray-400 group-hover:text-teal-600" />
-                                                    <span className="text-xs font-bold text-gray-600 group-hover:text-teal-700">{link.label}</span>
-                                                    <ChevronRight className="h-3.5 w-3.5 text-gray-300 ml-auto group-hover:text-teal-500" />
+                                                <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl hover:border-teal-300 hover:bg-orange-50/50 transition-colors cursor-pointer group">
+                                                    <Icon className="h-4 w-4 text-gray-400 group-hover:text-orange-600" />
+                                                    <span className="text-xs font-bold text-gray-600 group-hover:text-orange-700">{link.label}</span>
+                                                    <ChevronRight className="h-3.5 w-3.5 text-gray-300 ml-auto group-hover:text-orange-500" />
                                                 </div>
                                             </Link>
                                         );
@@ -820,7 +820,7 @@ export default function AdmissionDetailPage() {
                                 {/* Left: Timeline */}
                                 <div className="lg:col-span-3 space-y-1">
                                     <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                        <Clock className="h-3.5 w-3.5 text-teal-500" /> Clinical Timeline
+                                        <Clock className="h-3.5 w-3.5 text-orange-500" /> Clinical Timeline
                                     </h3>
                                     <div className="relative border-l-2 border-gray-100 ml-3 space-y-6 pl-6">
                                         {timelineEvents.length === 0 && (
@@ -879,7 +879,7 @@ export default function AdmissionDetailPage() {
                                                     </span>
                                                     <p className="text-[10px] font-bold text-gray-400 uppercase">{event._date.toLocaleString()}</p>
                                                     <div className="bg-white rounded-xl p-3 mt-1 border border-gray-200 text-xs shadow-sm">
-                                                        <span className="text-[10px] uppercase font-black text-teal-600 block mb-1">{event.note_type || 'Note'}</span>
+                                                        <span className="text-[10px] uppercase font-black text-orange-600 block mb-1">{event.note_type || 'Note'}</span>
                                                         {event.details}
                                                     </div>
                                                 </div>
@@ -986,7 +986,7 @@ export default function AdmissionDetailPage() {
                                             <button
                                                 type="submit"
                                                 disabled={savingNote}
-                                                className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors"
+                                                className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-orange-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors"
                                             >
                                                 {savingNote ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
                                                 Add Note
@@ -1073,8 +1073,8 @@ export default function AdmissionDetailPage() {
                                             </button>
                                         </form>
 
-                                        <div className="mt-4 p-4 border border-teal-100 bg-teal-50 rounded-xl text-center">
-                                            <Link href={`/ipd/nursing-station/${data.admission_id}`} className="text-xs font-bold text-teal-700 hover:underline flex items-center justify-center gap-1">
+                                        <div className="mt-4 p-4 border border-teal-100 bg-orange-50 rounded-xl text-center">
+                                            <Link href={`/ipd/nursing-station/${data.admission_id}`} className="text-xs font-bold text-orange-700 hover:underline flex items-center justify-center gap-1">
                                                 Open Full Nursing Workspace <ChevronRight className="h-3.5 w-3.5" />
                                             </Link>
                                         </div>
@@ -1107,7 +1107,7 @@ export default function AdmissionDetailPage() {
                                 {/* Vitals entry */}
                                 <div className="flex justify-end">
                                     <button onClick={() => setShowVitalsForm(v => !v)}
-                                        className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 transition-colors">
+                                        className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 transition-colors">
                                         <Plus className="h-4 w-4" /> Record Vitals
                                     </button>
                                 </div>
@@ -1150,7 +1150,7 @@ export default function AdmissionDetailPage() {
                                         </div>
                                         <div className="flex gap-3">
                                             <button onClick={handleSaveVitals} disabled={savingVitals}
-                                                className="flex items-center gap-2 px-5 py-2 bg-teal-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 disabled:opacity-60 transition-colors">
+                                                className="flex items-center gap-2 px-5 py-2 bg-orange-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 disabled:opacity-60 transition-colors">
                                                 {savingVitals ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Save Vitals
                                             </button>
                                             <button onClick={() => setShowVitalsForm(false)} className="px-4 py-2 text-gray-500 text-sm font-bold hover:bg-gray-100 rounded-xl">Cancel</button>
@@ -1206,12 +1206,12 @@ export default function AdmissionDetailPage() {
                                     <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
                                         <h3 className="font-bold text-gray-900 text-sm">Consulting Doctors</h3>
                                         <button onClick={() => setShowConsultForm(v => !v)}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-xs font-bold rounded-xl hover:bg-teal-700 transition-colors">
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 text-white text-xs font-bold rounded-xl hover:bg-teal-700 transition-colors">
                                             <Plus className="h-3 w-3" /> Request Consult
                                         </button>
                                     </div>
                                     {showConsultForm && (
-                                        <div className="p-4 border-b border-gray-100 bg-teal-50 space-y-3">
+                                        <div className="p-4 border-b border-gray-100 bg-orange-50 space-y-3">
                                             <div className="grid grid-cols-2 gap-3">
                                                 <div>
                                                     <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Doctor Name</label>
@@ -1228,7 +1228,7 @@ export default function AdmissionDetailPage() {
                                                 className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-teal-400 bg-white" />
                                             <div className="flex gap-2">
                                                 <button onClick={handleAddConsultant} disabled={savingConsult}
-                                                    className="px-4 py-2 bg-teal-600 text-white text-xs font-bold rounded-xl hover:bg-teal-700 disabled:opacity-60 transition-colors">
+                                                    className="px-4 py-2 bg-orange-600 text-white text-xs font-bold rounded-xl hover:bg-teal-700 disabled:opacity-60 transition-colors">
                                                     {savingConsult ? 'Saving...' : 'Request'}
                                                 </button>
                                                 <button onClick={() => setShowConsultForm(false)} className="px-3 py-2 text-gray-500 text-xs font-bold hover:bg-gray-100 rounded-xl">Cancel</button>
@@ -1469,7 +1469,7 @@ export default function AdmissionDetailPage() {
                                             </p>
                                             <button
                                                 onClick={() => { setBill(null); loadBill(); }}
-                                                className="text-[10px] text-teal-600 font-bold hover:underline"
+                                                className="text-[10px] text-orange-600 font-bold hover:underline"
                                             >
                                                 Refresh
                                             </button>
@@ -1526,9 +1526,9 @@ export default function AdmissionDetailPage() {
 
                                         {/* Deposits */}
                                         {bill.deposits?.length > 0 && (
-                                            <div className="flex items-center gap-2 p-3 bg-teal-50 border border-teal-100 rounded-xl text-xs">
-                                                <CreditCard className="h-4 w-4 text-teal-500 shrink-0" />
-                                                <span className="text-teal-700 font-bold">
+                                            <div className="flex items-center gap-2 p-3 bg-orange-50 border border-teal-100 rounded-xl text-xs">
+                                                <CreditCard className="h-4 w-4 text-orange-500 shrink-0" />
+                                                <span className="text-orange-700 font-bold">
                                                     Deposit available: ₹{bill.deposits.reduce((s: number, d: any) => s + Number(d.available_amount), 0).toLocaleString()}
                                                 </span>
                                             </div>
@@ -1589,14 +1589,14 @@ export default function AdmissionDetailPage() {
                                                                     setCatalogQuery('');
                                                                     setShowCatalogResults(false);
                                                                 }}
-                                                                className="w-full text-left px-3 py-2 hover:bg-teal-50 border-b border-gray-100 last:border-b-0"
+                                                                className="w-full text-left px-3 py-2 hover:bg-orange-50 border-b border-gray-100 last:border-b-0"
                                                             >
                                                                 <div className="flex items-center justify-between gap-2">
                                                                     <div className="min-w-0">
                                                                         <p className="text-xs font-bold text-gray-800 truncate">{s.item_name}</p>
                                                                         <p className="text-[10px] text-gray-500 font-mono">{s.item_code} · {s.service_category || s.category}</p>
                                                                     </div>
-                                                                    <p className="text-xs font-black text-teal-700 whitespace-nowrap">₹{Number(s.default_price).toLocaleString()}</p>
+                                                                    <p className="text-xs font-black text-orange-700 whitespace-nowrap">₹{Number(s.default_price).toLocaleString()}</p>
                                                                 </div>
                                                             </button>
                                                         ))}
@@ -1643,7 +1643,7 @@ export default function AdmissionDetailPage() {
                                             <button
                                                 type="submit"
                                                 disabled={postingCharge}
-                                                className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors"
+                                                className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-orange-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors"
                                             >
                                                 {postingCharge ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <DollarSign className="h-3.5 w-3.5" />}
                                                 Post Charge
@@ -1785,7 +1785,7 @@ function StatCard({ label, value, sub, icon, color }: { label: string; value: st
     const colors: Record<string, string> = {
         blue: 'bg-blue-50 border-blue-100',
         indigo: 'bg-indigo-50 border-indigo-100',
-        teal: 'bg-teal-50 border-teal-100',
+        teal: 'bg-orange-50 border-teal-100',
         purple: 'bg-purple-50 border-purple-100',
         green: 'bg-emerald-50 border-emerald-100',
         red: 'bg-rose-50 border-rose-100',

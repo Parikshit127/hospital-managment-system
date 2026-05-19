@@ -67,7 +67,7 @@ export default function DoctorVideoCallsClient({ session, initialData }: Props) 
         }
     };
 
-    const inputCls = "w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 outline-none transition-all font-medium text-gray-700 placeholder:text-gray-300";
+    const inputCls = "w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 outline-none transition-all font-medium text-gray-700 placeholder:text-gray-300";
     const labelCls = "text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 block ml-1";
 
     const upcoming = requests.filter(r => r.status === "Accepted" && r.scheduled_at && new Date(r.scheduled_at).toDateString() === new Date().toDateString());
@@ -89,7 +89,7 @@ export default function DoctorVideoCallsClient({ session, initialData }: Props) 
                             </div>
                             <p className="text-gray-400 font-medium ml-12">Manage patient video call requests & scheduled sessions</p>
                         </div>
-                        <button onClick={refresh} className="bg-white p-3 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-all text-gray-400 hover:text-teal-500">
+                        <button onClick={refresh} className="bg-white p-3 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-all text-gray-400 hover:text-orange-500">
                             <RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} />
                         </button>
                     </div>
@@ -99,7 +99,7 @@ export default function DoctorVideoCallsClient({ session, initialData }: Props) 
                         {[
                             { label: "Upcoming Today", value: upcoming.length, color: "text-emerald-600" },
                             { label: "Pending Requests", value: pending.length, color: "text-amber-500" },
-                            { label: "Total Consultations", value: requests.length, color: "text-teal-600" },
+                            { label: "Total Consultations", value: requests.length, color: "text-orange-600" },
                         ].map(s => (
                             <div key={s.label} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{s.label}</p>
@@ -139,7 +139,7 @@ export default function DoctorVideoCallsClient({ session, initialData }: Props) 
                                                     <span>Requested {new Date(req.request_date).toLocaleString()}</span>
                                                 </div>
                                                 {req.scheduled_at && (
-                                                    <div className="flex items-center gap-2 text-teal-600 font-black bg-teal-50 px-3 py-1.5 rounded-xl border border-teal-100 w-fit">
+                                                    <div className="flex items-center gap-2 text-orange-600 font-black bg-orange-50 px-3 py-1.5 rounded-xl border border-teal-100 w-fit">
                                                         <Clock className="h-3.5 w-3.5 shrink-0" />
                                                         <span className="text-xs">{new Date(req.scheduled_at).toLocaleString()}</span>
                                                     </div>

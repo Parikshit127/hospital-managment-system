@@ -50,7 +50,7 @@ export function Modal({ isOpen, onClose, title, icon, children, maxWidth = 'lg',
                     <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100/80">
                         <div className="flex items-center gap-3">
                             {icon && (
-                                <div className="p-1.5 rounded-lg bg-teal-50 text-teal-600 ring-1 ring-teal-100">
+                                <div className="p-1.5 rounded-lg bg-orange-50 text-orange-600 ring-1 ring-teal-100">
                                     {icon}
                                 </div>
                             )}

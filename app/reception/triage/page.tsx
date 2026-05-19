@@ -188,7 +188,7 @@ export default function TriagePage() {
                                 </div>
                                 <div className="flex items-center gap-3 flex-wrap">
                                     {triageResult.patientId && (
-                                        <div className="px-4 py-2 bg-teal-500/10 border border-teal-500/20 rounded-xl">
+                                        <div className="px-4 py-2 bg-orange-500/10 border border-orange-500/20 rounded-xl">
                                             <span className="text-[10px] font-black text-teal-400/60 uppercase tracking-wider block">Patient ID</span>
                                             <span className="text-sm font-black text-teal-400 font-mono">{triageResult.patientId}</span>
                                         </div>

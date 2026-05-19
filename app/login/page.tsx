@@ -1,15 +1,12 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { login } from './actions';
-import { useState, useEffect, Suspense } from 'react';
 
-function LoginForm() {
+function LoginModal({ onClose, isTimeout }: { onClose: () => void, isTimeout: boolean }) {
     const [state, loginAction, isPending] = useActionState(login, { success: false, error: '' });
     const [showPassword, setShowPassword] = useState(false);
-    const searchParams = useSearchParams();
-    const isTimeout = searchParams.get('reason') === 'timeout';
     const router = useRouter();
 
     useEffect(() => {
@@ -19,505 +16,284 @@ function LoginForm() {
     }, [state, router]);
 
     return (
-        <>
-            <style>{`
-                *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-                :root {
-                    --g50:  #f0fdfa;
-                    --g100: #ccfbf1;
-                    --g200: #99f6e4;
-                    --g400: #2dd4bf;
-                    --g500: #14b8a6;
-                    --g600: #0d9488;
-                    --sage: #94a3b8;
-                    --sage-light: #cbd5e1;
-                    --white: #ffffff;
-                    --off:  #fafaf8;
-                    --ink:  #1c1917;
-                    --mid:  #57534e;
-                    --soft: #78716c;
-                    --border: #e8e6e3;
-                    --shadow: rgba(13,148,136,0.10);
-                }
-
-                html, body { height: 100%; background: var(--off); }
-
-                .page {
-                    min-height: 100vh;
-                    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
-                    background: var(--off);
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    position: relative;
-                    overflow: hidden;
-                }
-
-                /* ─── BACKGROUND ─── */
-                .blob {
-                    position: fixed;
-                    border-radius: 50%;
-                    filter: blur(100px);
-                    pointer-events: none;
-                    z-index: 0;
-                }
-                .b1 { width:650px;height:650px;background:radial-gradient(circle,rgba(20,184,166,0.08),transparent 70%);top:-180px;left:-180px; }
-                .b2 { width:450px;height:450px;background:radial-gradient(circle,rgba(20,184,166,0.06),transparent 70%);bottom:-80px;right:300px; }
-                .b3 { width:280px;height:280px;background:radial-gradient(circle,rgba(45,212,191,0.05),transparent 70%);top:40%;right:100px; }
-
-                .grid-bg {
-                    position: fixed; inset: 0; z-index: 0; pointer-events: none;
-                    opacity: .2;
-                    background-image:
-                        linear-gradient(rgba(20,184,166,0.06) 1px,transparent 1px),
-                        linear-gradient(90deg,rgba(20,184,166,0.06) 1px,transparent 1px);
-                    background-size: 64px 64px;
-                    mask-image: radial-gradient(ellipse at 60% 50%, black 0%, transparent 65%);
-                }
-
-                /* ─── LEFT HERO ─── */
-                .hero {
-                    position: relative; z-index: 1;
-                    display: flex; flex-direction: column; justify-content: space-between;
-                    padding: 56px 64px 56px 72px;
-                }
-
-                .brand {
-                    display: flex; align-items: center; gap: 12px;
-                    animation: rise .7s ease both;
-                }
-                .brand-icon {
-                    width:42px;height:42px;
-                    background: linear-gradient(135deg, #14b8a6, #0d9488);
-                    border-radius:12px;
-                    display:flex;align-items:center;justify-content:center;
-                    box-shadow:0 4px 14px var(--shadow), 0 0 0 1px rgba(13,148,136,0.1);
-                }
-                .brand-icon svg { color:#fff; }
-                .brand-name { font-size:17px;font-weight:600;color:var(--ink);letter-spacing:-.01em; }
-                .brand-name span { color:var(--g600); }
-
-                .hero-body { animation: rise .7s .1s ease both; }
-
-                .badge {
-                    display:inline-flex;align-items:center;gap:7px;
-                    background:var(--g50);border:1px solid var(--g100);
-                    border-radius:100px;padding:6px 14px 6px 8px;margin-bottom:32px;
-                }
-                .badge-dot {
-                    width:8px;height:8px;border-radius:50%;background:var(--g500);
-                    animation:pulse-dot 2s ease infinite;
-                }
-                .badge-text { font-size:12px;font-weight:500;color:var(--g600);letter-spacing:.03em; }
-
-                .hero-hl {
-                    font-family:'Playfair Display',Georgia,serif;
-                    font-weight:900;font-size:clamp(48px,5.5vw,72px);
-                    line-height:1.0;color:var(--ink);letter-spacing:-.02em;margin-bottom:24px;
-                }
-                .hero-hl .accent { color:var(--g600);display:block; }
-
-                .hero-desc {
-                    font-size:15px;line-height:1.75;color:var(--mid);
-                    font-weight:400;max-width:420px;margin-bottom:48px;
-                }
-
-                .stats { display:flex;gap:40px; }
-                .stat { display:flex;flex-direction:column;gap:4px; }
-                .stat-num {
-                    font-family:'Playfair Display',serif;font-size:28px;
-                    font-weight:800;color:var(--ink);letter-spacing:-.02em;
-                }
-                .stat-lbl { font-size:11px;color:var(--soft);font-weight:500;letter-spacing:.06em;text-transform:uppercase; }
-                .stat-div { width:1px;background:var(--border);align-self:stretch; }
-
-                .float-card {
-                    background:var(--white);border:1px solid var(--border);
-                    border-radius:16px;padding:18px 22px;
-                    display:flex;align-items:center;gap:14px;
-                    box-shadow:0 8px 32px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.02);
-                    width:fit-content;
-                    animation: float 5s ease-in-out infinite, rise .7s .25s ease both;
-                }
-                .card-icon {
-                    width:40px;height:40px;background:var(--g50);border-radius:10px;
-                    display:flex;align-items:center;justify-content:center;flex-shrink:0;
-                }
-                .card-icon svg { color:var(--g600); }
-                .card-main { font-size:14px;font-weight:600;color:var(--ink); }
-                .card-sub  { font-size:12px;color:var(--soft);margin-top:2px; }
-
-                /* ─── RIGHT FORM ─── */
-                .form-side {
-                    position:relative;z-index:1;
-                    display:flex;align-items:center;justify-content:center;
-                    padding:56px 80px 56px 56px;
-                }
-                .form-side::before {
-                    content:'';position:absolute;left:0;top:15%;bottom:15%;
-                    width:1px;
-                    background:linear-gradient(to bottom,transparent,var(--border),transparent);
-                }
-
-                .form-wrap {
-                    width:100%;max-width:420px;
-                    animation: rise .7s .2s ease both;
-                }
-
-                .form-tag {
-                    font-size:11px;font-weight:600;letter-spacing:.12em;
-                    text-transform:uppercase;color:var(--g600);margin-bottom:12px;
-                }
-                .form-title {
-                    font-family:'Playfair Display',Georgia,serif;
-                    font-size:38px;font-weight:800;color:var(--ink);
-                    letter-spacing:-.02em;line-height:1.1;margin-bottom:8px;
-                }
-                .form-sub { font-size:14px;color:var(--soft);font-weight:400;margin-bottom:36px; }
-
-                /* Timeout notice */
-                .timeout-box {
-                    display:flex;align-items:center;gap:10px;
-                    background:#fffbeb;border:1px solid #fde68a;
-                    border-radius:12px;padding:12px 16px;margin-bottom:20px;
-                    font-size:13px;color:#92400e;
-                    animation:rise .3s ease both;
-                }
-                .timeout-box svg { flex-shrink:0;color:#d97706; }
-
-                /* Error */
-                .error-box {
-                    display:flex;align-items:center;gap:10px;
-                    background:#fef2f2;border:1px solid #fecaca;
-                    border-radius:12px;padding:12px 16px;margin-bottom:20px;
-                    font-size:13px;color:#dc2626;
-                    animation:rise .3s ease both;
-                }
-                .err-icon {
-                    width:22px;height:22px;background:#fee2e2;border-radius:50%;
-                    display:flex;align-items:center;justify-content:center;
-                    font-size:12px;font-weight:700;flex-shrink:0;color:#dc2626;
-                }
-
-                /* Fields */
-                .fields { display:flex;flex-direction:column;gap:20px; }
-                .field-lbl {
-                    display:block;font-size:11px;font-weight:600;
-                    letter-spacing:.06em;text-transform:uppercase;
-                    color:var(--mid);margin-bottom:8px;
-                }
-                .input-wrap { position:relative; }
-                .input-icon {
-                    position:absolute;left:16px;top:50%;transform:translateY(-50%);
-                    color:var(--sage-light);display:flex;align-items:center;
-                    transition:color .2s;pointer-events:none;
-                }
-                .input-wrap:focus-within .input-icon { color:var(--g500); }
-
-                .eye-btn {
-                    position:absolute;right:16px;top:50%;transform:translateY(-50%);
-                    background:none;border:none;cursor:pointer;
-                    color:var(--sage-light);display:flex;align-items:center;
-                    transition:color .2s;padding:0;
-                }
-                .eye-btn:hover { color:var(--g500); }
-
-                input[type="text"],
-                input[type="password"] {
-                    width:100%;padding:14px 46px 14px 46px;
-                    background:var(--white);border:1.5px solid var(--border);
-                    border-radius:12px;font-size:14px;
-                    font-family:'DM Sans',system-ui,sans-serif;font-weight:400;
-                    color:var(--ink);outline:none;
-                    transition:border-color .2s,box-shadow .2s;
-                    -webkit-appearance:none;
-                }
-                input::placeholder { color:var(--sage-light); }
-                input:focus {
-                    border-color:var(--g500);
-                    box-shadow:0 0 0 3px rgba(20,184,166,.10);
-                }
-
-                /* Submit */
-                .submit-btn {
-                    width:100%;margin-top:8px;padding:15px 24px;
-                    background: linear-gradient(135deg, #14b8a6, #0d9488);
-                    color:white;border:none;border-radius:12px;
-                    font-size:15px;font-family:'DM Sans',system-ui,sans-serif;font-weight:600;
-                    cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;
-                    transition:all .2s ease;
-                    box-shadow:0 4px 16px rgba(13,148,136,.25), 0 0 0 1px rgba(13,148,136,0.1);
-                    letter-spacing:.01em;
-                }
-                .submit-btn:hover:not(:disabled) {
-                    background: linear-gradient(135deg, #0d9488, #0f766e);
-                    transform:translateY(-1px);
-                    box-shadow:0 8px 24px rgba(13,148,136,.30), 0 0 0 1px rgba(13,148,136,0.15);
-                }
-                .submit-btn:active:not(:disabled) { transform:translateY(0);box-shadow:0 2px 8px rgba(13,148,136,.20); }
-                .submit-btn:disabled { opacity:.55;cursor:not-allowed; }
-
-                .spinner {
-                    width:17px;height:17px;
-                    border:2.5px solid rgba(255,255,255,.35);
-                    border-top-color:white;border-radius:50%;
-                    animation:spin .7s linear infinite;
-                }
-
-                /* Roles */
-                .roles-section {
-                    margin-top:28px;padding-top:28px;
-                    border-top:1px solid var(--border);
-                }
-                .roles-label {
-                    font-size:10px;font-weight:600;letter-spacing:.1em;
-                    text-transform:uppercase;color:var(--soft);
-                    text-align:center;margin-bottom:12px;
-                }
-                .roles-row {
-                    display:flex;flex-wrap:wrap;justify-content:center;gap:6px;
-                }
-                .role-chip {
-                    padding:5px 12px;
-                    background:var(--g50);border:1px solid var(--g100);
-                    border-radius:100px;font-size:11px;font-weight:500;
-                    color:var(--g600);white-space:nowrap;
-                    transition:all .15s ease;
-                }
-                .role-chip:hover {
-                    background:var(--g100);
-                    border-color:var(--g200);
-                }
-
-                /* Secure note */
-                .secure-note {
-                    margin-top:10px;text-align:center;
-                }
-                .secure-note p {
-                    font-size:11px;color:var(--soft);line-height:1.6;letter-spacing:.02em;
-                }
-
-                /* ─── ANIMATIONS ─── */
-                @keyframes rise {
-                    from { opacity:0;transform:translateY(16px); }
-                    to   { opacity:1;transform:translateY(0); }
-                }
-                @keyframes spin { to { transform:rotate(360deg); } }
-                @keyframes float {
-                    0%,100% { transform:translateY(0); }
-                    50%     { transform:translateY(-6px); }
-                }
-                @keyframes pulse-dot {
-                    0%,100% { opacity:1;transform:scale(1); }
-                    50%     { opacity:.6;transform:scale(.85); }
-                }
-
-                /* ─── RESPONSIVE ─── */
-                @media (max-width:1024px) {
-                    .page { grid-template-columns:1fr; }
-                    .hero { display:none; }
-                    .form-side { padding:48px 32px; }
-                    .form-side::before { display:none; }
-                }
-                @media (max-width:480px) {
-                    .form-side { padding:40px 24px; }
-                    .form-title { font-size:30px; }
-                }
-            `}</style>
-
-            <div className="page">
-                <div className="blob b1" />
-                <div className="blob b2" />
-                <div className="blob b3" />
-                <div className="grid-bg" />
-
-                {/* ── LEFT HERO ── */}
-                <div className="hero">
-                    <div className="brand">
-                        {/* Inline SVG — exact replica of /public/axten-logo.svg */}
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" style={{ height: '48px', width: 'auto' }} aria-label="Axten Hospitals">
-                            <text x="10" y="72" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="68" fill="#1e3a6e" letterSpacing="-2">Axten</text>
-                            <rect x="10" y="80" width="60" height="8" fill="#f97316" rx="2"/>
-                            <rect x="130" y="80" width="120" height="8" fill="#f97316" rx="2"/>
-                            <text x="75" y="89" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="16" fill="#1e3a6e" letterSpacing="6">HOSPITALS</text>
-                            <text x="10" y="110" fontFamily="Arial, sans-serif" fontWeight="400" fontSize="12" fill="#1e3a6e">A Unit of TAH Global Healthcare Pvt. Ltd.</text>
-                            <circle cx="360" cy="55" r="48" fill="none" stroke="#1e3a6e" strokeWidth="3"/>
-                            <circle cx="360" cy="55" r="42" fill="none" stroke="#1e3a6e" strokeWidth="1"/>
-                            <rect x="350" y="35" width="20" height="40" fill="none" stroke="#f97316" strokeWidth="3" rx="3"/>
-                            <rect x="340" y="45" width="40" height="20" fill="none" stroke="#f97316" strokeWidth="3" rx="3"/>
-                        </svg>
-                    </div>
-
-                    <div className="hero-body">
-                        <div className="badge">
-                            <span className="badge-dot" />
-                            <span className="badge-text">Hospital Management Platform</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f172a]/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden relative animate-in zoom-in-95 duration-200">
+                <button onClick={onClose} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+                <div className="p-8">
+                    <h2 className="text-2xl font-bold text-[#0f172a] mb-2">Sign in to Axten</h2>
+                    <p className="text-gray-500 text-sm mb-6">Enter your details to access your workspace.</p>
+                    
+                    {isTimeout && (
+                        <div className="mb-4 p-3 bg-amber-50 text-amber-800 text-sm rounded-lg border border-amber-200 flex items-center gap-2">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            Session expired. Please sign in again.
                         </div>
-                        <h1 className="hero-hl">
-                            Healthcare,
-                            <span className="accent">Elevated.</span>
-                        </h1>
-                        <p className="hero-desc">
-                            A unified clinical platform designed for modern hospitals — connecting patients, labs, pharmacy, and administration in one seamless workspace.
-                        </p>
-                        <div className="stats">
-                            <div className="stat">
-                                <span className="stat-num">360°</span>
-                                <span className="stat-lbl">Patient View</span>
-                            </div>
-                            <div className="stat-div" />
-                            <div className="stat">
-                                <span className="stat-num">Live</span>
-                                <span className="stat-lbl">Lab Sync</span>
-                            </div>
-                            <div className="stat-div" />
-                            <div className="stat">
-                                <span className="stat-num">AI</span>
-                                <span className="stat-lbl">Workflows</span>
-                            </div>
+                    )}
+                    {state?.error && (
+                        <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-200 flex items-center gap-2">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            {state.error}
                         </div>
-                    </div>
+                    )}
 
-                    <div className="float-card">
-                        <div className="card-icon">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                            </svg>
+                    <form action={loginAction} className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">Username</label>
+                            <input type="text" name="username" required className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#f97316]/20 focus:border-[#f97316] transition-all" placeholder="Enter username" />
                         </div>
                         <div>
-                            <div className="card-main">Secure &amp; HIPAA Ready</div>
-                            <div className="card-sub">Enterprise-grade data protection</div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* ── RIGHT FORM ── */}
-                <div className="form-side">
-                    <div className="form-wrap">
-                        <p className="form-tag">Staff Portal</p>
-                        <h2 className="form-title">Welcome<br />Back</h2>
-                        <p className="form-sub">Sign in to access your workspace</p>
-
-                        {/* Timeout notice */}
-                        {isTimeout && (
-                            <div className="timeout-box">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-                                </svg>
-                                Your session expired due to inactivity. Please sign in again.
-                            </div>
-                        )}
-
-                        {/* Error */}
-                        {state?.error && (
-                            <div className="error-box">
-                                <div className="err-icon">!</div>
-                                {state.error}
-                            </div>
-                        )}
-
-                        <form action={loginAction}>
-                            <div className="fields">
-                                <div>
-                                    <label htmlFor="login-username" className="field-lbl">Username</label>
-                                    <div className="input-wrap">
-                                        <span className="input-icon">
-                                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                                <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-                                            </svg>
-                                        </span>
-                                        <input
-                                            id="login-username"
-                                            name="username"
-                                            type="text"
-                                            required
-                                            autoComplete="username"
-                                            placeholder="Enter your username"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label htmlFor="login-password" className="field-lbl">Password</label>
-                                    <div className="input-wrap">
-                                        <span className="input-icon">
-                                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                                <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                                            </svg>
-                                        </span>
-                                        <input
-                                            id="login-password"
-                                            name="password"
-                                            type={showPassword ? 'text' : 'password'}
-                                            required
-                                            autoComplete="current-password"
-                                            placeholder="Enter your password"
-                                        />
-                                        <button
-                                            type="button"
-                                            className="eye-btn"
-                                            onClick={() => setShowPassword(!showPassword)}
-                                            aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                        >
-                                            {showPassword ? (
-                                                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" />
-                                                </svg>
-                                            ) : (
-                                                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
-                                                </svg>
-                                            )}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <button
-                                    id="login-submit"
-                                    type="submit"
-                                    disabled={isPending}
-                                    className="submit-btn"
-                                >
-                                    {isPending ? (
-                                        <>
-                                            <span className="spinner" />
-                                            Authenticating…
-                                        </>
+                            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">Password</label>
+                            <div className="relative">
+                                <input type={showPassword ? 'text' : 'password'} name="password" required className="w-full pl-4 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#f97316]/20 focus:border-[#f97316] transition-all" placeholder="••••••••" />
+                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                    {showPassword ? (
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
                                     ) : (
-                                        <>
-                                            Sign In
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M5 12h14M12 5l7 7-7 7" />
-                                            </svg>
-                                        </>
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                                     )}
                                 </button>
                             </div>
-                        </form>
-
-                        {/* Roles */}
-                        <div className="roles-section">
-                            <p className="roles-label">Authorized Roles</p>
-                            <div className="roles-row">
-                                {['Admin', 'Doctor', 'Receptionist', 'Lab Tech', 'Pharmacist'].map(role => (
-                                    <span key={role} className="role-chip">{role}</span>
-                                ))}
-                            </div>
-                            <div className="secure-note" style={{ marginTop: 20 }}>
-                                <p>256-bit encrypted · HIPAA-compliant · Audit-logged</p>
-                            </div>
+                        </div>
+                        <button type="submit" disabled={isPending} className="w-full py-3 px-4 bg-[#f97316] hover:bg-[#ea580c] text-white font-semibold rounded-xl shadow-lg shadow-[#f97316]/20 transition-all disabled:opacity-70 mt-2 flex justify-center items-center gap-2">
+                            {isPending ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    Authenticating...
+                                </>
+                            ) : 'Sign In'}
+                        </button>
+                    </form>
+                    
+                    <div className="mt-6 pt-6 border-t border-gray-100">
+                        <p className="text-center text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Authorized Roles</p>
+                        <div className="flex flex-wrap justify-center gap-2">
+                            {['Admin', 'Doctor', 'Receptionist', 'Lab Tech'].map(role => (
+                                <span key={role} className="px-3 py-1 bg-gray-50 border border-gray-200 text-gray-500 text-xs font-medium rounded-full">{role}</span>
+                            ))}
                         </div>
                     </div>
                 </div>
             </div>
-        </>
+        </div>
+    );
+}
+
+function LandingPage() {
+    const searchParams = useSearchParams();
+    const isTimeout = searchParams.get('reason') === 'timeout';
+    const [showLoginModal, setShowLoginModal] = useState(isTimeout);
+
+    return (
+        <div className="min-h-screen bg-white relative overflow-hidden font-sans">
+            {/* Subtle Grid Background */}
+            <div className="absolute inset-0 pointer-events-none z-0" style={{
+                backgroundImage: `linear-gradient(to right, #f1f5f9 1px, transparent 1px), linear-gradient(to bottom, #f1f5f9 1px, transparent 1px)`,
+                backgroundSize: '40px 40px',
+                maskImage: 'linear-gradient(to bottom, black 40%, transparent 100%)',
+                WebkitMaskImage: 'linear-gradient(to bottom, black 40%, transparent 100%)'
+            }} />
+
+            {/* Top Navigation */}
+            <nav className="relative z-10 flex items-center justify-between px-6 md:px-12 py-5 border-b border-gray-100 bg-white/80 backdrop-blur-md">
+                <div className="flex items-center gap-2">
+                    {/* Axten Logo */}
+                    <div className="flex items-center">
+                        <span className="text-2xl font-black text-[#1e3a6e] tracking-tight mr-1">Axten</span>
+                        <div className="flex flex-col gap-[2px]">
+                            <div className="w-4 h-1 bg-[#f97316] rounded-full" />
+                            <div className="w-6 h-1 bg-[#f97316] rounded-full" />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="hidden lg:flex items-center gap-8 text-sm font-semibold text-[#1e3a6e]">
+                    <a href="#" className="hover:text-[#f97316] transition-colors">Platform</a>
+                    <a href="#" className="hover:text-[#f97316] transition-colors">Modules</a>
+                    <a href="#" className="hover:text-[#f97316] transition-colors">Billing & RCM</a>
+                    <a href="#" className="hover:text-[#f97316] transition-colors">Customers</a>
+                    <a href="#" className="hover:text-[#f97316] transition-colors">Pricing</a>
+                    <a href="#" className="hover:text-[#f97316] transition-colors">Docs</a>
+                </div>
+
+                <div className="flex items-center gap-6">
+                    <button onClick={() => setShowLoginModal(true)} className="text-sm font-bold text-[#1e3a6e] hover:text-[#f97316] transition-colors">
+                        Sign in
+                    </button>
+                    <button className="flex items-center gap-2 px-5 py-2.5 bg-[#f97316] hover:bg-[#ea580c] text-white text-sm font-bold rounded-lg shadow-md shadow-[#f97316]/20 transition-all hover:-translate-y-0.5">
+                        Book a demo
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                    </button>
+                </div>
+            </nav>
+
+            {/* Main Content */}
+            <main className="relative z-10 max-w-[1400px] mx-auto px-6 md:px-12 pt-16 pb-24 grid grid-cols-1 xl:grid-cols-[1fr_1.1fr] gap-12 xl:gap-20 items-center">
+                {/* Left Side: Copy */}
+                <div className="max-w-2xl">
+                    <div className="inline-flex items-center gap-3 px-1 py-1 pr-4 bg-white border border-gray-200 rounded-full mb-8 shadow-sm">
+                        <span className="px-3 py-1 bg-[#fff7ed] text-[#f97316] text-[11px] font-bold rounded-full uppercase tracking-wider">NEW</span>
+                        <span className="text-sm font-medium text-gray-600">Axten 4.0 — Integrated RCM & ABDM-ready</span>
+                    </div>
+
+                    <h1 className="text-[56px] lg:text-[72px] leading-[1.05] font-extrabold text-[#0a1e42] tracking-[-0.03em] mb-8" style={{ fontFamily: 'var(--font-sans), sans-serif' }}>
+                        A modern<br />operating system<br />for the<br />connected<br />hospital
+                    </h1>
+
+                    <div className="w-2.5 h-2.5 bg-[#0a1e42] rounded-full mb-8" />
+
+                    <p className="text-[19px] text-gray-600 leading-[1.6] font-medium max-w-[500px]">
+                        Axten unifies OPD, IPD, pharmacy, lab, OT, billing and finance on one clinically-aware platform — built for India's multi-specialty hospitals, with the polish of a modern tool.
+                    </p>
+                </div>
+
+                {/* Right Side: Mockup Graphic */}
+                <div className="relative mt-8 xl:mt-0">
+                    {/* Floating shadow behind mockup */}
+                    <div className="absolute inset-0 bg-[#0f172a]/5 blur-[60px] transform -rotate-3 scale-105 rounded-[3rem]" />
+                    
+                    {/* Mockup Container */}
+                    <div className="relative bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden transform transition-transform hover:scale-[1.01] duration-500 flex flex-col h-[600px] border-b-0 rounded-b-none xl:rounded-2xl xl:border-b xl:h-[580px]">
+                        {/* Mockup Header */}
+                        <div className="flex items-center px-5 py-3 border-b border-gray-100 bg-white">
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-rose-400" />
+                                <div className="w-3 h-3 rounded-full bg-amber-400" />
+                                <div className="w-3 h-3 rounded-full bg-emerald-400" />
+                            </div>
+                            <div className="mx-auto px-6 py-1.5 bg-gray-50 border border-gray-200 rounded-md text-[11px] text-gray-500 font-medium flex items-center gap-2">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                app.axtenhospitals.com / dashboard
+                            </div>
+                        </div>
+
+                        {/* Mockup Body */}
+                        <div className="flex flex-1 overflow-hidden bg-[#0b1527]">
+                            {/* Mockup Sidebar */}
+                            <div className="w-[220px] bg-[#0b1527] p-5 flex flex-col gap-8 shrink-0 border-r border-white/5">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-7 h-7 bg-[#f97316] rounded-md flex items-center justify-center text-white text-[13px] font-bold">A</div>
+                                    <span className="text-white font-bold text-[15px] tracking-wide">Axten</span>
+                                </div>
+                                
+                                <div className="space-y-6">
+                                    <div>
+                                        <div className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-3">Clinical</div>
+                                        <div className="flex items-center gap-3 px-3 py-2 bg-[#ffffff]/10 rounded-lg text-white text-sm font-medium">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-[#f97316]" />
+                                            Dashboard
+                                        </div>
+                                        <div className="flex items-center gap-3 px-3 py-2 text-gray-400 text-sm font-medium hover:text-white transition-colors">
+                                            <div className="w-1 h-1 rounded-full bg-gray-500" /> OPD
+                                        </div>
+                                        <div className="flex items-center gap-3 px-3 py-2 text-gray-400 text-sm font-medium hover:text-white transition-colors">
+                                            <div className="w-1 h-1 rounded-full bg-gray-500" /> IPD
+                                        </div>
+                                        <div className="flex items-center gap-3 px-3 py-2 text-gray-400 text-sm font-medium hover:text-white transition-colors">
+                                            <div className="w-1 h-1 rounded-full bg-gray-500" /> Emergency
+                                        </div>
+                                        <div className="flex items-center gap-3 px-3 py-2 text-gray-400 text-sm font-medium hover:text-white transition-colors">
+                                            <div className="w-1 h-1 rounded-full bg-gray-500" /> Operating Theatre
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-3">Revenue</div>
+                                        <div className="flex items-center gap-3 px-3 py-2 text-gray-400 text-sm font-medium hover:text-white transition-colors">
+                                            <div className="w-1 h-1 rounded-full bg-gray-500" /> Billing & RCM
+                                        </div>
+                                        <div className="flex items-center gap-3 px-3 py-2 text-gray-400 text-sm font-medium hover:text-white transition-colors">
+                                            <div className="w-1 h-1 rounded-full bg-gray-500" /> Insurance / TPA
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Mockup Content Area */}
+                            <div className="flex-1 bg-white rounded-tl-xl overflow-hidden p-6 shadow-inner">
+                                <div className="flex items-center justify-between mb-6 border-b border-gray-100 pb-4">
+                                    <h3 className="font-bold text-[#0f172a] text-lg">Today · Operations overview</h3>
+                                    <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center border border-emerald-100">
+                                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                                    </div>
+                                </div>
+
+                                {/* KPI Cards */}
+                                <div className="grid grid-cols-3 gap-4 mb-6">
+                                    <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                                        <div className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-2">OPD Visits</div>
+                                        <div className="text-3xl font-extrabold text-[#0f172a] tracking-tight mb-2">428</div>
+                                        <div className="text-xs text-emerald-600 flex items-center gap-1 font-semibold"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m18 15-6-6-6 6"/></svg> 12.4% vs avg</div>
+                                    </div>
+                                    <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                                        <div className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-2">IPD Occupancy</div>
+                                        <div className="text-3xl font-extrabold text-[#0f172a] tracking-tight mb-2">86%</div>
+                                        <div className="text-xs text-emerald-600 flex items-center gap-1 font-semibold"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m18 15-6-6-6 6"/></svg> 3 beds opened</div>
+                                    </div>
+                                    <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                                        <div className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-2">Today's Revenue</div>
+                                        <div className="text-3xl font-extrabold text-[#0f172a] tracking-tight mb-2">₹18.4L</div>
+                                        <div className="text-xs text-rose-500 flex items-center gap-1 font-semibold"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m6 9 6 6 6-6"/></svg> 4.1% vs Tue</div>
+                                    </div>
+                                </div>
+
+                                {/* Bottom row */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                                        <div className="text-sm font-bold text-[#0f172a] mb-5">Revenue · last 14 days</div>
+                                        <div className="flex items-center gap-4 mb-4">
+                                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500"><div className="w-2 h-2 rounded bg-[#1e3a8a]" /> OPD</div>
+                                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500"><div className="w-2 h-2 rounded bg-[#f97316]" /> IPD</div>
+                                        </div>
+                                        <div className="h-24 w-full bg-gray-50 rounded-lg border border-gray-100 relative overflow-hidden">
+                                            <div className="absolute inset-0">
+                                              <svg viewBox="0 0 100 40" preserveAspectRatio="none" className="w-full h-full stroke-[#1e3a8a] stroke-[1.5] fill-blue-500/10">
+                                                <path d="M0,40 L0,30 L10,25 L20,35 L30,20 L40,15 L50,25 L60,10 L70,15 L80,5 L90,15 L100,5 L100,40 Z" />
+                                              </svg>
+                                              <svg viewBox="0 0 100 40" preserveAspectRatio="none" className="w-full h-full stroke-[#f97316] stroke-[1.5] fill-orange-500/10 absolute bottom-0">
+                                                <path d="M0,40 L0,35 L10,30 L20,38 L30,28 L40,20 L50,30 L60,25 L70,28 L80,15 L90,20 L100,10 L100,40 Z" />
+                                              </svg>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex flex-col gap-4">
+                                        <div className="flex items-center justify-between">
+                                            <div className="text-sm font-bold text-[#0f172a]">Live admissions</div>
+                                            <div className="text-xs font-semibold text-orange-500">3 pending</div>
+                                        </div>
+                                        <div className="text-[11px] text-gray-500 font-medium mb-1">12 active admissions</div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] font-bold">RP</div>
+                                            <div>
+                                                <div className="text-xs font-bold text-[#0f172a]">Ravi Pawar</div>
+                                                <div className="text-[10px] font-medium text-gray-500">Cardiology · Room 304</div>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center text-[10px] font-bold">AS</div>
+                                            <div>
+                                                <div className="text-xs font-bold text-[#0f172a]">Anita Sharma</div>
+                                                <div className="text-[10px] font-medium text-gray-500">ER · Triage Yellow</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            {/* Login Modal */}
+            {showLoginModal && <LoginModal onClose={() => setShowLoginModal(false)} isTimeout={isTimeout} />}
+        </div>
     );
 }
 
 export default function LoginPage() {
     return (
-        <Suspense fallback={<div style={{ minHeight: '100vh', background: '#fafaf8' }} />}>
-            <LoginForm />
+        <Suspense fallback={<div className="min-h-screen bg-white" />}>
+            <LandingPage />
         </Suspense>
     );
 }

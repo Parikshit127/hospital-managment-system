@@ -43,7 +43,7 @@ export default function HRDashboard() {
         return (
             <AppShell pageTitle="HR Dashboard" pageIcon={<LayoutDashboard className="h-5 w-5" />}>
                 <div className="flex items-center justify-center py-20">
-                    <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+                    <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
                     <span className="ml-3 text-gray-500 font-medium">Loading HR Dashboard...</span>
                 </div>
             </AppShell>
@@ -122,7 +122,7 @@ export default function HRDashboard() {
             {/* Role Breakdown */}
             <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6">
                 <div className="flex items-center gap-2 mb-6">
-                    <Briefcase className="h-5 w-5 text-teal-600" />
+                    <Briefcase className="h-5 w-5 text-orange-600" />
                     <h2 className="text-lg font-black text-gray-900">Role Breakdown</h2>
                 </div>
                 {data.roleBreakdown.length === 0 ? (

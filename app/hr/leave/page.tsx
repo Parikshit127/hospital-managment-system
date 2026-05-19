@@ -114,7 +114,7 @@ export default function HRLeavePage() {
                             <div>
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Employee *</label>
                                 <select value={applyForm.employeeId} onChange={e => setApplyForm({ ...applyForm, employeeId: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white">
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white">
                                     <option value="">Select Employee</option>
                                     {employees.map((emp: any) => (
                                         <option key={emp.id} value={emp.id}>{emp.name} ({emp.employee_code})</option>
@@ -124,7 +124,7 @@ export default function HRLeavePage() {
                             <div>
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Leave Type *</label>
                                 <select value={applyForm.leaveTypeId} onChange={e => setApplyForm({ ...applyForm, leaveTypeId: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white">
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white">
                                     <option value="">Select Type</option>
                                     {leaveTypes.map((lt: any) => (
                                         <option key={lt.id} value={lt.id}>{lt.name} ({lt.days_per_year} days/yr)</option>
@@ -137,17 +137,17 @@ export default function HRLeavePage() {
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">From Date *</label>
                                 <input type="date" value={applyForm.fromDate}
                                     onChange={e => setApplyForm({ ...applyForm, fromDate: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                             </div>
                             <div>
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">To Date *</label>
                                 <input type="date" value={applyForm.toDate}
                                     onChange={e => setApplyForm({ ...applyForm, toDate: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                             </div>
                         </div>
                         {applyForm.fromDate && applyForm.toDate && (
-                            <p className="text-xs text-teal-600 font-bold mb-4">
+                            <p className="text-xs text-orange-600 font-bold mb-4">
                                 Duration: {getDays(applyForm.fromDate, applyForm.toDate)} day(s)
                             </p>
                         )}
@@ -156,7 +156,7 @@ export default function HRLeavePage() {
                             <textarea rows={2} value={applyForm.reason}
                                 onChange={e => setApplyForm({ ...applyForm, reason: e.target.value })}
                                 placeholder="Optional reason"
-                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 resize-none" />
+                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 resize-none" />
                         </div>
                         <button onClick={handleApplySubmit} disabled={submitting}
                             className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-sm font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50">
@@ -172,7 +172,7 @@ export default function HRLeavePage() {
                     {(['pending', 'approved', 'rejected', 'all'] as const).map(f => (
                         <button key={f} onClick={() => setFilter(f)}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${filter === f
-                                ? 'bg-teal-50 text-teal-700 border border-teal-200'
+                                ? 'bg-orange-50 text-orange-700 border border-orange-200'
                                 : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
                             }`}>
                             {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -199,7 +199,7 @@ export default function HRLeavePage() {
                             <tbody>
                                 {loading ? (
                                     <tr><td colSpan={8} className="px-4 py-12 text-center">
-                                        <Loader2 className="h-6 w-6 animate-spin text-teal-500 mx-auto" />
+                                        <Loader2 className="h-6 w-6 animate-spin text-orange-500 mx-auto" />
                                     </td></tr>
                                 ) : requests.length === 0 ? (
                                     <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-400">

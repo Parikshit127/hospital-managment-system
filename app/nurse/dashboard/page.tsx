@@ -99,7 +99,7 @@ export default function NurseDashboardPage() {
         { label: 'Nursing Tasks', icon: ClipboardList, href: '/nurse/tasks', color: 'text-amber-500', bg: 'bg-amber-50' },
         { label: 'Medications', icon: Pill, href: '/nurse/medications', color: 'text-violet-500', bg: 'bg-violet-50' },
         { label: 'My Patients', icon: Users, href: '/nurse/patients', color: 'text-blue-500', bg: 'bg-blue-50' },
-        { label: 'Shift Handover', icon: ArrowRight, href: '/nurse/handover', color: 'text-teal-500', bg: 'bg-teal-50' },
+        { label: 'Shift Handover', icon: ArrowRight, href: '/nurse/handover', color: 'text-orange-500', bg: 'bg-orange-50' },
         { label: 'Patient Vitals', icon: Activity, href: '/nurse/vitals', color: 'text-emerald-500', bg: 'bg-emerald-50' },
     ];
 
@@ -112,7 +112,7 @@ export default function NurseDashboardPage() {
         >
             {loading ? (
                 <div className="flex items-center justify-center py-24">
-                    <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+                    <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
                 </div>
             ) : (
                 <>
@@ -143,7 +143,7 @@ export default function NurseDashboardPage() {
                                 <Link
                                     href={kpi.link}
                                     key={index}
-                                    className="bg-white border hover:border-teal-500 transition-colors border-gray-200 shadow-sm rounded-2xl p-5 flex items-center justify-between"
+                                    className="bg-white border hover:border-orange-500 transition-colors border-gray-200 shadow-sm rounded-2xl p-5 flex items-center justify-between"
                                 >
                                     <div>
                                         <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-1">{kpi.label}</p>
@@ -162,7 +162,7 @@ export default function NurseDashboardPage() {
                         {/* Quick Links */}
                         <div className="lg:col-span-2 bg-white border border-gray-200 shadow-sm rounded-2xl p-6">
                             <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                <Activity className="h-4 w-4 text-teal-500" /> Quick Actions
+                                <Activity className="h-4 w-4 text-orange-500" /> Quick Actions
                             </h3>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 {quickLinks.map((link, index) => {

@@ -106,7 +106,7 @@ export default function LabInventoryPage() {
                             placeholder="Search reagents..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                         />
                     </div>
                 </div>
@@ -145,7 +145,7 @@ export default function LabInventoryPage() {
                                     <td className="px-6 py-4 text-right">
                                         <button
                                             onClick={() => { setEditingId(item.id); setForm({ reagent_name: item.reagent_name, current_stock: item.current_stock.toString(), unit: item.unit, min_threshold: item.min_threshold.toString(), expiry_date: item.expiry_date ? new Date(item.expiry_date).toISOString().split('T')[0] : '' }); setModalOpen(true); }}
-                                            className="p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors inline-block"
+                                            className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors inline-block"
                                         >
                                             <Edit2 className="h-4 w-4" />
                                         </button>
@@ -168,31 +168,31 @@ export default function LabInventoryPage() {
                         <form onSubmit={handleSave} className="p-6 space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Reagent Name</label>
-                                <input required value={form.reagent_name} onChange={e => setForm({ ...form, reagent_name: e.target.value })} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-sm font-medium" />
+                                <input required value={form.reagent_name} onChange={e => setForm({ ...form, reagent_name: e.target.value })} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 text-sm font-medium" />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Current Stock</label>
-                                    <input required type="number" min="0" value={form.current_stock} onChange={e => setForm({ ...form, current_stock: e.target.value })} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-sm font-medium" />
+                                    <input required type="number" min="0" value={form.current_stock} onChange={e => setForm({ ...form, current_stock: e.target.value })} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 text-sm font-medium" />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Unit (e.g., ml, kit)</label>
-                                    <input required value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-sm font-medium" />
+                                    <input required value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 text-sm font-medium" />
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Min Threshold</label>
-                                    <input required type="number" min="0" value={form.min_threshold} onChange={e => setForm({ ...form, min_threshold: e.target.value })} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-sm font-medium" />
+                                    <input required type="number" min="0" value={form.min_threshold} onChange={e => setForm({ ...form, min_threshold: e.target.value })} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 text-sm font-medium" />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Expiry Date</label>
-                                    <input type="date" value={form.expiry_date} onChange={e => setForm({ ...form, expiry_date: e.target.value })} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-sm font-medium" />
+                                    <input type="date" value={form.expiry_date} onChange={e => setForm({ ...form, expiry_date: e.target.value })} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 text-sm font-medium" />
                                 </div>
                             </div>
                             <div className="pt-4 flex justify-end gap-3">
                                 <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 font-bold text-gray-500 hover:text-gray-800 text-sm">Cancel</button>
-                                <button type="submit" disabled={saving} className="px-4 py-2 font-bold bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm shadow-md disabled:opacity-50">Save Reagent</button>
+                                <button type="submit" disabled={saving} className="px-4 py-2 font-bold bg-orange-600 hover:bg-teal-700 text-white rounded-lg text-sm shadow-md disabled:opacity-50">Save Reagent</button>
                             </div>
                         </form>
                     </div>

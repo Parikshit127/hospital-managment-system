@@ -101,7 +101,7 @@ export default function SOAPAssistant({
         }
     }
 
-    const inputCls = "w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400";
+    const inputCls = "w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400";
 
     return (
         <div className="space-y-4">
@@ -137,7 +137,7 @@ export default function SOAPAssistant({
                 <button
                     onClick={handlePreBrief}
                     disabled={loadingBrief || disabled}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-teal-500/10 text-teal-400 border border-teal-500/20 text-xs font-bold rounded-lg hover:bg-teal-500/20 transition disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-orange-500/10 text-teal-400 border border-orange-500/20 text-xs font-bold rounded-lg hover:bg-orange-500/20 transition disabled:opacity-50"
                 >
                     {loadingBrief ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Brain className="h-3.5 w-3.5" />}
                     Pre-Consult Brief
@@ -157,7 +157,7 @@ export default function SOAPAssistant({
 
             {/* Pre-consult Brief Panel */}
             {showBrief && (
-                <div className="bg-teal-500/5 border border-teal-500/10 rounded-xl p-5 relative">
+                <div className="bg-orange-500/5 border border-orange-500/10 rounded-xl p-5 relative">
                     <button
                         onClick={() => setShowBrief(false)}
                         className="absolute top-3 right-3 p-1 text-gray-400 hover:text-gray-600 rounded"

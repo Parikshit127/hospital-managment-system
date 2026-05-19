@@ -42,7 +42,7 @@ export function TemplatePicker({ doctorId, filterType, onSelect, onClose }: Temp
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
                     <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-teal-500" />
+                        <FileText className="h-4 w-4 text-orange-500" />
                         <h3 className="font-black text-gray-900 text-sm">Apply Template</h3>
                     </div>
                     <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
@@ -59,7 +59,7 @@ export function TemplatePicker({ doctorId, filterType, onSelect, onClose }: Temp
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                             placeholder="Search templates..."
-                            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-teal-500"
+                            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-orange-500"
                             autoFocus
                         />
                     </div>
@@ -99,10 +99,10 @@ export function TemplatePicker({ doctorId, filterType, onSelect, onClose }: Temp
                                     <button
                                         key={t.id}
                                         onClick={() => { onSelect(t.contentPreview, t.title); onClose(); }}
-                                        className="w-full text-left p-3 rounded-xl border border-gray-200 hover:border-teal-400 hover:bg-teal-50/50 transition-all group"
+                                        className="w-full text-left p-3 rounded-xl border border-gray-200 hover:border-teal-400 hover:bg-orange-50/50 transition-all group"
                                     >
                                         <div className="flex items-center justify-between mb-1">
-                                            <span className="text-sm font-bold text-gray-900 group-hover:text-teal-700">{t.title}</span>
+                                            <span className="text-sm font-bold text-gray-900 group-hover:text-orange-700">{t.title}</span>
                                             <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{t.type}</span>
                                         </div>
                                         {preview && (
