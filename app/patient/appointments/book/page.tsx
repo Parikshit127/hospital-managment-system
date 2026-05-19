@@ -236,7 +236,7 @@ function BookAppointmentContent() {
           key: key_id,
           amount,
           currency: "INR",
-          name: "Avani Hospital",
+          name: "Axten Hospitals",
           description: "Appointment Payment",
           order_id,
           // Keep methods broadly enabled so Razorpay can render all account-eligible options.

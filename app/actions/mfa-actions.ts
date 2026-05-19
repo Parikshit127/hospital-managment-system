@@ -21,8 +21,8 @@ export async function setupMFA(userId: string) {
         if (!user) return { success: false, error: 'User not found' };
 
         const secret = speakeasy.generateSecret({
-            name: `Avani Hospital (${user.username})`,
-            issuer: 'Avani Hospital OS',
+            name: `Axten Hospitals (${user.username})`,
+            issuer: 'Axten Hospitals',
         });
 
         // Generate backup codes

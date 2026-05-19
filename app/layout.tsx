@@ -21,7 +21,7 @@ const playfairDisplay = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Avani Hospital OS — Intelligence Platform",
+  title: "Axten Hospitals — Intelligence Platform",
   description: "Next-generation Hospital Operating Intelligence System with AI-powered triage, real-time analytics, and comprehensive patient management.",
   keywords: "hospital management, AI triage, patient management, healthcare analytics, HIPAA compliant",
 };

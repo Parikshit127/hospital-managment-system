@@ -57,10 +57,12 @@ async function main() {
         update: {},
         create: {
             organizationId: DEFAULT_ORG_ID,
-            portal_title: 'Avani Hospital',
-            portal_subtitle: 'Intelligence Platform',
-            primary_color: '#10b981',
-            secondary_color: '#0f172a',
+            portal_title: 'Axten Hospitals',
+            portal_subtitle: 'A Unit of TAH Global Healthcare Pvt. Ltd.',
+            primary_color: '#1e3a6e',
+            secondary_color: '#1e3a6e',
+            logo_url: 'https://i.imgur.com/axten-logo.png',
+            footer_text: '© 2026 Axten Hospitals. A Unit of TAH Global Healthcare Pvt. Ltd. All rights reserved.',
         },
     });
     console.log('Organization branding created');

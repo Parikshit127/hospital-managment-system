@@ -75,7 +75,7 @@ export async function sendEmail({
 
     try {
         const info = await t.sendMail({
-            from: `"Avani Hospital OS" <${process.env.SMTP_USER}>`,
+            from: `"Axten Hospitals" <${process.env.SMTP_USER}>`,
             to,
             subject,
             html,
@@ -96,7 +96,7 @@ export async function sendWelcomeEmail(to: string, patientName: string, patientI
     const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
-            <h2 style="color: #1aab74;">Welcome to Avani Hospital, ${escapeHtml(patientName)}!</h2>
+            <h2 style="color: #1e3a6e;">Welcome to Axten Hospitals, ${escapeHtml(patientName)}!</h2>
             <p>Your registration is complete. You can now access all your health records, prescriptions, and lab results in your personal Patient Portal.</p>
 
             <div style="background: #f0faf6; padding: 15px; border-radius: 8px; margin: 20px 0;">
@@ -109,7 +109,7 @@ export async function sendWelcomeEmail(to: string, patientName: string, patientI
                 <p style="margin: 8px 0 0 0; font-size: 12px; color: #6b7280;">This setup link is valid for 24 hours.</p>
             </div>
             
-            <p>Please log in at <a href="${appBaseUrl}/patient/login" style="color: #1aab74;">Avani Patient Portal</a> after setting your password.</p>
+            <p>Please log in at <a href="${appBaseUrl}/patient/login" style="color: #1e3a6e;">Axten Patient Portal</a> after setting your password.</p>
             <p style="color: #666; font-size: 12px; margin-top: 30px;">For security reasons, please do not share these credentials.</p>
         </div>
     `;
@@ -148,7 +148,7 @@ export async function sendAdmissionEmail(to: string, patientName: string, bedDet
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
             <h2 style="color: #1aab74;">Admission Confirmation</h2>
             <p>Dear ${escapeHtml(patientName)},</p>
-            <p>This email confirms your admission at Avani Hospital under the care of Dr. ${escapeHtml(doctorName)}.</p>
+            <p>This email confirms your admission at Axten Hospitals under the care of Dr. ${escapeHtml(doctorName)}.</p>
 
             <div style="background: #f0faf6; padding: 15px; border-radius: 8px; margin: 20px 0;">
                 <p style="margin: 0; font-weight: bold; color: #0f8f5e;">Your bed assignment is confirmed as:</p>
@@ -239,7 +239,7 @@ export async function sendPillReminderEmail({
             <p>Please ensure you take your medication on time. You can track your full prescription history in the <a href="${appBaseUrl}/patient/login" style="color: #1aab74;">Patient Portal</a>.</p>
             
             <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
-            <p style="color: #999; font-size: 12px; text-align: center;">This is an automated reminder from Avani Hospital. Please do not reply to this email.</p>
+            <p style="color: #999; font-size: 12px; text-align: center;">This is an automated reminder from Axten Hospitals. Please do not reply to this email.</p>
         </div>
     `;
 
@@ -249,7 +249,7 @@ export async function sendPillReminderEmail({
 /**
  * Template: Lab Report Ready
  */
-export async function sendLabReportEmail(to: string, patientName: string, testName: string, hospitalName: string = 'Avani Hospital') {
+export async function sendLabReportEmail(to: string, patientName: string, testName: string, hospitalName: string = 'Axten Hospitals') {
     const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">

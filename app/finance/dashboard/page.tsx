@@ -84,7 +84,7 @@ export default function FinanceDashboard() {
 
             const rzp = new window.Razorpay({
                 key: orderData.data.key_id, amount: orderData.data.amount, currency: orderData.data.currency,
-                name: 'Avani Hospital', description: `Payment for ${paymentModal.invoice_number}`,
+                name: 'Axten Hospitals', description: `Payment for ${paymentModal.invoice_number}`,
                 order_id: orderData.data.order_id,
                 handler: async (response: any) => {
                     try {

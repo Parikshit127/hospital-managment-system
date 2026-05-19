@@ -28,19 +28,46 @@ export async function createWard(data: {
     ward_type: string;
     department_id?: string;
     floor_number?: string;
+    cost_per_day?: number;
+    nursing_charge?: number;
 }) {
     const { db, organizationId } = await requireTenantContext();
     await db.wards.create({
         data: {
             ward_name: data.ward_name,
             ward_type: data.ward_type,
-            department_id: data.department_id,
-            floor_number: data.floor_number,
+            department_id: data.department_id || null,
+            floor_number: data.floor_number || null,
+            cost_per_day: data.cost_per_day ?? 0,
+            nursing_charge: data.nursing_charge ?? 0,
             organizationId,
             is_active: true,
         }
     });
 
+    revalidatePath('/admin/ipd-setup');
+}
+
+export async function updateWard(ward_id: number, data: {
+    ward_name?: string;
+    ward_type?: string;
+    department_id?: string | null;
+    floor_number?: string | null;
+    cost_per_day?: number;
+    nursing_charge?: number;
+}) {
+    const { db } = await requireTenantContext();
+    await db.wards.update({
+        where: { ward_id },
+        data: {
+            ...(data.ward_name !== undefined && { ward_name: data.ward_name }),
+            ...(data.ward_type !== undefined && { ward_type: data.ward_type }),
+            ...(data.department_id !== undefined && { department_id: data.department_id }),
+            ...(data.floor_number !== undefined && { floor_number: data.floor_number }),
+            ...(data.cost_per_day !== undefined && { cost_per_day: data.cost_per_day }),
+            ...(data.nursing_charge !== undefined && { nursing_charge: data.nursing_charge }),
+        }
+    });
     revalidatePath('/admin/ipd-setup');
 }
 
@@ -51,9 +78,10 @@ export async function bulkAddBeds(data: {
     prefix: string;
     bed_category: string;
     pricing_tier: string;
+    is_isolation?: boolean;
 }) {
     const { db, organizationId } = await requireTenantContext();
-    const { ward_id, start_number, end_number, prefix, bed_category, pricing_tier } = data;
+    const { ward_id, start_number, end_number, prefix, bed_category, pricing_tier, is_isolation } = data;
     
     const count = end_number - start_number + 1;
     if (count <= 0 || count > 100) {
@@ -62,7 +90,6 @@ export async function bulkAddBeds(data: {
     
     const bedsData = [];
     for (let i = start_number; i <= end_number; i++) {
-        // e.g. "org_id-ICU-101"
         const bedLabel = `${prefix}${i}`;
         const uniqueId = `${organizationId}-${ward_id}-${bedLabel}`;
         
@@ -72,11 +99,11 @@ export async function bulkAddBeds(data: {
             status: 'Available',
             bed_category,
             pricing_tier,
+            is_isolation: is_isolation ?? false,
             organizationId
         });
     }
 
-    // Since Prisma createMany doesn't skip duplicates well in older APIs we might want skipDuplicates: true
     await db.beds.createMany({
         data: bedsData,
         skipDuplicates: true
@@ -85,14 +112,15 @@ export async function bulkAddBeds(data: {
     revalidatePath('/admin/ipd-setup');
 }
 
-export async function updateBedStatus(bed_id: string, status: string, category?: string, tier?: string) {
+export async function updateBedStatus(bed_id: string, status: string, category?: string, tier?: string, is_isolation?: boolean) {
     const { db } = await requireTenantContext();
     await db.beds.update({
         where: { bed_id },
         data: {
             status,
-            ...(category && { bed_category: category }),
-            ...(tier && { pricing_tier: tier }),
+            ...(category !== undefined && { bed_category: category }),
+            ...(tier !== undefined && { pricing_tier: tier }),
+            ...(is_isolation !== undefined && { is_isolation }),
         }
     });
     revalidatePath('/admin/ipd-setup');
