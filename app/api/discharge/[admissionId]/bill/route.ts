@@ -38,6 +38,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 
         const org = await prisma.organization.findUnique({
             where: { id: auth.context.organizationId },
+            include: { branding: { select: { logo_url: true, primary_color: true } } },
         });
 
         const deposits = await prisma.patientDeposit.findMany({
@@ -152,10 +153,16 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
     <div style="max-width:800px;margin:0 auto;padding:30px;position:relative;z-index:1;">
         <!-- Header -->
         <div style="display:flex;justify-content:space-between;border-bottom:3px solid #059669;padding-bottom:14px;margin-bottom:20px;">
-            <div>
-                <h1 style="font-size:22px;font-weight:900;color:#059669;">${hospitalName}</h1>
-                <p style="font-size:10px;color:#6b7280;">${hospitalAddress}</p>
-                <p style="font-size:10px;color:#9ca3af;">GSTIN: ${gstin}</p>
+            <div style="display:flex;align-items:center;gap:14px;">
+                ${org?.branding?.logo_url || org?.logo_url
+                    ? `<img src="${org?.branding?.logo_url || org?.logo_url}" alt="${hospitalName}" style="height:56px;width:auto;object-fit:contain;" />`
+                    : ''
+                }
+                <div>
+                    <h1 style="font-size:22px;font-weight:900;color:#059669;">${hospitalName}</h1>
+                    <p style="font-size:10px;color:#6b7280;">${hospitalAddress}</p>
+                    <p style="font-size:10px;color:#9ca3af;">GSTIN: ${gstin}</p>
+                </div>
             </div>
             <div style="text-align:right;">
                 <h2 style="font-size:16px;font-weight:800;color:${isFinal ? '#059669' : '#f59e0b'};">${isFinal ? 'FINAL BILL' : 'INTERIM BILL'}</h2>
