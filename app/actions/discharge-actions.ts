@@ -174,37 +174,59 @@ export async function processDischarge(patientId: string, patientName: string, n
                     }
                 });
             } else {
-                
-                const resolvedRoomCharge2 = resolvedRoomRate * daysAdmitted;
-                if (resolvedRoomCharge2 > 0) {
-                    await db.invoice_items.create({
-                        data: {
-                            invoice_id: invoice.id,
-                            department: 'IPD',
-                            description: `Room charges - ${resolvedWard?.ward_name || 'General Ward'} (${daysAdmitted} day${daysAdmitted > 1 ? 's' : ''} × ₹${resolvedRoomRate}/day)`,
-                            quantity: daysAdmitted,
-                            unit_price: resolvedRoomRate,
-                            total_price: resolvedRoomCharge2,
-                            net_price: resolvedRoomCharge2,
-                            organizationId,
-                        }
-                    });
-                    await db.invoices.update({
-                        where: { id: invoice.id },
-                        data: {
-                            total_amount: resolvedRoomCharge2,
-                            net_amount: resolvedRoomCharge2,
-                            balance_due: resolvedRoomCharge2,
-                            status: 'Final',
-                            finalized_at: new Date(),
-                        }
-                    });
-                } else {
-                    await db.invoices.update({
-                        where: { id: invoice.id },
-                        data: { status: 'Final', finalized_at: new Date() }
-                    });
+                // Invoice already exists — check if room/nursing charges were already
+                // posted by ensureIPDRoomChargesAccrued() to avoid duplicates
+                const existingRoomItems = await db.invoice_items.count({
+                    where: {
+                        invoice_id: invoice.id,
+                        service_category: { in: ['Room', 'Nursing'] },
+                    },
+                });
+
+                if (existingRoomItems === 0) {
+                    // No accrued charges yet — add a single consolidated room charge row
+                    const resolvedRoomCharge2 = resolvedRoomRate * daysAdmitted;
+                    if (resolvedRoomCharge2 > 0) {
+                        await db.invoice_items.create({
+                            data: {
+                                invoice_id: invoice.id,
+                                department: 'IPD',
+                                description: `Room charges - ${resolvedWard?.ward_name || 'General Ward'} (${daysAdmitted} day${daysAdmitted > 1 ? 's' : ''} × ₹${resolvedRoomRate}/day)`,
+                                quantity: daysAdmitted,
+                                unit_price: resolvedRoomRate,
+                                total_price: resolvedRoomCharge2,
+                                net_price: resolvedRoomCharge2,
+                                organizationId,
+                            }
+                        });
+                    }
                 }
+                // Room/Nursing already accrued per-day — skip adding duplicate rows
+
+                // Recalculate totals from all existing items
+                const allItems = await db.invoice_items.findMany({
+                    where: { invoice_id: invoice.id },
+                });
+                const recalcTotal = allItems.reduce(
+                    (sum: number, it: any) => sum + Number(it.net_price || it.total_price || 0),
+                    0,
+                );
+                const alreadyPaid = await db.payments.aggregate({
+                    where: { invoice_id: invoice.id, status: 'Completed' },
+                    _sum: { amount: true },
+                });
+                const paidAmount = Number(alreadyPaid._sum?.amount || 0);
+
+                await db.invoices.update({
+                    where: { id: invoice.id },
+                    data: {
+                        total_amount: recalcTotal,
+                        net_amount: recalcTotal,
+                        balance_due: Math.max(0, recalcTotal - paidAmount),
+                        status: 'Final',
+                        finalized_at: new Date(),
+                    }
+                });
             }
 
             
