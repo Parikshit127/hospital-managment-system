@@ -78,7 +78,7 @@ export async function getDashboardStats(timeRange?: string) {
         activeAdmissions,
         pendingLabOrders,
         completedLabToday,
-        totalRevenue: (totalRevenue._sum as any).total_amount || 0,
+        totalRevenue: Number((totalRevenue._sum as any).total_amount || 0),
         pendingDischarges: activeAdmissions,
         appointmentsToday,
       },
@@ -192,10 +192,10 @@ export async function getRevenueBreakdown(timeRange?: string) {
     return {
       success: true,
       data: {
-        totalRevenue: (totalAgg._sum as any).total_amount || 0,
+        totalRevenue: Number((totalAgg._sum as any).total_amount || 0),
         byDepartment: byDeptRaw.map((r: { department: string; total: number }) => ({
           name: r.department || "General",
-          amount: r.total || 0,
+          amount: Number(r.total || 0),
         })),
         byBillType: [],
         dailyTrend: Object.entries(dailyRevenue).map(([day, amount]) => ({
