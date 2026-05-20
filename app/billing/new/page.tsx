@@ -35,10 +35,10 @@ export default function ReceptionGenerateBillPage() {
 
     const [services, setServices] = useState<any[]>([]);
     const [selectedServiceId, setSelectedServiceId] = useState<number | null>(null);
-    
+
     // Line items for the bill
     const [items, setItems] = useState<any[]>([]);
-    
+
     // New item draft
     const [draftQty, setDraftQty] = useState(1);
     const [draftDiscount, setDraftDiscount] = useState(0);
@@ -216,18 +216,18 @@ export default function ReceptionGenerateBillPage() {
             pageIcon={<Receipt className="h-5 w-5" />}
         >
             <div className="max-w-5xl mx-auto pb-12">
-                <Link href="/reception/billing" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 font-medium mb-6 transition-colors">
-                    <ArrowLeft className="h-4 w-4" /> Back to Master Ledger
+                <Link href="/billing" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 font-medium mb-6 transition-colors">
+                    <ArrowLeft className="h-4 w-4" /> Back to Master Billing
                 </Link>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Left Column: Patient & Master Data */}
                     <div className="lg:col-span-2 space-y-6">
-                        
+
                         {/* 1. Patient Selection */}
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
                             <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-4">1. Select Patient</h2>
-                            
+
                             {!selectedPatient ? (
                                 <div className="space-y-4">
                                     <div className="relative">
@@ -245,8 +245,8 @@ export default function ReceptionGenerateBillPage() {
                                     {patients.length > 0 && (
                                         <div className="mt-2 border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 max-h-60 overflow-y-auto">
                                             {patients.map(p => (
-                                                <div 
-                                                    key={p.patient_id} 
+                                                <div
+                                                    key={p.patient_id}
                                                     onClick={() => setSelectedPatient(p)}
                                                     className="p-3 hover:bg-slate-50 cursor-pointer flex justify-between items-center transition-colors group"
                                                 >
@@ -321,12 +321,12 @@ export default function ReceptionGenerateBillPage() {
                         {/* 2. Add Services from Master Data */}
                         <div className={`bg-white rounded-2xl shadow-sm border border-gray-200 p-6 transition-opacity ${!selectedPatient ? 'opacity-50 pointer-events-none' : ''}`}>
                             <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-4">2. Add Services / Consultations</h2>
-                            
+
                             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                                 <div className="md:col-span-2">
                                     <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Service (Master Data)</label>
-                                    <select 
-                                        value={selectedServiceId || ''} 
+                                    <select
+                                        value={selectedServiceId || ''}
                                         onChange={e => setSelectedServiceId(Number(e.target.value))}
                                         className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none"
                                     >
@@ -336,11 +336,11 @@ export default function ReceptionGenerateBillPage() {
                                         ))}
                                     </select>
                                 </div>
-                                
+
                                 <div>
                                     <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Qty</label>
-                                    <input 
-                                        type="number" min="1" 
+                                    <input
+                                        type="number" min="1"
                                         inputMode="numeric"
                                         value={draftQty}
                                         onFocus={e => e.target.select()}
@@ -354,8 +354,8 @@ export default function ReceptionGenerateBillPage() {
 
                                 <div>
                                     <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Discount (₹)</label>
-                                    <input 
-                                        type="number" min="0" 
+                                    <input
+                                        type="number" min="0"
                                         step="0.01"
                                         inputMode="decimal"
                                         value={draftDiscount === 0 ? '' : draftDiscount}
@@ -370,7 +370,7 @@ export default function ReceptionGenerateBillPage() {
                                 </div>
 
                                 <div className="flex items-end">
-                                    <button 
+                                    <button
                                         onClick={handleAddService}
                                         disabled={!selectedServiceId}
                                         className="w-full p-2.5 bg-slate-900 text-white rounded-lg text-sm font-bold disabled:opacity-50 hover:bg-slate-800 transition-colors flex items-center justify-center gap-1"
@@ -382,7 +382,7 @@ export default function ReceptionGenerateBillPage() {
 
                             {selectedServiceId && (
                                 <div className="mt-3 text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-100 font-medium">
-                                    Base Rate: ₹{Number(services.find(s => s.id === selectedServiceId)?.default_rate).toFixed(2)} | 
+                                    Base Rate: ₹{Number(services.find(s => s.id === selectedServiceId)?.default_rate).toFixed(2)} |
                                     GST: {services.find(s => s.id === selectedServiceId)?.tax_rate}%
                                 </div>
                             )}
@@ -439,7 +439,7 @@ export default function ReceptionGenerateBillPage() {
                             <div className="p-6 bg-slate-800/50 border-b border-slate-700/50">
                                 <h3 className="text-sm font-black uppercase tracking-widest text-teal-400">Bill Summary</h3>
                             </div>
-                            
+
                             <div className="p-6 space-y-4 font-mono text-sm">
                                 <div className="flex justify-between text-slate-300">
                                     <span>Subtotal</span>
@@ -514,9 +514,9 @@ export default function ReceptionGenerateBillPage() {
                                     </>
                                 )}
                             </div>
-                            
+
                             <div className="p-6 pt-0">
-                                <button 
+                                <button
                                     onClick={handleGenerateBill}
                                     disabled={!selectedPatient || items.length === 0 || isSaving || preAuthBlocked}
                                     className="w-full py-4 bg-orange-500 hover:bg-teal-400 text-slate-900 font-black uppercase tracking-wider rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"

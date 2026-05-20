@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
+import { uploadToS3, buildPatientRecordKey, getSignedDownloadUrl } from '@/app/lib/s3';
 
 export async function POST(req: NextRequest) {
     try {
@@ -8,19 +7,29 @@ export async function POST(req: NextRequest) {
         const file = formData.get('file') as File;
         if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 });
 
-        const bytes = await file.arrayBuffer();
-        const buffer = Buffer.from(bytes);
+        // Validate file size (max 10 MB)
+        if (file.size > 10 * 1024 * 1024) {
+            return NextResponse.json({ error: 'File too large (max 10 MB)' }, { status: 400 });
+        }
 
-        const uploadDir = path.join(process.cwd(), 'public', 'patient-records');
-        await mkdir(uploadDir, { recursive: true });
+        // Validate file type
+        const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+        if (!allowedTypes.includes(file.type)) {
+            return NextResponse.json({ error: 'Invalid file type' }, { status: 400 });
+        }
 
-        const ext = file.name.split('.').pop();
-        const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const filePath = path.join(uploadDir, fileName);
+        const buffer = Buffer.from(await file.arrayBuffer());
 
-        await writeFile(filePath, buffer);
+        // Get org ID from form data or default
+        const orgId = formData.get('organizationId') as string || 'default';
+        const patientId = formData.get('patientId') as string || undefined;
 
-        return NextResponse.json({ url: `/patient-records/${fileName}` });
+        // Upload to S3
+        const key = buildPatientRecordKey(orgId, file.name, patientId);
+        await uploadToS3(buffer, key, file.type);
+
+        // Return the S3 key (frontend will use /api/files/[key] to get a signed URL)
+        return NextResponse.json({ key, fileName: file.name });
     } catch (error) {
         console.error('Upload error:', error);
         return NextResponse.json({ error: 'Upload failed' }, { status: 500 });

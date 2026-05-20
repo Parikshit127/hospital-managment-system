@@ -1,0 +1,50 @@
+# ── Local Development & Testing ──────────────────────────────────────────────
+# Use this to test the production Docker build locally before pushing to AWS
+# Run: docker compose up --build
+# Access: http://localhost:3000
+
+version: "3.8"
+
+services:
+  # ── PostgreSQL (local dev only — production uses RDS) ────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: hospitalos-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hospitalos
+      POSTGRES_PASSWORD: localdev_password_change_me
+      POSTGRES_DB: hospitalos
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hospitalos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── HospitalOS Application ──────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hospitalos-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "postgresql://hospitalos:localdev_password_change_me@postgres:5432/hospitalos"
+      DIRECT_URL: "postgresql://hospitalos:localdev_password_change_me@postgres:5432/hospitalos"
+      JWT_SECRET: "local-dev-jwt-secret-replace-in-production"
+      NODE_ENV: production
+      APP_BASE_URL: "http://localhost:3000"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+      HOSPITAL_NAME: "Test Hospital"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

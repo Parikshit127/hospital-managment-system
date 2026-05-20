@@ -477,12 +477,12 @@ function InvoicesTab({
 
                 {/* Actions */}
                 <div className="flex flex-wrap gap-1.5 pt-1">
-                  <ActionLink href="/finance/invoices">View Detail</ActionLink>
+                  <ActionLink href={`/finance/invoices/${inv.id}`}>View Detail</ActionLink>
                   {inv.status === "Draft" && (
-                    <ActionLink href="/reception/billing">Finalize</ActionLink>
+                    <ActionLink href="/billing">Finalize</ActionLink>
                   )}
                   {Number(inv.balance_due) > 0 && (
-                    <ActionLink href="/reception/billing">Collect Payment</ActionLink>
+                    <ActionLink href="/billing">Collect Payment</ActionLink>
                   )}
                   <ActionLink href="/finance/credit-notes">Credit Note</ActionLink>
                   <ActionLink href="/finance/refunds">Refund</ActionLink>

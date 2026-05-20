@@ -2,9 +2,9 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import {
-    ClipboardList, UserPlus, CheckCircle, Phone, Activity,
-    User, MapPin, Shield, Calendar, Hash, Loader2, Mail,
-    Search, AlertCircle, Heart, Users, ArrowRight, FileCheck,
+    UserPlus, CheckCircle, Phone,
+    User, MapPin, Shield, Calendar, Loader2, Mail,
+    AlertCircle, Heart, Users, FileCheck,
     Building2, CreditCard, FileText, GitMerge, CalendarPlus,
     Receipt, UserCheck, X
 } from 'lucide-react';
@@ -284,72 +284,9 @@ export default function ReceptionPage() {
                     </p>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                    {/* Left Info Panel */}
-                    <div className="hidden lg:flex flex-col gap-6">
-                        {/* Quick Stats Card */}
-                        <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5">
-                            <div className="flex items-center gap-2 mb-4">
-                                <div className="p-1.5 bg-orange-500/10 rounded-lg">
-                                    <Activity className="h-3.5 w-3.5 text-teal-400" />
-                                </div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Quick Info</span>
-                            </div>
-                            <div className="space-y-4">
-                                <div className="flex items-center gap-3 group">
-                                    <div className="h-8 w-8 bg-orange-500/10 rounded-lg flex items-center justify-center group-hover:bg-orange-500/20 transition-all">
-                                        <ClipboardList className="h-4 w-4 text-teal-400" />
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-bold text-gray-500">Digital Records</p>
-                                        <p className="text-[10px] text-gray-400 font-medium">Auto-generated patient IDs</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-3 group">
-                                    <div className="h-8 w-8 bg-violet-500/10 rounded-lg flex items-center justify-center group-hover:bg-violet-500/20 transition-all">
-                                        <Search className="h-4 w-4 text-violet-400" />
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-bold text-gray-500">Duplicate Detection</p>
-                                        <p className="text-[10px] text-gray-400 font-medium">Auto-checks existing patients</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-3 group">
-                                    <div className="h-8 w-8 bg-amber-500/10 rounded-lg flex items-center justify-center group-hover:bg-amber-500/20 transition-all">
-                                        <Calendar className="h-4 w-4 text-amber-400" />
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-bold text-gray-500">Auto Scheduling</p>
-                                        <p className="text-[10px] text-gray-400 font-medium">Appointment slots assigned</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Departments Legend */}
-                        <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5">
-                            <div className="flex items-center gap-2 mb-4">
-                                <div className="p-1.5 bg-violet-500/10 rounded-lg">
-                                    <Hash className="h-3.5 w-3.5 text-violet-400" />
-                                </div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Departments</span>
-                            </div>
-                            <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                                {departments.slice(0, 8).map((dept) => (
-                                    <div key={dept.id} className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
-                                        <div className="h-2 w-2 rounded-full bg-teal-400" />
-                                        <span className="text-xs font-bold text-gray-500">{dept.name}</span>
-                                    </div>
-                                ))}
-                                {departments.length > 8 && (
-                                    <p className="text-[10px] text-gray-400 font-medium ml-3">+{departments.length - 8} more</p>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
+                <div>
                     {/* Main Form Area */}
-                    <div className="lg:col-span-3">
+                    <div>
                         <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden relative">
                             {/* Gradient top border */}
                             <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-teal-400 via-emerald-500 to-teal-400" />
@@ -920,7 +857,7 @@ export default function ReceptionPage() {
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => router.push(`/reception/billing/new?patientId=${p.patient_id}`)}
+                                        onClick={() => router.push(`/billing/new?patientId=${p.patient_id}`)}
                                         className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg transition-colors"
                                     >
                                         <Receipt className="h-3.5 w-3.5" /> New Bill

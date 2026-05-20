@@ -392,8 +392,9 @@ function QuickActions() {
   // Each button links to the existing flow — the Master Billing page is the orchestrator,
   // not the form host. Forms live in the existing modules (preserves backward compat).
   const actions = [
-    { label: "New Bill", icon: Plus, href: "/reception/billing/new" },
-    { label: "Collect Payment", icon: CreditCard, href: "/reception/billing" },
+    { label: "New Bill", icon: Plus, href: "/billing/new" },
+    { label: "Fee Receipt", icon: ReceiptText, href: "/billing/fee-receipt" },
+    { label: "Collect Payment", icon: CreditCard, href: "/billing" },
     { label: "Add Deposit", icon: Wallet, href: "/finance/deposits" },
     { label: "Process Refund", icon: Undo2, href: "/finance/refunds" },
     { label: "Credit Note", icon: ReceiptText, href: "/finance/credit-notes" },

@@ -45,8 +45,8 @@ export default function MedicalRecordsPage() {
         try {
             const res = await fetch('/api/upload/patient-record', { method: 'POST', body: fd });
             const json = await res.json();
-            if (json.url) {
-                setForm(f => ({ ...f, file_url: json.url, file_name: file.name }));
+            if (json.key) {
+                setForm(f => ({ ...f, file_url: json.key, file_name: json.fileName || file.name }));
             }
         } catch {
             alert('Upload failed');
@@ -259,10 +259,15 @@ export default function MedicalRecordsPage() {
                                 {rec.description && <p className="text-sm text-gray-600 mt-1">{rec.description}</p>}
                                 {rec.record_date && <p className="text-xs text-gray-400 mt-1">{fmtDate(rec.record_date)}</p>}
                                 {rec.file_url && (
-                                    <a href={rec.file_url} target="_blank" rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1.5 text-xs font-bold text-violet-600 bg-violet-50 px-3 py-1.5 rounded-lg mt-2">
+                                    <button onClick={async () => {
+                                        const url = rec.file_url.startsWith('patient-records/')
+                                            ? (await fetch(`/api/files?key=${encodeURIComponent(rec.file_url)}`).then(r => r.json())).url
+                                            : rec.file_url;
+                                        if (url) window.open(url, '_blank');
+                                    }}
+                                        className="inline-flex items-center gap-1.5 text-xs font-bold text-violet-600 bg-violet-50 px-3 py-1.5 rounded-lg mt-2 cursor-pointer hover:bg-violet-100 transition-colors">
                                         <ExternalLink className="h-3.5 w-3.5" /> {rec.file_name || 'View File'}
-                                    </a>
+                                    </button>
                                 )}
                             </div>
                             <button onClick={() => handleDelete(rec.id)} className="text-gray-300 hover:text-red-500 transition p-1">

@@ -1,0 +1,45 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # ── Step 1: Test ─────────────────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx prisma generate
+      - run: npm run typecheck
+      - run: npm run lint:ci
+
+  # ── Step 2: Deploy via SSH ───────────────────────────────────────────────
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/hospitalos
+            git pull origin main
+            npm ci --no-audit --no-fund
+            npx prisma generate
+            npx prisma migrate deploy
+            npm run build
+            pm2 reload ecosystem.config.js --update-env
+            pm2 save
+            sleep 5
+            curl -sf http://localhost:3000/api/health || (echo "Health check failed!" && exit 1)
+            echo "Deployment successful!"

@@ -145,7 +145,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                 
                 <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
                     <a 
-                        href="/reception/billing/new"
+                        href="/billing/new"
                         className="w-full md:w-auto px-5 py-2.5 bg-orange-600 hover:bg-teal-700 text-white font-black rounded-xl text-sm transition-colors shadow-sm text-center flex items-center justify-center gap-2"
                     >
                         <FileText className="h-4 w-4" /> Generate New Bill
