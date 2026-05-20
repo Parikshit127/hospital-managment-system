@@ -132,7 +132,7 @@ apt-get install -y \
     curl git build-essential unzip \
     nginx certbot python3-certbot-nginx \
     ufw htop jq \
-    postgresql-client-14
+    postgresql-client
 
 print_ok "System packages installed"
 
