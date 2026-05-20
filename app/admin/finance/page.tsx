@@ -96,8 +96,8 @@ function GenerateReceiptTab({ onSuccess }: { onSuccess: () => void }) {
         const res = await saveFeeReceipt({
             patient_id: patientId,
             patient_name: patientName,
+            patient_phone: patientPhone,
             payment_method: paymentMethod,
-            total_amount: totalAmount,
             items: items.map(i => ({
                 description: i.description || "Misc Fee",
                 amount: Number(i.amount) || 0,
