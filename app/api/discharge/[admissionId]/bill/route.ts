@@ -101,9 +101,52 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
     const paid = Number(invoice.paid_amount || 0);
     const balance = Number(invoice.balance_due || 0);
 
-    // Group items
+    // Consolidate per-day Room + Nursing rows into single summary rows
+    const consolidatedItems: any[] = [];
+    const roomRows = items.filter((i: any) => i.service_category === 'Room');
+    const nursingRows = items.filter((i: any) => i.service_category === 'Nursing');
+    const otherRows = items.filter((i: any) => i.service_category !== 'Room' && i.service_category !== 'Nursing');
+
+    if (roomRows.length > 0) {
+        const unitPrice = Number(roomRows[0].unit_price);
+        const days = roomRows.length;
+        const totalPrice = roomRows.reduce((s: number, r: any) => s + Number(r.net_price || 0), 0);
+        const taxAmount = roomRows.reduce((s: number, r: any) => s + Number(r.tax_amount || 0), 0);
+        const wardName = roomRows[0].description?.split(' - ')[0] || 'Ward';
+        consolidatedItems.push({
+            ...roomRows[0],
+            description: `${wardName} - Room Charge (${days}d × ₹${unitPrice.toLocaleString('en-IN')}/day)`,
+            quantity: days,
+            unit_price: unitPrice,
+            net_price: totalPrice,
+            total_price: totalPrice,
+            tax_amount: taxAmount,
+            service_category: 'Room',
+        });
+    }
+
+    if (nursingRows.length > 0) {
+        const unitPrice = Number(nursingRows[0].unit_price);
+        const days = nursingRows.length;
+        const totalPrice = nursingRows.reduce((s: number, r: any) => s + Number(r.net_price || 0), 0);
+        const taxAmount = nursingRows.reduce((s: number, r: any) => s + Number(r.tax_amount || 0), 0);
+        consolidatedItems.push({
+            ...nursingRows[0],
+            description: `Nursing Charges (${days}d × ₹${unitPrice.toLocaleString('en-IN')}/day)`,
+            quantity: days,
+            unit_price: unitPrice,
+            net_price: totalPrice,
+            total_price: totalPrice,
+            tax_amount: taxAmount,
+            service_category: 'Nursing',
+        });
+    }
+
+    const displayItems = [...consolidatedItems, ...otherRows];
+
+    // Group display items by category
     const categoryMap: Record<string, { items: any[]; total: number }> = {};
-    for (const item of items) {
+    for (const item of displayItems) {
         const cat = item.service_category || item.department || 'Other';
         if (!categoryMap[cat]) categoryMap[cat] = { items: [], total: 0 };
         categoryMap[cat].items.push(item);
