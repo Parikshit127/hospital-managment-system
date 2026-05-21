@@ -53,8 +53,12 @@ async function buildVoucherContent(
     where: {
       organizationId,
       status: 'Posted',
-      ...(start_date && { entry_date: { gte: start_date } }),
-      ...(end_date && { entry_date: { lte: end_date } }),
+      ...((start_date || end_date) && {
+        entry_date: {
+          ...(start_date && { gte: start_date }),
+          ...(end_date && { lte: end_date }),
+        },
+      }),
     },
     include: { lines: { include: { account: true } } },
     orderBy: { entry_date: 'asc' },

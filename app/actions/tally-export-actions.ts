@@ -205,8 +205,12 @@ async function buildVoucherXML(options: TallyExportOptions): Promise<{ xml: stri
     where: {
       organizationId: options.organizationId,
       status: 'Posted',
-      ...(options.start_date && { entry_date: { gte: options.start_date } }),
-      ...(options.end_date && { entry_date: { lte: options.end_date } }),
+      ...((options.start_date || options.end_date) && {
+        entry_date: {
+          ...(options.start_date && { gte: options.start_date }),
+          ...(options.end_date && { lte: options.end_date }),
+        },
+      }),
     },
     include: {
       lines: {
@@ -271,8 +275,12 @@ async function buildInvoiceVoucherXML(options: TallyExportOptions): Promise<stri
   const invoices = await prisma.invoices.findMany({
     where: {
       organizationId: options.organizationId,
-      ...(startDate && { created_at: { gte: startDate } }),
-      ...(endDate   && { created_at: { lte: endDate   } }),
+      ...((startDate || endDate) && {
+        created_at: {
+          ...(startDate && { gte: startDate }),
+          ...(endDate   && { lte: endDate   }),
+        },
+      }),
     },
     include: {
       patient: true,
@@ -342,8 +350,12 @@ async function buildPaymentVoucherXML(options: TallyExportOptions): Promise<stri
   const payments = await prisma.payments.findMany({
     where: {
       organizationId: options.organizationId,
-      ...(startDate && { created_at: { gte: startDate } }),
-      ...(endDate   && { created_at: { lte: endDate   } }),
+      ...((startDate || endDate) && {
+        created_at: {
+          ...(startDate && { gte: startDate }),
+          ...(endDate   && { lte: endDate   }),
+        },
+      }),
     },
   });
 
@@ -378,8 +390,12 @@ async function buildExpenseVoucherXML(options: TallyExportOptions): Promise<stri
   const expenses = await prisma.expense.findMany({
     where: {
       organizationId: options.organizationId,
-      ...(startDate && { created_at: { gte: startDate } }),
-      ...(endDate   && { created_at: { lte: endDate   } }),
+      ...((startDate || endDate) && {
+        created_at: {
+          ...(startDate && { gte: startDate }),
+          ...(endDate   && { lte: endDate   }),
+        },
+      }),
     },
   });
 

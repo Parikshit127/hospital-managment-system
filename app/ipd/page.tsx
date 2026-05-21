@@ -66,6 +66,8 @@ export default function IPDDashboard() {
     ward_id: "",
     diagnosis: "",
     doctor_name: "",
+    deposit_amount: "",
+    deposit_payment_method: "Cash",
   });
   const [admitLoading, setAdmitLoading] = useState(false);
   const [admitError, setAdmitError] = useState("");
@@ -151,6 +153,8 @@ export default function IPDDashboard() {
         ward_id: wardId,
         diagnosis: admitForm.diagnosis,
         doctor_name: admitForm.doctor_name,
+        deposit_amount: admitForm.deposit_amount ? parseFloat(admitForm.deposit_amount) : undefined,
+        deposit_payment_method: admitForm.deposit_payment_method || "Cash",
       });
       if (res.success) {
         setAdmitModal(false);
@@ -160,6 +164,8 @@ export default function IPDDashboard() {
           ward_id: "",
           diagnosis: "",
           doctor_name: "",
+          deposit_amount: "",
+          deposit_payment_method: "Cash",
         });
         setAdmitError("");
         loadData();
@@ -1150,6 +1156,36 @@ export default function IPDDashboard() {
                     className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-violet-500/50 focus:outline-none"
                     placeholder="Attending doctor"
                   />
+                </div>
+
+                {/* Initial Deposit (optional) */}
+                <div className="border border-violet-200 bg-violet-50/40 rounded-xl p-3 space-y-2">
+                  <label className="text-[10px] font-black text-violet-600 uppercase tracking-wider block">
+                    Initial Deposit (Optional)
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-bold">₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={admitForm.deposit_amount}
+                        onChange={(e) => setAdmitForm({ ...admitForm, deposit_amount: e.target.value })}
+                        className="w-full pl-7 pr-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:border-violet-500/50 focus:outline-none"
+                        placeholder="0"
+                      />
+                    </div>
+                    <select
+                      value={admitForm.deposit_payment_method}
+                      onChange={(e) => setAdmitForm({ ...admitForm, deposit_payment_method: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:border-violet-500/50 focus:outline-none"
+                    >
+                      <option value="Cash">Cash</option>
+                      <option value="UPI">UPI</option>
+                      <option value="Card">Card</option>
+                      <option value="BankTransfer">Bank Transfer</option>
+                    </select>
+                  </div>
                 </div>
 
                 {admitError && (

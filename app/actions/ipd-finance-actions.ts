@@ -455,9 +455,9 @@ export async function generateInterimBill(admissionId: string) {
         const gstResult = await getGstSummary(invoice.id);
         const gstSummary = gstResult.success ? gstResult.data : null;
 
-        // Get deposits
+        // Get deposits — only for this admission, not all patient deposits
         const deposits = await db.patientDeposit.findMany({
-            where: { patient_id: admission.patient_id, status: 'Active' },
+            where: { admission_id: admission.admission_id, status: 'Active' },
         });
 
         const ward = admission.ward || admission.bed?.wards;
@@ -738,10 +738,10 @@ export async function settleAndDischarge(data: {
             if (!invoice) return { success: false, error: 'Invoice lost after recalculation' };
         }
 
-        // 3. Apply deposits if requested
+        // 3. Apply deposits if requested — only this admission's deposits
         if (data.apply_deposits) {
             const deposits = await db.patientDeposit.findMany({
-                where: { patient_id: admission.patient_id, status: 'Active' },
+                where: { admission_id: admission.admission_id, status: 'Active' },
             });
 
             for (const deposit of deposits) {

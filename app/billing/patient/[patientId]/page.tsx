@@ -40,6 +40,7 @@ import {
   getPatientLedger,
   getPatientTimeline,
 } from "@/app/actions/master-billing-actions";
+import { recordPayment } from "@/app/actions/finance-actions";
 
 // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -91,6 +92,7 @@ export default function PatientFinancialProfilePage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("invoices");
   const [expandedInvoice, setExpandedInvoice] = useState<number | null>(null);
+  const [payingInvoice, setPayingInvoice] = useState<any | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -171,6 +173,7 @@ export default function PatientFinancialProfilePage() {
                   invoices={profile.invoices}
                   expandedInvoice={expandedInvoice}
                   setExpandedInvoice={setExpandedInvoice}
+                  onCollectPayment={(inv: any) => setPayingInvoice(inv)}
                 />
               )}
               {tab === "payments" && <PaymentsTab invoices={profile.invoices} />}
@@ -192,6 +195,18 @@ export default function PatientFinancialProfilePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Collect Payment Modal */}
+      {payingInvoice && (
+        <CollectPaymentModal
+          invoice={payingInvoice}
+          onClose={() => setPayingInvoice(null)}
+          onSuccess={() => {
+            setPayingInvoice(null);
+            load();
+          }}
+        />
       )}
     </AppShell>
   );
@@ -326,10 +341,12 @@ function InvoicesTab({
   invoices,
   expandedInvoice,
   setExpandedInvoice,
+  onCollectPayment,
 }: {
   invoices: any[];
   expandedInvoice: number | null;
   setExpandedInvoice: (id: number | null) => void;
+  onCollectPayment: (inv: any) => void;
 }) {
   if (!invoices.length) {
     return <div className="text-xs text-gray-400">No invoices yet.</div>;
@@ -482,7 +499,15 @@ function InvoicesTab({
                     <ActionLink href="/billing">Finalize</ActionLink>
                   )}
                   {Number(inv.balance_due) > 0 && (
-                    <ActionLink href="/billing">Collect Payment</ActionLink>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCollectPayment(inv);
+                      }}
+                      className="px-2.5 py-1 bg-white border border-gray-200 hover:border-emerald-400 hover:bg-emerald-50 text-xs font-bold text-gray-700 rounded"
+                    >
+                      Collect Payment
+                    </button>
                   )}
                   <ActionLink href="/finance/credit-notes">Credit Note</ActionLink>
                   <ActionLink href="/finance/refunds">Refund</ActionLink>
@@ -504,6 +529,211 @@ function ActionLink({ href, children }: { href: string; children: React.ReactNod
     >
       {children}
     </Link>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Collect Payment Modal
+// ──────────────────────────────────────────────────────────────────────────
+
+function CollectPaymentModal({
+  invoice,
+  onClose,
+  onSuccess,
+}: {
+  invoice: any;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const balanceDue = Number(invoice.balance_due);
+  const [amount, setAmount] = useState(balanceDue.toString());
+  const [method, setMethod] = useState("Cash");
+  const [reference, setReference] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const numAmount = Number(amount) || 0;
+  const isValid = numAmount > 0 && numAmount <= balanceDue;
+
+  const handleSubmit = async () => {
+    if (!isValid) return;
+    setError(null);
+    setSaving(true);
+    try {
+      const res = await recordPayment({
+        invoice_id: invoice.id,
+        amount: numAmount,
+        payment_method: method,
+        payment_type: "Settlement",
+        notes: [notes, reference ? `Ref: ${reference}` : ""].filter(Boolean).join(" | ") || undefined,
+      });
+      if (res.success) {
+        setSuccess(true);
+        setTimeout(onSuccess, 1200);
+      } else {
+        setError(res.error || "Payment failed. Please try again.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Unexpected error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center px-4"
+      style={{ backgroundColor: "rgba(15, 23, 42, 0.5)", backdropFilter: "blur(4px)" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/60">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900">Collect Payment</h3>
+            <p className="text-[11px] text-gray-500 font-mono mt-0.5">{invoice.invoice_number}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-500">
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+
+        {success ? (
+          <div className="px-5 py-10 text-center">
+            <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-3" />
+            <p className="text-lg font-bold text-gray-800">Payment Recorded!</p>
+            <p className="text-xs text-gray-500 mt-1">₹{fmtMoney(numAmount)} via {method}</p>
+          </div>
+        ) : (
+          <div className="px-5 py-5 space-y-4">
+            {/* Invoice Summary */}
+            <div className="bg-gray-50 rounded-xl p-3 grid grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Net Amount</div>
+                <div className="text-sm font-bold text-gray-700">₹{fmtMoney(Number(invoice.net_amount))}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Paid</div>
+                <div className="text-sm font-bold text-emerald-600">₹{fmtMoney(Number(invoice.paid_amount))}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Balance</div>
+                <div className="text-sm font-bold text-rose-600">₹{fmtMoney(balanceDue)}</div>
+              </div>
+            </div>
+
+            {/* Amount */}
+            <div>
+              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Amount *</label>
+              <div className="relative mt-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-bold">₹</span>
+                <input
+                  type="number"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  min={1}
+                  max={balanceDue}
+                  step="0.01"
+                  className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm font-mono font-bold focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none"
+                  autoFocus
+                />
+              </div>
+              {numAmount > balanceDue && (
+                <p className="text-[11px] text-rose-500 mt-1">Amount cannot exceed balance of ₹{fmtMoney(balanceDue)}</p>
+              )}
+              <button
+                onClick={() => setAmount(balanceDue.toString())}
+                className="text-[11px] text-blue-600 hover:text-blue-800 font-bold mt-1"
+              >
+                Pay Full Balance (₹{fmtMoney(balanceDue)})
+              </button>
+            </div>
+
+            {/* Payment Method */}
+            <div>
+              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Payment Method</label>
+              <div className="grid grid-cols-4 gap-1.5 mt-1.5">
+                {["Cash", "Card", "UPI", "Bank"].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMethod(m)}
+                    className={`py-2 rounded-lg text-xs font-bold border transition-all ${
+                      method === m
+                        ? "bg-emerald-50 border-emerald-400 text-emerald-700 shadow-sm"
+                        : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Reference (for Card/UPI/Bank) */}
+            {method !== "Cash" && (
+              <div>
+                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Reference / Transaction ID</label>
+                <input
+                  type="text"
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value)}
+                  placeholder="Enter transaction reference"
+                  className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-emerald-500 outline-none"
+                />
+              </div>
+            )}
+
+            {/* Notes */}
+            <div>
+              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Notes (optional)</label>
+              <input
+                type="text"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Optional remark"
+                className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-emerald-500 outline-none"
+              />
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="flex items-start gap-2 px-3 py-2 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium rounded-lg">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={onClose}
+                disabled={saving}
+                className="flex-1 py-2.5 bg-white border border-gray-200 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={saving || !isValid}
+                className="flex-[2] flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CreditCard className="h-4 w-4" />
+                )}
+                {saving ? "Processing…" : `Record ₹${fmtMoney(numAmount)}`}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
