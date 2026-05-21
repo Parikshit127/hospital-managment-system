@@ -47,7 +47,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             include: {
                 items: { orderBy: { created_at: 'asc' } },
                 patient: { select: { full_name: true, patient_id: true, phone: true, age: true, gender: true } },
-                admission: { select: { admission_id: true, doctor_name: true, admission_date: true, ward: { select: { ward_name: true } }, bed: { select: { bed_id: true } } } },
+                admission: { select: { admission_id: true, doctor_name: true, admission_date: true, discharge_date: true, ward: { select: { ward_name: true } }, bed: { select: { bed_id: true } } } },
                 payments: {
                     where: { status: { not: 'Reversed' } },
                     orderBy: { created_at: 'desc' },
@@ -204,16 +204,37 @@ function generateInvoiceHTML(invoice: any, org: any) {
     <div style="max-width:800px;margin:0 auto;padding:30px;">
         <!-- Header -->
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;border-bottom:3px solid #1e3a6e;padding-bottom:16px;">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="267" height="80" style="display:block;flex-shrink:0;">
-              <text x="10" y="72" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="68" fill="#1e3a6e" letter-spacing="-2">Axten</text>
-              <rect x="10" y="80" width="60" height="8" fill="#f97316" rx="2"/>
-              <rect x="130" y="80" width="120" height="8" fill="#f97316" rx="2"/>
-              <text x="75" y="89" font-family="Arial, sans-serif" font-weight="700" font-size="16" fill="#1e3a6e" letter-spacing="6">HOSPITALS</text>
-              <text x="10" y="110" font-family="Arial, sans-serif" font-weight="400" font-size="12" fill="#1e3a6e">A Unit of TAH Global Healthcare Pvt. Ltd.</text>
-              <circle cx="360" cy="55" r="48" fill="none" stroke="#1e3a6e" stroke-width="3"/>
-              <circle cx="360" cy="55" r="42" fill="none" stroke="#1e3a6e" stroke-width="1"/>
-              <rect x="350" y="35" width="20" height="40" fill="none" stroke="#f97316" stroke-width="3" rx="3"/>
-              <rect x="340" y="45" width="40" height="20" fill="none" stroke="#f97316" stroke-width="3" rx="3"/>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 130" width="293" height="87" style="display:block;flex-shrink:0;">
+              <!-- "Axten" wordmark -->
+              <text x="10" y="70" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="66" fill="#1e3a6e" letter-spacing="-2">Axten</text>
+              <!-- Left orange strip -->
+              <rect x="10" y="78" width="50" height="7" fill="#f97316" rx="2"/>
+              <!-- HOSPITALS text — clear of left strip -->
+              <text x="65" y="87" font-family="Arial, sans-serif" font-weight="700" font-size="14" fill="#1e3a6e" letter-spacing="4.5">HOSPITALS</text>
+              <!-- Right orange strip — after HOSPITALS ends -->
+              <rect x="210" y="78" width="50" height="7" fill="#f97316" rx="2"/>
+              <!-- Tagline -->
+              <text x="10" y="110" font-family="Arial, sans-serif" font-weight="400" font-size="11" fill="#1e3a6e">A Unit of TAH Global Healthcare Pvt. Ltd.</text>
+
+              <!-- Outer circle emblem -->
+              <circle cx="390" cy="58" r="50" fill="none" stroke="#1e3a6e" stroke-width="3"/>
+              <circle cx="390" cy="58" r="42" fill="none" stroke="#1e3a6e" stroke-width="1"/>
+
+              <!-- Curved "AXTEN HOSPITALS" upper arc -->
+              <path id="ua" d="M 343,55 A 47,47 0 0,1 437,55" fill="none"/>
+              <text font-family="Arial, sans-serif" font-weight="700" font-size="8" fill="#1e3a6e" letter-spacing="2">
+                <textPath href="#ua" startOffset="5%">AXTEN HOSPITALS</textPath>
+              </text>
+
+              <!-- Curved "TAH GLOBAL HEALTHCARE" lower arc -->
+              <path id="la" d="M 342,63 A 47,47 0 0,0 438,63" fill="none"/>
+              <text font-family="Arial, sans-serif" font-weight="400" font-size="7" fill="#1e3a6e" letter-spacing="1.2">
+                <textPath href="#la" startOffset="3%">TAH GLOBAL HEALTHCARE</textPath>
+              </text>
+
+              <!-- Inner cross / plus emblem -->
+              <rect x="382" y="38" width="16" height="40" fill="none" stroke="#f97316" stroke-width="3" rx="3"/>
+              <rect x="371" y="49" width="38" height="18" fill="none" stroke="#f97316" stroke-width="3" rx="3"/>
             </svg>
             <div style="text-align:right;">
                 <h2 style="font-size:18px;font-weight:800;color:#1e3a6e;">TAX INVOICE</h2>
@@ -236,6 +257,7 @@ function generateInvoiceHTML(invoice: any, org: any) {
                 <p style="font-size:12px;"><strong>Doctor:</strong> ${admission.doctor_name || '-'}</p>
                 <p style="font-size:12px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_id || '-'}</p>
                 <p style="font-size:12px;"><strong>Admission:</strong> ${new Date(admission.admission_date).toLocaleDateString('en-IN')}</p>
+                <p style="font-size:12px;"><strong>Discharge:</strong> ${admission.discharge_date ? new Date(admission.discharge_date).toLocaleDateString('en-IN') : 'N/A'}</p>
                 ` : ''}
             </div>
         </div>

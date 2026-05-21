@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
+import { ensureIPDRoomChargesAccrued } from '@/app/actions/ipd-billing-helpers'
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager'];
 
@@ -13,6 +14,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         if (!auth.ok) return auth.response;
 
         const { admissionId } = await params;
+
+        // Accrue any missing per-day room/nursing charges before rendering the bill
+        await ensureIPDRoomChargesAccrued(admissionId).catch(() => null);
 
         const admission = await prisma.admissions.findFirst({
             where: { admission_id: admissionId, organizationId: auth.context.organizationId },
@@ -140,34 +144,60 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; background: #fff; }
         @media print { body { margin: 0; } .no-print { display: none !important; } .watermark { opacity: 0.06; } }
-        .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 80px; font-weight: 900; color: ${isFinal ? '#059669' : '#f59e0b'}; opacity: 0.04; pointer-events: none; z-index: 0; }
+        .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 80px; font-weight: 900; color: ${isFinal ? '#1e3a6e' : '#f59e0b'}; opacity: 0.04; pointer-events: none; z-index: 0; }
     </style>
 </head>
 <body>
     <div class="watermark">${isFinal ? 'FINAL BILL' : 'INTERIM'}</div>
 
     <div class="no-print" style="background:#f3f4f6;padding:12px;text-align:center;">
-        <button onclick="window.print()" style="padding:8px 24px;background:#059669;color:white;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Print / Download PDF</button>
+        <button onclick="window.print()" style="padding:8px 24px;background:#1e3a6e;color:white;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Print / Download PDF</button>
     </div>
 
     <div style="max-width:800px;margin:0 auto;padding:30px;position:relative;z-index:1;">
-        <!-- Header -->
-        <div style="display:flex;justify-content:space-between;border-bottom:3px solid #059669;padding-bottom:14px;margin-bottom:20px;">
-            <div style="display:flex;align-items:center;gap:14px;">
-                ${org?.branding?.logo_url || org?.logo_url
-                    ? `<img src="${org?.branding?.logo_url || org?.logo_url}" alt="${hospitalName}" style="height:56px;width:auto;object-fit:contain;" />`
-                    : ''
-                }
-                <div>
-                    <h1 style="font-size:22px;font-weight:900;color:#059669;">${hospitalName}</h1>
-                    <p style="font-size:10px;color:#6b7280;">${hospitalAddress}</p>
-                    <p style="font-size:10px;color:#9ca3af;">GSTIN: ${gstin}</p>
-                </div>
-            </div>
+        <!-- Header — matches attached PDF branding exactly -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e3a6e;padding-bottom:16px;margin-bottom:20px;">
+
+            <!-- LEFT: Logo SVG matching the PDF -->
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 130" width="293" height="87" style="display:block;flex-shrink:0;">
+              <!-- "Axten" wordmark -->
+              <text x="10" y="70" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="66" fill="#1e3a6e" letter-spacing="-2">Axten</text>
+              <!-- Left orange strip (before H) -->
+              <rect x="10" y="78" width="50" height="7" fill="#f97316" rx="2"/>
+              <!-- HOSPITALS text — starts at x=65, well clear of left strip -->
+              <text x="65" y="87" font-family="Arial, sans-serif" font-weight="700" font-size="14" fill="#1e3a6e" letter-spacing="4.5">HOSPITALS</text>
+              <!-- Right orange strip (after S) — starts after HOSPITALS ends ~x=205 -->
+              <rect x="210" y="78" width="50" height="7" fill="#f97316" rx="2"/>
+              <!-- Tagline -->
+              <text x="10" y="110" font-family="Arial, sans-serif" font-weight="400" font-size="11" fill="#1e3a6e">A Unit of TAH Global Healthcare Pvt. Ltd.</text>
+
+              <!-- Outer circle emblem -->
+              <circle cx="390" cy="58" r="50" fill="none" stroke="#1e3a6e" stroke-width="3"/>
+              <circle cx="390" cy="58" r="42" fill="none" stroke="#1e3a6e" stroke-width="1"/>
+
+              <!-- Curved "AXTEN HOSPITALS" along upper arc -->
+              <path id="ua" d="M 343,55 A 47,47 0 0,1 437,55" fill="none"/>
+              <text font-family="Arial, sans-serif" font-weight="700" font-size="8" fill="#1e3a6e" letter-spacing="2">
+                <textPath href="#ua" startOffset="5%">AXTEN HOSPITALS</textPath>
+              </text>
+
+              <!-- Curved "TAH GLOBAL HEALTHCARE" along lower arc -->
+              <path id="la" d="M 342,63 A 47,47 0 0,0 438,63" fill="none"/>
+              <text font-family="Arial, sans-serif" font-weight="400" font-size="7" fill="#1e3a6e" letter-spacing="1.2">
+                <textPath href="#la" startOffset="3%">TAH GLOBAL HEALTHCARE</textPath>
+              </text>
+
+              <!-- Inner cross / plus emblem centred at 390,58 -->
+              <rect x="382" y="38" width="16" height="40" fill="none" stroke="#f97316" stroke-width="3" rx="3"/>
+              <rect x="371" y="49" width="38" height="18" fill="none" stroke="#f97316" stroke-width="3" rx="3"/>
+            </svg>
+
+            <!-- RIGHT: Bill type + number -->
             <div style="text-align:right;">
-                <h2 style="font-size:16px;font-weight:800;color:${isFinal ? '#059669' : '#f59e0b'};">${isFinal ? 'FINAL BILL' : 'INTERIM BILL'}</h2>
-                <p style="font-size:12px;font-weight:700;">${invoice.invoice_number}</p>
+                <h2 style="font-size:16px;font-weight:800;color:${isFinal ? '#1e3a6e' : '#f97316'};">${isFinal ? 'FINAL BILL' : 'INTERIM BILL'}</h2>
+                <p style="font-size:12px;font-weight:700;color:#1e3a6e;">${invoice.invoice_number}</p>
                 <p style="font-size:10px;color:#6b7280;">Date: ${new Date().toLocaleDateString('en-IN')}</p>
+                <p style="font-size:10px;color:#6b7280;">GSTIN: ${gstin}</p>
             </div>
         </div>
 

@@ -942,6 +942,15 @@ export default function IPDDashboard() {
                                   >
                                     <ClipboardList className="h-3.5 w-3.5 text-gray-500" />
                                   </button>
+                                  <a
+                                    href={`/api/discharge/${adm.admission_id}/bill`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 hover:bg-blue-50 rounded-lg"
+                                    title="View Bill"
+                                  >
+                                    <FileText className="h-3.5 w-3.5 text-blue-500" />
+                                  </a>
                                   {adm.status === "Admitted" && (
                                     <button
                                       onClick={() => setDischargeModal(adm)}
