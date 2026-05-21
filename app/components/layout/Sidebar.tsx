@@ -76,6 +76,7 @@ import {
   Printer,
   LayoutList,
   Tag,
+  FileCode2,
 } from "lucide-react";
 
 interface NavItem {
@@ -263,6 +264,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "All Invoices", href: "/finance/invoices", icon: FileText },
         { label: "Payment Ledger", href: "/finance/payments", icon: CreditCard },
         { label: "Expenses", href: "/finance/expenses", icon: Banknote },
+        { label: "Tally Export", href: "/finance/tally-export", icon: FileCode2 },
       ],
     },
     {

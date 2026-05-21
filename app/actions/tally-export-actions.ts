@@ -2,9 +2,20 @@
 'use server';
 
 import { prisma } from '@/backend/db';
+import { requireTenantContext } from '@/backend/tenant';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { revalidatePath } from 'next/cache';
+
+// Resolve organizationId from server session — no localStorage needed
+export async function getMyOrganizationId() {
+    try {
+        const { organizationId } = await requireTenantContext();
+        return { success: true, organizationId };
+    } catch {
+        return { success: false, organizationId: null };
+    }
+}
 
 // ========================================
 // Types & Interfaces
@@ -39,6 +50,22 @@ interface TallyVoucher {
 
 export async function generateTallyXML(options: TallyExportOptions) {
   try {
+    // Convert IST date boundaries to UTC for correct DB filtering
+    // IST = UTC+5:30 → subtract 5h30m for start, add 18h29m59s for end
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const toISTDayStart = (d: Date) => new Date(d.getTime() - IST_OFFSET_MS);
+    const toISTDayEnd   = (d: Date) => new Date(d.getTime() + (24 * 60 * 60 * 1000) - IST_OFFSET_MS - 1);
+
+    const normalizedOptions = {
+      ...options,
+      start_date: options.start_date ? toISTDayStart(new Date(options.start_date)) : options.start_date,
+      end_date: options.end_date ? toISTDayEnd(new Date(options.end_date)) : options.end_date,
+    };
+
+    console.log('[TallyExport] date filter UTC:', {
+      start: normalizedOptions.start_date?.toISOString(),
+      end: normalizedOptions.end_date?.toISOString(),
+    });
     // Create export record
     const year = new Date().getFullYear();
     const lastExport = await prisma.tallyExport.findFirst({
@@ -60,14 +87,14 @@ export async function generateTallyXML(options: TallyExportOptions) {
 
     const exportRecord = await prisma.tallyExport.create({
       data: {
-        organizationId: options.organizationId,
+        organizationId: normalizedOptions.organizationId,
         export_number,
-        export_type: options.export_type,
+        export_type: normalizedOptions.export_type,
         export_format: 'XML',
-        start_date: options.start_date,
-        end_date: options.end_date,
+        start_date: normalizedOptions.start_date,
+        end_date: normalizedOptions.end_date,
         status: 'Processing',
-        created_by: options.created_by,
+        created_by: normalizedOptions.created_by,
       },
     });
 
@@ -75,33 +102,41 @@ export async function generateTallyXML(options: TallyExportOptions) {
       let xmlContent = '';
       let recordCount = 0;
 
-      switch (options.export_type) {
+      switch (normalizedOptions.export_type) {
         case 'Vouchers':
-          const vouchersResult = await buildVoucherXML(options);
+          const vouchersResult = await buildVoucherXML(normalizedOptions);
           xmlContent = vouchersResult.xml;
           recordCount = vouchersResult.count;
           break;
 
         case 'Ledgers':
-          const ledgersResult = await buildLedgerXML(options.organizationId);
+          const ledgersResult = await buildLedgerXML(normalizedOptions.organizationId);
           xmlContent = ledgersResult.xml;
           recordCount = ledgersResult.count;
           break;
 
         case 'Masters':
-          const mastersResult = await buildMasterXML(options.organizationId);
+          const mastersResult = await buildMasterXML(normalizedOptions.organizationId);
           xmlContent = mastersResult.xml;
           recordCount = mastersResult.count;
           break;
 
         case 'Full':
           const [vouchers, ledgers, masters] = await Promise.all([
-            buildVoucherXML(options),
-            buildLedgerXML(options.organizationId),
-            buildMasterXML(options.organizationId),
+            buildVoucherXML(normalizedOptions),
+            buildLedgerXML(normalizedOptions.organizationId),
+            buildMasterXML(normalizedOptions.organizationId),
           ]);
+          // Each builder already wraps its own XML — for Full export we need
+          // to extract the raw TALLYMESSAGE blocks and wrap them ONCE together.
+          const extractContent = (xml: string) => {
+            const match = xml.match(/<REQUESTDATA>([\s\S]*?)<\/REQUESTDATA>/);
+            return match ? match[1] : '';
+          };
           xmlContent = wrapTallyXML(
-            vouchers.xml + ledgers.xml + masters.xml
+            extractContent(vouchers.xml) +
+            extractContent(ledgers.xml) +
+            extractContent(masters.xml)
           );
           recordCount = vouchers.count + ledgers.count + masters.count;
           break;
@@ -111,7 +146,7 @@ export async function generateTallyXML(options: TallyExportOptions) {
       const exportsDir = join(process.cwd(), 'exports', 'tally');
       await mkdir(exportsDir, { recursive: true });
 
-      const filename = `${export_number}_${options.export_type.toLowerCase()}.xml`;
+      const filename = `${export_number}_${normalizedOptions.export_type.toLowerCase()}.xml`;
       const filepath = join(exportsDir, filename);
 
       await writeFile(filepath, xmlContent, 'utf-8');
@@ -230,11 +265,14 @@ ${journal.lines
 }
 
 async function buildInvoiceVoucherXML(options: TallyExportOptions): Promise<string[]> {
+  const startDate = options.start_date ? new Date(options.start_date) : undefined;
+  const endDate   = options.end_date   ? new Date(options.end_date)   : undefined;
+  console.log('[buildInvoiceVoucherXML] date filter:', { startDate: startDate?.toISOString(), endDate: endDate?.toISOString() });
   const invoices = await prisma.invoices.findMany({
     where: {
       organizationId: options.organizationId,
-      ...(options.start_date && { invoice_date: { gte: options.start_date } }),
-      ...(options.end_date && { invoice_date: { lte: options.end_date } }),
+      ...(startDate && { created_at: { gte: startDate } }),
+      ...(endDate   && { created_at: { lte: endDate   } }),
     },
     include: {
       patient: true,
@@ -251,9 +289,9 @@ async function buildInvoiceVoucherXML(options: TallyExportOptions): Promise<stri
     return `
     <TALLYMESSAGE xmlns:UDF="TallyUDF">
       <VOUCHER VCHTYPE="Sales" ACTION="Create">
-        <DATE>${formatTallyDate(invoice.invoice_date)}</DATE>
+        <DATE>${formatTallyDate(invoice.created_at)}</DATE>
         <VOUCHERNUMBER>${escapeXML(invoice.invoice_number)}</VOUCHERNUMBER>
-        <NARRATION>Sales Invoice - ${escapeXML(invoice.patient?.name || 'Patient')}</NARRATION>
+        <NARRATION>Sales Invoice - ${escapeXML(invoice.patient?.full_name || invoice.patient_name || 'Patient')}</NARRATION>
         <VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>
         <PARTYLEDGERNAME>Sundry Debtors - Patients</PARTYLEDGERNAME>
         <ALLLEDGERENTRIES.LIST>
@@ -299,11 +337,13 @@ ${
 }
 
 async function buildPaymentVoucherXML(options: TallyExportOptions): Promise<string[]> {
+  const startDate = options.start_date ? new Date(options.start_date) : undefined;
+  const endDate   = options.end_date   ? new Date(options.end_date)   : undefined;
   const payments = await prisma.payments.findMany({
     where: {
       organizationId: options.organizationId,
-      ...(options.start_date && { payment_date: { gte: options.start_date } }),
-      ...(options.end_date && { payment_date: { lte: options.end_date } }),
+      ...(startDate && { created_at: { gte: startDate } }),
+      ...(endDate   && { created_at: { lte: endDate   } }),
     },
   });
 
@@ -313,19 +353,19 @@ async function buildPaymentVoucherXML(options: TallyExportOptions): Promise<stri
     return `
     <TALLYMESSAGE xmlns:UDF="TallyUDF">
       <VOUCHER VCHTYPE="Receipt" ACTION="Create">
-        <DATE>${formatTallyDate(payment.payment_date)}</DATE>
-        <VOUCHERNUMBER>${escapeXML(payment.payment_reference || payment.id)}</VOUCHERNUMBER>
+        <DATE>${formatTallyDate(payment.created_at)}</DATE>
+        <VOUCHERNUMBER>${escapeXML(payment.receipt_number || payment.reference || String(payment.id))}</VOUCHERNUMBER>
         <NARRATION>Payment received - ${escapeXML(payment.payment_method)}</NARRATION>
         <VOUCHERTYPENAME>Receipt</VOUCHERTYPENAME>
         <ALLLEDGERENTRIES.LIST>
           <LEDGERNAME>${cashOrBank}</LEDGERNAME>
           <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
-          <AMOUNT>${payment.amount_paid.toNumber()}</AMOUNT>
+          <AMOUNT>${payment.amount.toNumber()}</AMOUNT>
         </ALLLEDGERENTRIES.LIST>
         <ALLLEDGERENTRIES.LIST>
           <LEDGERNAME>Sundry Debtors - Patients</LEDGERNAME>
           <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
-          <AMOUNT>${-payment.amount_paid.toNumber()}</AMOUNT>
+          <AMOUNT>${-payment.amount.toNumber()}</AMOUNT>
         </ALLLEDGERENTRIES.LIST>
       </VOUCHER>
     </TALLYMESSAGE>`;
@@ -333,23 +373,26 @@ async function buildPaymentVoucherXML(options: TallyExportOptions): Promise<stri
 }
 
 async function buildExpenseVoucherXML(options: TallyExportOptions): Promise<string[]> {
+  const startDate = options.start_date ? new Date(options.start_date) : undefined;
+  const endDate   = options.end_date   ? new Date(options.end_date)   : undefined;
   const expenses = await prisma.expense.findMany({
     where: {
       organizationId: options.organizationId,
-      ...(options.start_date && { expense_date: { gte: options.start_date } }),
-      ...(options.end_date && { expense_date: { lte: options.end_date } }),
+      ...(startDate && { created_at: { gte: startDate } }),
+      ...(endDate   && { created_at: { lte: endDate   } }),
     },
   });
 
   return expenses.map((expense: any) => {
     const paymentLedger =
-      expense.payment_status === 'Paid' ? 'Cash' : 'Sundry Creditors';
+      expense.status === 'Paid' ? 'Cash' : 'Sundry Creditors';
+    const expenseDate = expense.payment_date || expense.created_at;
 
     return `
     <TALLYMESSAGE xmlns:UDF="TallyUDF">
       <VOUCHER VCHTYPE="Payment" ACTION="Create">
-        <DATE>${formatTallyDate(expense.expense_date)}</DATE>
-        <VOUCHERNUMBER>${escapeXML(expense.id)}</VOUCHERNUMBER>
+        <DATE>${formatTallyDate(expenseDate)}</DATE>
+        <VOUCHERNUMBER>${escapeXML(expense.expense_number || String(expense.id))}</VOUCHERNUMBER>
         <NARRATION>${escapeXML(expense.description || 'Expense')}</NARRATION>
         <VOUCHERTYPENAME>Payment</VOUCHERTYPENAME>
         <ALLLEDGERENTRIES.LIST>

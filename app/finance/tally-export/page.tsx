@@ -9,7 +9,7 @@ import { Card, CardHeader, CardTitle } from '@/app/components/ui/Card';
 import { Table, TableHeader, TableBody, TableRow, TableCell } from '@/app/components/ui/Table';
 import { Input } from '@/app/components/ui/Input';
 import { Select } from '@/app/components/ui/Select';
-import { generateTallyXML, getTallyExports, deleteTallyExport } from '@/app/actions/tally-export-actions';
+import { generateTallyXML, getTallyExports, deleteTallyExport, getMyOrganizationId } from '@/app/actions/tally-export-actions';
 import { Download, Trash2, FileCode2, Loader2, RefreshCw } from 'lucide-react';
 
 const EXPORT_TYPE_OPTIONS = [
@@ -72,9 +72,16 @@ export default function TallyExportPage() {
     const [exports, setExports] = useState<TallyExportRecord[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(true);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [orgId, setOrgId] = useState<string>('');
 
-    const organizationId = (): string =>
-        (typeof window !== 'undefined' && localStorage.getItem('organizationId')) || '';
+    // Resolve orgId from server session on mount
+    useEffect(() => {
+        getMyOrganizationId().then(res => {
+            if (res.success && res.organizationId) setOrgId(res.organizationId);
+        });
+    }, []);
+
+    const organizationId = (): string => orgId;
 
     const loadExports = useCallback(async () => {
         setLoadingHistory(true);
@@ -82,14 +89,15 @@ export default function TallyExportPage() {
         if (result.success) {
             setExports(result.exports as TallyExportRecord[]);
         } else {
-            toast.error('Failed to load export history');
+            console.error('Failed to load export history');
         }
         setLoadingHistory(false);
-    }, [toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [orgId]);
 
     useEffect(() => {
-        loadExports();
-    }, [loadExports]);
+        if (orgId) loadExports();
+    }, [orgId, loadExports]);
 
     async function handleGenerate() {
         const orgId = organizationId();
@@ -106,13 +114,23 @@ export default function TallyExportPage() {
             return;
         }
 
+        // Parse dates as UTC midnight — server will convert to IST day boundaries
+        const parseLocalDate = (dateStr: string) => {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+        };
+
         setGenerating(true);
         try {
+            const isFull = exportType === 'Full';
             const result = await generateTallyXML({
                 organizationId: orgId,
                 export_type: exportType,
-                start_date: new Date(startDate),
-                end_date: new Date(endDate),
+                start_date: parseLocalDate(startDate),
+                end_date: parseLocalDate(endDate),
+                include_invoices: isFull || exportType === 'Vouchers',
+                include_payments: isFull || exportType === 'Vouchers',
+                include_expenses: isFull || exportType === 'Vouchers',
             });
 
             if (result.success) {
@@ -129,15 +147,10 @@ export default function TallyExportPage() {
     }
 
     async function handleDownload(record: TallyExportRecord) {
-        if (!record.file_path) {
-            toast.error('File path not available for this export');
-            return;
-        }
         try {
             const response = await fetch(`/api/tally-export/download?id=${record.id}`);
             if (!response.ok) {
-                // Fall back: try to read the file content directly via the action
-                toast.error('Download failed — file may have been moved or deleted');
+                toast.error('Download failed — please try again');
                 return;
             }
             const blob = await response.blob();
@@ -303,7 +316,7 @@ export default function TallyExportPage() {
                                                     size="sm"
                                                     icon={<Download className="h-3.5 w-3.5" />}
                                                     onClick={() => handleDownload(exp)}
-                                                    disabled={exp.status !== 'Completed' || !exp.file_path}
+                                                    disabled={exp.status !== 'Completed'}
                                                 >
                                                     Download
                                                 </Button>
