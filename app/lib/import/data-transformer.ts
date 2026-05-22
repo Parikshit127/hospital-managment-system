@@ -176,7 +176,9 @@ function transformField(field: string, value: string, _importType: ImportType): 
 
     // Numeric fields
     if (['total_amount', 'discount', 'paid_amount', 'price_per_unit', 'consultation_fee',
-        'current_stock', 'min_threshold', 'quantity'].includes(field)) {
+        'current_stock', 'min_threshold', 'quantity',
+        'mrp', 'purchase_price', 'selling_price', 'gst_percent', 'tax_rate',
+        'follow_up_fee', 'slot_duration', 'default_rate'].includes(field)) {
         return parseAmount(value);
     }
 
