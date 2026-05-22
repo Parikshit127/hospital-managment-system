@@ -588,14 +588,26 @@ export default function PharmacyPage() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md">
                     <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden print-area relative">
                         <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, #1e3a6e, #f97316, #1e3a6e)' }} />
+                        {/* Letterhead bg for print */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/letter head.png" alt="" aria-hidden="true" className="hidden print:block" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: -1, pointerEvents: 'none' }} />
 
                         {invoiceResult ? (
                             /* Invoice Generated - Show Receipt */
                             <>
-                                <div className="p-6 border-b border-dashed border-gray-200">
-                                    {/* Letterhead */}
-                                    <div className="flex items-start justify-between pb-4 mb-4" style={{ borderBottom: '2px solid #1e3a6e' }}>
-                                        <img src="/axten-logo.svg" alt="Axten Hospitals" className="h-12 w-auto object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                <div className="p-6 border-b border-dashed border-gray-200 print:pt-[130px]">
+                                    {/* Letterhead — hidden in print, letterhead image replaces it */}
+                                    <div className="flex items-start justify-between pb-4 mb-4 print:hidden" style={{ borderBottom: '2px solid #1e3a6e' }}>
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img src="/logo.jpeg" alt="Axten Hospitals" className="h-12 w-auto object-contain" />
+                                        <div className="text-right">
+                                            <p className="text-xs font-black uppercase tracking-widest" style={{ color: '#1e3a6e' }}>Pharmacy Invoice</p>
+                                            <p className="text-xs font-mono text-gray-500 mt-0.5">{invoiceResult.invoice_number}</p>
+                                            <p className="text-xs text-gray-400">{new Date().toLocaleDateString('en-IN')}</p>
+                                        </div>
+                                    </div>
+                                    {/* Print-only invoice info */}
+                                    <div className="hidden print:flex justify-end mb-4">
                                         <div className="text-right">
                                             <p className="text-xs font-black uppercase tracking-widest" style={{ color: '#1e3a6e' }}>Pharmacy Invoice</p>
                                             <p className="text-xs font-mono text-gray-500 mt-0.5">{invoiceResult.invoice_number}</p>

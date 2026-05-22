@@ -856,6 +856,85 @@ export default function IpdBillingPage() {
                     {toast.message}
                 </div>
             )}
+
+            {/* ── PRINT VIEW ── */}
+            {billData && (
+                <div className="hidden print:block fixed inset-0 z-[200] text-black" style={{ padding: '130px 60px 80px 60px' }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/letter head.png" alt="" aria-hidden="true" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: -1, pointerEvents: 'none' }} />
+
+                    <div className="max-w-3xl mx-auto space-y-6">
+                        {/* Invoice info top-right */}
+                        <div className="flex justify-between items-start border-b-2 border-gray-300 pb-4">
+                            <div>
+                                <p className="text-lg font-black text-gray-900">{billData.admission.patient_name}</p>
+                                <p className="text-xs text-gray-500">{billData.admission.admission_id} | Dr. {billData.admission.doctor_name}</p>
+                                <p className="text-xs text-gray-500">{billData.admission.ward_name} | Bed: {billData.admission.bed_id} | Day {billData.admission.days_admitted}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-sm font-bold" style={{ color: '#1e3a6e' }}>{billData.invoice.invoice_number}</p>
+                                <p className="text-xs text-gray-500">INTERIM BILL</p>
+                                <p className="text-xs text-gray-500">{new Date().toLocaleDateString('en-IN')}</p>
+                            </div>
+                        </div>
+
+                        {/* Charges table */}
+                        <table className="w-full text-sm border-collapse">
+                            <thead>
+                                <tr className="border-y-2 border-black">
+                                    <th className="py-2 text-left font-black uppercase tracking-wider text-xs">Description</th>
+                                    <th className="py-2 text-left font-black uppercase tracking-wider text-xs">Category</th>
+                                    <th className="py-2 text-right font-black uppercase tracking-wider text-xs">Qty</th>
+                                    <th className="py-2 text-right font-black uppercase tracking-wider text-xs">Rate</th>
+                                    <th className="py-2 text-right font-black uppercase tracking-wider text-xs">GST%</th>
+                                    <th className="py-2 text-right font-black uppercase tracking-wider text-xs">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                                {(billData.items || []).map((item: any, i: number) => (
+                                    <tr key={i}>
+                                        <td className="py-2 font-medium">{item.description}</td>
+                                        <td className="py-2 text-gray-500 text-xs">{item.service_category}</td>
+                                        <td className="py-2 text-right">{item.quantity}</td>
+                                        <td className="py-2 text-right">₹{Number(item.unit_price).toLocaleString('en-IN')}</td>
+                                        <td className="py-2 text-right">{item.tax_rate}%</td>
+                                        <td className="py-2 text-right font-bold">₹{(Number(item.net_price) + Number(item.tax_amount || 0)).toLocaleString('en-IN')}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            <tfoot>
+                                <tr className="border-t-2 border-black">
+                                    <td colSpan={5} className="py-3 text-right font-black uppercase tracking-wider">Net Bill</td>
+                                    <td className="py-3 text-right font-black text-lg">₹{Number(billData.invoice.net_amount || 0).toLocaleString('en-IN')}</td>
+                                </tr>
+                                {Number(billData.invoice.paid_amount) > 0 && (
+                                    <tr>
+                                        <td colSpan={5} className="py-1 text-right text-gray-500">Amount Paid</td>
+                                        <td className="py-1 text-right text-emerald-600 font-bold">₹{Number(billData.invoice.paid_amount).toLocaleString('en-IN')}</td>
+                                    </tr>
+                                )}
+                                <tr>
+                                    <td colSpan={5} className="py-1 text-right font-bold text-red-600">Balance Due</td>
+                                    <td className="py-1 text-right font-black text-red-600">₹{Number(billData.invoice.balance_due || 0).toLocaleString('en-IN')}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+
+                        {/* Footer */}
+                        <div className="pt-12 flex justify-between items-end">
+                            <div className="text-xs text-gray-500 space-y-1">
+                                <p>This is an interim bill. Final bill will be generated at discharge.</p>
+                                <p>Admitted: {new Date(billData.admission.admission_date).toLocaleDateString('en-IN')}</p>
+                            </div>
+                            <div className="text-center">
+                                <div className="border-t border-gray-400 w-40 mb-1" />
+                                <p className="text-xs font-bold uppercase tracking-wider">Authorized Signatory</p>
+                                <p className="text-[10px] text-gray-400">Computer Generated Digital Receipt</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

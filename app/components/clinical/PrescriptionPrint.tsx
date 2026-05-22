@@ -58,7 +58,8 @@ export function PrescriptionPrint({ data, onClose }: PrescriptionPrintProps) {
                 <title>Prescription — ${data.patient.full_name}</title>
                 <style>
                     * { margin: 0; padding: 0; box-sizing: border-box; }
-                    body { font-family: 'Times New Roman', serif; color: #111; padding: 32px; font-size: 13px; }
+                    body { font-family: 'Times New Roman', serif; color: #111; padding: 130px 48px 80px 48px; font-size: 13px; position: relative; }
+                    body::before { content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-image: url('/letter head.png'); background-size: cover; background-position: center; z-index: -1; }
                     ${LETTERHEAD_PRINT_CSS}
                     .rx-patient-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; padding: 10px 0; border-bottom: 1px solid #ccc; margin-bottom: 14px; }
                     .rx-label { font-size: 10px; text-transform: uppercase; color: #666; letter-spacing: 0.05em; }
@@ -72,11 +73,17 @@ export function PrescriptionPrint({ data, onClose }: PrescriptionPrintProps) {
                     .rx-med-num { font-weight: bold; color: #444; min-width: 18px; }
                     .rx-footer { margin-top: 40px; display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px solid #ccc; padding-top: 12px; }
                     .rx-sig { width: 180px; border-top: 1px solid #1e3a6e; margin-top: 40px; text-align: center; font-size: 11px; padding-top: 4px; }
-                    @media print { body { padding: 16px; } }
+                    @media print { body { padding: 130px 48px 80px 48px; } }
                 </style>
             </head>
             <body>
-                ${letterheadHtml(doctorRightHtml)}
+                <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
+                    <div style="font-family:Arial,sans-serif;text-align:right;">
+                        <div style="font-size:15px;font-weight:bold;color:#1e3a6e;">Dr. ${data.doctor.name}</div>
+                        ${data.doctor.specialty ? `<div style="font-size:11px;color:#555;margin-top:2px;">${data.doctor.specialty}</div>` : ''}
+                        ${data.doctor.reg_number ? `<div style="font-size:10px;color:#888;margin-top:1px;">Reg: ${data.doctor.reg_number}</div>` : ''}
+                    </div>
+                </div>
                 ${content}
             </body>
             </html>

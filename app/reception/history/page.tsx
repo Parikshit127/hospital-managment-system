@@ -241,18 +241,12 @@ export default function PatientHistoryPage() {
 
             {/* Hidden Printing Area for History */}
             {printingRecord && (
-                <div className="hidden print:block fixed inset-0 bg-white p-10 z-[100] text-black">
+                <div className="hidden print:block fixed inset-0 z-[100] text-black" style={{ padding: '130px 60px 80px 60px' }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/letter head.png" alt="" aria-hidden="true" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: -1, pointerEvents: 'none' }} />
                     <div className="max-w-3xl mx-auto space-y-8">
-                        {/* Hospital Header */}
-                        <div className="flex justify-between items-start border-b-2 border-black pb-8">
-                            <div className="space-y-2">
-                                <h1 className="text-3xl font-black uppercase tracking-tighter">HOSPITAL RECEIPT</h1>
-                                <div className="space-y-0.5 text-sm font-medium">
-                                    <p>Medical Center Address Line 1</p>
-                                    <p>City, State, PIN - 000000</p>
-                                    <p>Contact: +91 00000 00000</p>
-                                </div>
-                            </div>
+                        {/* Invoice number top-right */}
+                        <div className="flex justify-end border-b-2 border-gray-300 pb-4">
                             <div className="text-right space-y-1">
                                 <p className="text-xl font-bold">{printingRecord.invoice_number}</p>
                                 <p className="text-sm font-medium">{new Date(printingRecord.date).toLocaleDateString()} {new Date(printingRecord.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>

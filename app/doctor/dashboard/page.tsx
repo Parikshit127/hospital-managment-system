@@ -1023,7 +1023,10 @@ export default function DoctorDashboard() {
       {showPrescriptionModal && activePatient && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden print-area">
-            <div className="p-8 border-b border-slate-200 bg-slate-50">
+            {/* Letterhead bg for print */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/letter head.png" alt="" aria-hidden="true" className="hidden print:block" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: -1, pointerEvents: 'none' }} />
+            <div className="p-8 border-b border-slate-200 bg-slate-50 print:hidden">
               <PrintLetterhead
                 rightSlot={
                   <div>
@@ -1033,6 +1036,15 @@ export default function DoctorDashboard() {
                   </div>
                 }
               />
+            </div>
+            {/* Print-only top spacer */}
+            <div className="hidden print:flex justify-end" style={{ padding: '130px 32px 0 32px' }}>
+              <div className="text-right">
+                <p className="text-xs font-bold text-slate-400 uppercase">Doctor</p>
+                <p className="font-bold text-slate-900">{doctorName}</p>
+                <p className="text-xs text-slate-500">{new Date().toLocaleDateString()}</p>
+              </div>
+            </div>
             </div>
             <div className="p-8 space-y-6">
               <div className="flex justify-between items-center bg-slate-50 p-4 rounded-lg border border-slate-200">

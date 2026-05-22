@@ -49,7 +49,7 @@ export const LETTERHEAD_PRINT_CSS = `
 
 export function letterheadHtml(rightHtml = '') {
   return `
-    <div class="lh-wrap">
+    <div class="lh-wrap" style="position:relative;">
       <img src="/logo.jpeg" alt="Axten Hospitals" style="height:72px;width:auto;display:block;flex-shrink:0;" />
       ${rightHtml ? `<div class="lh-right">${rightHtml}</div>` : ''}
     </div>

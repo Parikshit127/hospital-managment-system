@@ -146,6 +146,19 @@ export async function admitPatientIPD(data: {
     
     
     const admission = await db.$transaction(async (tx: any) => {
+        // Check if patient is already admitted
+        const existingAdmission = await tx.admissions.findFirst({
+            where: {
+                patient_id: data.patient_id,
+                status: "Admitted",
+                organizationId,
+            },
+        });
+
+        if (existingAdmission) {
+            throw new Error(`Patient is already admitted (${existingAdmission.admission_id}). Please discharge them first.`);
+        }
+
         // Atomic update: only update if it is 'Available'
         const updatedBed = await tx.beds.updateMany({
             where: { bed_id: data.bed_id, status: "Available", organizationId },

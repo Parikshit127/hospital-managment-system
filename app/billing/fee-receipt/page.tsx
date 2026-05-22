@@ -74,6 +74,11 @@ export default function FeeReceiptPage() {
 
     return (
         <AppShell pageTitle="Fee Receipts" pageIcon={<FileText className="h-5 w-5" />}>
+            <style>{`
+                @media print {
+                    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                }
+            `}</style>
             <div className="max-w-6xl mx-auto pb-24 print:max-w-full">
                 <div className="flex items-center justify-between mb-5 print:hidden">
                     <div>
@@ -898,19 +903,35 @@ function SuccessAndPrintModal({
                 </div>
             </div>
 
-            <div className="hidden print:block fixed inset-0 bg-white p-10 z-[100] text-black">
-                <div className="max-w-3xl mx-auto space-y-8">
-                    <PrintLetterhead
-                        rightSlot={
-                            <div>
-                                <p className="text-xl font-bold" style={{ color: "#1e3a6e" }}>{receipt.invoice}</p>
-                                <p className="text-sm font-bold text-gray-600">Receipt: {receipt.id || "—"}</p>
-                                <p className="text-sm font-medium">
-                                    {fmtDate(receipt.created_at)} {fmtTime(receipt.created_at)}
-                                </p>
-                            </div>
-                        }
-                    />
+            <div className="hidden print:block fixed inset-0 z-[100] text-black" style={{ padding: '130px 60px 80px 60px' }}>
+                {/* Letterhead background image — full page */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                    src="/letter head.png"
+                    alt=""
+                    aria-hidden="true"
+                    style={{
+                        position: "fixed",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        zIndex: -1,
+                        pointerEvents: "none",
+                    }}
+                />
+                <div className="max-w-3xl mx-auto space-y-6">
+                    {/* Invoice number top-right */}
+                    <div className="flex justify-end">
+                        <div className="text-right">
+                            <p className="text-base font-bold" style={{ color: "#1e3a6e" }}>{receipt.invoice}</p>
+                            <p className="text-xs font-bold text-gray-600">Receipt: {receipt.id || "—"}</p>
+                            <p className="text-xs text-gray-500">
+                                {fmtDate(receipt.created_at)} {fmtTime(receipt.created_at)}
+                            </p>
+                        </div>
+                    </div>
 
                     <div className="grid grid-cols-2 gap-8 py-2">
                         <div className="space-y-1">

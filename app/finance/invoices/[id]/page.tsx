@@ -230,8 +230,26 @@ export default function InvoiceDetailPage() {
                 )}
 
                 {/* THE PRINTABLE INVOICE DOCUMENT */}
-                <div className="bg-white border border-gray-200 rounded-2xl print-m-0 p-8 sm:p-12 shadow-md relative">
-                    
+                <div className="bg-white border border-gray-200 rounded-2xl print-m-0 p-8 sm:p-12 shadow-md relative"
+                    style={{ position: 'relative' }}
+                >
+                    {/* Letterhead background for print */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                        src="/letter head.png"
+                        alt=""
+                        aria-hidden="true"
+                        className="hidden print:block"
+                        style={{
+                            position: 'fixed',
+                            top: 0, left: 0,
+                            width: '100%', height: '100%',
+                            objectFit: 'cover',
+                            zIndex: -1,
+                            pointerEvents: 'none',
+                        }}
+                    />
+
                     {/* Status Watermark */}
                     {(invoice.status === 'Draft' || invoice.status === 'Cancelled') && (
                         <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none z-0">
@@ -239,8 +257,8 @@ export default function InvoiceDetailPage() {
                         </div>
                     )}
 
-                    {/* Hospital Branding Header */}
-                    <div className="relative z-10">
+                    {/* Hospital Branding Header — hidden in print (letterhead image has it) */}
+                    <div className="relative z-10 print:hidden">
                         <PrintLetterhead
                             className="mb-8"
                             rightSlot={
@@ -257,6 +275,16 @@ export default function InvoiceDetailPage() {
                                 </div>
                             }
                         />
+                    </div>
+                    {/* Print-only header spacer + invoice info */}
+                    <div className="hidden print:flex justify-between items-start mb-8" style={{ paddingTop: '130px' }}>
+                        <div />
+                        <div className="text-right">
+                            <h2 className="text-2xl font-black tracking-wider uppercase mb-1" style={{ color: '#1e3a6e' }}>TAX INVOICE</h2>
+                            <div className="text-sm font-mono text-slate-700"><span className="font-bold">Bill No:</span> {invoice.invoice_number}</div>
+                            <div className="text-sm font-mono text-slate-700"><span className="font-bold">Date:</span> {new Date(invoice.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                            <div className="text-sm font-mono text-slate-700"><span className="font-bold">Type:</span> {invoice.invoice_type} BILLING</div>
+                        </div>
                     </div>
 
                     {/* Patient Context Block */}
