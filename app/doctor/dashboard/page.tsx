@@ -1045,7 +1045,6 @@ export default function DoctorDashboard() {
                 <p className="text-xs text-slate-500">{new Date().toLocaleDateString()}</p>
               </div>
             </div>
-            </div>
             <div className="p-8 space-y-6">
               <div className="flex justify-between items-center bg-slate-50 p-4 rounded-lg border border-slate-200">
                 <div>
