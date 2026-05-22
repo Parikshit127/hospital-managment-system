@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { requireTenantContext } from '@/backend/tenant';
+import { prisma } from '@/backend/db';
 
 export async function POST(req: NextRequest) {
     try {
