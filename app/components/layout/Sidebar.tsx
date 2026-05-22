@@ -77,6 +77,7 @@ import {
   LayoutList,
   Tag,
   FileCode2,
+  ReceiptText,
 } from "lucide-react";
 
 interface NavItem {
@@ -193,6 +194,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Patient List", href: "/reception", icon: Users },
         { label: "Register Patient", href: "/reception/register", icon: UserPlus },
         { label: "Master Billing", href: "/billing", icon: CircleDollarSign },
+        { label: "Fee Receipt", href: "/billing/fee-receipt", icon: ReceiptText },
         { label: "IPD Settlement", href: "/ipd/discharge-settlement", icon: Wallet },
         { label: "All Invoices", href: "/finance/invoices", icon: FileText },
         { label: "Patient History", href: "/reception/history", icon: Clock },
@@ -551,25 +553,36 @@ export function Sidebar({ session }: SidebarProps) {
     >
       {/* Brand Header */}
       <div
-        className="flex items-center gap-3 px-4 h-[60px] shrink-0"
+        className="flex items-center gap-3 px-4 h-[68px] shrink-0"
         style={{ borderBottom: "1px solid var(--admin-sidebar-border)" }}
       >
         {/* Axten logo — collapsed shows just the circle emblem */}
         {collapsed ? (
           <div className="shrink-0 flex items-center justify-center w-9 h-9">
-            <svg width="36" height="36" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="26" cy="26" r="24" stroke="#ffffff" strokeWidth="2.5"/>
-              <circle cx="26" cy="26" r="19" stroke="#ffffff" strokeWidth="1"/>
-              <rect x="21" y="14" width="10" height="24" rx="2" stroke="#f97316" strokeWidth="2.5" fill="none"/>
-              <rect x="14" y="21" width="24" height="10" rx="2" stroke="#f97316" strokeWidth="2.5" fill="none"/>
+            {/* Circular emblem: outer ring + AXTEN HOSPITALS text + cross icon */}
+            <svg width="36" height="36" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="50" cy="50" r="47" stroke="#ffffff" strokeWidth="4"/>
+              <circle cx="50" cy="50" r="38" stroke="#f97316" strokeWidth="1.5"/>
+              {/* Cross / plus shape */}
+              <rect x="42" y="28" width="16" height="44" rx="5" fill="#1e3a6e" stroke="#ffffff" strokeWidth="2"/>
+              <rect x="28" y="42" width="44" height="16" rx="5" fill="#1e3a6e" stroke="#ffffff" strokeWidth="2"/>
+              {/* Orange dots */}
+              <circle cx="20" cy="50" r="3" fill="#f97316"/>
+              <circle cx="80" cy="50" r="3" fill="#f97316"/>
             </svg>
           </div>
         ) : (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" style={{ height: '36px', width: 'auto', flexShrink: 0 }} aria-label="Axten Hospitals">
-            <text x="10" y="72" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="68" fill="#ffffff" letterSpacing="-2">Axten</text>
-            <rect x="10" y="80" width="60" height="8" fill="#f97316" rx="2"/>
-            <rect x="130" y="80" width="120" height="8" fill="#f97316" rx="2"/>
-            <text x="75" y="89" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="16" fill="#ffffff" letterSpacing="6">HOSPITALS</text>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 80" style={{ height: '44px', width: 'auto', flexShrink: 0 }} aria-label="Axten Hospitals">
+            {/* "Axten" bold navy-style text in white */}
+            <text x="0" y="52" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="56" fill="#ffffff" letterSpacing="-1">Axten</text>
+            {/* Orange bar left of HOSPITALS */}
+            <rect x="0" y="62" width="52" height="7" fill="#f97316" rx="2"/>
+            {/* HOSPITALS text */}
+            <text x="58" y="72" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="13" fill="#ffffff" letterSpacing="5">HOSPITALS</text>
+            {/* Orange bar right of HOSPITALS */}
+            <rect x="192" y="62" width="52" height="7" fill="#f97316" rx="2"/>
+            {/* Subtitle */}
+            <text x="0" y="82" fontFamily="Arial, sans-serif" fontWeight="400" fontSize="9" fill="#94a3b8" letterSpacing="0.3">A Unit of TAH Global Healthcare Pvt. Ltd.</text>
           </svg>
         )}
         {!collapsed && (
