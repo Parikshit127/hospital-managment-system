@@ -859,9 +859,9 @@ export default function IpdBillingPage() {
 
             {/* ── PRINT VIEW ── */}
             {billData && (
-                <div className="hidden print:block fixed inset-0 z-[200] text-black" style={{ padding: '130px 60px 80px 60px' }}>
+                <div className="hidden print:block fixed inset-0 z-[200] text-black" style={{ padding: '0 60px 80px 60px' }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/letter head.png" alt="" aria-hidden="true" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: -1, pointerEvents: 'none' }} />
+                    <img src="/letter head.png" alt="Axten Hospitals" style={{ width: '100%', height: 'auto', maxHeight: '160px', objectFit: 'cover', objectPosition: 'top', display: 'block', marginBottom: '16px' }} />
 
                     <div className="max-w-3xl mx-auto space-y-6">
                         {/* Invoice info top-right */}

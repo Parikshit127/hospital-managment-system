@@ -1174,10 +1174,23 @@ export async function approveInvoice(id: string | number, source: string) {
         const { db, organizationId } = await requireTenantContext();
 
         if (source === 'OPD' || source === 'IPD') {
-            await db.invoices.update({
+            // Only finalize the invoice — do NOT mark as Paid or zero balance_due
+            // Payment must be collected separately via recordPayment
+            const invoice = await db.invoices.findUnique({
                 where: { id: Number(id) },
-                data: { status: 'Paid', balance_due: 0 }
+                select: { status: true, balance_due: true, net_amount: true, paid_amount: true }
             });
+            if (invoice && invoice.status === 'Draft') {
+                const balanceDue = Number(invoice.net_amount) - Number(invoice.paid_amount);
+                await db.invoices.update({
+                    where: { id: Number(id) },
+                    data: {
+                        status: balanceDue <= 0 ? 'Paid' : 'Final',
+                        balance_due: balanceDue > 0 ? balanceDue : 0,
+                        finalized_at: new Date(),
+                    }
+                });
+            }
         } else if (source === 'LAB') {
             await db.lab_orders.update({
                 where: { id: Number(id) },
