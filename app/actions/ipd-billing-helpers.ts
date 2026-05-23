@@ -32,9 +32,9 @@ export async function searchDoctorsForIPD(query: string, limit: number = 10) {
         const where: any = { role: 'doctor', is_active: true };
         if (q) {
             where.OR = [
-                { name: { contains: q } },
-                { username: { contains: q } },
-                { specialty: { contains: q } },
+                { name: { contains: q, mode: 'insensitive' } },
+                { username: { contains: q, mode: 'insensitive' } },
+                { specialty: { contains: q, mode: 'insensitive' } },
             ];
         }
         const doctors = await db.user.findMany({
@@ -79,8 +79,8 @@ export async function getIPDServiceCatalog(
         if (category) where.category = category;
         if (q) {
             where.OR = [
-                { item_name: { contains: q } },
-                { item_code: { contains: q } },
+                { item_name: { contains: q, mode: 'insensitive' } },
+                { item_code: { contains: q, mode: 'insensitive' } },
             ];
         }
         const items = await db.charge_catalog.findMany({

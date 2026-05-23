@@ -689,8 +689,8 @@ export async function searchMedicine(query: string) {
         const meds = await db.pharmacy_medicine_master.findMany({
             where: {
                 OR: [
-                    { brand_name: { contains: query } },
-                    { generic_name: { contains: query } }
+                    { brand_name: { contains: query, mode: 'insensitive' } },
+                    { generic_name: { contains: query, mode: 'insensitive' } }
                 ]
             },
             take: 20,

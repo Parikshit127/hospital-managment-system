@@ -333,12 +333,12 @@ export async function findAssignedDoctorByPatientPhone(phoneQuery: string) {
         OR: [
           ...(q
             ? [
-                { phone: { contains: q } },
+                { phone: { contains: q, mode: 'insensitive' } },
                 { username: { contains: q, mode: "insensitive" } },
                 { name: { contains: q, mode: "insensitive" } },
               ]
             : []),
-          ...(digitQuery ? [{ phone: { contains: digitQuery } }] : []),
+          ...(digitQuery ? [{ phone: { contains: digitQuery, mode: 'insensitive' as const } }] : []),
         ],
       },
       select: {
@@ -794,9 +794,9 @@ export async function searchPatientsForAdmission(query: string) {
     const patients = await db.oPD_REG.findMany({
       where: {
         OR: [
-          { full_name: { contains: query } },
-          { patient_id: { contains: query } },
-          { phone: { contains: query } },
+          { full_name: { contains: query, mode: 'insensitive' } },
+          { patient_id: { contains: query, mode: 'insensitive' } },
+          { phone: { contains: query, mode: 'insensitive' } },
         ],
       },
       take: 10,

@@ -1220,7 +1220,7 @@ export async function searchPatientsForBilling(query: string) {
                 OR: [
                     { full_name: { contains: query, mode: 'insensitive' } },
                     { patient_id: { contains: query, mode: 'insensitive' } },
-                    { phone: { contains: query } }
+                    { phone: { contains: query, mode: 'insensitive' } }
                 ]
             },
             take: 10,

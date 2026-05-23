@@ -282,7 +282,7 @@ export async function getAdminPatientList(options?: {
       where.OR = [
         { full_name: { contains: search, mode: "insensitive" } },
         { patient_id: { contains: search, mode: "insensitive" } },
-        { phone: { contains: search } },
+        { phone: { contains: search, mode: 'insensitive' } },
       ];
     }
 
