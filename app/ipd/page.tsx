@@ -44,7 +44,30 @@ import {
   accrueIPDDailyCharges,
   findAssignedDoctorByPatientPhone,
 } from "@/app/actions/ipd-actions";
+import { getIpdPackages } from "@/app/actions/ipd-master-actions";
+import { applyPackageToAdmission } from "@/app/actions/ipd-finance-actions";
 import { AppShell } from "@/app/components/layout/AppShell";
+
+function parseIpdPackageMeta(desc: string | null | undefined): {
+  category: string | null;
+  isDayCare: boolean;
+  freeText: string;
+} {
+  if (!desc) return { category: null, isDayCare: false, freeText: "" };
+  try {
+    const m = JSON.parse(desc);
+    if (m && typeof m === "object" && "category" in m) {
+      return {
+        category: String(m.category),
+        isDayCare: !!m.is_day_care,
+        freeText: "",
+      };
+    }
+  } catch {
+    // not JSON
+  }
+  return { category: null, isDayCare: false, freeText: desc };
+}
 
 export default function IPDDashboard() {
   const [stats, setStats] = useState<any>(null);
@@ -68,9 +91,14 @@ export default function IPDDashboard() {
     doctor_name: "",
     deposit_amount: "",
     deposit_payment_method: "Cash",
+    package_id: "",
   });
   const [admitLoading, setAdmitLoading] = useState(false);
   const [admitError, setAdmitError] = useState("");
+
+  // IPD packages (for admission package selector)
+  const [ipdPackages, setIpdPackages] = useState<any[]>([]);
+  const [showPackageDetails, setShowPackageDetails] = useState(false);
 
   // Discharge modal
   const [dischargeModal, setDischargeModal] = useState<any>(null);
@@ -113,9 +141,22 @@ export default function IPDDashboard() {
     setLoading(false);
   };
 
+  const loadIpdPackages = async () => {
+    try {
+      const res = await getIpdPackages();
+      if (res.success) setIpdPackages(res.data || []);
+    } catch (err) {
+      console.error("loadIpdPackages error:", err);
+    }
+  };
+
   useEffect(() => {
     loadData();
   }, [admissionFilter]);
+
+  useEffect(() => {
+    loadIpdPackages();
+  }, []);
 
   const handleSearch = async (q: string) => {
     setSearchQuery(q);
@@ -157,6 +198,18 @@ export default function IPDDashboard() {
         deposit_payment_method: admitForm.deposit_payment_method || "Cash",
       });
       if (res.success) {
+        // If a package was selected, attach it to the new admission
+        if (admitForm.package_id && res.data?.admission_id) {
+          const pkgRes = await applyPackageToAdmission(
+            res.data.admission_id,
+            parseInt(admitForm.package_id),
+          );
+          if (!pkgRes.success) {
+            setAdmitError(
+              `Patient admitted but package could not be attached: ${pkgRes.error || "Unknown error"}`,
+            );
+          }
+        }
         setAdmitModal(false);
         setSelectedPatient(null);
         setAdmitForm({
@@ -166,8 +219,10 @@ export default function IPDDashboard() {
           doctor_name: "",
           deposit_amount: "",
           deposit_payment_method: "Cash",
+          package_id: "",
         });
-        setAdmitError("");
+        setShowPackageDetails(false);
+        if (!admitError) setAdmitError("");
         loadData();
       } else {
         setAdmitError(
@@ -1156,6 +1211,109 @@ export default function IPDDashboard() {
                     className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-violet-500/50 focus:outline-none"
                     placeholder="Attending doctor"
                   />
+                </div>
+
+                {/* IPD Package (optional) */}
+                <div className="border border-emerald-200 bg-emerald-50/40 rounded-xl p-3 space-y-2">
+                  <label className="text-[10px] font-black text-emerald-700 uppercase tracking-wider block">
+                    IPD Package (Optional)
+                  </label>
+                  <select
+                    value={admitForm.package_id}
+                    onChange={(e) => {
+                      setAdmitForm({ ...admitForm, package_id: e.target.value });
+                      setShowPackageDetails(false);
+                    }}
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:border-emerald-500/50 focus:outline-none"
+                  >
+                    <option value="">— No package —</option>
+                    {(() => {
+                      const groups: Record<string, any[]> = {};
+                      for (const p of ipdPackages) {
+                        const meta = parseIpdPackageMeta(p.description);
+                        const cat = meta.category || "Other";
+                        (groups[cat] ??= []).push(p);
+                      }
+                      return Object.entries(groups)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([cat, pkgs]) => (
+                          <optgroup key={cat} label={cat}>
+                            {pkgs
+                              .sort((a, b) => a.package_code.localeCompare(b.package_code))
+                              .map((p) => (
+                                <option key={p.id} value={String(p.id)}>
+                                  {p.package_code} — {p.package_name} (₹
+                                  {Number(p.total_amount).toLocaleString("en-IN")})
+                                </option>
+                              ))}
+                          </optgroup>
+                        ));
+                    })()}
+                  </select>
+
+                  {admitForm.package_id && (() => {
+                    const pkg = ipdPackages.find(
+                      (p) => String(p.id) === admitForm.package_id,
+                    );
+                    if (!pkg) return null;
+                    const meta = parseIpdPackageMeta(pkg.description);
+                    const inclusions = Array.isArray(pkg.inclusions) ? pkg.inclusions : [];
+                    const exclusions = Array.isArray(pkg.exclusions) ? pkg.exclusions : [];
+                    return (
+                      <div className="bg-white border border-emerald-200 rounded-lg p-2 text-[11px] space-y-1">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono font-bold text-emerald-800">
+                              {pkg.package_code}
+                            </span>
+                            {meta.category && (
+                              <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[9px] font-semibold">
+                                {meta.category}
+                              </span>
+                            )}
+                            {meta.isDayCare && (
+                              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[9px] font-semibold">
+                                DAY CARE
+                              </span>
+                            )}
+                          </div>
+                          <span className="font-bold text-emerald-700">
+                            ₹{Number(pkg.total_amount).toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                        <p className="text-gray-700 font-medium">{pkg.package_name}</p>
+                        <button
+                          type="button"
+                          onClick={() => setShowPackageDetails((v) => !v)}
+                          className="text-[10px] text-emerald-700 hover:underline"
+                        >
+                          {showPackageDetails ? "▼ Hide details" : "▶ View inclusions / exclusions"}
+                        </button>
+                        {showPackageDetails && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                            <div>
+                              <div className="font-semibold text-green-700 mb-0.5">✓ Included</div>
+                              <ul className="space-y-0.5 text-gray-600 list-disc list-inside">
+                                {inclusions.map((i: any, idx: number) => (
+                                  <li key={idx}>{String(i)}</li>
+                                ))}
+                                {inclusions.length === 0 && <li className="list-none text-gray-400">—</li>}
+                              </ul>
+                            </div>
+                            <div>
+                              <div className="font-semibold text-red-700 mb-0.5">✗ Excluded</div>
+                              <ul className="space-y-0.5 text-gray-600 list-disc list-inside">
+                                {exclusions.map((e: any, idx: number) => (
+                                  <li key={idx}>{String(e)}</li>
+                                ))}
+                                {exclusions.length === 0 && <li className="list-none text-gray-400">—</li>}
+                              </ul>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Initial Deposit (optional) */}
