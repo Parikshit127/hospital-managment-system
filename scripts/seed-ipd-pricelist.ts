@@ -2,16 +2,22 @@
  * Seed IPD Price List for Axten Hospitals
  * Source: axten-ipd-pricelist-agent.md
  *
- * Usage:
+ * Usage (local — uses .env DATABASE_URL):
  *   npx tsx scripts/seed-ipd-pricelist.ts
  *
- * Idempotent: upserts by (package_code, organizationId).
+ * Usage (remote — point at a different DB, set org explicitly):
+ *   DATABASE_URL=<remote-pooled-url> ORGANIZATION_ID=<remote-org-uuid> npx tsx scripts/seed-ipd-pricelist.ts
+ *
+ * To find the right ORGANIZATION_ID for a DB, run:
+ *   DATABASE_URL=<that-db-url> npx tsx scripts/lookup-org.ts
+ *
+ * Idempotent: upserts by (package_code, organizationId) — safe to re-run.
  */
 import { PrismaClient, Prisma } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-const ORGANIZATION_ID = 'org-avani-default'; // Axten Hospitals
+const ORGANIZATION_ID = process.env.ORGANIZATION_ID || 'org-avani-default'; // Axten Hospitals (local default)
 
 const INCLUSIONS = [
   'Room Rent (Day of Surgery)',
@@ -113,7 +119,18 @@ const DAILY_CHARGES: DailyChargeRow[] = [
 
 async function ensureOrg() {
   const org = await prisma.organization.findUnique({ where: { id: ORGANIZATION_ID } });
-  if (!org) throw new Error(`Organization "${ORGANIZATION_ID}" not found`);
+  if (!org) {
+    console.error(`\n❌ Organization "${ORGANIZATION_ID}" not found in this database.\n`);
+    console.error('This script assumes the Axten organization already exists.');
+    console.error('On a fresh database, run the base production seed first:');
+    console.error('  ALLOW_SEED=1 npx tsx prisma/seed-production.ts');
+    console.error('That creates the Axten org with id "org-axten-production".\n');
+    console.error('Then re-run this script with that id:');
+    console.error('  ORGANIZATION_ID="org-axten-production" npx tsx scripts/seed-ipd-pricelist.ts\n');
+    console.error('To see all existing orgs in this DB:');
+    console.error('  npx tsx scripts/lookup-org.ts\n');
+    throw new Error(`Organization "${ORGANIZATION_ID}" not found`);
+  }
   console.log(`✓ Org found: ${org.name} (${org.id})`);
 }
 
@@ -203,6 +220,8 @@ async function seedDailyCharges() {
 
 async function main() {
   console.log('=== Axten Hospitals — IPD Price List Seed ===');
+  console.log(`Target ORGANIZATION_ID: ${ORGANIZATION_ID}`);
+  console.log(`Target DATABASE_URL:    ${(process.env.DATABASE_URL || '<from .env>').replace(/:[^:@]+@/, ':***@')}\n`);
   await ensureOrg();
   await seedPackages();
   await seedDailyCharges();
