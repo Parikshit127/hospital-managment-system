@@ -499,6 +499,46 @@ export async function cancelInvoice(invoiceId: number, reason?: string) {
     }
 }
 
+// Revert a cancelled invoice back to Final
+export async function revertInvoice(invoiceId: number, reason?: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const existing = await db.invoices.findUnique({ where: { id: invoiceId } });
+        if (!existing) return { success: false, error: 'Invoice not found' };
+        if (existing.status !== 'Cancelled') return { success: false, error: 'Only cancelled invoices can be reverted' };
+
+        const balanceDue = Number(existing.net_amount) - Number(existing.paid_amount);
+        const newStatus = balanceDue <= 0 ? 'Paid' : Number(existing.paid_amount) > 0 ? 'Partial' : 'Final';
+
+        const invoice = await db.invoices.update({
+            where: { id: invoiceId },
+            data: {
+                status: newStatus,
+                balance_due: balanceDue > 0 ? balanceDue : 0,
+                notes: reason ? `Reverted: ${reason}` : 'Reverted by admin',
+                version: { increment: 1 },
+            },
+        });
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'REVERT_INVOICE',
+                module: 'finance',
+                entity_type: 'invoice',
+                entity_id: invoice.invoice_number,
+                details: JSON.stringify({ reason, newStatus }),
+                organizationId,
+            },
+        });
+
+        return { success: true, data: serialize(invoice) };
+    } catch (error: any) {
+        console.error('revertInvoice error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 // ============================================
 // PAYMENT PROCESSING
 // ============================================
