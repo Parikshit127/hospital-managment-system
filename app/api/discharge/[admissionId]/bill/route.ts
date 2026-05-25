@@ -354,6 +354,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                             </table>
                         </div>` : ''}
 
+<<<<<<< HEAD
                         <div style="border-top:1px solid #e5e7eb;padding-top:12px;margin-top:16px;">
                             <div style="display:flex;justify-content:space-between;">
                                 <p style="font-size:9px;color:#9ca3af;">Terms: Payment due on receipt.</p>
@@ -373,6 +374,89 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
             </tr>
         </tfoot>
     </table>
+=======
+            <!-- RIGHT: Bill type + number -->
+            <div style="text-align:right;">
+                <h2 style="font-size:16px;font-weight:800;color:${isFinal ? '#1e3a6e' : '#f97316'};">${isFinal ? 'FINAL BILL' : 'INTERIM BILL'}</h2>
+                <p style="font-size:12px;font-weight:700;color:#1e3a6e;">${invoice.invoice_number}</p>
+                <p style="font-size:10px;color:#6b7280;">Type: <strong>${invoice.invoice_type || 'IPD'}</strong></p>
+                <p style="font-size:10px;color:#6b7280;">Date: ${new Date().toLocaleDateString('en-IN')}</p>
+                <p style="font-size:10px;color:#6b7280;">GSTIN: ${gstin}</p>
+            </div>
+        </div>
+
+        <!-- Patient & Admission -->
+        <div style="background:#f9fafb;border-radius:8px;padding:14px;margin-bottom:16px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;">
+                <p style="font-size:11px;"><strong>Patient:</strong> ${patient.full_name}</p>
+                <p style="font-size:11px;"><strong>UHID:</strong> ${patient.patient_id}</p>
+                <p style="font-size:11px;"><strong>Age/Gender:</strong> ${patient.age || '-'} / ${patient.gender || '-'}</p>
+                <p style="font-size:11px;"><strong>Admission ID:</strong> ${admission.admission_id}</p>
+                <p style="font-size:11px;"><strong>Doctor:</strong> ${admission.doctor_name || '-'}</p>
+                <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_id || '-'}</p>
+                <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
+                <p style="font-size:11px;"><strong>Discharged:</strong> ${isFinal ? dischargeDate : 'N/A'}</p>
+                <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
+                <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
+            </div>
+        </div>
+
+        <!-- Charges -->
+        <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
+            <thead><tr style="background:#f3f4f6;">
+                <th style="padding:6px 12px;text-align:left;font-size:9px;font-weight:800;color:#6b7280;">Description</th>
+                <th style="padding:6px 12px;text-align:left;font-size:9px;font-weight:800;color:#6b7280;">SAC/HSN</th>
+                <th style="padding:6px 12px;text-align:center;font-size:9px;font-weight:800;color:#6b7280;">Qty</th>
+                <th style="padding:6px 12px;text-align:right;font-size:9px;font-weight:800;color:#6b7280;">Rate</th>
+                <th style="padding:6px 12px;text-align:center;font-size:9px;font-weight:800;color:#6b7280;">GST%</th>
+                <th style="padding:6px 12px;text-align:right;font-size:9px;font-weight:800;color:#6b7280;">GST Amt</th>
+                <th style="padding:6px 12px;text-align:right;font-size:9px;font-weight:800;color:#6b7280;">Total</th>
+            </tr></thead>
+            <tbody>${itemRows}</tbody>
+        </table>
+
+        <!-- Totals -->
+        <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+            <table style="width:300px;border-collapse:collapse;">
+                <tr><td style="padding:4px 12px;font-size:11px;color:#6b7280;">Subtotal</td><td style="padding:4px 12px;font-size:11px;text-align:right;">${total.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
+                ${totalDiscount > 0 ? `<tr><td style="padding:4px 12px;font-size:11px;color:#6b7280;">Discount</td><td style="padding:4px 12px;font-size:11px;text-align:right;color:#dc2626;">-${totalDiscount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
+                ${totalTax > 0 ? `<tr><td style="padding:4px 12px;font-size:11px;color:#6b7280;">Total GST</td><td style="padding:4px 12px;font-size:11px;text-align:right;">${totalTax.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
+                <tr style="border-top:2px solid #1f2937;"><td style="padding:6px 12px;font-size:13px;font-weight:800;">Net Amount</td><td style="padding:6px 12px;font-size:13px;text-align:right;font-weight:800;">${net.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
+                ${depositTotal > 0 ? `<tr><td style="padding:4px 12px;font-size:11px;color:#7c3aed;">Deposits Applied</td><td style="padding:4px 12px;font-size:11px;text-align:right;color:#7c3aed;">-${depositTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
+                <tr><td style="padding:4px 12px;font-size:11px;color:#059669;">Total Paid</td><td style="padding:4px 12px;font-size:11px;text-align:right;color:#059669;">${paid.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
+                ${balance > 0 ? `<tr style="background:#fef2f2;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#dc2626;">Balance Due</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#dc2626;">${balance.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : `<tr style="background:#f0fdf4;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#059669;">FULLY PAID</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#059669;">&#10003;</td></tr>`}
+            </table>
+        </div>
+
+        <div style="background:#f0fdf4;border-radius:6px;padding:8px 14px;margin-bottom:14px;">
+            <p style="font-size:10px;color:#059669;"><strong>Amount in Words:</strong> ${numberToWords(net)}</p>
+        </div>
+
+        ${payments.length > 0 ? `
+        <div style="margin-bottom:14px;">
+            <h3 style="font-size:9px;font-weight:800;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Payments</h3>
+            <table style="width:100%;border-collapse:collapse;background:#f9fafb;">
+                <thead><tr>
+                    <th style="padding:4px 12px;font-size:9px;text-align:left;color:#6b7280;">Receipt</th>
+                    <th style="padding:4px 12px;font-size:9px;text-align:left;color:#6b7280;">Method</th>
+                    <th style="padding:4px 12px;font-size:9px;text-align:right;color:#6b7280;">Amount</th>
+                    <th style="padding:4px 12px;font-size:9px;text-align:left;color:#6b7280;">Date</th>
+                </tr></thead>
+                <tbody>${paymentRows}</tbody>
+            </table>
+        </div>` : ''}
+
+        <div style="border-top:1px solid #e5e7eb;padding-top:12px;margin-top:16px;">
+            <div style="display:flex;justify-content:space-between;">
+                <p style="font-size:9px;color:#9ca3af;">Terms: Payment due on receipt.</p>
+                <div style="text-align:right;">
+                    <p style="font-size:9px;color:#6b7280;margin-bottom:28px;">Authorized Signatory</p>
+                    <p style="font-size:9px;border-top:1px solid #d1d5db;padding-top:3px;color:#9ca3af;">For ${hospitalName}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+>>>>>>> 7a192e59d50c17c0fe0d50fc695c655747605f60
 </body>
 </html>`;
 }
