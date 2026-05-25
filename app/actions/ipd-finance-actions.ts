@@ -513,6 +513,7 @@ export async function generateInterimBill(admissionId: string) {
                     created_at: p.created_at,
                 })),
                 deposits: deposits.map((d: any) => ({
+                    id: d.id,
                     deposit_number: d.deposit_number,
                     amount: Number(d.amount),
                     applied_amount: Number(d.applied_amount),
