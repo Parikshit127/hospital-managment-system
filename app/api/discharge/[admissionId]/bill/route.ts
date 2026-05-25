@@ -239,6 +239,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
             <div style="text-align:right;">
                 <h2 style="font-size:16px;font-weight:800;color:${isFinal ? '#1e3a6e' : '#f97316'};">${isFinal ? 'FINAL BILL' : 'INTERIM BILL'}</h2>
                 <p style="font-size:12px;font-weight:700;color:#1e3a6e;">${invoice.invoice_number}</p>
+                <p style="font-size:10px;color:#6b7280;">Type: <strong>${invoice.invoice_type || 'IPD'}</strong></p>
                 <p style="font-size:10px;color:#6b7280;">Date: ${new Date().toLocaleDateString('en-IN')}</p>
                 <p style="font-size:10px;color:#6b7280;">GSTIN: ${gstin}</p>
             </div>
