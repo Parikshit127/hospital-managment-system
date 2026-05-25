@@ -520,17 +520,35 @@ export async function accrueIPDDailyCharges(admissionId: string) {
 
     const baseRoomRate = Number(ward.cost_per_day || 0);
     const roomRate = baseRoomRate * multiplier;
-    
+
     // Nursing rate is also scaled or remains flat based on hospital policy. Let's scale it.
     const nursingRate = Number(ward.nursing_charge || 0) * multiplier;
     const today = new Date().toLocaleDateString("en-IN");
+
+    // If an active (non-broken-open) IPD package covers today, skip Room+Nursing
+    // accrual — both are included in the package price (per pricelist inclusions).
+    const activePkg = await db.ipdAdmissionPackage.findFirst({
+      where: { admission_id: admissionId, is_broken_open: false },
+      include: { package: { select: { validity_days: true } } },
+    });
+    let packageCoversToday = false;
+    if (activePkg) {
+      const validityDays = activePkg.package.validity_days || 7;
+      const admitDateMidnight = new Date(admission.admission_date);
+      admitDateMidnight.setHours(0, 0, 0, 0);
+      const coveredUntil = new Date(admitDateMidnight);
+      coveredUntil.setDate(admitDateMidnight.getDate() + validityDays - 1);
+      coveredUntil.setHours(23, 59, 59, 999);
+      const now = new Date();
+      packageCoversToday = now <= coveredUntil;
+    }
 
     // Determine room GST: 0% if <=5000/day, 5% if >5000/day
     const roomTaxRate = roomRate > 5000 ? 5 : 0;
     const roomTaxAmount = roomRate * roomTaxRate / 100;
 
-    // Add room charge
-    if (roomRate > 0) {
+    // Add room charge (skipped while inside package coverage)
+    if (roomRate > 0 && !packageCoversToday) {
       const roomRef = `room_${admissionId}_${today}`;
       const existingRoom = await db.invoice_items.findFirst({
         where: { invoice_id: invoice.id, ref_id: roomRef }
@@ -557,8 +575,8 @@ export async function accrueIPDDailyCharges(admissionId: string) {
       }
     }
 
-    // Add nursing charge
-    if (nursingRate > 0) {
+    // Add nursing charge (skipped while inside package coverage)
+    if (nursingRate > 0 && !packageCoversToday) {
       const nursingRef = `nursing_${admissionId}_${today}`;
       const existingNursing = await db.invoice_items.findFirst({
         where: { invoice_id: invoice.id, ref_id: nursingRef }

@@ -159,6 +159,22 @@ export async function ensureIPDRoomChargesAccrued(admissionId: string) {
             Math.floor((today.getTime() - admitDate.getTime()) / (1000 * 60 * 60 * 24)) + 1,
         );
 
+        // If an active (non-broken-open) IPD package is attached, suppress Room+Nursing
+        // accrual for the days covered by the package — Room Rent + Nursing Care are
+        // already included in the package price (per Axten pricelist inclusions).
+        // Days BEYOND validity_days still accrue normally per the "extended stay" rule.
+        const activePkg = await db.ipdAdmissionPackage.findFirst({
+            where: { admission_id: admissionId, is_broken_open: false },
+            include: { package: { select: { validity_days: true, package_name: true } } },
+        });
+        let packageCoveredUntil: Date | null = null;
+        if (activePkg) {
+            const validityDays = activePkg.package.validity_days || 7;
+            packageCoveredUntil = new Date(admitDate);
+            packageCoveredUntil.setDate(admitDate.getDate() + validityDays - 1);
+            packageCoveredUntil.setHours(23, 59, 59, 999);
+        }
+
         // Fetch existing Room + Nursing items to de-dupe by ISO day
         const existing = await db.invoice_items.findMany({
             where: {
@@ -186,6 +202,10 @@ export async function ensureIPDRoomChargesAccrued(admissionId: string) {
             const day = new Date(admitDate);
             day.setDate(admitDate.getDate() + i);
             const key = formatIsoDate(day);
+
+            // Skip days covered by the active package — Room & Nursing already
+            // included in the package price.
+            if (packageCoveredUntil && day <= packageCoveredUntil) continue;
 
             if (roomRate > 0 && !existingRoomKeys.has(key)) {
                 const taxAmount = (roomRate * roomTaxRate) / 100;
