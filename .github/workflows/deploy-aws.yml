@@ -1,5 +1,22 @@
 name: Deploy to AWS ECS
 
+# Auto-triggers on every push to main, but the build/deploy jobs only RUN
+# if AWS infrastructure is ready (see `AWS_DEPLOY_ENABLED` repo variable below).
+# Until that variable is set to "true", those jobs SKIP (green ✓), so pushes
+# don't show red failure noise.
+#
+# When you're ready to enable auto-deploy:
+#   1. Provision AWS resources:
+#        ECR repo:        hospitalos       (region ap-south-1)
+#        ECS cluster:     hospitalos-production
+#        ECS service:     hospitalos-production
+#        Task def family: hospitalos-production
+#   2. Add these GitHub SECRETS (Settings → Secrets and variables → Actions → Secrets):
+#        AWS_ACCESS_KEY_ID
+#        AWS_SECRET_ACCESS_KEY
+#   3. Add this GitHub VARIABLE (same screen → Variables tab):
+#        AWS_DEPLOY_ENABLED = true
+#   4. Push anything to main → deploy runs automatically.
 on:
   push:
     branches: [main]
@@ -32,6 +49,9 @@ jobs:
   # ── Step 2: Build & Push Docker Image ────────────────────────────────────
   build-and-push:
     needs: test
+    # Skip cleanly (green ✓) unless AWS infra is ready.
+    # Set the repo variable AWS_DEPLOY_ENABLED=true to enable.
+    if: ${{ vars.AWS_DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.build.outputs.image }}
@@ -64,6 +84,7 @@ jobs:
   # ── Step 3: Deploy to ECS ────────────────────────────────────────────────
   deploy:
     needs: build-and-push
+    if: ${{ vars.AWS_DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
 
     steps:
