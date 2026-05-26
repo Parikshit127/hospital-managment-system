@@ -101,6 +101,7 @@ export default function OTWorklistPage() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
+                  {/* Step 1: Wheel-in — only if not yet done */}
                   {!s.wheel_in_time && (
                     <button
                       onClick={() => handleAction(recordWheelIn, r.id, "Wheel-in")}
@@ -109,7 +110,8 @@ export default function OTWorklistPage() {
                       Wheel-in
                     </button>
                   )}
-                  {!s.actual_start && (
+                  {/* Step 2: Start — only after wheel-in, and surgery not yet started */}
+                  {s.wheel_in_time && !s.actual_start && (
                     <button
                       onClick={() => handleAction(startSurgery, r.id, "Start")}
                       className="px-2.5 py-1 bg-amber-50 text-amber-700 text-[11px] font-bold rounded hover:bg-amber-100"
@@ -117,6 +119,7 @@ export default function OTWorklistPage() {
                       Start
                     </button>
                   )}
+                  {/* Step 3: Complete — only after surgery started, not yet ended */}
                   {s.actual_start && !s.actual_end && (
                     <button
                       onClick={() => handleAction(completeSurgery, r.id, "Complete")}
@@ -125,6 +128,7 @@ export default function OTWorklistPage() {
                       Complete
                     </button>
                   )}
+                  {/* Step 4: Wheel-out — only after surgery completed */}
                   {s.actual_end && !s.wheel_out_time && (
                     <button
                       onClick={() => handleAction(recordWheelOut, r.id, "Wheel-out")}
