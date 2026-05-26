@@ -23,7 +23,7 @@ async function main() {
 
     console.log(`\nChecking room suppression logic for patient: ${patientId}\n`);
 
-    const items = await prisma.billing_items.findMany({
+    const items = await prisma.billingItems.findMany({        
         where: {
             patient_id: patientId,
         },
