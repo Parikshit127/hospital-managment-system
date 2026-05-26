@@ -12,6 +12,8 @@ import {
   createSurgeryRequest,
   listSurgeryMasters,
 } from "@/app/actions/ot-actions";
+import { searchPatientsForAdmission } from "@/app/actions/ipd-actions";
+import { searchDoctorsForIPD } from "@/app/actions/ipd-billing-helpers";
 
 type Req = {
   id: string;
@@ -37,7 +39,9 @@ function SurgeryRequestsInner() {
   const [masters, setMasters] = useState<any[]>([]);
   const [form, setForm] = useState({
     patient_id: "",
+    patient_label: "",
     requesting_doctor_id: "",
+    doctor_label: "",
     surgery_master_id: "",
     surgery_name: "",
     surgery_category: "",
@@ -78,7 +82,9 @@ function SurgeryRequestsInner() {
       setShowCreate(false);
       setForm({
         patient_id: "",
+        patient_label: "",
         requesting_doctor_id: "",
+        doctor_label: "",
         surgery_master_id: "",
         surgery_name: "",
         surgery_category: "",
@@ -232,11 +238,39 @@ function SurgeryRequestsInner() {
             className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-3"
           >
             <h3 className="text-lg font-black text-gray-800">New Surgery Request</h3>
-            <Field label="Patient ID *" value={form.patient_id} onChange={(v) => setForm({ ...form, patient_id: v })} />
-            <Field
-              label="Requesting Doctor ID *"
-              value={form.requesting_doctor_id}
-              onChange={(v) => setForm({ ...form, requesting_doctor_id: v })}
+
+            <SearchPicker
+              label="Patient *"
+              placeholder="Search by name, UHID, or phone..."
+              selectedLabel={form.patient_label}
+              onPick={(value, display) => setForm({ ...form, patient_id: value, patient_label: display })}
+              onClear={() => setForm({ ...form, patient_id: "", patient_label: "" })}
+              fetcher={async (q) => {
+                const r = await searchPatientsForAdmission(q);
+                if (!r.success) return [];
+                return (r.data as any[]).map((p) => ({
+                  value: p.patient_id,
+                  display: `${p.full_name}`,
+                  sub: `${p.patient_id} · ${p.phone || '—'}`,
+                }));
+              }}
+            />
+
+            <SearchPicker
+              label="Requesting Doctor *"
+              placeholder="Search by doctor name or specialty..."
+              selectedLabel={form.doctor_label}
+              onPick={(value, display) => setForm({ ...form, requesting_doctor_id: value, doctor_label: display })}
+              onClear={() => setForm({ ...form, requesting_doctor_id: "", doctor_label: "" })}
+              fetcher={async (q) => {
+                const r = await searchDoctorsForIPD(q, 10);
+                if (!r.success) return [];
+                return (r.data as any[]).map((d) => ({
+                  value: d.id,
+                  display: d.name,
+                  sub: d.specialty || d.username || '',
+                }));
+              }}
             />
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
@@ -345,6 +379,99 @@ function Field({
           onChange={(e) => onChange(e.target.value)}
           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
         />
+      )}
+    </div>
+  );
+}
+
+function SearchPicker({
+  label,
+  placeholder,
+  selectedLabel,
+  onPick,
+  onClear,
+  fetcher,
+}: {
+  label: string;
+  placeholder: string;
+  selectedLabel: string;
+  onPick: (value: string, display: string) => void;
+  onClear: () => void;
+  fetcher: (query: string) => Promise<Array<{ value: string; display: string; sub?: string }>>;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Array<{ value: string; display: string; sub?: string }>>([]);
+  const [searching, setSearching] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open || query.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    setSearching(true);
+    const t = setTimeout(async () => {
+      const r = await fetcher(query.trim());
+      setResults(r);
+      setSearching(false);
+    }, 200);
+    return () => clearTimeout(t);
+  }, [query, open, fetcher]);
+
+  if (selectedLabel) {
+    return (
+      <div>
+        <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{label}</label>
+        <div className="flex items-center gap-2 px-3 py-2 border border-emerald-200 bg-emerald-50 rounded-lg">
+          <span className="text-sm font-medium text-emerald-800 flex-1">{selectedLabel}</span>
+          <button type="button" onClick={onClear} className="text-emerald-700 hover:text-emerald-900 text-xs font-bold">
+            ✕ Change
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{label}</label>
+      <input
+        type="text"
+        value={query}
+        placeholder={placeholder}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 200)}
+        onChange={(e) => setQuery(e.target.value)}
+        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-400 focus:outline-none"
+      />
+      {open && query.trim().length >= 2 && (
+        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-auto">
+          {searching ? (
+            <div className="px-3 py-3 text-xs text-gray-400 flex items-center gap-2">
+              <Loader2 className="h-3 w-3 animate-spin" /> Searching…
+            </div>
+          ) : results.length === 0 ? (
+            <div className="px-3 py-3 text-xs text-gray-400">No matches.</div>
+          ) : (
+            results.map((r) => (
+              <button
+                key={r.value}
+                type="button"
+                onMouseDown={(e) => {
+                  // onMouseDown fires before onBlur — preserves selection
+                  e.preventDefault();
+                  onPick(r.value, r.display);
+                  setQuery("");
+                  setOpen(false);
+                }}
+                className="block w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-50"
+              >
+                <div className="text-sm font-medium text-gray-800">{r.display}</div>
+                {r.sub && <div className="text-[10px] text-gray-500">{r.sub}</div>}
+              </button>
+            ))
+          )}
+        </div>
       )}
     </div>
   );
