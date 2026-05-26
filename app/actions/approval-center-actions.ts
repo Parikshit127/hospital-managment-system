@@ -31,6 +31,7 @@ import {
   postWriteoff,
   getRequiredApproverRoles,
 } from "@/app/actions/writeoff-actions";
+import { approveExpense, rejectExpense } from "@/app/actions/expense-actions";
 
 // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -66,7 +67,7 @@ function serialize<T>(data: T): T {
 
 // ── unified record shape ──────────────────────────────────────────────────
 
-export type ApprovalItemType = "refund" | "credit_note" | "writeoff";
+export type ApprovalItemType = "refund" | "credit_note" | "writeoff" | "expense";
 
 export interface ApprovalItem {
   id: string; // entity id (string for writeoffs/credit_notes, numeric for refunds — coerced)
@@ -105,6 +106,11 @@ export async function getRequiredApproverRolesForType(
     case "credit_note":
       // Credit notes affect GST + revenue — finance/admin only.
       if (amount < 25000) return ["admin", "finance"];
+      return ["admin"];
+    case "expense":
+      // Expenses: small amounts any finance role, large amounts admin only
+      if (amount < 10000) return ["admin", "finance", "ipd_manager"];
+      if (amount < 50000) return ["admin", "finance"];
       return ["admin"];
   }
 }
@@ -158,6 +164,20 @@ export async function getApprovalQueue(filter: ApprovalFilter = {}) {
             where: { organizationId, status: "Requested" },
             include: {
               invoice: { select: { invoice_number: true } },
+            },
+            orderBy: { created_at: "desc" },
+            take: limit,
+          })
+        : [];
+
+    // Expenses: status = Pending (awaiting approval)
+    const expensesRaw =
+      !filter.type || filter.type === "expense"
+        ? await db.expense.findMany({
+            where: { organizationId, status: "Pending" },
+            include: {
+              category: { select: { name: true } },
+              vendor: { select: { vendor_name: true } },
             },
             orderBy: { created_at: "desc" },
             take: limit,
@@ -263,6 +283,27 @@ export async function getApprovalQueue(filter: ApprovalFilter = {}) {
       });
     }
 
+    for (const e of expensesRaw) {
+      const amount = decToNum(e.total_amount);
+      items.push({
+        id: String(e.id),
+        type: "expense",
+        number: e.expense_number,
+        patient_id: null,
+        patient_name: null,
+        invoice_id: null,
+        invoice_number: null,
+        amount,
+        reason: `${e.description}${e.vendor ? ` — ${e.vendor.vendor_name}` : ""}${e.category ? ` [${e.category.name}]` : ""}`,
+        status: e.status,
+        requested_by: null,
+        requested_role: null,
+        requested_at: new Date(e.created_at).toISOString(),
+        required_roles: await getRequiredApproverRolesForType("expense", amount),
+        raw: serialize(e),
+      });
+    }
+
     // Optional in-memory filters
     let filtered = items;
     if (filter.patient_id) {
@@ -288,7 +329,7 @@ export async function getApprovalKPIs() {
   try {
     const { db, organizationId } = await requireTenantContext();
 
-    const [refundCount, refundAgg, cnCount, cnAgg, woCount, woAgg, postedCount, postedAgg] =
+    const [refundCount, refundAgg, cnCount, cnAgg, woCount, woAgg, postedCount, postedAgg, expCount, expAgg] =
       await Promise.all([
         db.refunds.count({ where: { organizationId, status: "Pending" } }),
         db.refunds.aggregate({
@@ -310,6 +351,11 @@ export async function getApprovalKPIs() {
           where: { organizationId, status: "Approved" },
           _sum: { amount: true },
         }),
+        db.expense.count({ where: { organizationId, status: "Pending" } }),
+        db.expense.aggregate({
+          where: { organizationId, status: "Pending" },
+          _sum: { total_amount: true },
+        }),
       ]);
 
     return {
@@ -322,11 +368,13 @@ export async function getApprovalKPIs() {
           count: postedCount,
           total: decToNum(postedAgg._sum.amount),
         },
-        total_pending: refundCount + cnCount + woCount,
+        expenses_pending: { count: expCount, total: decToNum(expAgg._sum.total_amount) },
+        total_pending: refundCount + cnCount + woCount + expCount,
         total_pending_amount:
           decToNum(refundAgg._sum.amount) +
           decToNum(cnAgg._sum.total_amount) +
-          decToNum(woAgg._sum.amount),
+          decToNum(woAgg._sum.amount) +
+          decToNum(expAgg._sum.total_amount),
       }),
     };
   } catch (error: any) {
@@ -358,6 +406,10 @@ export async function approveItem(input: {
     return approveCreditNote(Number(id), comment);
   }
 
+  if (type === "expense") {
+    return approveExpense(Number(id));
+  }
+
   return { success: false, error: "Unknown approval type" };
 }
 
@@ -381,6 +433,10 @@ export async function rejectItem(input: {
 
   if (type === "credit_note") {
     return rejectCreditNote(Number(id), reason);
+  }
+
+  if (type === "expense") {
+    return rejectExpense(Number(id), reason);
   }
 
   return { success: false, error: "Unknown approval type" };

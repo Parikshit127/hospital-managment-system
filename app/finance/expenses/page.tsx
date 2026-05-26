@@ -34,7 +34,7 @@ export default function ExpensesPage() {
         const [expRes, catRes, venRes, statsRes] = await Promise.all([
             getExpenses({ status: statusFilter || undefined }),
             getExpenseCategories(),
-            getVendors(),
+            getVendors(false),  // show all vendors including inactive
             getExpenseDashboardStats(),
         ]);
         if (expRes.success) setExpenses(expRes.data);
