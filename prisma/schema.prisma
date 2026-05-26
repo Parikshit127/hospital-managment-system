@@ -288,6 +288,10 @@ model OrganizationConfig {
   whatsapp_webhook_verify_token String?
   whatsapp_app_secret           String?
   openai_key                    String?
+  sms_gateway_url               String?
+  sms_api_key                   String?
+  sms_sender_id                 String?
+  sender_phone_number           String?
 
   organization Organization @relation(fields: [organizationId], references: [id])
 

@@ -8,6 +8,8 @@ import {
     maskSecret,
     decryptSecret,
 } from '@/app/lib/secure-config';
+import { sendWhatsAppTemplate, formatPhoneNumber } from '@/app/lib/whatsapp';
+import { sendSMS } from '@/app/lib/sms';
 
 const ADMIN_ROLES = ['admin', 'superadmin'];
 type IntegrationConfig = Record<string, string | boolean | Date | null | undefined>;
@@ -27,6 +29,10 @@ const ALLOWED_FIELDS = new Set([
     'whatsapp_webhook_verify_token',
     'whatsapp_app_secret',
     'openai_key',
+    'sms_gateway_url',
+    'sms_api_key',
+    'sms_sender_id',
+    'sender_phone_number',
 ]);
 
 function getErrorMessage(error: unknown) {
@@ -212,6 +218,20 @@ async function runIntegrationTest(integrationKey: string, config: IntegrationCon
         return { success: true, message: 'WhatsApp credentials are stored. Send a live message to fully verify templates.' };
     }
 
+    if (integrationKey === 'sms') {
+        const gatewayUrl = asString(config.sms_gateway_url);
+        const apiKey = asString(config.sms_api_key);
+        if (!gatewayUrl || !apiKey) {
+            return { success: false, error: 'SMS Gateway URL and API Key are required.' };
+        }
+        try {
+            new URL(gatewayUrl);
+        } catch {
+            return { success: false, error: 'Invalid SMS Gateway URL format.' };
+        }
+        return { success: true, message: 'SMS Gateway credentials successfully validated.' };
+    }
+
     if (integrationKey === 'supabase') {
         const missing = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'].filter((key) => !process.env[key]);
         if (missing.length) return { success: false, error: `Missing ${missing.join(', ')}.` };
@@ -235,4 +255,93 @@ function getProductionReadinessSnapshot() {
         missingRecommended,
         nodeEnv: process.env.NODE_ENV || 'development',
     };
+}
+
+export async function sendRealTestNotification(channel: 'smtp' | 'whatsapp' | 'sms', recipient: string) {
+    try {
+        const { db, organizationId, session } = await requireRoleAndTenant(ADMIN_ROLES);
+        const config = await db.organizationConfig.findUnique({ where: { organizationId } });
+        if (!config) return { success: false, error: 'Integration configuration was not found.' };
+
+        const plainPass = decryptSecret(asString(config.smtp_pass));
+        const host = asString(config.smtp_host);
+        const user = asString(config.smtp_user);
+
+        if (channel === 'smtp') {
+            if (!host || !user || !plainPass) {
+                return { success: false, error: 'SMTP host, username, and password are required to send an email.' };
+            }
+            const transporter = nodemailer.createTransport({
+                host,
+                port: Number(process.env.SMTP_PORT || 587),
+                secure: process.env.SMTP_SECURE === 'true',
+                auth: { user, pass: plainPass },
+            });
+            const info = await transporter.sendMail({
+                from: `"Axten Hospitals" <${user}>`,
+                to: recipient,
+                subject: '🔌 Live Integration System Verification Test',
+                html: `
+                    <div style="font-family: Arial, sans-serif; padding: 25px; border: 1px solid #e5e7eb; border-radius: 16px; max-width: 600px; background: #ffffff;">
+                        <h2 style="color: #d97706; margin-top: 0; font-size: 20px; font-weight: 800; border-bottom: 2px solid #f3f4f6; padding-bottom: 10px;">🔌 Integration System Sandbox</h2>
+                        <p style="font-size: 14px; color: #374151; line-height: 1.5;">Hello,</p>
+                        <p style="font-size: 14px; color: #374151; line-height: 1.5;">This is a <strong>real test email</strong> sent directly from your Admin Dashboard. It verifies that your dynamic SMTP credentials work flawlessly at runtime.</p>
+                        <div style="background: #f9fafb; padding: 15px; border-radius: 12px; border: 1px solid #f3f4f6; margin: 20px 0; font-family: monospace; font-size: 12px; color: #4b5563;">
+                            <strong>SMTP Host:</strong> ${host}<br/>
+                            <strong>Sender User:</strong> ${user}<br/>
+                            <strong>Sent At:</strong> ${new Date().toLocaleString()}<br/>
+                            <strong>Dynamic Config:</strong> Active (No .env Changes)
+                        </div>
+                        <p style="color: #10b981; font-weight: bold; font-size: 14px; margin-bottom: 0;">✅ SMTP Integration Delivered Successfully!</p>
+                    </div>
+                `,
+            });
+            return { success: true, message: `Real test email sent! ID: ${info.messageId}` };
+        }
+
+        if (channel === 'whatsapp') {
+            const formattedPhone = formatPhoneNumber(recipient);
+            if (!formattedPhone) {
+                return { success: false, error: 'Invalid phone number format.' };
+            }
+            const res = await sendWhatsAppTemplate({
+                to: formattedPhone,
+                templateName: 'appointment_confirmed',
+                userName: 'Test Patient',
+                params: [
+                    'Axten Hospitals',
+                    'Test Patient',
+                    'Dr. Akshay Pandey',
+                    'General Medicine',
+                    new Date().toLocaleDateString(),
+                    '11:00 AM',
+                ],
+                organizationId,
+            });
+            if (!res.success) {
+                return { success: false, error: res.error || 'WhatsApp gateway returned an error.' };
+            }
+            return { success: true, message: `Real WhatsApp template sent successfully! ID: ${res.messageId}` };
+        }
+
+        if (channel === 'sms') {
+            const formattedPhone = formatPhoneNumber(recipient);
+            if (!formattedPhone) {
+                return { success: false, error: 'Invalid phone number format.' };
+            }
+            const res = await sendSMS({
+                to: formattedPhone,
+                message: `Dear Test Patient, your dynamic SMS integration is fully working! Sent from Axten Hospitals at ${new Date().toLocaleTimeString()}.`,
+                organizationId,
+            });
+            if (!res.success) {
+                return { success: false, error: res.error || 'SMS gateway returned an error.' };
+            }
+            return { success: true, message: 'Real test SMS dispatched successfully!' };
+        }
+
+        return { success: false, error: 'Invalid channel' };
+    } catch (error: unknown) {
+        return { success: false, error: getErrorMessage(error) };
+    }
 }

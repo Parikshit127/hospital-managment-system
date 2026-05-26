@@ -484,10 +484,10 @@ async function approveCreditNote(creditNoteId: number, comment?: string) {
       };
     }
 
-    const updated = await db.creditNote.update({
-      where: { id: creditNoteId },
-      data: { status: "Approved", approved_by: session.username },
-    });
+    // Delegate execution to robust helper in deposit-actions.ts to post GL journal & update invoice balance
+    const { approveCreditNote: executeApprove } = await import("@/app/actions/deposit-actions");
+    const result = await executeApprove(creditNoteId);
+    if (!result.success) return result;
 
     await logAudit({
       action: "CREDIT_NOTE_APPROVED",
@@ -499,7 +499,7 @@ async function approveCreditNote(creditNoteId: number, comment?: string) {
 
     revalidatePath("/billing/approvals");
     revalidatePath("/finance/credit-notes");
-    return { success: true, data: serialize(updated) };
+    return result;
   } catch (error: any) {
     return { success: false, error: error?.message };
   }

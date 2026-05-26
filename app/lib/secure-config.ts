@@ -10,6 +10,7 @@ const SECRET_FIELDS = [
     'whatsapp_webhook_verify_token',
     'whatsapp_app_secret',
     'openai_key',
+    'sms_api_key',
 ] as const;
 
 export type SecretField = (typeof SECRET_FIELDS)[number];
@@ -24,6 +25,10 @@ export type OrganizationIntegrationRuntimeConfig = Record<string, unknown> & {
     razorpay_key_secret?: string | null;
     whatsapp_api_token?: string | null;
     openai_key?: string | null;
+    sms_gateway_url?: string | null;
+    sms_api_key?: string | null;
+    sms_sender_id?: string | null;
+    sender_phone_number?: string | null;
 };
 
 function getEncryptionKey() {

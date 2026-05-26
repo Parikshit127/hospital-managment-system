@@ -197,7 +197,18 @@ export async function generateTallyXML(options: TallyExportOptions) {
 // XML Building Functions
 // ========================================
 
-async function buildVoucherXML(options: TallyExportOptions): Promise<{ xml: string; count: number }> {
+async function getLedgerName(organizationId: string, accountCode: string, defaultName: string): Promise<string> {
+  const acc = await prisma.gL_Account.findFirst({
+    where: {
+      organizationId,
+      account_code: accountCode,
+      is_active: true,
+    },
+  });
+  return acc?.tally_ledger_name || acc?.account_name || defaultName;
+}
+
+export async function buildVoucherXML(options: TallyExportOptions): Promise<{ xml: string; count: number }> {
   const vouchers: string[] = [];
 
   // Fetch journal entries
@@ -232,13 +243,17 @@ async function buildVoucherXML(options: TallyExportOptions): Promise<{ xml: stri
         <VOUCHERTYPENAME>Journal</VOUCHERTYPENAME>
         <REFERENCE>${escapeXML(journal.reference_number || '')}</REFERENCE>
 ${journal.lines
-  .map(
-    (line) => `        <ALLLEDGERENTRIES.LIST>
+  .map((line) => {
+    const isDebit = line.debit_amount.toNumber() > 0;
+    const amount = isDebit ? line.debit_amount.toNumber() : line.credit_amount.toNumber();
+    const tallyAmount = isDebit ? -amount : amount;
+    const isDeemedPositive = isDebit ? 'Yes' : 'No';
+    return `        <ALLLEDGERENTRIES.LIST>
           <LEDGERNAME>${escapeXML(line.account.tally_ledger_name || line.account.account_name)}</LEDGERNAME>
-          <ISDEEMEDPOSITIVE>${line.debit_amount.toNumber() > 0 ? 'Yes' : 'No'}</ISDEEMEDPOSITIVE>
-          <AMOUNT>${line.debit_amount.toNumber() > 0 ? line.debit_amount.toNumber() : -line.credit_amount.toNumber()}</AMOUNT>
-        </ALLLEDGERENTRIES.LIST>`
-  )
+          <ISDEEMEDPOSITIVE>${isDeemedPositive}</ISDEEMEDPOSITIVE>
+          <AMOUNT>${tallyAmount}</AMOUNT>
+        </ALLLEDGERENTRIES.LIST>`;
+  })
   .join('\n')}
       </VOUCHER>
     </TALLYMESSAGE>`;
@@ -268,7 +283,7 @@ ${journal.lines
   return { xml, count: vouchers.length };
 }
 
-async function buildInvoiceVoucherXML(options: TallyExportOptions): Promise<string[]> {
+export async function buildInvoiceVoucherXML(options: TallyExportOptions): Promise<string[]> {
   const startDate = options.start_date ? new Date(options.start_date) : undefined;
   const endDate   = options.end_date   ? new Date(options.end_date)   : undefined;
   console.log('[buildInvoiceVoucherXML] date filter:', { startDate: startDate?.toISOString(), endDate: endDate?.toISOString() });
@@ -287,12 +302,18 @@ async function buildInvoiceVoucherXML(options: TallyExportOptions): Promise<stri
     },
   });
 
-  return invoices.map((invoice: any) => {
-    const taxableAmount =
-      invoice.total_amount.toNumber() -
-      (invoice.cgst_amount?.toNumber() || 0) -
-      (invoice.sgst_amount?.toNumber() || 0) -
-      (invoice.igst_amount?.toNumber() || 0);
+  const receivableLedger = await getLedgerName(options.organizationId, '1130', 'Sundry Debtors - Patients');
+  const revenueLedger = await getLedgerName(options.organizationId, '6000', 'Sales Account');
+  const cgstLedger = await getLedgerName(options.organizationId, '3120', 'CGST Payable');
+  const sgstLedger = await getLedgerName(options.organizationId, '3121', 'SGST Payable');
+  const igstLedger = await getLedgerName(options.organizationId, '3122', 'IGST Payable');
+
+  return Promise.all(invoices.map(async (invoice: any) => {
+    const total = invoice.total_amount.toNumber();
+    const cgst = invoice.cgst_amount?.toNumber() || 0;
+    const sgst = invoice.sgst_amount?.toNumber() || 0;
+    const igst = invoice.igst_amount?.toNumber() || 0;
+    const taxableAmount = total - (cgst + sgst + igst);
 
     return `
     <TALLYMESSAGE xmlns:UDF="TallyUDF">
@@ -301,47 +322,47 @@ async function buildInvoiceVoucherXML(options: TallyExportOptions): Promise<stri
         <VOUCHERNUMBER>${escapeXML(invoice.invoice_number)}</VOUCHERNUMBER>
         <NARRATION>Sales Invoice - ${escapeXML(invoice.patient?.full_name || invoice.patient_name || 'Patient')}</NARRATION>
         <VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>
-        <PARTYLEDGERNAME>Sundry Debtors - Patients</PARTYLEDGERNAME>
-        <ALLLEDGERENTRIES.LIST>
-          <LEDGERNAME>Sundry Debtors - Patients</LEDGERNAME>
+        <PARTYLEDGERNAME>${escapeXML(receivableLedger)}</PARTYLEDGERNAME>
+        <LEDGERENTRIES.LIST>
+          <LEDGERNAME>${escapeXML(receivableLedger)}</LEDGERNAME>
           <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
-          <AMOUNT>${invoice.total_amount.toNumber()}</AMOUNT>
-        </ALLLEDGERENTRIES.LIST>
-        <ALLLEDGERENTRIES.LIST>
-          <LEDGERNAME>Sales Account</LEDGERNAME>
+          <AMOUNT>${-total}</AMOUNT>
+        </LEDGERENTRIES.LIST>
+        <LEDGERENTRIES.LIST>
+          <LEDGERNAME>${escapeXML(revenueLedger)}</LEDGERNAME>
           <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
-          <AMOUNT>${-taxableAmount}</AMOUNT>
-        </ALLLEDGERENTRIES.LIST>
+          <AMOUNT>${taxableAmount}</AMOUNT>
+        </LEDGERENTRIES.LIST>
 ${
-  invoice.cgst_amount && invoice.cgst_amount.toNumber() > 0
-    ? `        <ALLLEDGERENTRIES.LIST>
-          <LEDGERNAME>CGST Payable</LEDGERNAME>
+  cgst > 0
+    ? `        <LEDGERENTRIES.LIST>
+          <LEDGERNAME>${escapeXML(cgstLedger)}</LEDGERNAME>
           <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
-          <AMOUNT>${-invoice.cgst_amount.toNumber()}</AMOUNT>
-        </ALLLEDGERENTRIES.LIST>`
+          <AMOUNT>${cgst}</AMOUNT>
+        </LEDGERENTRIES.LIST>`
     : ''
 }
 ${
-  invoice.sgst_amount && invoice.sgst_amount.toNumber() > 0
-    ? `        <ALLLEDGERENTRIES.LIST>
-          <LEDGERNAME>SGST Payable</LEDGERNAME>
+  sgst > 0
+    ? `        <LEDGERENTRIES.LIST>
+          <LEDGERNAME>${escapeXML(sgstLedger)}</LEDGERNAME>
           <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
-          <AMOUNT>${-invoice.sgst_amount.toNumber()}</AMOUNT>
-        </ALLLEDGERENTRIES.LIST>`
+          <AMOUNT>${sgst}</AMOUNT>
+        </LEDGERENTRIES.LIST>`
     : ''
 }
 ${
-  invoice.igst_amount && invoice.igst_amount.toNumber() > 0
-    ? `        <ALLLEDGERENTRIES.LIST>
-          <LEDGERNAME>IGST Payable</LEDGERNAME>
+  igst > 0
+    ? `        <LEDGERENTRIES.LIST>
+          <LEDGERNAME>${escapeXML(igstLedger)}</LEDGERNAME>
           <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
-          <AMOUNT>${-invoice.igst_amount.toNumber()}</AMOUNT>
-        </ALLLEDGERENTRIES.LIST>`
+          <AMOUNT>${igst}</AMOUNT>
+        </LEDGERENTRIES.LIST>`
     : ''
 }
       </VOUCHER>
     </TALLYMESSAGE>`;
-  });
+  }));
 }
 
 async function buildPaymentVoucherXML(options: TallyExportOptions): Promise<string[]> {
@@ -359,8 +380,14 @@ async function buildPaymentVoucherXML(options: TallyExportOptions): Promise<stri
     },
   });
 
-  return payments.map((payment: any) => {
-    const cashOrBank = payment.payment_method === 'Cash' ? 'Cash' : 'Bank Accounts';
+  const receivableLedger = await getLedgerName(options.organizationId, '1130', 'Sundry Debtors - Patients');
+  const cashLedger = await getLedgerName(options.organizationId, '1110', 'Cash');
+  const bankLedger = await getLedgerName(options.organizationId, '1120', 'Bank Accounts');
+
+  return Promise.all(payments.map(async (payment: any) => {
+    const isCash = payment.payment_method === 'Cash';
+    const cashOrBankLedger = isCash ? cashLedger : bankLedger;
+    const amount = payment.amount.toNumber();
 
     return `
     <TALLYMESSAGE xmlns:UDF="TallyUDF">
@@ -370,18 +397,18 @@ async function buildPaymentVoucherXML(options: TallyExportOptions): Promise<stri
         <NARRATION>Payment received - ${escapeXML(payment.payment_method)}</NARRATION>
         <VOUCHERTYPENAME>Receipt</VOUCHERTYPENAME>
         <ALLLEDGERENTRIES.LIST>
-          <LEDGERNAME>${cashOrBank}</LEDGERNAME>
+          <LEDGERNAME>${escapeXML(cashOrBankLedger)}</LEDGERNAME>
           <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
-          <AMOUNT>${payment.amount.toNumber()}</AMOUNT>
+          <AMOUNT>${-amount}</AMOUNT>
         </ALLLEDGERENTRIES.LIST>
         <ALLLEDGERENTRIES.LIST>
-          <LEDGERNAME>Sundry Debtors - Patients</LEDGERNAME>
+          <LEDGERNAME>${escapeXML(receivableLedger)}</LEDGERNAME>
           <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
-          <AMOUNT>${-payment.amount.toNumber()}</AMOUNT>
+          <AMOUNT>${amount}</AMOUNT>
         </ALLLEDGERENTRIES.LIST>
       </VOUCHER>
     </TALLYMESSAGE>`;
-  });
+  }));
 }
 
 async function buildExpenseVoucherXML(options: TallyExportOptions): Promise<string[]> {
@@ -399,10 +426,15 @@ async function buildExpenseVoucherXML(options: TallyExportOptions): Promise<stri
     },
   });
 
-  return expenses.map((expense: any) => {
-    const paymentLedger =
-      expense.status === 'Paid' ? 'Cash' : 'Sundry Creditors';
+  const expenseLedger = await getLedgerName(options.organizationId, '8000', 'Operating Expenses');
+  const cashLedger = await getLedgerName(options.organizationId, '1110', 'Cash');
+  const payableLedger = await getLedgerName(options.organizationId, '3110', 'Sundry Creditors');
+
+  return Promise.all(expenses.map(async (expense: any) => {
+    const isPaid = expense.status === 'Paid';
+    const paymentLedgerName = isPaid ? cashLedger : payableLedger;
     const expenseDate = expense.payment_date || expense.created_at;
+    const amount = expense.amount.toNumber();
 
     return `
     <TALLYMESSAGE xmlns:UDF="TallyUDF">
@@ -412,18 +444,18 @@ async function buildExpenseVoucherXML(options: TallyExportOptions): Promise<stri
         <NARRATION>${escapeXML(expense.description || 'Expense')}</NARRATION>
         <VOUCHERTYPENAME>Payment</VOUCHERTYPENAME>
         <ALLLEDGERENTRIES.LIST>
-          <LEDGERNAME>Operating Expenses</LEDGERNAME>
+          <LEDGERNAME>${escapeXML(expenseLedger)}</LEDGERNAME>
           <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
-          <AMOUNT>${expense.amount.toNumber()}</AMOUNT>
+          <AMOUNT>${-amount}</AMOUNT>
         </ALLLEDGERENTRIES.LIST>
         <ALLLEDGERENTRIES.LIST>
-          <LEDGERNAME>${paymentLedger}</LEDGERNAME>
+          <LEDGERNAME>${escapeXML(paymentLedgerName)}</LEDGERNAME>
           <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
-          <AMOUNT>${-expense.amount.toNumber()}</AMOUNT>
+          <AMOUNT>${amount}</AMOUNT>
         </ALLLEDGERENTRIES.LIST>
       </VOUCHER>
     </TALLYMESSAGE>`;
-  });
+  }));
 }
 
 async function buildLedgerXML(organizationId: string): Promise<{ xml: string; count: number }> {

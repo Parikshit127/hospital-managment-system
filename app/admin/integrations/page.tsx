@@ -5,13 +5,14 @@ import {
     Plug, CreditCard, MessageSquare, Brain, Mail, Database,
     ChevronDown, ChevronUp, Loader2, CheckCircle2, XCircle,
     AlertTriangle, Eye, EyeOff, RefreshCw, Save, Info,
-    Shield,
+    Shield, Send,
 } from 'lucide-react';
 import { AdminPage } from '@/app/admin/components/AdminPage';
 import {
     getAdminIntegrationSettings,
     updateAdminIntegrationSettings,
     testAdminIntegrationConnection,
+    sendRealTestNotification,
 } from '@/app/actions/integration-actions';
 
 /* ------------------------------------------------------------------ */
@@ -135,6 +136,27 @@ const INTEGRATIONS: IntegrationDef[] = [
         hasTestButton: true,
     },
     {
+        key: 'sms',
+        name: 'SMS Gateway',
+        description: 'Send transactional SMS notifications, billing summaries, and patient intake OTP alerts via dynamic REST integration.',
+        icon: MessageSquare,
+        color: 'text-sky-600',
+        bgColor: 'bg-sky-50',
+        borderColor: 'border-sky-500',
+        statusCheck: (cfg) => {
+            if (cfg?.sms_gateway_url && cfg?.sms_api_key_configured) return 'connected';
+            if (cfg?.sms_gateway_url && !cfg?.sms_api_key_configured) return 'error';
+            return 'not_configured';
+        },
+        fields: [
+            { key: 'sms_gateway_url', label: 'SMS Gateway URL', type: 'text', placeholder: 'https://api.sms-provider.com/v1/send' },
+            { key: 'sms_api_key', label: 'API Key / Secret Token', type: 'password', placeholder: 'Enter SMS Gateway API Key' },
+            { key: 'sms_sender_id', label: 'Sender ID (Header)', type: 'text', placeholder: 'e.g., AVNHSP' },
+            { key: 'sender_phone_number', label: 'Sender Phone Number', type: 'text', placeholder: 'e.g., +91 99999 99999' },
+        ],
+        hasTestButton: true,
+    },
+    {
         key: 'supabase',
         name: 'Supabase Storage',
         description: 'Cloud object storage for patient documents, lab report PDFs, medical imaging files, and discharge summaries.',
@@ -200,6 +222,9 @@ export default function IntegrationDashboard() {
     const [visibleFields, setVisibleFields] = useState<Record<string, boolean>>({});
     const [localFields, setLocalFields] = useState<Record<string, string>>({});
     const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+    const [testLog, setTestLog] = useState<Record<string, string[]>>({});
+    const [sendingTest, setSendingTest] = useState<Record<string, boolean>>({});
+    const [testTarget, setTestTarget] = useState<Record<string, string>>({});
 
     /* Load organization config */
     const loadConfig = async () => {
@@ -295,6 +320,61 @@ export default function IntegrationDashboard() {
         setTestResults((prev) => ({ ...prev, [integration.key]: res.success ? 'success' : 'failed' }));
         if (!res.success && res.error) alert(res.error);
         setTestingKey(null);
+    };
+
+    /* Send real test notification sandbox */
+    const handleSendTestNotification = async (integrationKey: string) => {
+        const target = testTarget[integrationKey]?.trim();
+        if (!target) {
+            alert('Please enter a recipient email or phone number.');
+            return;
+        }
+
+        setSendingTest((prev) => ({ ...prev, [integrationKey]: true }));
+        setTestLog((prev) => ({
+            ...prev,
+            [integrationKey]: [
+                `[${new Date().toLocaleTimeString()}] 🚀 Initiating outbound live delivery test...`,
+                `[${new Date().toLocaleTimeString()}] 🔍 Resolving dynamically configured secrets from database...`,
+            ],
+        }));
+
+        const channel = integrationKey === 'smtp' ? 'smtp' : (integrationKey === 'whatsapp' ? 'whatsapp' : 'sms');
+
+        try {
+            const res = await sendRealTestNotification(channel, target);
+            if (res.success) {
+                setTestLog((prev) => ({
+                    ...prev,
+                    [integrationKey]: [
+                        ...(prev[integrationKey] || []),
+                        `[${new Date().toLocaleTimeString()}] 📡 Channel: ${channel.toUpperCase()}`,
+                        `[${new Date().toLocaleTimeString()}] 🟢 Connection verified and handshake successful.`,
+                        `[${new Date().toLocaleTimeString()}] ✉️ Dispatching live payload...`,
+                        `[${new Date().toLocaleTimeString()}] ✅ SUCCESS: ${res.message || 'Delivered successfully!'}`
+                    ],
+                }));
+            } else {
+                setTestLog((prev) => ({
+                    ...prev,
+                    [integrationKey]: [
+                        ...(prev[integrationKey] || []),
+                        `[${new Date().toLocaleTimeString()}] 📡 Channel: ${channel.toUpperCase()}`,
+                        `[${new Date().toLocaleTimeString()}] 🔴 FAILURE: ${res.error || 'Unknown gateway transmission error'}`
+                    ],
+                }));
+            }
+        } catch (err) {
+            setTestLog((prev) => ({
+                ...prev,
+                [integrationKey]: [
+                    ...(prev[integrationKey] || []),
+                    `[${new Date().toLocaleTimeString()}] 🔴 CRITICAL ERROR: ${err instanceof Error ? err.message : String(err)}`
+                ],
+            }));
+        } finally {
+            setSendingTest((prev) => ({ ...prev, [integrationKey]: false }));
+        }
     };
 
     /* Compute KPIs */
@@ -603,6 +683,66 @@ export default function IntegrationDashboard() {
                                                                 {testResult === 'success'
                                                                     ? 'Connection test passed. Credentials appear valid.'
                                                                     : 'Connection test failed. Please verify all fields are filled correctly.'}
+                                                            </div>
+                                                        )}
+
+                                                        {/* OUTBOUND SANDBOX LIVE TESTING */}
+                                                        {['smtp', 'whatsapp', 'sms'].includes(integration.key) && (
+                                                            <div className="mt-4 pt-4 border-t border-gray-200/60">
+                                                                <h4 className="flex items-center gap-1.5 text-xs font-black text-amber-600 uppercase tracking-wider mb-2">
+                                                                    <Send className="h-3.5 w-3.5" />
+                                                                    Outbound Sandbox Live Testing
+                                                                </h4>
+                                                                <p className="text-[11px] text-gray-500 font-medium leading-relaxed mb-3">
+                                                                    {integration.key === 'smtp' 
+                                                                        ? 'Send a real test email to verify correct sender credentials and delivery without editing .env.' 
+                                                                        : integration.key === 'whatsapp'
+                                                                        ? 'Send a real WhatsApp template message to confirm the API Token and sender configuration.'
+                                                                        : 'Dispatch a dynamic SMS message via REST API gateway credentials to check the gateway status.'}
+                                                                </p>
+                                                                <div className="flex gap-2.5">
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder={
+                                                                            integration.key === 'smtp' 
+                                                                                ? "Enter patient or staff email" 
+                                                                                : "Enter phone number e.g., +91 99999 99999"
+                                                                        }
+                                                                        value={testTarget[integration.key] || ''}
+                                                                        onChange={(e) => setTestTarget(prev => ({ ...prev, [integration.key]: e.target.value }))}
+                                                                        className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleSendTestNotification(integration.key)}
+                                                                        disabled={sendingTest[integration.key]}
+                                                                        className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition-all disabled:opacity-50"
+                                                                    >
+                                                                        {sendingTest[integration.key] ? (
+                                                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                                                        ) : (
+                                                                            <Send className="h-3 w-3" />
+                                                                        )}
+                                                                        Send Test
+                                                                    </button>
+                                                                </div>
+                                                                
+                                                                {/* Interactive Console Logs */}
+                                                                {testLog[integration.key] && testLog[integration.key].length > 0 && (
+                                                                    <div className="mt-3 p-3 bg-gray-900 border border-gray-800 rounded-xl font-mono text-[10px] text-gray-300 leading-normal max-h-40 overflow-y-auto space-y-1 shadow-inner">
+                                                                        {testLog[integration.key].map((log, idx) => {
+                                                                            let color = 'text-gray-400';
+                                                                            if (log.includes('✅') || log.includes('🟢')) color = 'text-emerald-400 font-bold';
+                                                                            else if (log.includes('🔴')) color = 'text-red-400 font-bold';
+                                                                            else if (log.includes('🚀') || log.includes('📡')) color = 'text-amber-400';
+                                                                            return (
+                                                                                <div key={idx} className={color}>
+                                                                                    {log}
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>

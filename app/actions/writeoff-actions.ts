@@ -308,11 +308,11 @@ async function findExpenseAccountId(
   writeoffType: WriteoffType,
 ): Promise<string | null> {
   const typeNames: Record<WriteoffType, string[]> = {
-    charity: ["Charity Expense", "Charitable Donations", "Bad Debt Expense"],
-    bad_debt: ["Bad Debt Expense", "Doubtful Accounts"],
-    management_waiver: ["Management Waiver", "Discount Expense", "Bad Debt Expense"],
-    settlement_adjustment: ["Settlement Adjustment", "Bad Debt Expense"],
-    employee_waiver: ["Employee Discount", "Staff Welfare", "Bad Debt Expense"],
+    charity: ["Charity Expense", "Charitable Donations", "Bad Debt Expense", "Operating Expenses"],
+    bad_debt: ["Bad Debt Expense", "Doubtful Accounts", "Operating Expenses"],
+    management_waiver: ["Management Waiver", "Discount Expense", "Bad Debt Expense", "Operating Expenses"],
+    settlement_adjustment: ["Settlement Adjustment", "Bad Debt Expense", "Operating Expenses"],
+    employee_waiver: ["Employee Discount", "Staff Welfare", "Bad Debt Expense", "Operating Expenses"],
   };
   const candidates = typeNames[writeoffType];
   for (const name of candidates) {
@@ -322,6 +322,14 @@ async function findExpenseAccountId(
     });
     if (acc) return acc.id;
   }
+
+  // Try to look up by standard account code 8000 (Operating Expenses)
+  const codeAcc = await db.gL_Account.findFirst({
+    where: { organizationId, account_code: "8000", is_active: true },
+    select: { id: true },
+  });
+  if (codeAcc) return codeAcc.id;
+
   // Last-ditch: any Expense account
   const any = await db.gL_Account.findFirst({
     where: { organizationId, account_type: "Expense", is_active: true },
@@ -335,10 +343,18 @@ async function findReceivableAccountId(
   db: any,
   organizationId: string,
 ): Promise<string | null> {
+  // First, look up standard account code 1130 (Patient Receivables)
+  const codeAcc = await db.gL_Account.findFirst({
+    where: { organizationId, account_code: "1130", is_active: true },
+    select: { id: true },
+  });
+  if (codeAcc) return codeAcc.id;
+
   const acc = await db.gL_Account.findFirst({
     where: {
       organizationId,
       OR: [
+        { account_name: "Patient Receivables" },
         { account_name: "Accounts Receivable" },
         { account_name: "Sundry Debtors" },
         { account_name: "Trade Receivables" },

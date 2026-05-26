@@ -866,7 +866,44 @@ export async function getBalanceSheet(organizationId: string, filters?: {
 
     const assets = balances.filter(a => a.account_type === 'Asset');
     const liabilities = balances.filter(a => a.account_type === 'Liability');
-    const equity = balances.filter(a => a.account_type === 'Equity');
+    let equity = balances.filter(a => a.account_type === 'Equity');
+
+    // Calculate dynamic Net Income from P&L (Revenue and Expense accounts) up to asOfDate
+    const plAccounts = await prisma.gL_Account.findMany({
+      where: {
+        organizationId,
+        is_active: true,
+        account_type: { in: ['Revenue', 'Expense'] },
+      },
+    });
+
+    let netIncome = 0;
+    for (const plAcc of plAccounts) {
+      const balRes = await getAccountBalance(plAcc.id, asOfDate);
+      const balance = balRes.balance || 0;
+      if (plAcc.account_type === 'Revenue') {
+        netIncome += balance;
+      } else {
+        netIncome -= balance;
+      }
+    }
+
+    // Map Net Income to the 5300 Current Year Profit/Loss account or append a virtual one under Equity
+    const pnlAccountIdx = equity.findIndex((e: any) => e.account_code === '5300');
+    if (pnlAccountIdx !== -1) {
+      equity[pnlAccountIdx].balance = netIncome;
+    } else {
+      equity.push({
+        id: 'virtual-pnl',
+        account_code: '5300',
+        account_name: 'Current Year Profit/Loss',
+        account_type: 'Equity',
+        account_group: 'Equity',
+        normal_balance: 'Credit',
+        balance: netIncome,
+        is_active: true,
+      });
+    }
 
     const totalAssets = assets.reduce((sum: number, a: any) => sum + a.balance, 0);
     const totalLiabilities = liabilities.reduce((sum: number, a: any) => sum + a.balance, 0);

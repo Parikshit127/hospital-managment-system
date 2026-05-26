@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { getOrganizationIntegrationConfig } from '@/app/lib/secure-config';
 
 function escapeHtml(str: string): string {
     return str
@@ -55,27 +56,40 @@ function getTransporter(orgConfig?: { smtp_host?: string | null; smtp_user?: str
     });
 }
 
-/**
- * Generic email sending utility
- */
 export async function sendEmail({
     to,
     subject,
-    html
+    html,
+    organizationId
 }: {
     to: string;
     subject: string;
     html: string;
+    organizationId?: string;
 }) {
-    const t = getTransporter();
+    let orgConfig = null;
+    if (organizationId) {
+        try {
+            orgConfig = await getOrganizationIntegrationConfig(organizationId);
+        } catch (e) {
+            console.error('Failed to load dynamic organization config for email:', e);
+        }
+    }
+
+    const t = getTransporter(orgConfig ? {
+        smtp_host: orgConfig.smtp_host as string | null,
+        smtp_user: orgConfig.smtp_user as string | null,
+        smtp_pass: orgConfig.smtp_pass as string | null,
+    } : undefined);
     if (!t) {
-        console.warn('⚠️ SMTP credentials are not fully configured in .env. Email skipped:', subject);
+        console.warn('⚠️ SMTP credentials are not fully configured. Email skipped:', subject);
         return { success: false, error: 'SMTP not configured' };
     }
 
     try {
+        const fromUser = orgConfig?.smtp_user || process.env.SMTP_USER;
         const info = await t.sendMail({
-            from: `"Axten Hospitals" <${process.env.SMTP_USER}>`,
+            from: `"Axten Hospitals" <${fromUser}>`,
             to,
             subject,
             html,
@@ -92,7 +106,7 @@ export async function sendEmail({
 /**
  * Template: Patient Portal Welcome (with credentials)
  */
-export async function sendWelcomeEmail(to: string, patientName: string, patientId: string, setupLink: string) {
+export async function sendWelcomeEmail(to: string, patientName: string, patientId: string, setupLink: string, organizationId?: string) {
     const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
@@ -114,13 +128,13 @@ export async function sendWelcomeEmail(to: string, patientName: string, patientI
         </div>
     `;
 
-    return sendEmail({ to, subject: 'Your Patient Portal Credentials', html });
+    return sendEmail({ to, subject: 'Your Patient Portal Credentials', html, organizationId });
 }
 
 /**
  * Template: AI Prescription & Clinical Summary
  */
-export async function sendPrescriptionEmail(to: string, patientName: string, doctorName: string, summaryHtml: string) {
+export async function sendPrescriptionEmail(to: string, patientName: string, doctorName: string, summaryHtml: string, organizationId?: string) {
     const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
@@ -136,13 +150,13 @@ export async function sendPrescriptionEmail(to: string, patientName: string, doc
         </div>
     `;
 
-    return sendEmail({ to, subject: 'Your Latest Prescription & Consult Summary', html });
+    return sendEmail({ to, subject: 'Your Latest Prescription & Consult Summary', html, organizationId });
 }
 
 /**
  * Template: Admission Notice
  */
-export async function sendAdmissionEmail(to: string, patientName: string, bedDetails: string, doctorName: string) {
+export async function sendAdmissionEmail(to: string, patientName: string, bedDetails: string, doctorName: string, organizationId?: string) {
     const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
@@ -159,7 +173,7 @@ export async function sendAdmissionEmail(to: string, patientName: string, bedDet
         </div>
     `;
 
-    return sendEmail({ to, subject: 'Hospital Admission Confirmation', html });
+    return sendEmail({ to, subject: 'Hospital Admission Confirmation', html, organizationId });
 }
 
 /**
@@ -173,6 +187,7 @@ export async function sendAppointmentConfirmationEmail({
     date,
     time,
     hospitalName,
+    organizationId,
 }: {
     to: string;
     patientName: string;
@@ -181,6 +196,7 @@ export async function sendAppointmentConfirmationEmail({
     date: string;
     time: string;
     hospitalName: string;
+    organizationId?: string;
 }) {
     const appBaseUrl = getAppBaseUrl();
     const html = `
@@ -201,7 +217,7 @@ export async function sendAppointmentConfirmationEmail({
         </div>
     `;
 
-    return sendEmail({ to, subject: `Appointment Confirmation - ${escapeHtml(hospitalName)}`, html });
+    return sendEmail({ to, subject: `Appointment Confirmation - ${escapeHtml(hospitalName)}`, html, organizationId });
 }
 
 /**
@@ -212,13 +228,15 @@ export async function sendPillReminderEmail({
     patientName,
     medicationName,
     dosage,
-    notes
+    notes,
+    organizationId,
 }: {
     to: string;
     patientName: string;
     medicationName: string;
     dosage: string;
     notes?: string | null;
+    organizationId?: string;
 }) {
     const appBaseUrl = getAppBaseUrl();
     const html = `
@@ -243,13 +261,13 @@ export async function sendPillReminderEmail({
         </div>
     `;
 
-    return sendEmail({ to, subject: `Medication Reminder: ${escapeHtml(medicationName)}`, html });
+    return sendEmail({ to, subject: `Medication Reminder: ${escapeHtml(medicationName)}`, html, organizationId });
 }
 
 /**
  * Template: Lab Report Ready
  */
-export async function sendLabReportEmail(to: string, patientName: string, testName: string, hospitalName: string = 'Axten Hospitals') {
+export async function sendLabReportEmail(to: string, patientName: string, testName: string, hospitalName: string = 'Axten Hospitals', organizationId?: string) {
     const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
@@ -265,13 +283,13 @@ export async function sendLabReportEmail(to: string, patientName: string, testNa
         </div>
     `;
 
-    return sendEmail({ to, subject: `Lab Report Ready: ${escapeHtml(testName)} — ${escapeHtml(hospitalName)}`, html });
+    return sendEmail({ to, subject: `Lab Report Ready: ${escapeHtml(testName)} — ${escapeHtml(hospitalName)}`, html, organizationId });
 }
 
 /**
  * Template: Discharge Summary
  */
-export async function sendDischargeEmail(to: string, patientName: string, doctorName: string, hospitalName: string = 'Avani Hospital') {
+export async function sendDischargeEmail(to: string, patientName: string, doctorName: string, hospitalName: string = 'Avani Hospital', organizationId?: string) {
     const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
@@ -288,13 +306,13 @@ export async function sendDischargeEmail(to: string, patientName: string, doctor
         </div>
     `;
 
-    return sendEmail({ to, subject: `Discharge Summary — ${escapeHtml(hospitalName)}`, html });
+    return sendEmail({ to, subject: `Discharge Summary — ${escapeHtml(hospitalName)}`, html, organizationId });
 }
 
 /**
  * Template: Invoice / Billing Notification
  */
-export async function sendInvoiceEmail(to: string, patientName: string, invoiceNumber: string, amount: string, hospitalName: string = 'Avani Hospital') {
+export async function sendInvoiceEmail(to: string, patientName: string, invoiceNumber: string, amount: string, hospitalName: string = 'Avani Hospital', organizationId?: string) {
     const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
@@ -312,5 +330,5 @@ export async function sendInvoiceEmail(to: string, patientName: string, invoiceN
         </div>
     `;
 
-    return sendEmail({ to, subject: `Invoice #${escapeHtml(invoiceNumber)} — ${escapeHtml(hospitalName)}`, html });
+    return sendEmail({ to, subject: `Invoice #${escapeHtml(invoiceNumber)} — ${escapeHtml(hospitalName)}`, html, organizationId });
 }

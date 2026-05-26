@@ -265,15 +265,206 @@ export async function createCreditNote(data: {
     }
 }
 
+function decToNum(value: unknown): number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+  if (typeof (value as any)?.toNumber === 'function') {
+    return Number((value as any).toNumber());
+  }
+  return Number(value) || 0;
+}
+
 export async function approveCreditNote(id: number) {
     try {
-        const { db, session } = await requireTenantContext();
-        const cn = await db.creditNote.update({
-            where: { id },
-            data: { status: 'Approved', approved_by: session.username },
+        const { db, session, organizationId } = await requireTenantContext();
+        
+        const result = await db.$transaction(async (tx: any) => {
+            const cn = await tx.creditNote.findUnique({
+                where: { id },
+            });
+            if (!cn) throw new Error('Credit note not found');
+            if (cn.status !== 'Draft') throw new Error(`Cannot approve credit note in status ${cn.status}`);
+
+            const amount = decToNum(cn.total_amount);
+
+            // Fetch original invoice
+            const invoice = await tx.invoices.findUnique({
+                where: { id: cn.original_invoice_id },
+            });
+            if (!invoice) throw new Error('Original invoice not found');
+
+            // Calculate GST proportionally
+            const invoiceTotal = decToNum(invoice.total_amount);
+            const invoiceCgst = decToNum(invoice.cgst_amount);
+            const invoiceSgst = decToNum(invoice.sgst_amount);
+            const invoiceIgst = decToNum(invoice.igst_amount);
+            const invoiceGst = invoiceCgst + invoiceSgst + invoiceIgst;
+            const invoiceTaxable = invoiceTotal - invoiceGst;
+
+            let cnTaxable = amount;
+            let cnCgst = 0;
+            let cnSgst = 0;
+            let cnIgst = 0;
+
+            if (invoiceTotal > 0) {
+                const ratio = amount / invoiceTotal;
+                cnTaxable = ratio * invoiceTaxable;
+                cnCgst = ratio * invoiceCgst;
+                cnSgst = ratio * invoiceSgst;
+                cnIgst = ratio * invoiceIgst;
+            }
+
+            // Find GL accounts
+            const [receivableAccount, revenueAccount, cgstAccount, sgstAccount, igstAccount] = await Promise.all([
+                tx.gL_Account.findFirst({ where: { organizationId, account_code: '1130', is_active: true } }),
+                tx.gL_Account.findFirst({ where: { organizationId, account_code: '6000', is_active: true } }),
+                tx.gL_Account.findFirst({ where: { organizationId, account_code: '3120', is_active: true } }),
+                tx.gL_Account.findFirst({ where: { organizationId, account_code: '3121', is_active: true } }),
+                tx.gL_Account.findFirst({ where: { organizationId, account_code: '3122', is_active: true } }),
+            ]);
+
+            if (!receivableAccount || !revenueAccount) {
+                throw new Error('Required receivable (1130) or revenue (6000) GL accounts not found. Ensure Chart of Accounts is seeded.');
+            }
+
+            // Update credit note status
+            const updatedCn = await tx.creditNote.update({
+                where: { id },
+                data: { status: 'Approved', approved_by: session.username },
+            });
+
+            // Update original invoice balance
+            const newBalance = Math.max(0, decToNum(invoice.balance_due) - amount);
+            const isFullyPaid = newBalance <= 0.01;
+            await tx.invoices.update({
+                where: { id: cn.original_invoice_id },
+                data: {
+                    balance_due: newBalance,
+                    status: isFullyPaid ? 'Paid' : invoice.status,
+                },
+            });
+
+            // Generate unique journal number
+            const year = new Date().getFullYear();
+            const prefix = `JV-CN-${year}-`;
+            const count = await tx.gL_JournalEntry.count({
+                where: { organizationId, journal_number: { startsWith: prefix } },
+            });
+            const journalNumber = `${prefix}${String(count + 1).padStart(4, "0")}`;
+
+            // Create Journal Lines list
+            const journalLines = [];
+            let lineNum = 1;
+
+            // 1. DR: Revenue Account (Taxable component)
+            if (cnTaxable > 0) {
+                journalLines.push({
+                    organizationId,
+                    line_number: lineNum++,
+                    account_id: revenueAccount.id,
+                    debit_amount: cnTaxable,
+                    credit_amount: 0,
+                    description: `Credit Note - Revenue Reversal`,
+                });
+            }
+
+            // 2. DR: CGST Account
+            if (cnCgst > 0 && cgstAccount) {
+                journalLines.push({
+                    organizationId,
+                    line_number: lineNum++,
+                    account_id: cgstAccount.id,
+                    debit_amount: cnCgst,
+                    credit_amount: 0,
+                    description: `Credit Note - CGST Reversal`,
+                });
+            }
+
+            // 3. DR: SGST Account
+            if (cnSgst > 0 && sgstAccount) {
+                journalLines.push({
+                    organizationId,
+                    line_number: lineNum++,
+                    account_id: sgstAccount.id,
+                    debit_amount: cnSgst,
+                    credit_amount: 0,
+                    description: `Credit Note - SGST Reversal`,
+                });
+            }
+
+            // 4. DR: IGST Account
+            if (cnIgst > 0 && igstAccount) {
+                journalLines.push({
+                    organizationId,
+                    line_number: lineNum++,
+                    account_id: igstAccount.id,
+                    debit_amount: cnIgst,
+                    credit_amount: 0,
+                    description: `Credit Note - IGST Reversal`,
+                });
+            }
+
+            // 5. CR: Receivable Account (Total credit note amount)
+            journalLines.push({
+                organizationId,
+                line_number: lineNum++,
+                account_id: receivableAccount.id,
+                debit_amount: 0,
+                credit_amount: amount,
+                description: `Receivable adjustment via credit note`,
+            });
+
+            // Create GL Journal Entry
+            await tx.gL_JournalEntry.create({
+                data: {
+                    organizationId,
+                    journal_number: journalNumber,
+                    entry_date: new Date(),
+                    entry_type: 'Adjustment',
+                    reference_type: 'CreditNote',
+                    reference_id: String(cn.id),
+                    reference_number: cn.credit_note_number,
+                    narration: `Credit Note ${cn.credit_note_number} approved — ${cn.reason}`,
+                    total_debit: amount,
+                    total_credit: amount,
+                    status: 'Posted',
+                    created_by: session.username ?? null,
+                    lines: {
+                        create: journalLines,
+                    },
+                },
+            });
+
+            // Update GL Account balances
+            for (const line of journalLines) {
+                const isDebitLine = line.debit_amount > 0;
+                const lineAmount = isDebitLine ? line.debit_amount : line.credit_amount;
+                const glAcc = await tx.gL_Account.findUnique({ where: { id: line.account_id } });
+                if (glAcc) {
+                    const balanceChange = glAcc.normal_balance === 'Debit'
+                        ? (isDebitLine ? lineAmount : -lineAmount)
+                        : (isDebitLine ? -lineAmount : lineAmount);
+                    await tx.gL_Account.update({
+                        where: { id: line.account_id },
+                        data: {
+                            current_balance: {
+                                increment: balanceChange,
+                            },
+                        },
+                    });
+                }
+            }
+
+            return updatedCn;
         });
-        return { success: true, data: serialize(cn) };
+
+        return { success: true, data: serialize(result) };
     } catch (error: any) {
+        console.error('approveCreditNote error:', error);
         return { success: false, error: error.message };
     }
 }
