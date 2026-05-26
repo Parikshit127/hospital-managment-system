@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ClipboardList, Loader2, Plus, Check, X, ArrowRight } from "lucide-react";
 import { AppShell } from "@/app/components/layout/AppShell";
 import {
@@ -27,11 +28,12 @@ type Req = {
   created_at: string;
 };
 
-export default function SurgeryRequestsPage() {
+function SurgeryRequestsInner() {
+  const searchParams = useSearchParams();
   const [requests, setRequests] = useState<Req[]>([]);
   const [filter, setFilter] = useState<string>("Requested");
   const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] = useState(searchParams.get("create") === "1");
   const [masters, setMasters] = useState<any[]>([]);
   const [form, setForm] = useState({
     patient_id: "",
@@ -345,5 +347,13 @@ function Field({
         />
       )}
     </div>
+  );
+}
+
+export default function SurgeryRequestsPage() {
+  return (
+    <Suspense fallback={<div className="py-20 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>}>
+      <SurgeryRequestsInner />
+    </Suspense>
   );
 }

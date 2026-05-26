@@ -11,6 +11,7 @@ import {
   Stethoscope,
   Building2,
   TimerReset,
+  Plus,
 } from "lucide-react";
 import { AdminPage } from "@/app/admin/components/AdminPage";
 import { getOTDashboard, getOTStats } from "@/app/actions/ot-actions";
@@ -38,6 +39,14 @@ export default function OTDashboardPage() {
       pageIcon={<Scissors className="h-5 w-5" />}
       onRefresh={load}
       refreshing={loading}
+      headerActions={
+        <Link
+          href="/ot/requests?create=1"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition"
+        >
+          <Plus className="h-4 w-4" /> Schedule Patient
+        </Link>
+      }
     >
       {loading && !data ? (
         <div className="flex items-center justify-center py-20">
