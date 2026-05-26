@@ -233,21 +233,13 @@ export default function InvoiceDetailPage() {
                 <div className="bg-white border border-gray-200 rounded-2xl print-m-0 p-8 sm:p-12 shadow-md relative"
                     style={{ position: 'relative' }}
                 >
-                    {/* Letterhead background for print */}
+                    {/* Letterhead as actual img — prints in all browsers */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                         src="/letter head.png"
-                        alt=""
-                        aria-hidden="true"
-                        className="hidden print:block"
-                        style={{
-                            position: 'fixed',
-                            top: 0, left: 0,
-                            width: '100%', height: '100%',
-                            objectFit: 'cover',
-                            zIndex: -1,
-                            pointerEvents: 'none',
-                        }}
+                        alt="Axten Hospitals"
+                        className="hidden print:block w-full"
+                        style={{ height: 'auto', maxHeight: '160px', objectFit: 'cover', objectPosition: 'top', marginBottom: '16px' }}
                     />
 
                     {/* Status Watermark */}
@@ -276,8 +268,8 @@ export default function InvoiceDetailPage() {
                             }
                         />
                     </div>
-                    {/* Print-only header spacer + invoice info */}
-                    <div className="hidden print:flex justify-between items-start mb-8" style={{ paddingTop: '130px' }}>
+                    {/* Print-only invoice info */}
+                    <div className="hidden print:flex justify-between items-start mb-8">
                         <div />
                         <div className="text-right">
                             <h2 className="text-2xl font-black tracking-wider uppercase mb-1" style={{ color: '#1e3a6e' }}>TAX INVOICE</h2>

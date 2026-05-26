@@ -1467,12 +1467,20 @@ export default function AdmissionDetailPage() {
                                                 Invoice: <span className="font-mono text-gray-800">{bill.invoice.invoice_number}</span>
                                                 &nbsp;·&nbsp; Days: {bill.admission.days_admitted}
                                             </p>
-                                            <button
-                                                onClick={() => { setBill(null); loadBill(); }}
-                                                className="text-[10px] text-orange-600 font-bold hover:underline"
-                                            >
-                                                Refresh
-                                            </button>
+                                            <div className="flex items-center gap-3">
+                                                <button
+                                                    onClick={() => window.open(`/api/ipd/${params.id}/package-acceptance`, '_blank')}
+                                                    className="text-[10px] text-emerald-700 font-bold hover:underline"
+                                                >
+                                                    📄 Print Package Acceptance Form
+                                                </button>
+                                                <button
+                                                    onClick={() => { setBill(null); loadBill(); }}
+                                                    className="text-[10px] text-orange-600 font-bold hover:underline"
+                                                >
+                                                    Refresh
+                                                </button>
+                                            </div>
                                         </div>
 
                                         {/* Line Items by Category */}

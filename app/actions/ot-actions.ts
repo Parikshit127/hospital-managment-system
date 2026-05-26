@@ -654,6 +654,56 @@ export async function addSurgeryConsumable(input: {
 // Billing
 // ============================================
 
+export async function updateSurgeryBillFees(
+  surgery_request_id: string,
+  fees: {
+    surgeon_fee: number;
+    anesthesia_fee: number;
+    ot_charges: number;
+  },
+) {
+  try {
+    const { db } = await requireTenantContext();
+    const existing = await db.surgeryBilling.findUnique({ where: { surgery_request_id } });
+    const consumable_total = Number(existing?.consumable_total ?? 0);
+    const implant_total = Number(existing?.implant_total ?? 0);
+    const total_amount =
+      fees.surgeon_fee + fees.anesthesia_fee + fees.ot_charges + consumable_total + implant_total;
+
+    const billing = await db.surgeryBilling.upsert({
+      where: { surgery_request_id },
+      create: {
+        surgery_request_id,
+        surgeon_fee: fees.surgeon_fee,
+        anesthesia_fee: fees.anesthesia_fee,
+        ot_charges: fees.ot_charges,
+        consumable_total,
+        implant_total,
+        total_amount,
+      },
+      update: {
+        surgeon_fee: fees.surgeon_fee,
+        anesthesia_fee: fees.anesthesia_fee,
+        ot_charges: fees.ot_charges,
+        total_amount,
+      },
+    });
+
+    await logAudit({
+      action: "UPDATE_SURGERY_BILL_FEES",
+      module: "ot",
+      entity_type: "SurgeryBilling",
+      entity_id: billing.id,
+      details: `Fees updated — surgeon: ${fees.surgeon_fee}, anesthesia: ${fees.anesthesia_fee}, OT: ${fees.ot_charges}`,
+    });
+
+    revalidatePath("/ot/billing");
+    return { success: true, data: serialize(billing) };
+  } catch (error: any) {
+    return { success: false, error: error?.message };
+  }
+}
+
 export async function generateSurgeryBill(surgery_request_id: string) {
   try {
     const { db } = await requireTenantContext();

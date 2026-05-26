@@ -4,6 +4,7 @@ import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
 import { createJournalEntry } from './gl-actions';
 import { accrueIPDDailyCharges } from '@/app/actions/ipd-actions';
+import { getPackageGSTRate } from '@/app/lib/gst';
 
 
 function serialize<T>(data: T): T {
@@ -338,6 +339,19 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
             },
         });
 
+        // Determine GST rate from package category. Cosmetic / plastic surgery = 18%,
+        // all other clinical packages are exempt under healthcare exemption.
+        let packageCategory: string | null = null;
+        try {
+            const meta = pkg.description ? JSON.parse(pkg.description) : null;
+            if (meta && typeof meta === 'object' && 'category' in meta) {
+                packageCategory = String(meta.category);
+            }
+        } catch {
+            packageCategory = null;
+        }
+        const packageTaxRate = getPackageGSTRate(packageCategory);
+
         // Post as a single line item to the IPD bill
         await postChargeToIpdBill({
             admission_id: admissionId,
@@ -346,6 +360,7 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
             description: `Package: ${pkg.package_name}`,
             quantity: 1,
             unit_price: Number(pkg.total_amount),
+            tax_rate: packageTaxRate,
             service_category: 'Package',
         });
 
@@ -513,6 +528,7 @@ export async function generateInterimBill(admissionId: string) {
                     created_at: p.created_at,
                 })),
                 deposits: deposits.map((d: any) => ({
+                    id: d.id,
                     deposit_number: d.deposit_number,
                     amount: Number(d.amount),
                     applied_amount: Number(d.applied_amount),

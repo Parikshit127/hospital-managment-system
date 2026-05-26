@@ -150,6 +150,101 @@ export async function getProfitLossReport(filters: { from: string; to: string })
     }
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// P&L drill-downs (one row → individual invoice items / expenses)
+// ──────────────────────────────────────────────────────────────────────────
+
+export async function getPnLIncomeBreakdown(filters: {
+    department: string;
+    from: string;
+    to: string;
+}) {
+    try {
+        const { db } = await requireTenantContext();
+        const dateFilter = { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') };
+
+        const items = await db.invoice_items.findMany({
+            where: { department: filters.department, created_at: dateFilter },
+            include: {
+                invoice: {
+                    select: {
+                        invoice_number: true,
+                        invoice_type: true,
+                        status: true,
+                        patient: { select: { full_name: true, patient_id: true } },
+                    },
+                },
+            },
+            orderBy: { created_at: 'desc' },
+        });
+
+        const rows = items.map((it: any) => ({
+            id: it.id,
+            date: it.created_at,
+            description: it.description,
+            quantity: it.quantity,
+            unit_price: Number(it.unit_price),
+            net_price: Number(it.net_price),
+            tax_amount: Number(it.tax_amount || 0),
+            service_category: it.service_category,
+            patient_name: it.invoice?.patient?.full_name || '-',
+            patient_id: it.invoice?.patient?.patient_id || '-',
+            invoice_number: it.invoice?.invoice_number || '-',
+            invoice_type: it.invoice?.invoice_type || '-',
+        }));
+        const total = rows.reduce((s: number, r: any) => s + r.net_price + r.tax_amount, 0);
+
+        return { success: true, data: { rows, total, department: filters.department } };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function getPnLExpenseBreakdown(filters: {
+    categoryLabel: string;
+    from: string;
+    to: string;
+}) {
+    try {
+        const { db } = await requireTenantContext();
+        const dateFilter = { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') };
+
+        // Resolve category by name (label) → id
+        const category = await db.expenseCategory.findFirst({
+            where: { name: filters.categoryLabel },
+            select: { id: true },
+        });
+        const where: any = {
+            status: { in: ['Approved', 'Paid'] },
+            created_at: dateFilter,
+        };
+        if (category) where.category_id = category.id;
+        else where.category_id = -1; // no match → empty result
+
+        const expenses = await db.expense.findMany({
+            where,
+            include: { vendor: { select: { vendor_name: true } } },
+            orderBy: { created_at: 'desc' },
+        });
+
+        const rows = expenses.map((e: any) => ({
+            id: e.id,
+            date: e.created_at,
+            expense_number: e.expense_number,
+            description: e.description,
+            vendor: e.vendor?.vendor_name || '-',
+            payment_method: e.payment_method,
+            amount: Number(e.total_amount),
+            status: e.status,
+        }));
+        const total = rows.reduce((s: number, r: any) => s + r.amount, 0);
+
+        return { success: true, data: { rows, total, category: filters.categoryLabel } };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
 export async function getRevenueByDepartment(filters: { from: string; to: string }) {
     try {
         const { db } = await requireTenantContext();

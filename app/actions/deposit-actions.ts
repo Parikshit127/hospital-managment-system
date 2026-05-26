@@ -102,11 +102,14 @@ export async function applyDepositToInvoice(depositId: number, invoiceId: number
     try {
         const { db, organizationId } = await requireTenantContext();
 
-        const deposit = await db.patientDeposit.findUnique({ where: { id: depositId } });
+        const deposit = await db.patientDeposit.findFirst({ where: { id: depositId } });
         if (!deposit) return { success: false, error: 'Deposit not found' };
 
         const available = Number(deposit.amount) - Number(deposit.applied_amount) - Number(deposit.refunded_amount);
-        if (amount > available) return { success: false, error: `Only ${available} available to apply` };
+        if (available <= 0) return { success: false, error: 'No balance available in this deposit' };
+
+        // Apply only what's available — don't exceed deposit balance
+        const applyAmount = Math.min(available, amount);
 
         // Create a payment on the invoice
         const receiptNum = `RCP-DEP-${Date.now()}`;
@@ -114,7 +117,7 @@ export async function applyDepositToInvoice(depositId: number, invoiceId: number
             data: {
                 receipt_number: receiptNum,
                 invoice_id: invoiceId,
-                amount,
+                amount: applyAmount,
                 payment_method: 'Deposit',
                 payment_type: 'Settlement',
                 status: 'Completed',
@@ -123,7 +126,7 @@ export async function applyDepositToInvoice(depositId: number, invoiceId: number
         });
 
         // Update deposit
-        const newApplied = Number(deposit.applied_amount) + amount;
+        const newApplied = Number(deposit.applied_amount) + applyAmount;
         const newStatus = newApplied >= Number(deposit.amount) ? 'Applied' : 'Active';
         await db.patientDeposit.update({
             where: { id: depositId },
@@ -152,12 +155,12 @@ export async function applyDepositToInvoice(depositId: number, invoiceId: number
                 module: 'finance',
                 entity_type: 'deposit',
                 entity_id: deposit.deposit_number,
-                details: JSON.stringify({ invoiceId, amount }),
+                details: JSON.stringify({ invoiceId, amount: applyAmount }),
                 organizationId,
             },
         });
 
-        return { success: true };
+        return { success: true, applied: applyAmount };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
@@ -167,7 +170,7 @@ export async function refundDeposit(depositId: number, amount: number) {
     try {
         const { db, organizationId } = await requireTenantContext();
 
-        const deposit = await db.patientDeposit.findUnique({ where: { id: depositId } });
+        const deposit = await db.patientDeposit.findFirst({ where: { id: depositId } });
         if (!deposit) return { success: false, error: 'Deposit not found' };
 
         const available = Number(deposit.amount) - Number(deposit.applied_amount) - Number(deposit.refunded_amount);

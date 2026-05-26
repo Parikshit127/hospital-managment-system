@@ -27,7 +27,7 @@ export async function getMasterBillingData(params: {
             where.OR = [
                 { full_name: { contains: params.search, mode: 'insensitive' } },
                 { patient_id: { contains: params.search, mode: 'insensitive' } },
-                { phone: { contains: params.search } },
+                { phone: { contains: params.search, mode: 'insensitive' } },
             ];
         }
 

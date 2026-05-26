@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/app/components/ui/Toast';
 import { processPatientPayment, addPatientDues } from '@/app/actions/reception-actions';
-import { reversePayment, cancelInvoice } from '@/app/actions/finance-actions';
+import { reversePayment, cancelInvoice, revertInvoice } from '@/app/actions/finance-actions';
 
 interface BillingMasterProps {
     role: 'admin' | 'reception' | 'opd';
@@ -106,14 +106,15 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
     };
 
     const handleVoidInvoice = async (invoiceId: number) => {
-        if (!confirm('Are you sure you want to void this bill?')) return;
+        const reason = prompt('Reason for cancelling this bill? (required)');
+        if (!reason || !reason.trim()) return;
         setProcessLoading(true);
-        const res = await cancelInvoice(invoiceId, 'Voided by Admin');
+        const res = await cancelInvoice(invoiceId, reason.trim());
         if (res.success) {
-            toast.success('Bill Voided');
+            toast.success('Bill Cancelled');
             loadData();
         } else {
-            toast.error('Failed to void bill');
+            toast.error('Failed to cancel bill');
         }
         setProcessLoading(false);
     };

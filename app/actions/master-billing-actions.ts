@@ -173,7 +173,7 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
           patient: {
             OR: [
               { full_name: { contains: q, mode: "insensitive" } },
-              { phone: { contains: q } },
+              { phone: { contains: q, mode: 'insensitive' } },
             ],
           },
         },
@@ -503,7 +503,7 @@ export async function globalFinanceSearch(query: string): Promise<{
           organizationId,
           OR: [
             { full_name: { contains: trimmed, mode: "insensitive" } },
-            { phone: { contains: trimmed } },
+            { phone: { contains: trimmed, mode: 'insensitive' } },
             { patient_id: { contains: trimmed, mode: "insensitive" } },
             { abha_number: { contains: trimmed, mode: "insensitive" } },
           ],

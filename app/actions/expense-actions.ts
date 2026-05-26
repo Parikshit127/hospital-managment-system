@@ -2,6 +2,7 @@
 
 import { postExpenseToGL } from './gl-actions';
 import { syncExpenseToBudget } from './budget-actions';
+import { sendExpenseApprovedEmail, sendExpenseRejectedEmail, sendExpensePaidEmail } from '@/backend/email';
 
 import { requireTenantContext } from '@/backend/tenant';
 
@@ -244,6 +245,7 @@ export async function approveExpense(id: number) {
         const expense = await db.expense.update({
             where: { id },
             data: { status: 'Approved', approved_by: session.username },
+            include: { vendor: { select: { email: true, vendor_name: true } } },
         });
 
         await db.system_audit_logs.create({
@@ -254,10 +256,8 @@ export async function approveExpense(id: number) {
                 entity_id: expense.expense_number,
                 details: JSON.stringify({ approved_by: session.username }),
                 organizationId,
-
             },
         });
-
 
         // Auto-post to General Ledger
         await postExpenseToGL(expense.id).catch(err =>
@@ -268,6 +268,18 @@ export async function approveExpense(id: number) {
         await syncExpenseToBudget(expense.id, expense.organizationId).catch(err =>
             console.error("Budget sync failed for expense:", expense.id, err)
         );
+
+        // Email notification to vendor if email is available
+        if ((expense as any).vendor?.email) {
+            sendExpenseApprovedEmail({
+                to: (expense as any).vendor.email,
+                approverName: (expense as any).vendor.vendor_name,
+                expenseNumber: expense.expense_number,
+                description: expense.description,
+                amount: Number(expense.total_amount).toLocaleString('en-IN'),
+                approvedBy: session.username ?? 'Finance Team',
+            }).catch(err => console.warn('Expense approval email failed:', err));
+        }
 
         return { success: true, data: serialize(expense) };
     } catch (error: any) {
@@ -290,6 +302,7 @@ export async function markExpensePaid(id: number, paymentData: {
                 payment_date: paymentData.payment_date ? new Date(paymentData.payment_date) : new Date(),
                 reference_no: paymentData.reference_no || null,
             },
+            include: { vendor: { select: { email: true, vendor_name: true } } },
         });
 
         await db.system_audit_logs.create({
@@ -303,6 +316,19 @@ export async function markExpensePaid(id: number, paymentData: {
             },
         });
 
+        // Email notification to vendor if email is available
+        if ((expense as any).vendor?.email) {
+            sendExpensePaidEmail({
+                to: (expense as any).vendor.email,
+                recipientName: (expense as any).vendor.vendor_name,
+                expenseNumber: expense.expense_number,
+                description: expense.description,
+                amount: Number(expense.total_amount).toLocaleString('en-IN'),
+                paymentMethod: paymentData.payment_method,
+                referenceNo: paymentData.reference_no,
+            }).catch(err => console.warn('Expense paid email failed:', err));
+        }
+
         return { success: true, data: serialize(expense) };
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -315,6 +341,7 @@ export async function rejectExpense(id: number, reason: string) {
         const expense = await db.expense.update({
             where: { id },
             data: { status: 'Rejected', notes: reason, approved_by: session.username },
+            include: { vendor: { select: { email: true, vendor_name: true } } },
         });
 
         await db.system_audit_logs.create({
@@ -327,6 +354,19 @@ export async function rejectExpense(id: number, reason: string) {
                 organizationId,
             },
         });
+
+        // Email notification to vendor if email is available
+        if ((expense as any).vendor?.email) {
+            sendExpenseRejectedEmail({
+                to: (expense as any).vendor.email,
+                recipientName: (expense as any).vendor.vendor_name,
+                expenseNumber: expense.expense_number,
+                description: expense.description,
+                amount: Number(expense.total_amount).toLocaleString('en-IN'),
+                rejectedBy: session.username ?? 'Finance Team',
+                reason,
+            }).catch(err => console.warn('Expense rejection email failed:', err));
+        }
 
         return { success: true, data: serialize(expense) };
     } catch (error: any) {

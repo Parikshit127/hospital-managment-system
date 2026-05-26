@@ -322,7 +322,18 @@ export default function DischargeSettlementPage() {
                         disabled={!billData}
                         className="px-4 py-3 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
                     >
-                        Print Final Bill
+                        Print Detailed Bill
+                    </button>
+                    <button
+                        onClick={() => {
+                            if (billData?.invoice?.id) {
+                                window.open(`/api/discharge/${admissionId}/summary-bill`, '_blank');
+                            }
+                        }}
+                        disabled={!billData}
+                        className="px-4 py-3 border border-emerald-300 bg-emerald-50 text-emerald-700 rounded-lg text-sm hover:bg-emerald-100 disabled:opacity-50"
+                    >
+                        Print Summary Bill
                     </button>
                     <button
                         onClick={() => router.back()}

@@ -332,3 +332,117 @@ export async function sendInvoiceEmail(to: string, patientName: string, invoiceN
 
     return sendEmail({ to, subject: `Invoice #${escapeHtml(invoiceNumber)} — ${escapeHtml(hospitalName)}`, html, organizationId });
 }
+
+/**
+ * Template: Expense Approved
+ */
+export async function sendExpenseApprovedEmail({
+    to,
+    approverName,
+    expenseNumber,
+    description,
+    amount,
+    approvedBy,
+}: {
+    to: string;
+    approverName: string;
+    expenseNumber: string;
+    description: string;
+    amount: string;
+    approvedBy: string;
+}) {
+    const appBaseUrl = getAppBaseUrl();
+    const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+            <h2 style="color: #059669;">✅ Expense Approved</h2>
+            <p>Dear ${escapeHtml(approverName)},</p>
+            <p>The following expense has been <strong>approved</strong>.</p>
+            <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #bbf7d0;">
+                <p style="margin: 0;"><strong>Expense No:</strong> ${escapeHtml(expenseNumber)}</p>
+                <p style="margin: 8px 0 0 0;"><strong>Description:</strong> ${escapeHtml(description)}</p>
+                <p style="margin: 8px 0 0 0; font-size: 20px; font-weight: bold; color: #059669;">&#8377;${escapeHtml(amount)}</p>
+                <p style="margin: 8px 0 0 0; font-size: 12px; color: #6b7280;">Approved by: ${escapeHtml(approvedBy)}</p>
+            </div>
+            <p>You can view the full expense record in the <a href="${appBaseUrl}/finance/expenses" style="color: #059669;">Finance Portal</a>.</p>
+        </div>
+    `;
+    return sendEmail({ to, subject: `Expense Approved: ${escapeHtml(expenseNumber)}`, html });
+}
+
+/**
+ * Template: Expense Rejected
+ */
+export async function sendExpenseRejectedEmail({
+    to,
+    recipientName,
+    expenseNumber,
+    description,
+    amount,
+    rejectedBy,
+    reason,
+}: {
+    to: string;
+    recipientName: string;
+    expenseNumber: string;
+    description: string;
+    amount: string;
+    rejectedBy: string;
+    reason: string;
+}) {
+    const appBaseUrl = getAppBaseUrl();
+    const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+            <h2 style="color: #dc2626;">❌ Expense Rejected</h2>
+            <p>Dear ${escapeHtml(recipientName)},</p>
+            <p>The following expense has been <strong>rejected</strong>.</p>
+            <div style="background: #fef2f2; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #fecaca;">
+                <p style="margin: 0;"><strong>Expense No:</strong> ${escapeHtml(expenseNumber)}</p>
+                <p style="margin: 8px 0 0 0;"><strong>Description:</strong> ${escapeHtml(description)}</p>
+                <p style="margin: 8px 0 0 0; font-size: 20px; font-weight: bold; color: #dc2626;">&#8377;${escapeHtml(amount)}</p>
+                <p style="margin: 8px 0 0 0;"><strong>Rejected by:</strong> ${escapeHtml(rejectedBy)}</p>
+                <p style="margin: 8px 0 0 0;"><strong>Reason:</strong> ${escapeHtml(reason)}</p>
+            </div>
+            <p>Please review and resubmit if needed via the <a href="${appBaseUrl}/finance/expenses" style="color: #dc2626;">Finance Portal</a>.</p>
+        </div>
+    `;
+    return sendEmail({ to, subject: `Expense Rejected: ${escapeHtml(expenseNumber)}`, html });
+}
+
+/**
+ * Template: Expense Paid / Payment Processed
+ */
+export async function sendExpensePaidEmail({
+    to,
+    recipientName,
+    expenseNumber,
+    description,
+    amount,
+    paymentMethod,
+    referenceNo,
+}: {
+    to: string;
+    recipientName: string;
+    expenseNumber: string;
+    description: string;
+    amount: string;
+    paymentMethod: string;
+    referenceNo?: string;
+}) {
+    const appBaseUrl = getAppBaseUrl();
+    const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+            <h2 style="color: #0284c7;">💳 Expense Payment Processed</h2>
+            <p>Dear ${escapeHtml(recipientName)},</p>
+            <p>Payment has been processed for the following expense.</p>
+            <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #bae6fd;">
+                <p style="margin: 0;"><strong>Expense No:</strong> ${escapeHtml(expenseNumber)}</p>
+                <p style="margin: 8px 0 0 0;"><strong>Description:</strong> ${escapeHtml(description)}</p>
+                <p style="margin: 8px 0 0 0; font-size: 20px; font-weight: bold; color: #0284c7;">&#8377;${escapeHtml(amount)}</p>
+                <p style="margin: 8px 0 0 0;"><strong>Payment Method:</strong> ${escapeHtml(paymentMethod)}</p>
+                ${referenceNo ? `<p style="margin: 8px 0 0 0;"><strong>Reference No:</strong> ${escapeHtml(referenceNo)}</p>` : ''}
+            </div>
+            <p>View payment details in the <a href="${appBaseUrl}/finance/expenses" style="color: #0284c7;">Finance Portal</a>.</p>
+        </div>
+    `;
+    return sendEmail({ to, subject: `Payment Processed: ${escapeHtml(expenseNumber)}`, html });
+}

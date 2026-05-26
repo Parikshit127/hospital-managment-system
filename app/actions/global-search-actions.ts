@@ -46,7 +46,7 @@ export async function globalSearchPatients(query: string): Promise<{
         is_archived: false,
         OR: [
           { full_name: { contains: trimmed, mode: 'insensitive' } },
-          { phone: { contains: trimmed } },
+          { phone: { contains: trimmed, mode: 'insensitive' } },
           { patient_id: { contains: trimmed, mode: 'insensitive' } },
           { abha_number: { contains: trimmed, mode: 'insensitive' } },
         ],

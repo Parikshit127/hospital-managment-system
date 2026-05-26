@@ -76,7 +76,18 @@ export default function FeeReceiptPage() {
         <AppShell pageTitle="Fee Receipts" pageIcon={<FileText className="h-5 w-5" />}>
             <style>{`
                 @media print {
-                    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                    body * { visibility: hidden !important; }
+                    .fee-receipt-print, .fee-receipt-print * { visibility: visible !important; }
+                    .fee-receipt-print {
+                        display: block !important;
+                        position: fixed !important;
+                        inset: 0 !important;
+                        z-index: 99999 !important;
+                        background: white !important;
+                        padding: 0 !important;
+                    }
                 }
             `}</style>
             <div className="max-w-6xl mx-auto pb-24 print:max-w-full">
@@ -903,24 +914,15 @@ function SuccessAndPrintModal({
                 </div>
             </div>
 
-            <div className="hidden print:block fixed inset-0 z-[100] text-black" style={{ padding: '130px 60px 80px 60px' }}>
-                {/* Letterhead background image — full page */}
+            <div className="fee-receipt-print" style={{ display: 'none', position: 'relative' }}>
+                {/* Full letterhead img — header + watermark + footer */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                    src="/letter head.png"
-                    alt=""
-                    aria-hidden="true"
-                    style={{
-                        position: "fixed",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
-                        zIndex: -1,
-                        pointerEvents: "none",
-                    }}
-                />
+                <img src="/letter head.png" alt="" aria-hidden="true" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0, pointerEvents: 'none' }} />
+                {/* Watermark logo */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo.jpeg" alt="" aria-hidden="true" style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '280px', opacity: 0.06, zIndex: 0, pointerEvents: 'none' }} />
+                {/* Content */}
+                <div style={{ position: 'relative', zIndex: 1, padding: '130px 60px 80px 60px' }}>
                 <div className="max-w-3xl mx-auto space-y-6">
                     {/* Invoice number top-right */}
                     <div className="flex justify-end">
@@ -1006,6 +1008,7 @@ function SuccessAndPrintModal({
                             <p className="text-[10px] font-medium text-gray-500 mt-1">Computer Generated Digital Receipt</p>
                         </div>
                     </div>
+                </div>
                 </div>
             </div>
         </div>

@@ -1025,7 +1025,7 @@ export default function DoctorDashboard() {
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden print-area">
             {/* Letterhead bg for print */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/letter head.png" alt="" aria-hidden="true" className="hidden print:block" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: -1, pointerEvents: 'none' }} />
+            <img src="/letter head.png" alt="Axten Hospitals" className="hidden print:block w-full" style={{ height: 'auto', maxHeight: '160px', objectFit: 'cover', objectPosition: 'top', marginBottom: '16px' }} />
             <div className="p-8 border-b border-slate-200 bg-slate-50 print:hidden">
               <PrintLetterhead
                 rightSlot={
@@ -1038,7 +1038,7 @@ export default function DoctorDashboard() {
               />
             </div>
             {/* Print-only top spacer */}
-            <div className="hidden print:flex justify-end" style={{ padding: '130px 32px 0 32px' }}>
+            <div className="hidden print:flex justify-end" style={{ padding: '0 32px 16px 32px' }}>
               <div className="text-right">
                 <p className="text-xs font-bold text-slate-400 uppercase">Doctor</p>
                 <p className="font-bold text-slate-900">{doctorName}</p>

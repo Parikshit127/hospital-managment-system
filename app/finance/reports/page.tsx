@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import {
     getCollectionsReport, getARAgingReport, getCashFlowReport,
     getProfitLossReport, getInsuranceCollectionReport, getRevenueByDepartment,
+    getPnLIncomeBreakdown, getPnLExpenseBreakdown,
 } from '@/app/actions/report-actions';
 import { DateRangePicker } from '@/app/components/finance/DateRangePicker';
 import { ReportChart } from '@/app/components/finance/ReportChart';
@@ -272,6 +273,30 @@ function CashFlowReport({ data, fmt, from, to }: { data: any; fmt: (n: number) =
 function ProfitLossReport({ data, fmt, from, to }: { data: any; fmt: (n: number) => string; from: string; to: string }) {
     const income = data?.income || [];
     const expenses = data?.expenses || [];
+
+    // Drill-down state: which row is expanded + its loaded breakdown
+    const [openKey, setOpenKey] = useState<string | null>(null);
+    const [drillData, setDrillData] = useState<any | null>(null);
+    const [drillLoading, setDrillLoading] = useState(false);
+
+    async function toggleIncome(department: string) {
+        const key = `inc:${department}`;
+        if (openKey === key) { setOpenKey(null); setDrillData(null); return; }
+        setOpenKey(key); setDrillData(null); setDrillLoading(true);
+        const res = await getPnLIncomeBreakdown({ department, from, to });
+        if (res.success) setDrillData({ type: 'income', ...res.data });
+        setDrillLoading(false);
+    }
+
+    async function toggleExpense(categoryLabel: string) {
+        const key = `exp:${categoryLabel}`;
+        if (openKey === key) { setOpenKey(null); setDrillData(null); return; }
+        setOpenKey(key); setDrillData(null); setDrillLoading(true);
+        const res = await getPnLExpenseBreakdown({ categoryLabel, from, to });
+        if (res.success) setDrillData({ type: 'expense', ...res.data });
+        setDrillLoading(false);
+    }
+
     return (
         <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -295,7 +320,7 @@ function ProfitLossReport({ data, fmt, from, to }: { data: any; fmt: (n: number)
             </div>
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                    <h3 className="font-semibold text-gray-900">P&L Statement</h3>
+                    <h3 className="font-semibold text-gray-900">P&L Statement <span className="text-xs font-normal text-gray-400 ml-2">(click any row for breakdown)</span></h3>
                     <ExportButton data={[
                         ...income.map((i: any) => ({ type: 'Income', label: i.label, amount: i.amount })),
                         ...expenses.map((e: any) => ({ type: 'Expense', label: e.label, amount: e.amount })),
@@ -307,24 +332,56 @@ function ProfitLossReport({ data, fmt, from, to }: { data: any; fmt: (n: number)
                 <div className="p-6 space-y-4">
                     <div>
                         <h4 className="text-xs font-bold text-emerald-600 uppercase mb-2">Income</h4>
-                        {income.map((i: any) => (
-                            <div key={i.label} className="flex justify-between py-1.5 text-sm">
-                                <span className="text-gray-700">{i.label}</span>
-                                <span className="font-medium text-gray-900">{fmt(i.amount)}</span>
-                            </div>
-                        ))}
+                        {income.map((i: any) => {
+                            const key = `inc:${i.label}`;
+                            const open = openKey === key;
+                            return (
+                                <div key={i.label}>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleIncome(i.label)}
+                                        className={`w-full flex justify-between py-1.5 text-sm hover:bg-emerald-50 px-2 -mx-2 rounded transition ${open ? 'bg-emerald-50' : ''}`}
+                                    >
+                                        <span className="text-gray-700 flex items-center gap-2">
+                                            <span className="text-emerald-500 text-xs">{open ? '▼' : '▶'}</span>
+                                            {i.label}
+                                        </span>
+                                        <span className="font-medium text-gray-900">{fmt(i.amount)}</span>
+                                    </button>
+                                    {open && (
+                                        <DrillPanel loading={drillLoading} data={drillData} fmt={fmt} kind="income" />
+                                    )}
+                                </div>
+                            );
+                        })}
                         <div className="flex justify-between py-2 text-sm font-bold border-t border-gray-200 mt-2">
                             <span>Total Income</span><span className="text-emerald-600">{fmt(data?.totalIncome || 0)}</span>
                         </div>
                     </div>
                     <div>
                         <h4 className="text-xs font-bold text-red-600 uppercase mb-2">Expenses</h4>
-                        {expenses.map((e: any) => (
-                            <div key={e.label} className="flex justify-between py-1.5 text-sm">
-                                <span className="text-gray-700">{e.label}</span>
-                                <span className="font-medium text-gray-900">{fmt(e.amount)}</span>
-                            </div>
-                        ))}
+                        {expenses.map((e: any) => {
+                            const key = `exp:${e.label}`;
+                            const open = openKey === key;
+                            return (
+                                <div key={e.label}>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleExpense(e.label)}
+                                        className={`w-full flex justify-between py-1.5 text-sm hover:bg-red-50 px-2 -mx-2 rounded transition ${open ? 'bg-red-50' : ''}`}
+                                    >
+                                        <span className="text-gray-700 flex items-center gap-2">
+                                            <span className="text-red-500 text-xs">{open ? '▼' : '▶'}</span>
+                                            {e.label}
+                                        </span>
+                                        <span className="font-medium text-gray-900">{fmt(e.amount)}</span>
+                                    </button>
+                                    {open && (
+                                        <DrillPanel loading={drillLoading} data={drillData} fmt={fmt} kind="expense" />
+                                    )}
+                                </div>
+                            );
+                        })}
                         <div className="flex justify-between py-2 text-sm font-bold border-t border-gray-200 mt-2">
                             <span>Total Expenses</span><span className="text-red-600">{fmt(data?.totalExpenses || 0)}</span>
                         </div>
@@ -336,6 +393,97 @@ function ProfitLossReport({ data, fmt, from, to }: { data: any; fmt: (n: number)
                 </div>
             </div>
         </>
+    );
+}
+
+function DrillPanel({ loading, data, fmt, kind }: { loading: boolean; data: any; fmt: (n: number) => string; kind: 'income' | 'expense' }) {
+    if (loading) {
+        return (
+            <div className="my-2 ml-6 mr-2 py-4 px-3 bg-gray-50 rounded-lg flex items-center gap-2 text-xs text-gray-500">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading breakdown...
+            </div>
+        );
+    }
+    if (!data || (kind === 'income' && data.type !== 'income') || (kind === 'expense' && data.type !== 'expense')) {
+        return null;
+    }
+    const rows = data.rows || [];
+    if (rows.length === 0) {
+        return (
+            <div className="my-2 ml-6 mr-2 py-4 px-3 bg-gray-50 rounded-lg text-xs text-gray-400 text-center">
+                No detailed entries found.
+            </div>
+        );
+    }
+    return (
+        <div className="my-2 ml-6 mr-2 bg-gray-50 rounded-lg overflow-hidden border border-gray-200">
+            <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                    <thead className="bg-white border-b border-gray-200">
+                        {kind === 'income' ? (
+                            <tr>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-500">Date</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-500">Patient</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-500">Invoice</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-500">Type</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-500">Description</th>
+                                <th className="px-3 py-2 text-right font-semibold text-gray-500">Qty</th>
+                                <th className="px-3 py-2 text-right font-semibold text-gray-500">Amount</th>
+                            </tr>
+                        ) : (
+                            <tr>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-500">Date</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-500">Voucher #</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-500">Vendor</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-500">Description</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-500">Method</th>
+                                <th className="px-3 py-2 text-left font-semibold text-gray-500">Status</th>
+                                <th className="px-3 py-2 text-right font-semibold text-gray-500">Amount</th>
+                            </tr>
+                        )}
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {kind === 'income'
+                            ? rows.map((r: any) => (
+                                <tr key={r.id} className="hover:bg-white">
+                                    <td className="px-3 py-2 text-gray-500">{new Date(r.date).toLocaleDateString('en-IN')}</td>
+                                    <td className="px-3 py-2 text-gray-900">{r.patient_name}</td>
+                                    <td className="px-3 py-2 font-mono text-gray-600">{r.invoice_number}</td>
+                                    <td className="px-3 py-2">
+                                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${r.invoice_type === 'IPD' ? 'bg-violet-100 text-violet-700' : 'bg-sky-100 text-sky-700'}`}>
+                                            {r.invoice_type}
+                                        </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-gray-700">{r.description}</td>
+                                    <td className="px-3 py-2 text-right text-gray-600">{r.quantity}</td>
+                                    <td className="px-3 py-2 text-right font-semibold text-gray-900">{fmt(r.net_price + r.tax_amount)}</td>
+                                </tr>
+                            ))
+                            : rows.map((r: any) => (
+                                <tr key={r.id} className="hover:bg-white">
+                                    <td className="px-3 py-2 text-gray-500">{new Date(r.date).toLocaleDateString('en-IN')}</td>
+                                    <td className="px-3 py-2 font-mono text-gray-600">{r.expense_number}</td>
+                                    <td className="px-3 py-2 text-gray-900">{r.vendor}</td>
+                                    <td className="px-3 py-2 text-gray-700">{r.description}</td>
+                                    <td className="px-3 py-2 text-gray-600">{r.payment_method || '-'}</td>
+                                    <td className="px-3 py-2">
+                                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${r.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                            {r.status}
+                                        </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-right font-semibold text-gray-900">{fmt(r.amount)}</td>
+                                </tr>
+                            ))}
+                    </tbody>
+                    <tfoot>
+                        <tr className="bg-white border-t border-gray-200">
+                            <td colSpan={kind === 'income' ? 6 : 6} className="px-3 py-2 text-right font-bold text-gray-600">Subtotal</td>
+                            <td className="px-3 py-2 text-right font-bold text-gray-900">{fmt(data.total || 0)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
     );
 }
 

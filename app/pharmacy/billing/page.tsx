@@ -258,7 +258,16 @@ export default function PharmacyPage() {
                   body * { visibility: hidden; }
                   .print-area, .print-area * { visibility: visible; }
                   .print-area { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; background: white; color: black; }
-                  .no-print { display: none !important; }
+                  .pharmacy-print-view, .pharmacy-print-view * { visibility: visible !important; }
+                  .pharmacy-print-view {
+                    display: block !important;
+                    position: fixed !important;
+                    inset: 0 !important;
+                    z-index: 9999 !important;
+                    background: white !important;
+                    padding: 0 !important;
+                    overflow: visible !important;
+                  }                  .no-print { display: none !important; }
                 }
             `}</style>
 
@@ -586,16 +595,13 @@ export default function PharmacyPage() {
             {/* INVOICE MODAL */}
             {showInvoiceModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md">
-                    <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden print-area relative">
-                        <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, #1e3a6e, #f97316, #1e3a6e)' }} />
-                        {/* Letterhead bg for print */}
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/letter head.png" alt="" aria-hidden="true" className="hidden print:block" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: -1, pointerEvents: 'none' }} />
+                    <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden print-area relative print:fixed print:inset-0 print:max-w-none print:rounded-none print:shadow-none print:overflow-visible">
+                        <div className="absolute top-0 left-0 right-0 h-[2px] print:hidden" style={{ background: 'linear-gradient(90deg, #1e3a6e, #f97316, #1e3a6e)' }} />
 
                         {invoiceResult ? (
                             /* Invoice Generated - Show Receipt */
                             <>
-                                <div className="p-6 border-b border-dashed border-gray-200 print:pt-[130px]">
+                                <div className="p-6 border-b border-dashed border-gray-200" style={{ paddingTop: undefined }}>
                                     {/* Letterhead — hidden in print, letterhead image replaces it */}
                                     <div className="flex items-start justify-between pb-4 mb-4 print:hidden" style={{ borderBottom: '2px solid #1e3a6e' }}>
                                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -606,8 +612,8 @@ export default function PharmacyPage() {
                                             <p className="text-xs text-gray-400">{new Date().toLocaleDateString('en-IN')}</p>
                                         </div>
                                     </div>
-                                    {/* Print-only invoice info */}
-                                    <div className="hidden print:flex justify-end mb-4">
+                                    {/* Print-only invoice info with top padding for letterhead */}
+                                    <div className="hidden print:flex justify-end mb-4" style={{ paddingTop: '130px' }}>
                                         <div className="text-right">
                                             <p className="text-xs font-black uppercase tracking-widest" style={{ color: '#1e3a6e' }}>Pharmacy Invoice</p>
                                             <p className="text-xs font-mono text-gray-500 mt-0.5">{invoiceResult.invoice_number}</p>
@@ -730,6 +736,83 @@ export default function PharmacyPage() {
                                 </div>
                             </>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* PRINT-ONLY FULL PAGE — shown only when printing pharmacy invoice */}
+            {invoiceResult && (
+                <div className="pharmacy-print-view" style={{ display: 'none', position: 'relative' }}>
+                    {/* Full letterhead as background — header + watermark + footer */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/letter head.png" alt="" aria-hidden="true" style={{
+                        position: 'absolute', top: 0, left: 0,
+                        width: '100%', height: '100%',
+                        objectFit: 'fill',
+                        zIndex: 0, pointerEvents: 'none',
+                    }} />
+                    {/* Content on top */}
+                    <div style={{ position: 'relative', zIndex: 1, padding: '130px 60px 80px 60px' }}>
+                    <div className="max-w-2xl mx-auto space-y-4">
+                        <div className="flex justify-end border-b border-gray-300 pb-3">
+                            <div className="text-right">
+                                <p className="text-xs font-black uppercase tracking-widest" style={{ color: '#1e3a6e' }}>Pharmacy Invoice</p>
+                                <p className="text-xs font-mono text-gray-600 mt-0.5">{invoiceResult.invoice_number}</p>
+                                <p className="text-xs text-gray-500">{new Date().toLocaleDateString('en-IN')}</p>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div><span className="text-gray-500">Patient:</span> <span className="font-bold">{patientId}</span></div>
+                            <div className="text-right"><span className="text-gray-500">Date:</span> <span className="font-bold">{new Date().toLocaleDateString('en-IN')}</span></div>
+                        </div>
+                        <table className="w-full text-sm border-collapse mt-2">
+                            <thead>
+                                <tr className="border-y-2 border-black">
+                                    <th className="py-2 text-left font-black uppercase tracking-wider text-xs">Medicine</th>
+                                    <th className="py-2 text-center font-black uppercase tracking-wider text-xs">Qty</th>
+                                    <th className="py-2 text-right font-black uppercase tracking-wider text-xs">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                                {invoiceResult.items?.map((item: any, idx: number) => (
+                                    <tr key={idx}>
+                                        <td className="py-2 font-medium">{item.medicine_name}</td>
+                                        <td className="py-2 text-center">{item.qty}</td>
+                                        <td className="py-2 text-right font-bold">₹{item.net_price.toFixed(2)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            <tfoot>
+                                <tr className="border-t border-gray-300">
+                                    <td colSpan={2} className="py-2 text-right text-gray-500 text-xs">Subtotal</td>
+                                    <td className="py-2 text-right">₹{invoiceResult.subtotal?.toFixed(2)}</td>
+                                </tr>
+                                {invoiceResult.tax > 0 && (
+                                    <>
+                                        <tr>
+                                            <td colSpan={2} className="py-1 text-right text-gray-400 text-xs">CGST</td>
+                                            <td className="py-1 text-right text-xs">₹{invoiceResult.cgst?.toFixed(2)}</td>
+                                        </tr>
+                                        <tr>
+                                            <td colSpan={2} className="py-1 text-right text-gray-400 text-xs">SGST</td>
+                                            <td className="py-1 text-right text-xs">₹{invoiceResult.sgst?.toFixed(2)}</td>
+                                        </tr>
+                                    </>
+                                )}
+                                <tr className="border-t-2 border-black">
+                                    <td colSpan={2} className="py-3 text-right font-black uppercase tracking-wider">Total</td>
+                                    <td className="py-3 text-right font-black text-xl">₹{invoiceResult.total?.toFixed(2)}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                        <div className="pt-12 flex justify-end">
+                            <div className="text-center">
+                                <div className="border-t border-gray-400 w-40 mb-1" />
+                                <p className="text-xs font-bold uppercase tracking-wider">Authorized Signatory</p>
+                                <p className="text-[10px] text-gray-400">Computer Generated Digital Receipt</p>
+                            </div>
+                        </div>
+                    </div>
                     </div>
                 </div>
             )}

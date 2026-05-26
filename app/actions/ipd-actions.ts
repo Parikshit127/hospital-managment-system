@@ -4,6 +4,7 @@ import { requireTenantContext } from "@/backend/tenant";
 import { logAudit } from "@/app/lib/audit";
 import { revalidatePath } from "next/cache";
 import { getPatientBalances } from '@/app/actions/balance-actions';
+import { getRoomGSTRate } from '@/app/lib/gst';
 
 
 function serialize<T>(data: T): T {
@@ -128,6 +129,36 @@ export async function updateBedStatus(bedId: string, newStatus: string) {
   }
 }
 
+
+/**
+ * Check if a patient currently has an active (non-discharged) IPD admission.
+ * Used by the admit modal to surface a duplicate-admission warning BEFORE
+ * the user tries to submit — much better UX than letting the backend reject.
+ */
+export async function checkActiveAdmission(patientId: string) {
+  try {
+    const { db, organizationId } = await requireTenantContext();
+    const existing = await db.admissions.findFirst({
+      where: {
+        patient_id: patientId,
+        status: "Admitted",
+        organizationId,
+      },
+      select: {
+        admission_id: true,
+        admission_date: true,
+        diagnosis: true,
+        doctor_name: true,
+        ward: { select: { ward_name: true } },
+        bed: { select: { bed_id: true } },
+      },
+    });
+    return { success: true as const, data: existing };
+  } catch (error: any) {
+    console.error("checkActiveAdmission error:", error);
+    return { success: false as const, error: error.message };
+  }
+}
 
 export async function admitPatientIPD(data: {
   patient_id: string;
@@ -333,12 +364,12 @@ export async function findAssignedDoctorByPatientPhone(phoneQuery: string) {
         OR: [
           ...(q
             ? [
-                { phone: { contains: q } },
+                { phone: { contains: q, mode: 'insensitive' } },
                 { username: { contains: q, mode: "insensitive" } },
                 { name: { contains: q, mode: "insensitive" } },
               ]
             : []),
-          ...(digitQuery ? [{ phone: { contains: digitQuery } }] : []),
+          ...(digitQuery ? [{ phone: { contains: digitQuery, mode: 'insensitive' as const } }] : []),
         ],
       },
       select: {
@@ -520,17 +551,36 @@ export async function accrueIPDDailyCharges(admissionId: string) {
 
     const baseRoomRate = Number(ward.cost_per_day || 0);
     const roomRate = baseRoomRate * multiplier;
-    
+
     // Nursing rate is also scaled or remains flat based on hospital policy. Let's scale it.
     const nursingRate = Number(ward.nursing_charge || 0) * multiplier;
     const today = new Date().toLocaleDateString("en-IN");
 
-    // Determine room GST: 0% if <=5000/day, 5% if >5000/day
-    const roomTaxRate = roomRate > 5000 ? 5 : 0;
+    // If an active (non-broken-open) IPD package covers today, skip Room+Nursing
+    // accrual — both are included in the package price (per pricelist inclusions).
+    const activePkg = await db.ipdAdmissionPackage.findFirst({
+      where: { admission_id: admissionId, is_broken_open: false },
+      include: { package: { select: { validity_days: true } } },
+    });
+    let packageCoversToday = false;
+    if (activePkg) {
+      const validityDays = activePkg.package.validity_days || 7;
+      const admitDateMidnight = new Date(admission.admission_date);
+      admitDateMidnight.setHours(0, 0, 0, 0);
+      const coveredUntil = new Date(admitDateMidnight);
+      coveredUntil.setDate(admitDateMidnight.getDate() + validityDays - 1);
+      coveredUntil.setHours(23, 59, 59, 999);
+      const now = new Date();
+      packageCoversToday = now <= coveredUntil;
+    }
+
+    // Determine room GST: ICU/CCU/NICU exempt regardless of rate;
+    // other wards 5% if rent > ₹5,000/day (CBIC 03/2022).
+    const roomTaxRate = getRoomGSTRate(ward.ward_type, roomRate);
     const roomTaxAmount = roomRate * roomTaxRate / 100;
 
-    // Add room charge
-    if (roomRate > 0) {
+    // Add room charge (skipped while inside package coverage)
+    if (roomRate > 0 && !packageCoversToday) {
       const roomRef = `room_${admissionId}_${today}`;
       const existingRoom = await db.invoice_items.findFirst({
         where: { invoice_id: invoice.id, ref_id: roomRef }
@@ -557,8 +607,8 @@ export async function accrueIPDDailyCharges(admissionId: string) {
       }
     }
 
-    // Add nursing charge
-    if (nursingRate > 0) {
+    // Add nursing charge (skipped while inside package coverage)
+    if (nursingRate > 0 && !packageCoversToday) {
       const nursingRef = `nursing_${admissionId}_${today}`;
       const existingNursing = await db.invoice_items.findFirst({
         where: { invoice_id: invoice.id, ref_id: nursingRef }
@@ -794,9 +844,9 @@ export async function searchPatientsForAdmission(query: string) {
     const patients = await db.oPD_REG.findMany({
       where: {
         OR: [
-          { full_name: { contains: query } },
-          { patient_id: { contains: query } },
-          { phone: { contains: query } },
+          { full_name: { contains: query, mode: 'insensitive' } },
+          { patient_id: { contains: query, mode: 'insensitive' } },
+          { phone: { contains: query, mode: 'insensitive' } },
         ],
       },
       take: 10,

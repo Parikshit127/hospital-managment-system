@@ -499,6 +499,46 @@ export async function cancelInvoice(invoiceId: number, reason?: string) {
     }
 }
 
+// Revert a cancelled invoice back to Final
+export async function revertInvoice(invoiceId: number, reason?: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const existing = await db.invoices.findUnique({ where: { id: invoiceId } });
+        if (!existing) return { success: false, error: 'Invoice not found' };
+        if (existing.status !== 'Cancelled') return { success: false, error: 'Only cancelled invoices can be reverted' };
+
+        const balanceDue = Number(existing.net_amount) - Number(existing.paid_amount);
+        const newStatus = balanceDue <= 0 ? 'Paid' : Number(existing.paid_amount) > 0 ? 'Partial' : 'Final';
+
+        const invoice = await db.invoices.update({
+            where: { id: invoiceId },
+            data: {
+                status: newStatus,
+                balance_due: balanceDue > 0 ? balanceDue : 0,
+                notes: reason ? `Reverted: ${reason}` : 'Reverted by admin',
+                version: { increment: 1 },
+            },
+        });
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'REVERT_INVOICE',
+                module: 'finance',
+                entity_type: 'invoice',
+                entity_id: invoice.invoice_number,
+                details: JSON.stringify({ reason, newStatus }),
+                organizationId,
+            },
+        });
+
+        return { success: true, data: serialize(invoice) };
+    } catch (error: any) {
+        console.error('revertInvoice error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 // ============================================
 // PAYMENT PROCESSING
 // ============================================
@@ -1174,10 +1214,23 @@ export async function approveInvoice(id: string | number, source: string) {
         const { db, organizationId } = await requireTenantContext();
 
         if (source === 'OPD' || source === 'IPD') {
-            await db.invoices.update({
+            // Only finalize the invoice — do NOT mark as Paid or zero balance_due
+            // Payment must be collected separately via recordPayment
+            const invoice = await db.invoices.findUnique({
                 where: { id: Number(id) },
-                data: { status: 'Paid', balance_due: 0 }
+                select: { status: true, balance_due: true, net_amount: true, paid_amount: true }
             });
+            if (invoice && invoice.status === 'Draft') {
+                const balanceDue = Number(invoice.net_amount) - Number(invoice.paid_amount);
+                await db.invoices.update({
+                    where: { id: Number(id) },
+                    data: {
+                        status: balanceDue <= 0 ? 'Paid' : 'Final',
+                        balance_due: balanceDue > 0 ? balanceDue : 0,
+                        finalized_at: new Date(),
+                    }
+                });
+            }
         } else if (source === 'LAB') {
             await db.lab_orders.update({
                 where: { id: Number(id) },
@@ -1220,7 +1273,7 @@ export async function searchPatientsForBilling(query: string) {
                 OR: [
                     { full_name: { contains: query, mode: 'insensitive' } },
                     { patient_id: { contains: query, mode: 'insensitive' } },
-                    { phone: { contains: query } }
+                    { phone: { contains: query, mode: 'insensitive' } }
                 ]
             },
             take: 10,

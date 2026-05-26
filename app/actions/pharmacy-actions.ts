@@ -100,6 +100,59 @@ export async function generateInvoice(patientId: string, items: any[]) {
             });
         }
 
+        // 2.5 IPD AUTO-LINK: if this patient is currently admitted, post the
+        // dispensed medicines as line items on their active IPD bill instead of
+        // creating a standalone Pharmacy invoice. Stock has already been deducted
+        // in step 1, so this only redirects the financial posting.
+        if (patientId !== 'WALKIN') {
+            const activeAdmission = await db.admissions.findFirst({
+                where: { patient_id: patientId, status: 'Admitted', organizationId },
+                select: { admission_id: true },
+            });
+            if (activeAdmission) {
+                for (const item of invoiceItems) {
+                    await postChargeToIpdBill({
+                        admission_id: activeAdmission.admission_id,
+                        source_module: 'pharmacy',
+                        source_ref_id: `PHARM-COUNTER-${item.medicine_id}-${item.batch_no}-${Date.now()}`,
+                        description: `Pharmacy: ${item.medicine_name} (Batch ${item.batch_no}) × ${item.qty}`,
+                        quantity: item.qty,
+                        unit_price: item.unit_price,
+                        tax_rate: item.tax_rate,
+                        hsn_sac_code: item.hsn_sac_code,
+                        service_category: 'Pharmacy',
+                    });
+                }
+
+                await logAudit({
+                    action: 'PHARMACY_POSTED_TO_IPD',
+                    module: 'Pharmacy',
+                    entity_type: 'admission',
+                    entity_id: activeAdmission.admission_id,
+                    details: JSON.stringify({
+                        patientId,
+                        admission_id: activeAdmission.admission_id,
+                        itemCount: invoiceItems.length,
+                        total: totalAmount + totalTax,
+                    }),
+                });
+
+                revalidatePath('/pharmacy/billing');
+                return {
+                    success: true,
+                    total: totalAmount + totalTax,
+                    subtotal: totalAmount,
+                    tax: totalTax,
+                    cgst: totalTax / 2,
+                    sgst: totalTax / 2,
+                    ipd_admission_id: activeAdmission.admission_id,
+                    ipd_posted: true,
+                    items: invoiceItems,
+                    message: `Posted to IPD bill of admission ${activeAdmission.admission_id} — no separate pharmacy invoice created.`,
+                };
+            }
+        }
+
         // 3. Create formal invoice in finance system
         const netAmount = totalAmount + totalTax;
         const cgst = totalTax / 2;
@@ -689,8 +742,8 @@ export async function searchMedicine(query: string) {
         const meds = await db.pharmacy_medicine_master.findMany({
             where: {
                 OR: [
-                    { brand_name: { contains: query } },
-                    { generic_name: { contains: query } }
+                    { brand_name: { contains: query, mode: 'insensitive' } },
+                    { generic_name: { contains: query, mode: 'insensitive' } }
                 ]
             },
             take: 20,

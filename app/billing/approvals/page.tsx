@@ -14,6 +14,7 @@ import {
   ReceiptText,
   Scale,
   ShieldAlert,
+  TrendingDown,
   Undo2,
   User,
   X,
@@ -45,6 +46,11 @@ const TYPE_BADGE: Record<ApprovalItemType, { label: string; cls: string; icon: a
     label: "Write-off",
     cls: "bg-amber-100 text-amber-700 border-amber-200",
     icon: Scale,
+  },
+  expense: {
+    label: "Expense",
+    cls: "bg-orange-100 text-orange-700 border-orange-200",
+    icon: TrendingDown,
   },
 };
 
@@ -189,6 +195,13 @@ export default function ApprovalCenterPage() {
               tone="blue"
               icon={Play}
             />
+            <Kpi
+              label="Pending Expenses"
+              value={kpis.expenses_pending?.count ?? 0}
+              sub={`₹${fmtMoney(kpis.expenses_pending?.total ?? 0)}`}
+              tone="orange"
+              icon={TrendingDown}
+            />
           </div>
         )}
 
@@ -196,7 +209,7 @@ export default function ApprovalCenterPage() {
         <div className="bg-white border border-gray-200 rounded-xl p-3 flex flex-wrap items-center gap-2">
           <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Type</span>
           <div className="flex items-center gap-1">
-            {(["", "refund", "credit_note", "writeoff"] as const).map((t) => (
+            {(["", "refund", "credit_note", "writeoff", "expense"] as const).map((t) => (
               <button
                 key={t || "all"}
                 onClick={() => setTypeFilter(t)}
@@ -404,6 +417,9 @@ export default function ApprovalCenterPage() {
             <li>
               <strong>Write-off</strong> &lt;₹5k: manager/finance/admin · &lt;₹50k: finance/admin · ≥₹50k: admin only
             </li>
+            <li>
+              <strong>Expense</strong> &lt;₹10k: manager/finance/admin · &lt;₹50k: finance/admin · ≥₹50k: admin only
+            </li>
             <li className="pt-1 text-gray-400">
               Every action is captured in the audit log and the item's approval chain.
             </li>
@@ -519,7 +535,7 @@ function Kpi({
   label: string;
   value: React.ReactNode;
   sub?: string;
-  tone: "amber" | "rose" | "purple" | "blue";
+  tone: "amber" | "rose" | "purple" | "blue" | "orange";
   icon?: any;
 }) {
   const map: Record<string, string> = {
@@ -527,6 +543,7 @@ function Kpi({
     rose: "bg-rose-50 text-rose-600 border-rose-200",
     purple: "bg-purple-50 text-purple-600 border-purple-200",
     blue: "bg-blue-50 text-blue-600 border-blue-200",
+    orange: "bg-orange-50 text-orange-600 border-orange-200",
   };
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-3">

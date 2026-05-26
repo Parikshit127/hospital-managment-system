@@ -1,10 +1,28 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import {
     getIpdServices, addIpdService, updateIpdService,
     getIpdPackages, addIpdPackage, updateIpdPackage,
 } from '@/app/actions/ipd-master-actions';
+
+function parsePackageMeta(desc: string | null | undefined): { category: string | null; isDayCare: boolean; freeText: string } {
+    if (!desc) return { category: null, isDayCare: false, freeText: '' };
+    try {
+        const m = JSON.parse(desc);
+        if (m && typeof m === 'object' && 'category' in m) {
+            return { category: String(m.category), isDayCare: !!m.is_day_care, freeText: '' };
+        }
+    } catch {
+        // not JSON — treat as plain text description
+    }
+    return { category: null, isDayCare: false, freeText: desc };
+}
+
+function asStringArray(v: unknown): string[] {
+    if (Array.isArray(v)) return v.filter((x) => typeof x === 'string') as string[];
+    return [];
+}
 
 export default function IpdFinanceSetupPage() {
     const [activeTab, setActiveTab] = useState<'services' | 'packages'>('services');
@@ -74,6 +92,33 @@ export default function IpdFinanceSetupPage() {
     }
 
     const categories = ['Room', 'Nursing', 'DoctorVisit', 'Procedure', 'Consumable', 'Pharmacy', 'Lab', 'Diet', 'Misc'];
+
+    const [showInclusions, setShowInclusions] = useState(false);
+
+    const groupedPackages = useMemo(() => {
+        const groups: Record<string, any[]> = {};
+        for (const p of packages) {
+            const meta = parsePackageMeta(p.description);
+            const cat = meta.category || 'Uncategorized';
+            (groups[cat] ??= []).push({ ...p, _meta: meta });
+        }
+        return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+    }, [packages]);
+
+    const globalInclusions = useMemo(() => {
+        const p = packages.find((x: any) => asStringArray(x.inclusions).length > 0);
+        return p ? asStringArray(p.inclusions) : [];
+    }, [packages]);
+
+    const globalExclusions = useMemo(() => {
+        const p = packages.find((x: any) => asStringArray(x.exclusions).length > 0);
+        return p ? asStringArray(p.exclusions) : [];
+    }, [packages]);
+
+    const dayCareCount = useMemo(
+        () => packages.filter((p: any) => parsePackageMeta(p.description).isDayCare).length,
+        [packages],
+    );
 
     return (
         <div className="min-h-screen bg-gray-50 p-6">
@@ -213,31 +258,101 @@ export default function IpdFinanceSetupPage() {
                             </div>
                         )}
 
+                        {/* Summary strip */}
+                        {packages.length > 0 && (
+                            <div className="px-4 py-3 bg-emerald-50 border-b flex items-center gap-6 text-xs">
+                                <span className="text-gray-700">
+                                    <strong className="text-emerald-800">{packages.length}</strong> packages
+                                </span>
+                                <span className="text-gray-700">
+                                    <strong className="text-emerald-800">{groupedPackages.length}</strong> categories
+                                </span>
+                                <span className="text-gray-700">
+                                    <strong className="text-emerald-800">{dayCareCount}</strong> day-care procedures
+                                </span>
+                            </div>
+                        )}
+
+                        {/* Global Inclusions / Exclusions panel */}
+                        {(globalInclusions.length > 0 || globalExclusions.length > 0) && (
+                            <div className="border-b">
+                                <button
+                                    onClick={() => setShowInclusions((v) => !v)}
+                                    className="w-full px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-between"
+                                >
+                                    <span>📋 Package Inclusions &amp; Exclusions (applies to all packages)</span>
+                                    <span className="text-gray-400 text-xs">{showInclusions ? '▼ Hide' : '▶ Show'}</span>
+                                </button>
+                                {showInclusions && (
+                                    <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                        <div>
+                                            <div className="font-semibold text-green-700 mb-2">✓ Included</div>
+                                            <ul className="space-y-1 text-gray-700">
+                                                {globalInclusions.map((i, idx) => (
+                                                    <li key={idx} className="flex gap-2">
+                                                        <span className="text-green-600">•</span>
+                                                        <span>{i}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                        <div>
+                                            <div className="font-semibold text-red-700 mb-2">✗ Excluded</div>
+                                            <ul className="space-y-1 text-gray-700">
+                                                {globalExclusions.map((e, idx) => (
+                                                    <li key={idx} className="flex gap-2">
+                                                        <span className="text-red-600">•</span>
+                                                        <span>{e}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="bg-gray-50 text-left">
                                     <th className="p-3">Code</th>
                                     <th className="p-3">Package Name</th>
-                                    <th className="p-3">Description</th>
+                                    <th className="p-3">Notes</th>
                                     <th className="p-3 text-right">Amount (₹)</th>
                                     <th className="p-3 text-right">Validity</th>
                                     <th className="p-3">Status</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {packages.map((p: any) => (
-                                    <tr key={p.id} className="border-b hover:bg-gray-50">
-                                        <td className="p-3 font-mono text-xs">{p.package_code}</td>
-                                        <td className="p-3 font-medium">{p.package_name}</td>
-                                        <td className="p-3 text-gray-500 text-xs">{p.description || '-'}</td>
-                                        <td className="p-3 text-right font-semibold">₹{Number(p.total_amount).toLocaleString('en-IN')}</td>
-                                        <td className="p-3 text-right">{p.validity_days} days</td>
-                                        <td className="p-3">
-                                            <span className={`px-2 py-0.5 rounded text-xs ${p.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                {p.is_active ? 'Active' : 'Inactive'}
-                                            </span>
-                                        </td>
-                                    </tr>
+                                {groupedPackages.map(([category, rows]) => (
+                                    <Fragment key={category}>
+                                        <tr className="bg-emerald-50/60">
+                                            <td colSpan={6} className="p-2 px-3 text-xs font-semibold text-emerald-800 uppercase tracking-wide">
+                                                {category} <span className="text-emerald-600 font-normal normal-case">({rows.length})</span>
+                                            </td>
+                                        </tr>
+                                        {rows.map((p: any) => (
+                                            <tr key={p.id} className="border-b hover:bg-gray-50">
+                                                <td className="p-3 font-mono text-xs">{p.package_code}</td>
+                                                <td className="p-3 font-medium">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span>{p.package_name}</span>
+                                                        {p._meta.isDayCare && (
+                                                            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold">DAY CARE</span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="p-3 text-gray-500 text-xs">{p._meta.freeText || '-'}</td>
+                                                <td className="p-3 text-right font-semibold">₹{Number(p.total_amount).toLocaleString('en-IN')}</td>
+                                                <td className="p-3 text-right">{p.validity_days} days</td>
+                                                <td className="p-3">
+                                                    <span className={`px-2 py-0.5 rounded text-xs ${p.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                        {p.is_active ? 'Active' : 'Inactive'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </Fragment>
                                 ))}
                                 {packages.length === 0 && (
                                     <tr><td colSpan={6} className="p-8 text-center text-gray-400">No packages configured yet</td></tr>

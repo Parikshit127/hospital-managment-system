@@ -1,5 +1,22 @@
 name: Deploy to EC2
 
+# Auto-triggers on every push to main, but the deploy job only RUNS if EC2
+# is ready (see `EC2_DEPLOY_ENABLED` repo variable below). Until that variable
+# is set to "true", the deploy job SKIPS cleanly (green ✓), so pushes don't
+# show red failure noise.
+#
+# When you're ready to enable auto-deploy:
+#   1. Provision the EC2 server:
+#        - Ubuntu user with /home/ubuntu/hospitalos cloned
+#        - Node 20+, PM2 installed
+#        - ecosystem.config.js configured
+#        - .env populated with DATABASE_URL, JWT_SECRET, etc.
+#   2. Add these GitHub SECRETS (Settings → Secrets and variables → Actions → Secrets):
+#        EC2_HOST     — public IP or hostname of the EC2 instance
+#        EC2_SSH_KEY  — private SSH key (matches the EC2 keypair)
+#   3. Add this GitHub VARIABLE (same screen → Variables tab):
+#        EC2_DEPLOY_ENABLED = true
+#   4. Push anything to main → deploy runs automatically.
 on:
   push:
     branches: [main]
@@ -23,6 +40,9 @@ jobs:
   # ── Step 2: Deploy via SSH ───────────────────────────────────────────────
   deploy:
     needs: test
+    # Skip cleanly (green ✓) unless EC2 is ready.
+    # Set the repo variable EC2_DEPLOY_ENABLED=true to enable.
+    if: ${{ vars.EC2_DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to EC2
