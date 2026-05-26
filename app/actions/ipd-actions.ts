@@ -4,6 +4,7 @@ import { requireTenantContext } from "@/backend/tenant";
 import { logAudit } from "@/app/lib/audit";
 import { revalidatePath } from "next/cache";
 import { getPatientBalances } from '@/app/actions/balance-actions';
+import { getRoomGSTRate } from '@/app/lib/gst';
 
 
 function serialize<T>(data: T): T {
@@ -128,6 +129,36 @@ export async function updateBedStatus(bedId: string, newStatus: string) {
   }
 }
 
+
+/**
+ * Check if a patient currently has an active (non-discharged) IPD admission.
+ * Used by the admit modal to surface a duplicate-admission warning BEFORE
+ * the user tries to submit — much better UX than letting the backend reject.
+ */
+export async function checkActiveAdmission(patientId: string) {
+  try {
+    const { db, organizationId } = await requireTenantContext();
+    const existing = await db.admissions.findFirst({
+      where: {
+        patient_id: patientId,
+        status: "Admitted",
+        organizationId,
+      },
+      select: {
+        admission_id: true,
+        admission_date: true,
+        diagnosis: true,
+        doctor_name: true,
+        ward: { select: { ward_name: true } },
+        bed: { select: { bed_id: true } },
+      },
+    });
+    return { success: true as const, data: existing };
+  } catch (error: any) {
+    console.error("checkActiveAdmission error:", error);
+    return { success: false as const, error: error.message };
+  }
+}
 
 export async function admitPatientIPD(data: {
   patient_id: string;
@@ -543,8 +574,9 @@ export async function accrueIPDDailyCharges(admissionId: string) {
       packageCoversToday = now <= coveredUntil;
     }
 
-    // Determine room GST: 0% if <=5000/day, 5% if >5000/day
-    const roomTaxRate = roomRate > 5000 ? 5 : 0;
+    // Determine room GST: ICU/CCU/NICU exempt regardless of rate;
+    // other wards 5% if rent > ₹5,000/day (CBIC 03/2022).
+    const roomTaxRate = getRoomGSTRate(ward.ward_type, roomRate);
     const roomTaxAmount = roomRate * roomTaxRate / 100;
 
     // Add room charge (skipped while inside package coverage)

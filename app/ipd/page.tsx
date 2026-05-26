@@ -43,6 +43,7 @@ import {
   addMedicalNote,
   accrueIPDDailyCharges,
   findAssignedDoctorByPatientPhone,
+  checkActiveAdmission,
 } from "@/app/actions/ipd-actions";
 import { getIpdPackages } from "@/app/actions/ipd-master-actions";
 import { applyPackageToAdmission } from "@/app/actions/ipd-finance-actions";
@@ -99,6 +100,23 @@ export default function IPDDashboard() {
   // IPD packages (for admission package selector)
   const [ipdPackages, setIpdPackages] = useState<any[]>([]);
   const [showPackageDetails, setShowPackageDetails] = useState(false);
+
+  // Duplicate-admission alert — populated when selectedPatient already has an active admission
+  const [existingAdmission, setExistingAdmission] = useState<any>(null);
+  const [checkingDuplicate, setCheckingDuplicate] = useState(false);
+
+  // When a patient is picked, check if they already have an active admission
+  useEffect(() => {
+    if (!selectedPatient?.patient_id) {
+      setExistingAdmission(null);
+      return;
+    }
+    setCheckingDuplicate(true);
+    checkActiveAdmission(selectedPatient.patient_id).then((res) => {
+      setCheckingDuplicate(false);
+      if (res.success) setExistingAdmission(res.data);
+    });
+  }, [selectedPatient]);
 
   // Discharge modal
   const [dischargeModal, setDischargeModal] = useState<any>(null);
@@ -1106,6 +1124,56 @@ export default function IPDDashboard() {
                   </button>
                 </div>
 
+                {/* Duplicate-admission warning */}
+                {checkingDuplicate && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 flex items-center gap-2 text-xs text-gray-500">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Checking for existing admission...
+                  </div>
+                )}
+                {!checkingDuplicate && existingAdmission && (
+                  <div className="bg-rose-50 border-2 border-rose-300 rounded-xl p-3">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-rose-800">
+                          Patient is already admitted!
+                        </p>
+                        <p className="text-[11px] text-rose-700 mt-1">
+                          Active admission <span className="font-mono font-bold">{existingAdmission.admission_id}</span>
+                          {existingAdmission.ward?.ward_name && (
+                            <> · {existingAdmission.ward.ward_name}</>
+                          )}
+                          {existingAdmission.bed?.bed_id && (
+                            <> · Bed {existingAdmission.bed.bed_id}</>
+                          )}
+                        </p>
+                        <p className="text-[11px] text-rose-700">
+                          Admitted on{' '}
+                          {new Date(existingAdmission.admission_date).toLocaleDateString('en-IN')}
+                          {existingAdmission.doctor_name && (
+                            <> under <strong>{existingAdmission.doctor_name}</strong></>
+                          )}
+                        </p>
+                        <p className="text-[11px] text-rose-700 mt-1">
+                          Diagnosis: {existingAdmission.diagnosis || '—'}
+                        </p>
+                        <div className="flex items-center gap-3 mt-2">
+                          <Link
+                            href={`/ipd/admission/${existingAdmission.admission_id}`}
+                            className="text-[11px] font-bold text-rose-700 hover:underline"
+                          >
+                            View admission →
+                          </Link>
+                          <span className="text-[10px] text-rose-600">
+                            Discharge first before admitting again
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">
@@ -1361,7 +1429,8 @@ export default function IPDDashboard() {
                     admitLoading ||
                     !admitForm.bed_id ||
                     !admitForm.ward_id ||
-                    !admitForm.diagnosis
+                    !admitForm.diagnosis ||
+                    !!existingAdmission
                   }
                   className="w-full py-3 bg-gradient-to-r from-violet-500 to-indigo-500 text-white text-sm font-black rounded-xl hover:shadow-lg hover:shadow-violet-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                 >

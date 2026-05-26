@@ -2,6 +2,7 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
+import { getRoomGSTRate } from '@/app/lib/gst';
 
 function serialize<T>(data: T): T {
     return JSON.parse(JSON.stringify(data, (_, value) =>
@@ -195,7 +196,8 @@ export async function ensureIPDRoomChargesAccrued(admissionId: string) {
                 .map((e: any) => extractDayKey(e.description)),
         );
 
-        const roomTaxRate = roomRate > 5000 ? 5 : 0;
+        // GST: ICU/CCU/NICU exempt regardless of rate; other wards 5% if rent > ₹5,000/day
+        const roomTaxRate = getRoomGSTRate(ward.ward_type, roomRate);
         const rowsToInsert: any[] = [];
 
         for (let i = 0; i < totalDays; i++) {
