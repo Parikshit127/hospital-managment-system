@@ -16,10 +16,38 @@ function formatIsoDate(d: Date): string {
     return d.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
+/**
+ * Extract a canonical YYYY-MM-DD key from an invoice item description,
+ * regardless of the format the description uses.
+ *
+ * Supports:
+ *   "Ward - Room Charge [2026-05-27]"        → "2026-05-27"
+ *   "Ward - Room Charge (27/5/2026)"         → "2026-05-27"
+ *   "Ward - Room Charge (27/05/2026)"        → "2026-05-27"
+ *   "Ward - Room Charge 2026-05-27"          → "2026-05-27"
+ *
+ * Returning the same canonical key for any of these formats prevents
+ * duplicate Room/Nursing rows when legacy descriptions exist on the bill.
+ */
 function extractDayKey(description: string | null | undefined): string {
     if (!description) return '';
-    const m = description.match(/\[(\d{4}-\d{2}-\d{2})\]/);
-    return m ? m[1] : description;
+    // 1. ISO bracket format: [YYYY-MM-DD]
+    let m = description.match(/\[(\d{4}-\d{2}-\d{2})\]/);
+    if (m) return m[1];
+    // 2. India parens format: (D/M/YYYY) or (DD/MM/YYYY) or (D/M/YY)
+    m = description.match(/\((\d{1,2})\/(\d{1,2})\/(\d{2,4})\)/);
+    if (m) {
+        const d = m[1].padStart(2, '0');
+        const mo = m[2].padStart(2, '0');
+        const y = m[3].length === 2 ? `20${m[3]}` : m[3];
+        return `${y}-${mo}-${d}`;
+    }
+    // 3. Plain ISO anywhere in the description: YYYY-MM-DD
+    m = description.match(/(\d{4}-\d{2}-\d{2})/);
+    if (m) return m[1];
+    // 4. Fallback: full description (won't match any ISO key — so it skips dedup
+    //    for this row, leaving the legacy row in place but not creating new dupes)
+    return description;
 }
 
 /**
@@ -176,25 +204,32 @@ export async function ensureIPDRoomChargesAccrued(admissionId: string) {
             packageCoveredUntil.setHours(23, 59, 59, 999);
         }
 
-        // Fetch existing Room + Nursing items to de-dupe by ISO day
+        // Fetch existing Room + Nursing items to de-dupe by ISO day.
+        // We dedup by BOTH ref_id AND date-key extracted from description
+        // (defense-in-depth — keeps us safe against legacy data with mixed
+        //  description formats AND against either accrual path skipping ref_id).
         const existing = await db.invoice_items.findMany({
             where: {
                 invoice_id: invoice.id,
                 service_category: { in: ['Room', 'Nursing'] },
             },
-            select: { service_category: true, description: true },
+            select: { service_category: true, description: true, ref_id: true },
         });
 
-        const existingRoomKeys = new Set(
-            existing
-                .filter((e: any) => e.service_category === 'Room')
-                .map((e: any) => extractDayKey(e.description)),
-        );
-        const existingNursingKeys = new Set(
-            existing
-                .filter((e: any) => e.service_category === 'Nursing')
-                .map((e: any) => extractDayKey(e.description)),
-        );
+        const roomRefIds = new Set<string>();
+        const nursingRefIds = new Set<string>();
+        const existingRoomKeys = new Set<string>();
+        const existingNursingKeys = new Set<string>();
+        for (const e of existing) {
+            const key = extractDayKey(e.description);
+            if (e.service_category === 'Room') {
+                if (e.ref_id) roomRefIds.add(e.ref_id);
+                if (key) existingRoomKeys.add(key);
+            } else if (e.service_category === 'Nursing') {
+                if (e.ref_id) nursingRefIds.add(e.ref_id);
+                if (key) existingNursingKeys.add(key);
+            }
+        }
 
         // GST: ICU/CCU/NICU exempt regardless of rate; other wards 5% if rent > ₹5,000/day
         const roomTaxRate = getRoomGSTRate(ward.ward_type, roomRate);
@@ -209,7 +244,14 @@ export async function ensureIPDRoomChargesAccrued(admissionId: string) {
             // included in the package price.
             if (packageCoveredUntil && day <= packageCoveredUntil) continue;
 
-            if (roomRate > 0 && !existingRoomKeys.has(key)) {
+            const roomRef = `room_${admissionId}_${key}`;
+            const nursingRef = `nursing_${admissionId}_${key}`;
+
+            if (
+                roomRate > 0 &&
+                !roomRefIds.has(roomRef) &&
+                !existingRoomKeys.has(key)
+            ) {
                 const taxAmount = (roomRate * roomTaxRate) / 100;
                 rowsToInsert.push({
                     invoice_id: invoice.id,
@@ -224,11 +266,19 @@ export async function ensureIPDRoomChargesAccrued(admissionId: string) {
                     tax_amount: taxAmount,
                     hsn_sac_code: roomRate > 5000 ? '9963' : '9993',
                     service_category: 'Room',
+                    ref_id: roomRef,
                     organizationId,
                 });
+                // Track within this batch too, so we don't insert the same key twice
+                roomRefIds.add(roomRef);
+                existingRoomKeys.add(key);
             }
 
-            if (nursingRate > 0 && !existingNursingKeys.has(key)) {
+            if (
+                nursingRate > 0 &&
+                !nursingRefIds.has(nursingRef) &&
+                !existingNursingKeys.has(key)
+            ) {
                 rowsToInsert.push({
                     invoice_id: invoice.id,
                     department: 'Nursing',
@@ -242,8 +292,11 @@ export async function ensureIPDRoomChargesAccrued(admissionId: string) {
                     tax_amount: 0,
                     hsn_sac_code: '9993',
                     service_category: 'Nursing',
+                    ref_id: nursingRef,
                     organizationId,
                 });
+                nursingRefIds.add(nursingRef);
+                existingNursingKeys.add(key);
             }
         }
 
