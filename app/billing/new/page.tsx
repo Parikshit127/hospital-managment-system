@@ -39,9 +39,17 @@ export default function ReceptionGenerateBillPage() {
     // Line items for the bill
     const [items, setItems] = useState<any[]>([]);
 
-    // New item draft
+    // New item draft (master service)
     const [draftQty, setDraftQty] = useState(1);
     const [draftDiscount, setDraftDiscount] = useState(0);
+
+    // Custom (free-form) item draft — for services NOT in the master list
+    const [customDesc, setCustomDesc] = useState('');
+    const [customDept, setCustomDept] = useState('General');
+    const [customUnitPrice, setCustomUnitPrice] = useState<string>('');
+    const [customQty, setCustomQty] = useState(1);
+    const [customDiscount, setCustomDiscount] = useState(0);
+    const [customTaxRate, setCustomTaxRate] = useState<string>('0');
 
     const [isSaving, setIsSaving] = useState(false);
     // Phase 2 — bill split
@@ -121,6 +129,38 @@ export default function ReceptionGenerateBillPage() {
         setSelectedServiceId(null);
         setDraftQty(1);
         setDraftDiscount(0);
+    };
+
+    const handleAddCustomItem = () => {
+        const desc = customDesc.trim();
+        const price = Number(customUnitPrice);
+        const tax = Number(customTaxRate) || 0;
+        if (!desc) { toast.error('Description is required'); return; }
+        if (!Number.isFinite(price) || price <= 0) { toast.error('Unit price must be > 0'); return; }
+        if (customQty <= 0) { toast.error('Quantity must be at least 1'); return; }
+
+        const basePrice = price * customQty;
+        const netPrice = Math.max(0, basePrice - customDiscount);
+        const taxAmount = netPrice * (tax / 100);
+
+        setItems([...items, {
+            // no service_id — this is a custom line item
+            department: customDept || 'General',
+            description: desc,
+            quantity: customQty,
+            unit_price: price,
+            discount: customDiscount,
+            tax_rate: tax,
+            net_total: netPrice + taxAmount,
+        }]);
+
+        // Reset custom draft
+        setCustomDesc('');
+        setCustomDept('General');
+        setCustomUnitPrice('');
+        setCustomQty(1);
+        setCustomDiscount(0);
+        setCustomTaxRate('0');
     };
 
     const handleRemoveItem = (index: number) => {
@@ -387,6 +427,114 @@ export default function ReceptionGenerateBillPage() {
                                 </div>
                             )}
 
+                            {/* Divider */}
+                            <div className="my-5 flex items-center gap-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                <div className="flex-1 h-px bg-gray-200" />
+                                or add a custom item
+                                <div className="flex-1 h-px bg-gray-200" />
+                            </div>
+
+                            {/* Custom item form — for services NOT in the master list */}
+                            <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                                <div className="md:col-span-2">
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Description *</label>
+                                    <input
+                                        type="text"
+                                        value={customDesc}
+                                        onChange={e => setCustomDesc(e.target.value)}
+                                        placeholder="e.g. Ambulance Charge"
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Department</label>
+                                    <select
+                                        value={customDept}
+                                        onChange={e => setCustomDept(e.target.value)}
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none"
+                                    >
+                                        <option value="General">General</option>
+                                        <option value="OPD">OPD</option>
+                                        <option value="IPD">IPD</option>
+                                        <option value="Consultation">Consultation</option>
+                                        <option value="Procedure">Procedure</option>
+                                        <option value="Lab">Lab</option>
+                                        <option value="Pharmacy">Pharmacy</option>
+                                        <option value="Misc">Misc</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Unit Price ₹ *</label>
+                                    <input
+                                        type="number" min="0" step="0.01"
+                                        inputMode="decimal"
+                                        value={customUnitPrice}
+                                        onChange={e => setCustomUnitPrice(sanitizeDecimal(e.target.value))}
+                                        placeholder="0"
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Qty</label>
+                                    <input
+                                        type="number" min="1"
+                                        inputMode="numeric"
+                                        value={customQty}
+                                        onFocus={e => e.target.select()}
+                                        onChange={e => {
+                                            const v = sanitizePositiveInt(e.target.value);
+                                            setCustomQty(v === '' ? 1 : Math.max(1, Number(v)));
+                                        }}
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none"
+                                    />
+                                </div>
+                                <div className="flex items-end">
+                                    <button
+                                        onClick={handleAddCustomItem}
+                                        disabled={!customDesc.trim() || !customUnitPrice}
+                                        className="w-full p-2.5 bg-emerald-600 text-white rounded-lg text-sm font-bold disabled:opacity-50 hover:bg-emerald-700 transition-colors flex items-center justify-center gap-1"
+                                    >
+                                        <Plus className="h-4 w-4" /> Add Custom
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Discount ₹</label>
+                                    <input
+                                        type="number" min="0" step="0.01"
+                                        inputMode="decimal"
+                                        value={customDiscount === 0 ? '' : customDiscount}
+                                        placeholder="0"
+                                        onFocus={e => e.target.select()}
+                                        onChange={e => {
+                                            const v = sanitizeDecimal(e.target.value);
+                                            setCustomDiscount(v === '' ? 0 : Number(v));
+                                        }}
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">GST %</label>
+                                    <select
+                                        value={customTaxRate}
+                                        onChange={e => setCustomTaxRate(e.target.value)}
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none"
+                                    >
+                                        <option value="0">0% (Exempt)</option>
+                                        <option value="5">5%</option>
+                                        <option value="12">12%</option>
+                                        <option value="18">18%</option>
+                                        <option value="28">28%</option>
+                                    </select>
+                                </div>
+                                <div className="flex items-end">
+                                    <p className="text-[11px] text-gray-500 italic px-2 pb-2">
+                                        Use for one-off services (e.g. ambulance, special consumables) not in the master.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
 
                         {/* 3. Items List */}
