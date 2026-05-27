@@ -35,6 +35,8 @@ export default function ReceptionGenerateBillPage() {
 
     const [services, setServices] = useState<any[]>([]);
     const [selectedServiceId, setSelectedServiceId] = useState<number | null>(null);
+    const [serviceSearch, setServiceSearch] = useState('');
+    const [showServiceDropdown, setShowServiceDropdown] = useState(false);
 
     // Line items for the bill
     const [items, setItems] = useState<any[]>([]);
@@ -363,18 +365,75 @@ export default function ReceptionGenerateBillPage() {
                             <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-4">2. Add Services / Consultations</h2>
 
                             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                                <div className="md:col-span-2">
+                                <div className="md:col-span-2 relative">
                                     <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Service (Master Data)</label>
-                                    <select
-                                        value={selectedServiceId || ''}
-                                        onChange={e => setSelectedServiceId(Number(e.target.value))}
-                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none"
-                                    >
-                                        <option value="">-- Select Master Service --</option>
-                                        {services.map(s => (
-                                            <option key={s.id} value={s.id}>{s.service_name} (₹{Number(s.default_rate)})</option>
-                                        ))}
-                                    </select>
+                                    {selectedServiceId ? (
+                                        <div className="flex items-center gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg">
+                                            <span className="flex-1 text-sm font-medium text-emerald-800 truncate">
+                                                {services.find(s => s.id === selectedServiceId)?.service_name}
+                                                <span className="text-emerald-600 ml-1">
+                                                    (₹{Number(services.find(s => s.id === selectedServiceId)?.default_rate)})
+                                                </span>
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => { setSelectedServiceId(null); setServiceSearch(''); }}
+                                                className="text-emerald-700 hover:text-emerald-900 text-xs font-bold"
+                                            >
+                                                ✕ Change
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="relative">
+                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                                                <input
+                                                    type="text"
+                                                    value={serviceSearch}
+                                                    onChange={e => setServiceSearch(e.target.value)}
+                                                    onFocus={() => setShowServiceDropdown(true)}
+                                                    onBlur={() => setTimeout(() => setShowServiceDropdown(false), 200)}
+                                                    placeholder="Search by name or code..."
+                                                    className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none focus:border-emerald-400"
+                                                />
+                                            </div>
+                                            {showServiceDropdown && (
+                                                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+                                                    {(() => {
+                                                        const q = serviceSearch.trim().toLowerCase();
+                                                        const filtered = q
+                                                            ? services.filter(s =>
+                                                                (s.service_name || '').toLowerCase().includes(q) ||
+                                                                (s.service_code || '').toLowerCase().includes(q) ||
+                                                                (s.service_category || '').toLowerCase().includes(q)
+                                                            )
+                                                            : services;
+                                                        if (filtered.length === 0) {
+                                                            return <div className="px-3 py-3 text-xs text-gray-400">No matches.</div>;
+                                                        }
+                                                        return filtered.slice(0, 50).map(s => (
+                                                            <button
+                                                                key={s.id}
+                                                                type="button"
+                                                                onMouseDown={e => {
+                                                                    e.preventDefault();
+                                                                    setSelectedServiceId(s.id);
+                                                                    setServiceSearch('');
+                                                                    setShowServiceDropdown(false);
+                                                                }}
+                                                                className="block w-full text-left px-3 py-2 hover:bg-emerald-50 border-b border-gray-50"
+                                                            >
+                                                                <div className="text-sm font-medium text-gray-800">{s.service_name}</div>
+                                                                <div className="text-[10px] text-gray-500">
+                                                                    {s.service_code || '—'} · ₹{Number(s.default_rate)} · GST {s.tax_rate || 0}% · {s.service_category || 'General'}
+                                                                </div>
+                                                            </button>
+                                                        ));
+                                                    })()}
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
                                 </div>
 
                                 <div>

@@ -168,6 +168,7 @@ export async function getPnLIncomeBreakdown(filters: {
             include: {
                 invoice: {
                     select: {
+                        id: true,
                         invoice_number: true,
                         invoice_type: true,
                         status: true,
@@ -180,6 +181,7 @@ export async function getPnLIncomeBreakdown(filters: {
 
         const rows = items.map((it: any) => ({
             id: it.id,
+            invoice_id: it.invoice?.id ?? it.invoice_id ?? null,
             date: it.created_at,
             description: it.description,
             quantity: it.quantity,

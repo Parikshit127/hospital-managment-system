@@ -14,6 +14,7 @@ import {
     Loader2, FileText,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
+import Link from 'next/link';
 
 type ReportType = 'collections' | 'aging' | 'cashflow' | 'pnl' | 'insurance' | 'department';
 
@@ -448,7 +449,19 @@ function DrillPanel({ loading, data, fmt, kind }: { loading: boolean; data: any;
                                 <tr key={r.id} className="hover:bg-white">
                                     <td className="px-3 py-2 text-gray-500">{new Date(r.date).toLocaleDateString('en-IN')}</td>
                                     <td className="px-3 py-2 text-gray-900">{r.patient_name}</td>
-                                    <td className="px-3 py-2 font-mono text-gray-600">{r.invoice_number}</td>
+                                    <td className="px-3 py-2 font-mono text-gray-600">
+                                        {r.invoice_id ? (
+                                            <Link
+                                                href={`/finance/invoices/${r.invoice_id}`}
+                                                className="text-emerald-700 hover:text-emerald-900 hover:underline font-semibold"
+                                                title="Open invoice"
+                                            >
+                                                {r.invoice_number} ↗
+                                            </Link>
+                                        ) : (
+                                            r.invoice_number
+                                        )}
+                                    </td>
                                     <td className="px-3 py-2">
                                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${r.invoice_type === 'IPD' ? 'bg-violet-100 text-violet-700' : 'bg-sky-100 text-sky-700'}`}>
                                             {r.invoice_type}
