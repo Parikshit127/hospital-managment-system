@@ -334,10 +334,10 @@ export async function approveCreditNote(id: number) {
                 throw new Error('Required receivable (1130) or revenue (6000) GL accounts not found. Ensure Chart of Accounts is seeded.');
             }
 
-            // Update credit note status
+            // Update credit note status to Applied (approve + apply in one step)
             const updatedCn = await tx.creditNote.update({
                 where: { id },
-                data: { status: 'Approved', approved_by: session.username },
+                data: { status: 'Applied', approved_by: session.username },
             });
 
             // Update original invoice balance
