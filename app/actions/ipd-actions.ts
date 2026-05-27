@@ -609,7 +609,13 @@ export async function accrueIPDDailyCharges(admissionId: string) {
 
     // Nursing rate is also scaled or remains flat based on hospital policy. Let's scale it.
     const nursingRate = Number(ward.nursing_charge || 0) * multiplier;
+    // Two forms of "today":
+    //   today      → human-readable, used in description suffix for backwards-compat
+    //   isoToday   → strict YYYY-MM-DD, used inside square brackets so both this
+    //                function AND ensureIPDRoomChargesAccrued share the same
+    //                de-dupe key (avoids double-billing across the two paths)
     const today = new Date().toLocaleDateString("en-IN");
+    const isoToday = new Date().toISOString().slice(0, 10);
 
     // If an active (non-broken-open) IPD package covers today, skip Room+Nursing
     // accrual — both are included in the package price (per pricelist inclusions).
@@ -636,9 +642,20 @@ export async function accrueIPDDailyCharges(admissionId: string) {
 
     // Add room charge (skipped while inside package coverage)
     if (roomRate > 0 && !packageCoversToday) {
-      const roomRef = `room_${admissionId}_${today}`;
+      const roomRef = `room_${admissionId}_${isoToday}`;
+      // De-dupe by BOTH ref_id AND description containing today's ISO date.
+      // This matches the de-dupe key used by ensureIPDRoomChargesAccrued
+      // (which writes "Ward Name - Room Charge [YYYY-MM-DD]") so the two
+      // functions never double-bill the same day.
       const existingRoom = await db.invoice_items.findFirst({
-        where: { invoice_id: invoice.id, ref_id: roomRef }
+        where: {
+          invoice_id: invoice.id,
+          service_category: 'Room',
+          OR: [
+            { ref_id: roomRef },
+            { description: { contains: `[${isoToday}]` } },
+          ],
+        },
       });
 
       if (!existingRoom) {
@@ -646,7 +663,7 @@ export async function accrueIPDDailyCharges(admissionId: string) {
           data: {
             invoice_id: invoice.id,
             department: "Room",
-            description: `${ward.ward_name} - Room Charge (${today})`,
+            description: `${ward.ward_name} - Room Charge [${isoToday}]`,
             quantity: 1,
             unit_price: roomRate,
             total_price: roomRate,
@@ -664,9 +681,16 @@ export async function accrueIPDDailyCharges(admissionId: string) {
 
     // Add nursing charge (skipped while inside package coverage)
     if (nursingRate > 0 && !packageCoversToday) {
-      const nursingRef = `nursing_${admissionId}_${today}`;
+      const nursingRef = `nursing_${admissionId}_${isoToday}`;
       const existingNursing = await db.invoice_items.findFirst({
-        where: { invoice_id: invoice.id, ref_id: nursingRef }
+        where: {
+          invoice_id: invoice.id,
+          service_category: 'Nursing',
+          OR: [
+            { ref_id: nursingRef },
+            { description: { contains: `[${isoToday}]` } },
+          ],
+        },
       });
 
       if (!existingNursing) {
@@ -674,7 +698,7 @@ export async function accrueIPDDailyCharges(admissionId: string) {
           data: {
             invoice_id: invoice.id,
             department: "Nursing",
-            description: `Nursing Charge (${today})`,
+            description: `Nursing Charge [${isoToday}]`,
             quantity: 1,
             unit_price: nursingRate,
             total_price: nursingRate,

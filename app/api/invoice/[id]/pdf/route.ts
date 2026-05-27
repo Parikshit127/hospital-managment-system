@@ -52,6 +52,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                     where: { status: { not: 'Reversed' } },
                     orderBy: { created_at: 'desc' },
                 },
+                credit_notes: { where: { status: 'Approved' }, orderBy: { created_at: 'desc' } },
             }
         })
 
@@ -113,6 +114,8 @@ function numberToWords(n: number): string {
 function generateInvoiceHTML(invoice: any, org: any) {
     const items = invoice.items || []
     const payments = invoice.payments || []
+    const creditNotes = (invoice as any).credit_notes || []
+    const creditNoteTotal = creditNotes.reduce((s: number, c: any) => s + Number(c.total_amount || 0), 0)
     const patient = invoice.patient || {}
     const admission = invoice.admission || null
     const total = Number(invoice.total_amount || 0)
@@ -311,6 +314,7 @@ function generateInvoiceHTML(invoice: any, org: any) {
                 ${totalDiscount > 0 ? `<tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">Discount</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#dc2626;">-${totalDiscount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
                 ${totalTax > 0 ? `<tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">Total Tax</td><td style="padding:5px 12px;font-size:12px;text-align:right;">${totalTax.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
                 <tr style="border-top:2px solid #1f2937;"><td style="padding:8px 12px;font-size:14px;font-weight:800;">Net Amount</td><td style="padding:8px 12px;font-size:14px;text-align:right;font-weight:800;">${net.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
+                ${creditNoteTotal > 0 ? `<tr><td style="padding:5px 12px;font-size:12px;color:#0891b2;">Credit Notes Applied</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#0891b2;">-${creditNoteTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
                 <tr><td style="padding:5px 12px;font-size:12px;color:#059669;">Paid</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#059669;">${paid.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
                 ${balance > 0 ? `<tr style="background:#fef2f2;"><td style="padding:8px 12px;font-size:13px;font-weight:800;color:#dc2626;">Balance Due</td><td style="padding:8px 12px;font-size:13px;text-align:right;font-weight:800;color:#dc2626;">${balance.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
             </table>

@@ -66,10 +66,16 @@ async function main() {
 
     // 5. Create IPD invoice
     const invoiceNumber = `IPD-AXTEN-${ts}`;
-    const extraRoom = new Prisma.Decimal(8000 * 2); // 2 extra room days
+    const extraRoom = new Prisma.Decimal(8000 * 2); // 2 extra room days, ₹8,000/day
     const extraLab = new Prisma.Decimal(1500); // lab test outside package
     const extraConsult = new Prisma.Decimal(1500); // super-specialist consult
     const totalBeforeTax = new Prisma.Decimal(Number(pkgAmount) + Number(extraRoom) + Number(extraLab) + Number(extraConsult));
+
+    // Room > ₹5K + Private ward → 5% GST. Other lines exempt (clinical).
+    const roomGstAmount = new Prisma.Decimal(Number(extraRoom) * 0.05);
+    const cgstAmt = new Prisma.Decimal(Number(roomGstAmount) / 2);
+    const sgstAmt = new Prisma.Decimal(Number(roomGstAmount) / 2);
+    const netAmountWithGst = new Prisma.Decimal(Number(totalBeforeTax) + Number(roomGstAmount));
 
     const invoice = await prisma.invoices.create({
         data: {
@@ -78,18 +84,28 @@ async function main() {
             admission_id: admission.admission_id,
             invoice_type: 'IPD',
             total_amount: totalBeforeTax,
-            net_amount: totalBeforeTax,
-            balance_due: totalBeforeTax,
+            total_tax: roomGstAmount,
+            cgst_amount: cgstAmt,
+            sgst_amount: sgstAmt,
+            net_amount: netAmountWithGst,
+            balance_due: netAmountWithGst,
             paid_amount: new Prisma.Decimal(0),
             status: 'Draft',
             billing_patient_type: 'cash',
-            patient_payable: totalBeforeTax,
+            patient_payable: netAmountWithGst,
             organizationId: ORG,
         },
     });
     console.log(`✓ Invoice created: ${invoice.invoice_number}`);
 
     // 6. Add line items — package + 3 extras
+    // GST rates align with app/lib/gst.ts:
+    //   Room (Private ward, > ₹5K/day)         → 5%
+    //   Lab tests (clinical)                   → 0% (exempt)
+    //   Consultation (clinical)                → 0% (exempt)
+    //   Package will be tax_rate=0 here too because ORTHO is clinical (cosmetic would be 18%)
+    const roomTaxRate = 5;
+    const roomTaxAmount = Number(extraRoom) * roomTaxRate / 100;
     const items: any[] = [
         {
             description: `${pkg.package_code} — ${pkg.package_name}`,
@@ -97,6 +113,8 @@ async function main() {
             unit_price: pkgAmount,
             total_price: pkgAmount,
             net_price: pkgAmount,
+            tax_rate: 0,
+            tax_amount: 0,
             department: 'IPD',
             service_category: 'Package',
         },
@@ -106,6 +124,8 @@ async function main() {
             unit_price: new Prisma.Decimal(8000),
             total_price: extraRoom,
             net_price: extraRoom,
+            tax_rate: roomTaxRate,
+            tax_amount: roomTaxAmount,
             department: 'IPD',
             service_category: 'Room',
         },
@@ -115,6 +135,8 @@ async function main() {
             unit_price: extraLab,
             total_price: extraLab,
             net_price: extraLab,
+            tax_rate: 0,
+            tax_amount: 0,
             department: 'Lab',
             service_category: 'Lab',
         },
@@ -124,6 +146,8 @@ async function main() {
             unit_price: extraConsult,
             total_price: extraConsult,
             net_price: extraConsult,
+            tax_rate: 0,
+            tax_amount: 0,
             department: 'OPD Consultation',
             service_category: 'Consultation',
         },

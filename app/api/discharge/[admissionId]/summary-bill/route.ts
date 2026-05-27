@@ -30,7 +30,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 
         const invoice = await prisma.invoices.findFirst({
             where: { admission_id: admissionId, status: { not: 'Cancelled' } },
-            include: { items: true, payments: { where: { status: { not: 'Reversed' } } } },
+            include: {
+                items: true,
+                payments: { where: { status: { not: 'Reversed' } } },
+                credit_notes: { where: { status: 'Approved' }, orderBy: { created_at: 'desc' } },
+            },
             orderBy: { created_at: 'desc' },
         });
         if (!invoice) return NextResponse.json({ error: 'No invoice found' }, { status: 404 });
@@ -123,6 +127,9 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
     }
 
     const depositTotal = deposits.reduce((s, d) => s + Number(d.applied_amount || 0), 0);
+
+    const creditNotes = invoice.credit_notes || [];
+    const creditNoteTotal = creditNotes.reduce((s: number, c: any) => s + Number(c.total_amount || 0), 0);
 
     return `<!DOCTYPE html>
 <html>
@@ -277,6 +284,7 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                                 <tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">SGST</td><td style="padding:5px 12px;font-size:12px;text-align:right;">${(totalTax / 2).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
                                 ` : ''}
                                 <tr style="border-top:2px solid #1f2937;"><td style="padding:7px 12px;font-size:14px;font-weight:800;">Net Amount</td><td style="padding:7px 12px;font-size:14px;text-align:right;font-weight:800;">${net.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
+                                ${creditNoteTotal > 0 ? `<tr><td style="padding:5px 12px;font-size:12px;color:#0891b2;">Credit Notes Applied</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#0891b2;">-${creditNoteTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
                                 ${depositTotal > 0 ? `<tr><td style="padding:5px 12px;font-size:12px;color:#7c3aed;">Deposits Applied</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#7c3aed;">-${depositTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
                                 <tr><td style="padding:5px 12px;font-size:12px;color:#059669;">Total Paid</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#059669;">${paid.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
                                 ${balance > 0 ? `<tr style="background:#fef2f2;"><td style="padding:7px 12px;font-size:13px;font-weight:800;color:#dc2626;">Balance Due</td><td style="padding:7px 12px;font-size:13px;text-align:right;font-weight:800;color:#dc2626;">${balance.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : `<tr style="background:#f0fdf4;"><td style="padding:7px 12px;font-size:13px;font-weight:800;color:#059669;">FULLY PAID</td><td style="padding:7px 12px;font-size:13px;text-align:right;font-weight:800;color:#059669;">&#10003;</td></tr>`}

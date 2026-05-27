@@ -34,6 +34,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             include: {
                 items: { orderBy: { created_at: 'asc' } },
                 payments: { where: { status: { not: 'Reversed' } }, orderBy: { created_at: 'desc' } },
+                credit_notes: { where: { status: 'Approved' }, orderBy: { created_at: 'desc' } },
             },
             orderBy: { created_at: 'desc' },
         });
@@ -170,6 +171,9 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
     }
 
     const depositTotal = deposits.reduce((s, d) => s + Number(d.applied_amount || 0), 0);
+
+    const creditNotes = invoice.credit_notes || [];
+    const creditNoteTotal = creditNotes.reduce((s: number, c: any) => s + Number(c.total_amount || 0), 0);
 
     const paymentRows = payments.map((p: any) => `<tr>
         <td style="padding:4px 12px;font-size:10px;">${p.receipt_number}</td>
@@ -330,6 +334,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 <tr><td style="padding:4px 12px;font-size:11px;color:#6b7280;">SGST</td><td style="padding:4px 12px;font-size:11px;text-align:right;">${(totalTax / 2).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
                                 ` : ''}
                                 <tr style="border-top:2px solid #1f2937;"><td style="padding:6px 12px;font-size:13px;font-weight:800;">Net Amount</td><td style="padding:6px 12px;font-size:13px;text-align:right;font-weight:800;">${net.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
+                                ${creditNoteTotal > 0 ? `<tr><td style="padding:4px 12px;font-size:11px;color:#0891b2;">Credit Notes Applied</td><td style="padding:4px 12px;font-size:11px;text-align:right;color:#0891b2;">-${creditNoteTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
                                 ${depositTotal > 0 ? `<tr><td style="padding:4px 12px;font-size:11px;color:#7c3aed;">Deposits Applied</td><td style="padding:4px 12px;font-size:11px;text-align:right;color:#7c3aed;">-${depositTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
                                 <tr><td style="padding:4px 12px;font-size:11px;color:#059669;">Total Paid</td><td style="padding:4px 12px;font-size:11px;text-align:right;color:#059669;">${paid.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
                                 ${balance > 0 ? `<tr style="background:#fef2f2;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#dc2626;">Balance Due</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#dc2626;">${balance.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : `<tr style="background:#f0fdf4;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#059669;">FULLY PAID</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#059669;">&#10003;</td></tr>`}
@@ -351,6 +356,25 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                     <th style="padding:4px 12px;font-size:9px;text-align:left;color:#1e3a6e;">Date</th>
                                 </tr></thead>
                                 <tbody>${paymentRows}</tbody>
+                            </table>
+                        </div>` : ''}
+
+                        ${creditNotes.length > 0 ? `
+                        <div style="margin-bottom:14px;">
+                            <h3 style="font-size:9px;font-weight:800;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Credit Notes Applied</h3>
+                            <table style="width:100%;border-collapse:collapse;background:#ecfeff;">
+                                <thead><tr style="border-bottom:1px solid #0891b2;">
+                                    <th style="padding:4px 12px;font-size:9px;text-align:left;color:#0891b2;">CN Number</th>
+                                    <th style="padding:4px 12px;font-size:9px;text-align:left;color:#0891b2;">Reason</th>
+                                    <th style="padding:4px 12px;font-size:9px;text-align:right;color:#0891b2;">Amount</th>
+                                    <th style="padding:4px 12px;font-size:9px;text-align:left;color:#0891b2;">Date</th>
+                                </tr></thead>
+                                <tbody>${creditNotes.map((c: any) => `<tr>
+                                    <td style="padding:4px 12px;font-size:10px;">${c.credit_note_number}</td>
+                                    <td style="padding:4px 12px;font-size:10px;">${c.reason || '-'}</td>
+                                    <td style="padding:4px 12px;font-size:10px;text-align:right;color:#0891b2;">-${Number(c.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                    <td style="padding:4px 12px;font-size:10px;">${new Date(c.created_at).toLocaleDateString('en-IN')}</td>
+                                </tr>`).join('')}</tbody>
                             </table>
                         </div>` : ''}
 

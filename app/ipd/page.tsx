@@ -140,15 +140,22 @@ export default function IPDDashboard() {
     details: "",
   });
 
+  // Filter-race guard: track which filter the most recent request was for,
+  // and discard any earlier-fired response that comes back after a newer one.
+  const loadSeqRef = React.useRef(0);
   const loadData = async () => {
+    const mySeq = ++loadSeqRef.current;
+    const myFilter = admissionFilter;
     setLoading(true);
     try {
       const [s, w, b, a] = await Promise.all([
         getIPDStats(),
         getWardsWithBeds(),
         getAllBeds(),
-        getIPDAdmissions(admissionFilter)
+        getIPDAdmissions(myFilter)
       ]);
+      // If a newer load has started while we awaited, throw this response away.
+      if (mySeq !== loadSeqRef.current) return;
       if (s.success) setStats(s.data);
       if (w.success) setWards(w.data || []);
       if (b.success) setBeds(b.data || []);
@@ -156,7 +163,7 @@ export default function IPDDashboard() {
     } catch (err) {
       console.error("IPD load error:", err);
     }
-    setLoading(false);
+    if (mySeq === loadSeqRef.current) setLoading(false);
   };
 
   const loadIpdPackages = async () => {

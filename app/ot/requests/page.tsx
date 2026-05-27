@@ -36,6 +36,7 @@ function SurgeryRequestsInner() {
   const [filter, setFilter] = useState<string>("Requested");
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(searchParams.get("create") === "1");
+  const [createError, setCreateError] = useState<string>("");
   const [masters, setMasters] = useState<any[]>([]);
   const [form, setForm] = useState({
     patient_id: "",
@@ -65,9 +66,33 @@ function SurgeryRequestsInner() {
     listSurgeryMasters().then((r) => r.success && setMasters(r.data));
   }, []);
 
+  const resetForm = () =>
+    setForm({
+      patient_id: "",
+      patient_label: "",
+      requesting_doctor_id: "",
+      doctor_label: "",
+      surgery_master_id: "",
+      surgery_name: "",
+      surgery_category: "",
+      urgency: "Elective",
+      diagnosis: "",
+      clinical_notes: "",
+    });
+
+  const closeCreate = () => {
+    setShowCreate(false);
+    setCreateError("");
+    resetForm();
+  };
+
   const onCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.patient_id || !form.surgery_name || !form.requesting_doctor_id) return;
+    setCreateError("");
+    if (!form.patient_id || !form.surgery_name || !form.requesting_doctor_id) {
+      setCreateError("Patient, doctor and surgery name are required.");
+      return;
+    }
     const res = await createSurgeryRequest({
       patient_id: form.patient_id,
       requesting_doctor_id: form.requesting_doctor_id,
@@ -79,22 +104,10 @@ function SurgeryRequestsInner() {
       clinical_notes: form.clinical_notes || null,
     });
     if (res.success) {
-      setShowCreate(false);
-      setForm({
-        patient_id: "",
-        patient_label: "",
-        requesting_doctor_id: "",
-        doctor_label: "",
-        surgery_master_id: "",
-        surgery_name: "",
-        surgery_category: "",
-        urgency: "Elective",
-        diagnosis: "",
-        clinical_notes: "",
-      });
+      closeCreate();
       load();
     } else {
-      alert(res.error || "Failed");
+      setCreateError(res.error || "Failed to create surgery request.");
     }
   };
 
@@ -230,7 +243,7 @@ function SurgeryRequestsInner() {
       {showCreate && (
         <div
           className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4"
-          onClick={() => setShowCreate(false)}
+          onClick={closeCreate}
         >
           <form
             onSubmit={onCreate}
@@ -238,6 +251,12 @@ function SurgeryRequestsInner() {
             className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-3"
           >
             <h3 className="text-lg font-black text-gray-800">New Surgery Request</h3>
+
+            {createError && (
+              <div className="bg-rose-50 border border-rose-200 rounded-lg p-2.5 text-xs text-rose-700">
+                {createError}
+              </div>
+            )}
 
             <SearchPicker
               label="Patient *"
@@ -331,7 +350,7 @@ function SurgeryRequestsInner() {
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setShowCreate(false)}
+                onClick={closeCreate}
                 className="px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-lg"
               >
                 Cancel
