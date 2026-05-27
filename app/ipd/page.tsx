@@ -47,6 +47,7 @@ import {
 } from "@/app/actions/ipd-actions";
 import { getIpdPackages } from "@/app/actions/ipd-master-actions";
 import { applyPackageToAdmission } from "@/app/actions/ipd-finance-actions";
+import { getDoctorsForDropdown } from "@/app/actions/admin-actions";
 import { AppShell } from "@/app/components/layout/AppShell";
 
 function parseIpdPackageMeta(desc: string | null | undefined): {
@@ -94,6 +95,7 @@ export default function IPDDashboard() {
     deposit_payment_method: "Cash",
     package_id: "",
   });
+  const [doctors, setDoctors] = useState<{ id: string; name: string; specialty: string | null }[]>([]);
   const [admitLoading, setAdmitLoading] = useState(false);
   const [admitError, setAdmitError] = useState("");
 
@@ -181,6 +183,9 @@ export default function IPDDashboard() {
 
   useEffect(() => {
     loadIpdPackages();
+    getDoctorsForDropdown().then((res) => {
+      if (res.success) setDoctors(res.data || []);
+    });
   }, []);
 
   const handleSearch = async (q: string) => {
@@ -1279,18 +1284,20 @@ export default function IPDDashboard() {
                   <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">
                     Doctor
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={admitForm.doctor_name}
                     onChange={(e) =>
-                      setAdmitForm({
-                        ...admitForm,
-                        doctor_name: e.target.value,
-                      })
+                      setAdmitForm({ ...admitForm, doctor_name: e.target.value })
                     }
                     className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-violet-500/50 focus:outline-none"
-                    placeholder="Attending doctor"
-                  />
+                  >
+                    <option value="">— Select Doctor —</option>
+                    {doctors.map((d) => (
+                      <option key={d.id} value={d.name}>
+                        {d.name}{d.specialty ? ` (${d.specialty})` : ""}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* IPD Package (optional) */}

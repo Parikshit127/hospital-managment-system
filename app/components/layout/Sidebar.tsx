@@ -339,6 +339,26 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       ],
     },
     {
+      title: "Operation Theatre",
+      items: [
+        { label: "OT Dashboard", href: "/ot/dashboard", icon: Scissors },
+        { label: "Surgery Requests", href: "/ot/requests", icon: ClipboardList },
+        { label: "OT Schedule", href: "/ot/schedule", icon: CalendarClock },
+        { label: "OT Worklist", href: "/ot/worklist", icon: ClipboardCheck },
+        { label: "PAC Clearance", href: "/ot/pac", icon: HeartPulse },
+        { label: "OT Billing", href: "/ot/billing", icon: CreditCard },
+      ],
+    },
+    {
+      title: "Emergency Room",
+      items: [
+        { label: "ER Dashboard", href: "/er/dashboard", icon: Siren },
+        { label: "Tracking Board", href: "/er/tracking-board", icon: MonitorPlay },
+        { label: "Register Patient", href: "/er/register", icon: UserPlus },
+        { label: "ER Billing", href: "/er/billing", icon: CreditCard },
+      ],
+    },
+    {
       title: "System",
       items: [
         { label: "Audit Trail", href: "/ipd/audit-trail", icon: Activity },

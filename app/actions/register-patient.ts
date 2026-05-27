@@ -96,7 +96,7 @@ export async function registerPatient(formData: FormData) {
         return { success: false, error: firstError };
     }
 
-    const skipAppointment = formData.get('skipAppointment') === 'true';
+    const skipAppointment = formData.get('bookAppointment') !== 'true'; // opt-in: only create if checked
 
     const rawData = {
         ...parsed.data,

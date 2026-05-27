@@ -12,6 +12,7 @@ import { registerPatient, checkDuplicatePatient } from '@/app/actions/register-p
 import { lookupInsuranceByPhone } from '@/app/actions/insurance-lookup';
 import { getDepartmentList } from '@/app/actions/reception-actions';
 import { getCorporateMasters, getTpaProviders } from '@/app/actions/patient-type-actions';
+import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useToast } from '@/app/components/ui/Toast';
 import { FALLBACK_DEPARTMENTS } from '@/app/lib/constants/departments';
@@ -85,6 +86,7 @@ export default function ReceptionPage() {
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [departments, setDepartments] = useState<DepartmentItem[]>([]);
+    const [doctors, setDoctors] = useState<{ id: string; name: string; specialty: string | null }[]>([]);
     const [duplicates, setDuplicates] = useState<DuplicatePatient[]>([]);
     const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
     const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
@@ -120,6 +122,9 @@ export default function ReceptionPage() {
         });
         getTpaProviders().then(r => {
             if (r.success) setTpaProviders(r.data as TpaProviderItem[]);
+        });
+        getDoctorsForDropdown().then(r => {
+            if (r.success) setDoctors(r.data || []);
         });
     }, []);
 
@@ -519,11 +524,24 @@ export default function ReceptionPage() {
 
                                         {/* Department from DB */}
                                         <div className="md:col-span-2 space-y-1.5">
-                                            <label className={labelClass}>Department *</label>
-                                            <select name="department" required className={selectClass}>
+                                            <label className={labelClass}>Department <span className="text-gray-400 font-normal">(Optional)</span></label>
+                                            <select name="department" className={selectClass}>
                                                 <option value="">Select Department</option>
                                                 {departments.map(dept => (
                                                     <option key={dept.id} value={dept.name}>{dept.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* Doctor dropdown */}
+                                        <div className="md:col-span-2 space-y-1.5">
+                                            <label className={labelClass}>Doctor <span className="text-gray-400 font-normal">(Optional)</span></label>
+                                            <select name="doctor_name" className={selectClass}>
+                                                <option value="">Select Doctor</option>
+                                                {doctors.map(d => (
+                                                    <option key={d.id} value={d.name}>
+                                                        {d.name}{d.specialty ? ` — ${d.specialty}` : ''}
+                                                    </option>
                                                 ))}
                                             </select>
                                         </div>
@@ -759,22 +777,22 @@ export default function ReceptionPage() {
                                         </label>
                                     </div>
 
-                                    {/* Skip Appointment Option */}
+                                    {/* Book Appointment Option — opt-in */}
                                     <div className="mb-6 border-t border-gray-200 pt-6">
                                         <label className="flex items-start gap-3 cursor-pointer group">
                                             <input
                                                 type="checkbox"
-                                                name="skipAppointment"
+                                                name="bookAppointment"
                                                 value="true"
-                                                className="mt-1 h-4 w-4 rounded border-gray-300 text-amber-500 focus:ring-amber-500/20"
+                                                className="mt-1 h-4 w-4 rounded border-gray-300 text-teal-500 focus:ring-teal-500/20"
                                             />
                                             <div>
                                                 <span className="text-sm font-bold text-gray-700 group-hover:text-gray-900 transition-colors flex items-center gap-1.5">
-                                                    <Calendar className="h-3.5 w-3.5 text-amber-400" />
-                                                    Register only (skip appointment)
+                                                    <Calendar className="h-3.5 w-3.5 text-teal-400" />
+                                                    Book appointment now
                                                 </span>
                                                 <p className="text-xs text-gray-400 mt-0.5">
-                                                    Check this to register the patient without creating an appointment. You can book an appointment later.
+                                                    Check this to create an appointment along with registration. Leave unchecked to register only.
                                                 </p>
                                             </div>
                                         </label>
