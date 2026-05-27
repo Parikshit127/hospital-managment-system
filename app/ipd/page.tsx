@@ -913,7 +913,7 @@ export default function IPDDashboard() {
             {activeTab === "admissions" && (
               <div className="space-y-4">
                 <div className="flex gap-2">
-                  {["Admitted", "Discharged"].map((f) => (
+                  {["Admitted", "Discharged", "Cancelled"].map((f) => (
                     <button
                       key={f}
                       onClick={() => setAdmissionFilter(f)}
@@ -985,8 +985,13 @@ export default function IPDDashboard() {
                               <td className="px-5 py-3.5 text-xs text-gray-500">
                                 {adm.wardName} / {adm.bed_id || "N/A"}
                               </td>
-                              <td className="px-5 py-3.5 text-xs text-gray-500 max-w-[200px] truncate">
-                                {adm.diagnosis || "-"}
+                              <td className="px-5 py-3.5 text-xs text-gray-500 max-w-[260px]">
+                                <p className="truncate">{adm.diagnosis || "-"}</p>
+                                {adm.status === "Cancelled" && adm.cancellation_reason && (
+                                  <p className="mt-1 text-[10px] text-rose-600 leading-relaxed" title={adm.cancellation_reason}>
+                                    Cancelled: {adm.cancellation_reason}
+                                  </p>
+                                )}
                               </td>
                               <td className="px-5 py-3.5 text-xs text-gray-500">
                                 {adm.doctor_name || "-"}

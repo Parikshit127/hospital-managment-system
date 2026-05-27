@@ -78,17 +78,25 @@ export default function ChartOfAccountsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<GLAccount | null>(null);
   const [formData, setFormData] = useState(defaultForm);
+  const [orgId, setOrgId] = useState('');
 
   useEffect(() => {
-    loadAccounts();
+    fetch('/api/session')
+      .then(r => r.json())
+      .then(s => { if (s?.organization_id) setOrgId(s.organization_id); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (orgId) loadAccounts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterType]);
+  }, [filterType, orgId]);
 
   const loadAccounts = async () => {
     setLoading(true);
     try {
       const result = await getGLAccounts(
-        localStorage.getItem('organizationId') || '',
+        orgId,
         filterType !== 'all' ? { account_type: filterType } : undefined
       );
       if (result.success) {
@@ -148,7 +156,7 @@ export default function ChartOfAccountsPage() {
         }
       } else {
         const result = await createGLAccount({
-          organizationId: localStorage.getItem('organizationId') || '',
+          organizationId: orgId,
           ...formData,
         });
         if (result.success) {

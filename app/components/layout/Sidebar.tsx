@@ -78,6 +78,9 @@ import {
   Tag,
   FileCode2,
   ReceiptText,
+  BookOpen,
+  Landmark,
+  TrendingUp,
 } from "lucide-react";
 
 interface NavItem {
@@ -266,7 +269,17 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "All Invoices", href: "/finance/invoices", icon: FileText },
         { label: "Payment Ledger", href: "/finance/payments", icon: CreditCard },
         { label: "Expenses", href: "/finance/expenses", icon: Banknote },
+        { label: "Income & Expense", href: "/finance/income-expense", icon: TrendingUp },
         { label: "Tally Export", href: "/finance/tally-export", icon: FileCode2 },
+      ],
+    },
+    {
+      title: "Accounting",
+      items: [
+        { label: "Chart of Accounts", href: "/finance/chart-of-accounts", icon: Landmark },
+        { label: "Journal Entries", href: "/finance/journal-entries", icon: BookOpen },
+        { label: "GL Reports", href: "/finance/gl-reports", icon: ScrollText },
+        { label: "Vendor Ledger", href: "/finance/vendor-ledger", icon: FileStack },
       ],
     },
     {

@@ -3,7 +3,7 @@
 import { requireTenantContext } from '@/backend/tenant';
 
 export async function getAdmissionsHubData(filters?: {
-    status?: string; // 'All', 'Admitted', 'Discharged'
+    status?: string; // 'All', 'Admitted', 'Discharged', 'Cancelled'
     search?: string;
     ward_id?: number | 'All';
 }) {
@@ -45,11 +45,46 @@ export async function getAdmissionsHubData(filters?: {
         take: 100 // High density page, can implement pagination later
     });
 
-    // We also need filter options for Wards
-    const wards = await db.wards.findMany({
-        where: { organizationId, is_active: true },
-        select: { ward_id: true, ward_name: true }
+    const cancelledAdmissionIds = admissions
+        .filter((admission: any) => admission.status === 'Cancelled')
+        .map((admission: any) => admission.admission_id);
+
+    const [wards, cancellationLogs] = await Promise.all([
+        db.wards.findMany({
+            where: { organizationId, is_active: true },
+            select: { ward_id: true, ward_name: true }
+        }),
+        cancelledAdmissionIds.length > 0
+            ? db.system_audit_logs.findMany({
+                where: {
+                    organizationId,
+                    action: 'CANCEL_ADMISSION',
+                    entity_type: 'admission',
+                    entity_id: { in: cancelledAdmissionIds },
+                },
+                orderBy: { created_at: 'desc' },
+                select: { entity_id: true, details: true },
+            })
+            : Promise.resolve([]),
+    ]);
+
+    const cancellationReasons = new Map<string, string>();
+    cancellationLogs.forEach((log: any) => {
+        if (!log.entity_id || cancellationReasons.has(log.entity_id) || !log.details) return;
+        try {
+            const reason = JSON.parse(log.details)?.reason;
+            if (typeof reason === 'string' && reason.trim()) {
+                cancellationReasons.set(log.entity_id, reason.trim());
+            }
+        } catch {
+            // Ignore malformed historical audit details.
+        }
     });
 
-    return JSON.parse(JSON.stringify({ admissions, wards }));
+    const admissionsWithCancellationReason = admissions.map((admission: any) => ({
+        ...admission,
+        cancellation_reason: cancellationReasons.get(admission.admission_id) || null,
+    }));
+
+    return JSON.parse(JSON.stringify({ admissions: admissionsWithCancellationReason, wards }));
 }

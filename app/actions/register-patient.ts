@@ -111,6 +111,29 @@ export async function registerPatient(formData: FormData) {
         let agentPatientId = null;
         let appointmentId = null;
 
+        // Block duplicate registration unless explicitly allowed
+        const allowDuplicate = formData.get('allowDuplicate') === 'true';
+        if (!allowDuplicate) {
+            const cleaned = rawData.phone.replace(/[\s\-+91]/g, '').slice(-10);
+            if (cleaned.length >= 10) {
+                const existingByPhone = await (db.oPD_REG.findFirst as any)({
+                    where: {
+                        organizationId,
+                        phone: { contains: cleaned },
+                    },
+                    select: { patient_id: true, full_name: true },
+                });
+                if (existingByPhone) {
+                    return {
+                        success: false,
+                        error: `Patient already registered with this phone number (${existingByPhone.full_name} — ${existingByPhone.patient_id}). Use existing record or confirm duplicate registration.`,
+                        duplicate: true,
+                        existing_patient_id: existingByPhone.patient_id,
+                    };
+                }
+            }
+        }
+
         // Use org-configured UHID prefix if available
         const orgConfig = await db.organizationConfig.findUnique({
             where: { organizationId },

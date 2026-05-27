@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react';
 import {
     getExpenses, createExpense, approveExpense, markExpensePaid, rejectExpense,
-    getExpenseCategories, getExpenseDashboardStats
+    getExpenseCategories, getExpenseDashboardStats, getExpenseReceiptUrl, attachReceiptToExpense
 } from '@/app/actions/expense-actions';
 import { getVendors } from '@/app/actions/expense-actions';
 import {
     Plus, Search, Filter, CheckCircle, XCircle, CreditCard,
-    TrendingDown, Clock, AlertCircle, IndianRupee, Receipt
+    TrendingDown, Clock, AlertCircle, IndianRupee, Receipt,
+    Paperclip, Upload, ExternalLink, Loader2
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 
@@ -102,6 +103,7 @@ export default function ExpensesPage() {
                             onApprove={async (id) => { await approveExpense(id); loadData(); }}
                             onReject={async (id) => { const r = prompt('Rejection reason:'); if (r) { await rejectExpense(id, r); loadData(); } }}
                             onPay={(e) => setShowPayModal(e)}
+                            onRefresh={loadData}
                         />
                     </div>
                 </div>
@@ -132,6 +134,7 @@ export default function ExpensesPage() {
                             onApprove={async (id) => { await approveExpense(id); loadData(); }}
                             onReject={async (id) => { const r = prompt('Rejection reason:'); if (r) { await rejectExpense(id, r); loadData(); } }}
                             onPay={(e) => setShowPayModal(e)}
+                            onRefresh={loadData}
                         />
                         {filteredExpenses.length === 0 && (
                             <div className="text-center py-12 text-gray-500">
@@ -239,9 +242,10 @@ function KPICard({ icon, label, value, color }: { icon: React.ReactNode; label: 
     );
 }
 
-function ExpenseTable({ expenses, onApprove, onReject, onPay }: {
-    expenses: any[]; onApprove: (id: number) => void; onReject: (id: number) => void; onPay: (e: any) => void;
+function ExpenseTable({ expenses, onApprove, onReject, onPay, onRefresh }: {
+    expenses: any[]; onApprove: (id: number) => void; onReject: (id: number) => void; onPay: (e: any) => void; onRefresh?: () => void;
 }) {
+    const [uploadingId, setUploadingId] = useState<number | null>(null);
     const statusColors: Record<string, string> = {
         Pending: 'bg-amber-50 text-amber-700',
         Approved: 'bg-blue-50 text-blue-700',
@@ -261,6 +265,7 @@ function ExpenseTable({ expenses, onApprove, onReject, onPay }: {
                         <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase text-right">Amount</th>
                         <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
                         <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
+                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Receipt</th>
                         <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Actions</th>
                     </tr>
                 </thead>
@@ -281,6 +286,48 @@ function ExpenseTable({ expenses, onApprove, onReject, onPay }: {
                             </td>
                             <td className="px-6 py-3 text-sm text-gray-500">
                                 {new Date(exp.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                            </td>
+                            <td className="px-6 py-3">
+                                {exp.receipt_key ? (
+                                    <button
+                                        onClick={async () => {
+                                            const res = await getExpenseReceiptUrl(exp.id);
+                                            if (res.success && res.url) window.open(res.url, '_blank');
+                                        }}
+                                        className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="View Receipt"
+                                    >
+                                        <ExternalLink className="h-4 w-4" />
+                                    </button>
+                                ) : (
+                                    <label className="cursor-pointer p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg inline-flex" title="Upload Receipt">
+                                        {uploadingId === exp.id ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <Upload className="h-4 w-4" />
+                                        )}
+                                        <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.webp"
+                                            onChange={async (e) => {
+                                                const file = e.target.files?.[0];
+                                                if (!file) return;
+                                                setUploadingId(exp.id);
+                                                try {
+                                                    const fd = new FormData();
+                                                    fd.append('file', file);
+                                                    const uploadRes = await fetch('/api/upload/expense-receipt', { method: 'POST', body: fd });
+                                                    const uploadData = await uploadRes.json();
+                                                    if (uploadData.key) {
+                                                        await attachReceiptToExpense(exp.id, uploadData.key);
+                                                        onRefresh?.();
+                                                    }
+                                                } catch (err) {
+                                                    console.error('Receipt upload failed:', err);
+                                                }
+                                                setUploadingId(null);
+                                                e.target.value = '';
+                                            }}
+                                        />
+                                    </label>
+                                )}
                             </td>
                             <td className="px-6 py-3">
                                 <div className="flex items-center gap-1">
@@ -318,6 +365,8 @@ function AddExpenseModal({ categories, vendors, onClose, onSave }: {
     });
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+    const [receiptFile, setReceiptFile] = useState<File | null>(null);
+    const [uploading, setUploading] = useState(false);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -327,6 +376,24 @@ function AddExpenseModal({ categories, vendors, onClose, onSave }: {
         }
         setSaving(true);
         setError('');
+
+        let receiptKey: string | undefined;
+        if (receiptFile) {
+            setUploading(true);
+            try {
+                const fd = new FormData();
+                fd.append('file', receiptFile);
+                const uploadRes = await fetch('/api/upload/expense-receipt', { method: 'POST', body: fd });
+                const uploadData = await uploadRes.json();
+                if (uploadData.key) receiptKey = uploadData.key;
+                else setError(uploadData.error || 'Receipt upload failed');
+            } catch {
+                setError('Receipt upload failed');
+            }
+            setUploading(false);
+            if (error) { setSaving(false); return; }
+        }
+
         const res = await onSave({
             category_id: parseInt(form.category_id),
             vendor_id: form.vendor_id ? parseInt(form.vendor_id) : undefined,
@@ -336,6 +403,7 @@ function AddExpenseModal({ categories, vendors, onClose, onSave }: {
             payment_method: form.payment_method || undefined,
             reference_no: form.reference_no || undefined,
             notes: form.notes || undefined,
+            receipt_key: receiptKey,
         });
         if (!res.success) setError(res.error || 'Failed to create expense');
         setSaving(false);
@@ -415,11 +483,27 @@ function AddExpenseModal({ categories, vendors, onClose, onSave }: {
                             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500" placeholder="Optional notes" />
                     </div>
 
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Receipt / Bill (Optional)</label>
+                        <label className="flex items-center gap-3 px-4 py-3 border-2 border-dashed border-gray-200 rounded-lg cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/50 transition">
+                            <Paperclip className="h-4 w-4 text-gray-400" />
+                            <span className="text-sm text-gray-500">
+                                {receiptFile ? receiptFile.name : 'Attach PDF, JPEG, or PNG (max 10 MB)'}
+                            </span>
+                            <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.webp"
+                                onChange={(e) => setReceiptFile(e.target.files?.[0] || null)} />
+                        </label>
+                        {receiptFile && (
+                            <button type="button" onClick={() => setReceiptFile(null)}
+                                className="text-xs text-red-500 hover:text-red-700 mt-1">Remove</button>
+                        )}
+                    </div>
+
                     <div className="flex justify-end gap-3 pt-2">
                         <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
-                        <button type="submit" disabled={saving}
-                            className="px-6 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50">
-                            {saving ? 'Saving...' : 'Create Expense'}
+                        <button type="submit" disabled={saving || uploading}
+                            className="px-6 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2">
+                            {uploading ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading...</> : saving ? 'Saving...' : 'Create Expense'}
                         </button>
                     </div>
                 </form>

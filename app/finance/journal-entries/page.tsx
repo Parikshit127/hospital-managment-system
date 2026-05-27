@@ -76,23 +76,29 @@ export default function JournalEntriesPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [orgId, setOrgId] = useState('');
 
   useEffect(() => {
-    loadEntries();
-  }, [filterType, filterStatus, startDate, endDate]);
+    fetch('/api/session')
+      .then(r => r.json())
+      .then(s => { if (s?.organization_id) setOrgId(s.organization_id); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (orgId) loadEntries();
+  }, [filterType, filterStatus, startDate, endDate, orgId]);
 
   const loadEntries = async () => {
     setLoading(true);
     try {
-      const organizationId = localStorage.getItem('organizationId') || '';
-
       const filters: Record<string, unknown> = {};
       if (filterType !== 'all') filters.entry_type = filterType;
       if (filterStatus !== 'all') filters.status = filterStatus;
       if (startDate) filters.start_date = new Date(startDate);
       if (endDate) filters.end_date = new Date(endDate);
 
-      const result = await getJournalEntries(organizationId, filters);
+      const result = await getJournalEntries(orgId, filters);
       if (result.success) {
         setEntries(result.entries as JournalEntry[]);
       } else {

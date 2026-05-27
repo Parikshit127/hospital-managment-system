@@ -589,6 +589,13 @@ export default function AdmissionDetailPage() {
                         </div>
                     </div>
 
+                    {data.status === 'Cancelled' && data.cancellation_reason && (
+                        <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
+                            <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Cancellation Reason</p>
+                            <p className="mt-1 text-sm font-medium text-rose-800">{data.cancellation_reason}</p>
+                        </div>
+                    )}
+
                     {/* Change Doctor — searchable autocomplete */}
                     {showDoctorForm && (
                         <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap items-center gap-3 pl-2">

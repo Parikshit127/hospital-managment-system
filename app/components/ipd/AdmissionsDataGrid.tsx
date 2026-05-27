@@ -12,7 +12,7 @@ import { useRouter } from 'next/navigation';
 
 export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[], wards: any[] }) {
     const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'All' | 'Admitted' | 'Discharged'>('Admitted');
+    const [statusFilter, setStatusFilter] = useState<'All' | 'Admitted' | 'Discharged' | 'Cancelled'>('Admitted');
     const [wardFilter, setWardFilter] = useState<string>('All');
     
     // Transfer Modal State
@@ -150,7 +150,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                 <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
                     {/* Quick Toggles */}
                     <div className="flex bg-gray-100 p-1 rounded-xl shrink-0">
-                        {['All', 'Admitted', 'Discharged'].map((status) => (
+                        {['All', 'Admitted', 'Discharged', 'Cancelled'].map((status) => (
                             <button
                                 key={status}
                                 onClick={() => setStatusFilter(status as any)}
@@ -298,9 +298,16 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                                                     </Link>
                                                 </div>
                                             ) : adm.status === 'Cancelled' ? (
-                                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-500 rounded-lg text-[10px] font-bold">
-                                                    <XCircle className="h-3 w-3" /> Cancelled
-                                                </span>
+                                                <div className="inline-flex max-w-[240px] flex-col items-end gap-1.5">
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-500 rounded-lg text-[10px] font-bold">
+                                                        <XCircle className="h-3 w-3" /> Cancelled
+                                                    </span>
+                                                    {adm.cancellation_reason && (
+                                                        <p className="text-[10px] text-rose-600 text-right leading-relaxed" title={adm.cancellation_reason}>
+                                                            Reason: {adm.cancellation_reason}
+                                                        </p>
+                                                    )}
+                                                </div>
                                             ) : (
                                                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-500 rounded-lg text-[10px] font-bold">
                                                     <CheckCircle2 className="h-3 w-3" /> Discharged

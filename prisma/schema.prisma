@@ -2327,6 +2327,7 @@ model Expense {
   status         String    @default("Pending") // Pending, Approved, Paid, Rejected
   approved_by    String?
   notes          String?
+  receipt_key    String?   // S3 key for uploaded receipt/bill
   organizationId String
   created_at     DateTime  @default(now())
   updated_at     DateTime  @updatedAt

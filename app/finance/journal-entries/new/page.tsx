@@ -49,14 +49,22 @@ export default function NewJournalEntryPage() {
     { account_id: '', debit_amount: 0, credit_amount: 0, description: '' },
   ]);
 
+  const [orgId, setOrgId] = useState('');
+
   useEffect(() => {
-    loadAccounts();
+    fetch('/api/session')
+      .then(r => r.json())
+      .then(s => { if (s?.organization_id) setOrgId(s.organization_id); })
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (orgId) loadAccounts();
+  }, [orgId]);
 
   const loadAccounts = async () => {
     try {
-      const organizationId = localStorage.getItem('organizationId') || '';
-      const result = await getGLAccounts(organizationId);
+      const result = await getGLAccounts(orgId);
       if (result.success) {
         setAccounts(result.accounts as GLAccount[]);
       }
@@ -107,10 +115,8 @@ export default function NewJournalEntryPage() {
 
     setLoading(true);
     try {
-      const organizationId = localStorage.getItem('organizationId') || '';
-
       const result = await createJournalEntry({
-        organizationId,
+        organizationId: orgId,
         entry_date: new Date(formData.entry_date),
         entry_type: formData.entry_type,
         narration: formData.narration,

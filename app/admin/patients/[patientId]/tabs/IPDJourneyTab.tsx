@@ -69,6 +69,8 @@ export default function IPDJourneyTab({ admissions }: IPDJourneyTabProps) {
         const statusCls =
           statusNorm === 'admitted'
             ? 'bg-rose-50 text-rose-700 border-rose-200'
+            : statusNorm === 'cancelled'
+              ? 'bg-rose-50 text-rose-700 border-rose-200'
             : 'bg-emerald-50 text-emerald-700 border-emerald-200';
 
         const medicalNotes: any[] = admission.medical_notes || admission.medicalNotes || [];
@@ -120,6 +122,11 @@ export default function IPDJourneyTab({ admissions }: IPDJourneyTabProps) {
               <p className="text-sm font-semibold text-gray-700 mb-2">
                 {admission.diagnosis || 'No diagnosis recorded'}
               </p>
+              {statusNorm === 'cancelled' && admission.cancellation_reason && (
+                <p className="mb-2 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                  Cancellation Reason: {admission.cancellation_reason}
+                </p>
+              )}
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
                 <span>
                   Admitted: {fmtDate(admission.admission_date)} —{' '}

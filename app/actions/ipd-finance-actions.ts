@@ -4,7 +4,7 @@ import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
 import { createJournalEntry } from './gl-actions';
 import { accrueIPDDailyCharges } from '@/app/actions/ipd-actions';
-import { getPackageGSTRate } from '@/app/lib/gst';
+import { getPackageGSTRate, getRoomGSTRate } from '@/app/lib/gst';
 
 
 function serialize<T>(data: T): T {
@@ -693,6 +693,9 @@ export async function settleAndDischarge(data: {
             const roomRate = Number(ward.cost_per_day || 0);
             const nursingRate = Number(ward.nursing_charge || 0);
 
+            // GST: ICU/CCU/NICU exempt; other wards 5% if rent > ₹5,000/day
+            const roomTaxRate = getRoomGSTRate(ward.ward_type, roomRate);
+
             if (roomRate > 0 && roomDaysToPost > 0) {
                 await postChargeToIpdBill({
                     admission_id: data.admission_id,
@@ -700,6 +703,7 @@ export async function settleAndDischarge(data: {
                     description: `Room Charges (${roomDaysToPost}d x ₹${roomRate})`,
                     quantity: roomDaysToPost,
                     unit_price: roomRate,
+                    tax_rate: roomTaxRate,
                     service_category: 'Room',
                     hsn_sac_code: '996311',
                 });
@@ -711,6 +715,7 @@ export async function settleAndDischarge(data: {
                     description: `Nursing Charges (${roomDaysToPost}d x ₹${nursingRate})`,
                     quantity: roomDaysToPost,
                     unit_price: nursingRate,
+                    tax_rate: roomTaxRate,
                     service_category: 'Nursing',
                     hsn_sac_code: '999312',
                 });

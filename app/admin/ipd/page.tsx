@@ -20,7 +20,7 @@ export default function AdminIPDHub() {
     const [wards, setWards] = useState<any[]>([]);
     const [admissions, setAdmissions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [admissionFilter, setAdmissionFilter] = useState<'Admitted' | 'Discharged'>('Admitted');
+    const [admissionFilter, setAdmissionFilter] = useState<'Admitted' | 'Discharged' | 'Cancelled'>('Admitted');
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -45,6 +45,7 @@ export default function AdminIPDHub() {
         const map: Record<string, string> = {
             'Admitted': 'bg-blue-50 text-blue-700 border border-blue-200',
             'Discharged': 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+            'Cancelled': 'bg-rose-50 text-rose-700 border border-rose-200',
             'Transferred': 'bg-amber-50 text-amber-700 border border-amber-200',
         };
         return map[status] || 'bg-gray-100 text-gray-500';
@@ -145,11 +146,12 @@ export default function AdminIPDHub() {
                         <Filter className="h-4 w-4 text-gray-400" />
                         <select
                             value={admissionFilter}
-                            onChange={e => setAdmissionFilter(e.target.value as 'Admitted' | 'Discharged')}
+                            onChange={e => setAdmissionFilter(e.target.value as 'Admitted' | 'Discharged' | 'Cancelled')}
                             className="px-3 py-2 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-blue-500"
                         >
                             <option value="Admitted">Admitted</option>
                             <option value="Discharged">Discharged</option>
+                            <option value="Cancelled">Cancelled</option>
                         </select>
                     </div>
 
@@ -157,7 +159,11 @@ export default function AdminIPDHub() {
                     <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
                         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
                             <h3 className="text-sm font-bold text-gray-900">
-                                {admissionFilter === 'Admitted' ? 'Current Admissions' : 'Discharged Patients'}
+                                {admissionFilter === 'Admitted'
+                                    ? 'Current Admissions'
+                                    : admissionFilter === 'Cancelled'
+                                        ? 'Cancelled Admissions'
+                                        : 'Discharged Patients'}
                             </h3>
                             <span className="text-xs text-gray-400">{admissions.length} records</span>
                         </div>
@@ -188,7 +194,14 @@ export default function AdminIPDHub() {
                                                 {adm.wardName || 'N/A'}
                                                 <span className="block text-[10px] text-gray-400">{adm.bed_id || '-'}</span>
                                             </td>
-                                            <td className="px-4 py-3 text-gray-500 max-w-[150px] truncate">{adm.diagnosis || '-'}</td>
+                                            <td className="px-4 py-3 text-gray-500 max-w-[230px]">
+                                                <p className="truncate">{adm.diagnosis || '-'}</p>
+                                                {adm.status === 'Cancelled' && adm.cancellation_reason && (
+                                                    <p className="mt-1 text-[10px] leading-relaxed text-rose-600" title={adm.cancellation_reason}>
+                                                        Cancelled: {adm.cancellation_reason}
+                                                    </p>
+                                                )}
+                                            </td>
                                             <td className="px-4 py-3 text-gray-500">{adm.doctor_name || '-'}</td>
                                             <td className="px-4 py-3 text-gray-700 font-semibold">{adm.daysAdmitted || 0}</td>
                                             <td className="px-4 py-3">

@@ -2,9 +2,9 @@
 
 import React from "react";
 import { useEffect, useState } from "react";
-import { BookOpen, Building2, ChevronDown, ChevronRight, Loader2, TrendingDown } from "lucide-react";
+import { BookOpen, Building2, ChevronDown, ChevronRight, Loader2, ExternalLink, Calendar, Filter } from "lucide-react";
 import { AppShell } from "@/app/components/layout/AppShell";
-import { getVendors, getExpenses } from "@/app/actions/expense-actions";
+import { getVendors, getExpenses, getExpenseReceiptUrl } from "@/app/actions/expense-actions";
 
 const fmt = (n: number) =>
   n.toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
@@ -22,6 +22,8 @@ export default function VendorLedgerPage() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [selectedVendor, setSelectedVendor] = useState<number | "all">("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   useEffect(() => {
     load();
@@ -30,8 +32,12 @@ export default function VendorLedgerPage() {
   async function load() {
     setLoading(true);
     const [vRes, eRes] = await Promise.all([
-      getVendors(false), // all vendors including inactive
-      getExpenses({ limit: 500 }),
+      getVendors(false),
+      getExpenses({
+        limit: 2000,
+        from_date: fromDate || undefined,
+        to_date: toDate || undefined,
+      }),
     ]);
     if (vRes.success) setVendors(vRes.data);
     if (eRes.success) setExpenses(eRes.data);
@@ -46,9 +52,13 @@ export default function VendorLedgerPage() {
     return acc;
   }, {});
 
+  const unlinkedExpenses = expensesByVendor["__none__"] || [];
+
   const vendorRows = vendors.map((v: any) => {
     const exps = expensesByVendor[String(v.id)] ?? [];
-    const totalBilled = exps.reduce((s: number, e: any) => s + Number(e.total_amount ?? 0), 0);
+    const totalBilled = exps
+      .filter((e: any) => e.status !== "Rejected")
+      .reduce((s: number, e: any) => s + Number(e.total_amount ?? 0), 0);
     const totalPaid = exps
       .filter((e: any) => e.status === "Paid")
       .reduce((s: number, e: any) => s + Number(e.total_amount ?? 0), 0);
@@ -78,6 +88,11 @@ export default function VendorLedgerPage() {
       return next;
     });
   };
+
+  async function viewReceipt(expenseId: number) {
+    const res = await getExpenseReceiptUrl(expenseId);
+    if (res.success && res.url) window.open(res.url, "_blank");
+  }
 
   return (
     <AppShell
@@ -114,23 +129,44 @@ export default function VendorLedgerPage() {
             </div>
           </div>
 
-          {/* Vendor filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Vendor:</span>
-            <select
-              value={selectedVendor}
-              onChange={(e) =>
-                setSelectedVendor(e.target.value === "all" ? "all" : Number(e.target.value))
-              }
-              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Vendors</option>
-              {vendors.map((v: any) => (
-                <option key={v.id} value={v.id}>
-                  {v.vendor_name} ({v.vendor_code})
-                </option>
-              ))}
-            </select>
+          {/* Filters */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-gray-400" />
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Vendor:</span>
+              <select
+                value={selectedVendor}
+                onChange={(e) =>
+                  setSelectedVendor(e.target.value === "all" ? "all" : Number(e.target.value))
+                }
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Vendors</option>
+                {vendors.map((v: any) => (
+                  <option key={v.id} value={v.id}>
+                    {v.vendor_name} ({v.vendor_code})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-gray-400" />
+              <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <span className="text-xs text-gray-400">to</span>
+              <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <button onClick={load}
+                className="px-3 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-100 transition">
+                Apply
+              </button>
+              {(fromDate || toDate) && (
+                <button onClick={() => { setFromDate(""); setToDate(""); setTimeout(load, 0); }}
+                  className="px-3 py-1.5 bg-gray-50 text-gray-500 text-xs font-bold rounded-lg hover:bg-gray-100 transition">
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Ledger table */}
@@ -181,6 +217,9 @@ export default function VendorLedgerPage() {
                               {v.contact_person && (
                                 <div className="text-[11px] text-gray-400">{v.contact_person}</div>
                               )}
+                              {v.gst_number && (
+                                <div className="text-[10px] text-gray-400 font-mono">GSTIN: {v.gst_number}</div>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -219,14 +258,26 @@ export default function VendorLedgerPage() {
                                 {e.payment_date
                                   ? new Date(e.payment_date).toLocaleDateString("en-IN")
                                   : new Date(e.created_at).toLocaleDateString("en-IN")}
+                                {e.reference_no && ` · Ref: ${e.reference_no}`}
+                                {e.payment_method && ` · ${e.payment_method}`}
                               </div>
                             </td>
                             <td className="px-4 py-2 text-right">
-                              <span
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${STATUS_BADGE[e.status] ?? "bg-gray-100 text-gray-600"}`}
-                              >
-                                {e.status}
-                              </span>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${STATUS_BADGE[e.status] ?? "bg-gray-100 text-gray-600"}`}
+                                >
+                                  {e.status}
+                                </span>
+                                {e.receipt_key && (
+                                  <button
+                                    onClick={(ev) => { ev.stopPropagation(); viewReceipt(e.id); }}
+                                    className="p-1 text-emerald-500 hover:bg-emerald-50 rounded" title="View Receipt"
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
                             </td>
                             <td className="px-4 py-2 text-right text-gray-700">
                               {fmt(Number(e.total_amount))}
@@ -265,6 +316,48 @@ export default function VendorLedgerPage() {
               )}
             </table>
           </div>
+
+          {/* Unlinked Expenses (no vendor) */}
+          {unlinkedExpenses.length > 0 && selectedVendor === "all" && (
+            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+              <div className="px-4 py-3 bg-amber-50 border-b border-amber-100">
+                <h3 className="text-xs font-bold text-amber-700 uppercase tracking-wider">
+                  Expenses Without Vendor ({unlinkedExpenses.length})
+                </h3>
+                <p className="text-[10px] text-amber-600 mt-0.5">These expenses are not linked to any vendor</p>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-[11px] uppercase tracking-wider text-gray-500 font-bold">
+                  <tr>
+                    <th className="text-left px-4 py-2">Expense #</th>
+                    <th className="text-left px-4 py-2">Description</th>
+                    <th className="text-left px-4 py-2">Category</th>
+                    <th className="text-right px-4 py-2">Amount</th>
+                    <th className="text-center px-4 py-2">Status</th>
+                    <th className="text-left px-4 py-2">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {unlinkedExpenses.map((e: any) => (
+                    <tr key={e.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-2 font-mono text-xs text-gray-500">{e.expense_number}</td>
+                      <td className="px-4 py-2 text-gray-700 max-w-[200px] truncate">{e.description}</td>
+                      <td className="px-4 py-2 text-gray-500">{e.category?.name || "—"}</td>
+                      <td className="px-4 py-2 text-right font-semibold">{fmt(Number(e.total_amount))}</td>
+                      <td className="px-4 py-2 text-center">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${STATUS_BADGE[e.status] ?? "bg-gray-100 text-gray-600"}`}>
+                          {e.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-gray-500 text-xs">
+                        {new Date(e.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </AppShell>

@@ -19,6 +19,42 @@ function serialize<T>(data: T): T {
   );
 }
 
+function parseCancellationReason(details?: string | null): string | null {
+  if (!details) return null;
+
+  try {
+    const parsed = JSON.parse(details);
+    return typeof parsed.reason === "string" && parsed.reason.trim()
+      ? parsed.reason.trim()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function getAdmissionCancellationReasons(db: any, admissionIds: string[]) {
+  const reasons = new Map<string, string>();
+  if (admissionIds.length === 0) return reasons;
+
+  const logs = await db.system_audit_logs.findMany({
+    where: {
+      action: "CANCEL_ADMISSION",
+      entity_type: "admission",
+      entity_id: { in: admissionIds },
+    },
+    orderBy: { created_at: "desc" },
+    select: { entity_id: true, details: true },
+  });
+
+  logs.forEach((log: any) => {
+    if (!log.entity_id || reasons.has(log.entity_id)) return;
+    const reason = parseCancellationReason(log.details);
+    if (reason) reasons.set(log.entity_id, reason);
+  });
+
+  return reasons;
+}
+
 
 export async function getWardsWithBeds() {
   try {
@@ -303,7 +339,13 @@ export async function getIPDAdmissions(statusFilter?: string) {
     });
 
     const patientIds = Array.from(new Set(admissions.map((a: any) => a.patient_id).filter(Boolean))) as string[];
-    const balances = await getPatientBalances(patientIds);
+    const cancelledAdmissionIds = admissions
+      .filter((a: any) => a.status === "Cancelled")
+      .map((a: any) => a.admission_id);
+    const [balances, cancellationReasons] = await Promise.all([
+      getPatientBalances(patientIds),
+      getAdmissionCancellationReasons(db, cancelledAdmissionIds),
+    ]);
 
     const enriched = admissions.map((a: any) => {
       const daysAdmitted = Math.ceil(
@@ -322,6 +364,7 @@ export async function getIPDAdmissions(statusFilter?: string) {
           daysAdmitted *
           Number(a.ward?.cost_per_day || a.bed?.wards?.cost_per_day || 0),
         totalBalance: balances[a.patient_id]?.totalBalance || 0,
+        cancellation_reason: cancellationReasons.get(a.admission_id) || null,
       };
     });
 
@@ -504,7 +547,19 @@ export async function getAdmissionDetail(admissionId: string) {
 
     if (!admission) return { success: false, error: "Admission not found" };
 
-    return { success: true, data: serialize(admission) };
+    const cancellationReasons = await getAdmissionCancellationReasons(
+      db,
+      admission.status === "Cancelled" ? [admission.admission_id] : [],
+    );
+
+    return {
+      success: true,
+      data: serialize({
+        ...admission,
+        cancellation_reason:
+          cancellationReasons.get(admission.admission_id) || null,
+      }),
+    };
   } catch (error: any) {
     console.error("getAdmissionDetail error:", error);
     return { success: false, error: error.message };
@@ -1177,7 +1232,19 @@ export async function getAdmissionFullDetails(admissionId: string) {
 
     if (!admission) return { success: false, error: "Not found" };
 
-    return { success: true, data: serialize(admission) };
+    const cancellationReasons = await getAdmissionCancellationReasons(
+      db,
+      admission.status === "Cancelled" ? [admission.admission_id] : [],
+    );
+
+    return {
+      success: true,
+      data: serialize({
+        ...admission,
+        cancellation_reason:
+          cancellationReasons.get(admission.admission_id) || null,
+      }),
+    };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -1525,6 +1592,11 @@ export async function markBedAvailable(bedId: string) {
 export async function cancelAdmission(admissionId: string, reason: string) {
   try {
     const { db, organizationId } = await requireTenantContext();
+    const cancellationReason = reason?.trim();
+
+    if (!cancellationReason) {
+      return { success: false, error: 'Cancellation reason is required' };
+    }
 
     const admission = await db.admissions.findUnique({
       where: { admission_id: admissionId },
@@ -1565,13 +1637,15 @@ export async function cancelAdmission(admissionId: string, reason: string) {
           module: 'ipd',
           entity_type: 'admission',
           entity_id: admissionId,
-          details: JSON.stringify({ reason, bed_id: admission.bed_id }),
+          details: JSON.stringify({ reason: cancellationReason, bed_id: admission.bed_id }),
           organizationId,
         },
       });
     });
 
     revalidatePath('/ipd/admissions-hub');
+    revalidatePath('/ipd');
+    revalidatePath('/admin/ipd');
     revalidatePath('/ipd/bed-matrix');
     return { success: true };
   } catch (error: any) {

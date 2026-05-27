@@ -104,6 +104,7 @@ export default function ReceptionPage() {
     } | null>(null);
     const [isLookingUpInsurance, setIsLookingUpInsurance] = useState(false);
     const [insuranceFoundAlert, setInsuranceFoundAlert] = useState<string | null>(null);
+    const [allowDuplicate, setAllowDuplicate] = useState(false);
 
     // Load departments, corporates, TPA providers on mount
     useEffect(() => {
@@ -225,6 +226,7 @@ export default function ReceptionPage() {
                 setDuplicates([]);
                 setShowDuplicateWarning(false);
                 setInsuranceFoundAlert(null);
+                setAllowDuplicate(false);
             }
         }
     }, [checkDuplicatePatient]);
@@ -240,7 +242,10 @@ export default function ReceptionPage() {
         event.preventDefault();
         setIsSubmitting(true);
         const formData = new FormData(event.currentTarget);
-        const result = await registerPatient(formData);
+        if (allowDuplicate) {
+            formData.set('allowDuplicate', 'true');
+        }
+        const result = await registerPatient(formData) as any;
 
         if (result.success) {
             setSuccessData({
@@ -252,13 +257,25 @@ export default function ReceptionPage() {
             });
             setDuplicates([]);
             setShowDuplicateWarning(false);
+            setAllowDuplicate(false);
             (event.target as HTMLFormElement).reset();
             setDobValue('');
             setAgeValue('');
             setPatientType('cash');
             setSelectedCorporate(null);
-            // Force Next.js to refetch server data so patient list updates
             router.refresh();
+        } else if (result.duplicate) {
+            // Server blocked duplicate — show warning modal
+            toast.error('Patient already registered with this phone number');
+            setShowDuplicateWarning(true);
+            // Re-fetch duplicates to show in modal
+            const phone = formData.get('phone') as string;
+            if (phone) {
+                const dupResult = await checkDuplicatePatient(phone);
+                if (dupResult.success && dupResult.data.length > 0) {
+                    setDuplicates(dupResult.data);
+                }
+            }
         } else {
             toast.error(result.error || 'Registration failed');
         }
@@ -880,10 +897,14 @@ export default function ReceptionPage() {
                         )}
                         <button
                             type="button"
-                            onClick={() => setShowDuplicateWarning(false)}
+                            onClick={() => {
+                                setAllowDuplicate(true);
+                                setShowDuplicateWarning(false);
+                                toast.info('Duplicate override enabled — click "Register Patient" to proceed');
+                            }}
                             className="ml-auto flex items-center gap-1.5 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl transition-colors"
                         >
-                            <UserPlus className="h-3.5 w-3.5" /> Register as New Patient
+                            <UserPlus className="h-3.5 w-3.5" /> Register as New Patient Anyway
                         </button>
                     </div>
                 </div>

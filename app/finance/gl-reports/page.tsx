@@ -75,10 +75,15 @@ export default function GLReportsPage() {
   // Ledger account selector
   const [glAccounts, setGlAccounts] = useState<any[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [orgId, setOrgId] = useState('');
 
-  const orgId = typeof window !== 'undefined'
-    ? localStorage.getItem('organizationId') || ''
-    : '';
+  // Fetch organization ID from session
+  useEffect(() => {
+    fetch('/api/session')
+      .then(r => r.json())
+      .then(s => { if (s?.organization_id) setOrgId(s.organization_id); })
+      .catch(() => {});
+  }, []);
 
   // Load GL accounts for ledger dropdown once
   useEffect(() => {

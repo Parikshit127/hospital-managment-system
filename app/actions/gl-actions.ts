@@ -808,8 +808,16 @@ export async function getTrialBalance(organizationId: string, filters?: {
     let totalCredit = 0;
 
     const trialBalanceData = balances.map(({ account, balance }: any) => {
-      const debit = account.normal_balance === 'Debit' && balance > 0 ? balance : 0;
-      const credit = account.normal_balance === 'Credit' && balance > 0 ? balance : 0;
+      // Positive balance on normal side; negative balance flips to opposite side
+      let debit = 0;
+      let credit = 0;
+      if (account.normal_balance === 'Debit') {
+        if (balance >= 0) debit = balance;
+        else credit = Math.abs(balance);
+      } else {
+        if (balance >= 0) credit = balance;
+        else debit = Math.abs(balance);
+      }
 
       totalDebit += debit;
       totalCredit += credit;
@@ -905,8 +913,9 @@ export async function getBalanceSheet(organizationId: string, filters?: {
       });
     }
 
+    // Assets: positive = normal (Debit). Liabilities/Equity: show absolute value (Credit-normal accounts may compute negative).
     const totalAssets = assets.reduce((sum: number, a: any) => sum + a.balance, 0);
-    const totalLiabilities = liabilities.reduce((sum: number, a: any) => sum + a.balance, 0);
+    const totalLiabilities = liabilities.reduce((sum: number, a: any) => sum + Math.abs(a.balance), 0);
     const totalEquity = equity.reduce((sum: number, a: any) => sum + a.balance, 0);
 
     return {
@@ -973,9 +982,10 @@ export async function getProfitLossStatement(organizationId: string, filters?: {
       }
 
       if (account.account_type === 'Revenue') {
-        revenueAccounts.push({ ...account, amount: total });
+        // Revenue amounts: positive = earned, negative = reversed. Show absolute for display.
+        revenueAccounts.push({ ...account, amount: Math.abs(total) });
       } else {
-        expenseAccounts.push({ ...account, amount: total });
+        expenseAccounts.push({ ...account, amount: Math.abs(total) });
       }
     }
 

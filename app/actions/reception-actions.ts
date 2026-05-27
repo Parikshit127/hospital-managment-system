@@ -806,17 +806,23 @@ export async function rescheduleAppointment(appointmentId: string, newDate: stri
 export async function cancelAppointment(appointmentId: string, reason: string) {
     try {
         const { db } = await requireTenantContext();
+        const cancellationReason = reason?.trim();
+
+        if (!cancellationReason) {
+            return { success: false, error: 'Cancellation reason is required' };
+        }
 
         await db.appointments.update({
             where: { appointment_id: appointmentId },
             data: {
                 status: 'Cancelled',
-                cancellation_reason: reason,
+                cancellation_reason: cancellationReason,
             },
         });
 
         revalidatePath('/reception/appointments');
         revalidatePath('/reception');
+        revalidatePath('/reception/patient/[id]', 'page');
         return { success: true };
     } catch (error) {
         console.error('Cancel Appointment Error:', error);

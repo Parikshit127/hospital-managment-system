@@ -76,7 +76,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   er_staff: ["er.view", "ipd.view", "lab.view", "pharmacy.view", "reports.view"],
 };
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Route handlers apply their own auth checks for these endpoints.

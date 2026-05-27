@@ -285,7 +285,9 @@ export default function PatientProfilePage() {
         ...(data.appointments || []).map((a: any) => ({
             type: 'appointment',
             title: `${a.status} — ${a.department || 'General'}`,
-            subtitle: `${a.doctor_name || 'Doctor'} · ${a.reason_for_visit || 'Consultation'} · ${a.appointment_id}`,
+            subtitle: a.status === 'Cancelled' && a.cancellation_reason
+                ? `${a.doctor_name || 'Doctor'} · Cancelled: ${a.cancellation_reason} · ${a.appointment_id}`
+                : `${a.doctor_name || 'Doctor'} · ${a.reason_for_visit || 'Consultation'} · ${a.appointment_id}`,
             date: formatDate(a.appointment_date),
             sortDate: new Date(a.appointment_date),
             color: a.status === 'Completed' ? 'bg-emerald-500' : a.status === 'Cancelled' ? 'bg-red-400' : 'bg-blue-500',
@@ -475,7 +477,14 @@ export default function PatientProfilePage() {
                                         <td className="px-4 py-3 text-xs text-gray-500">{formatDate(appt.appointment_date)}</td>
                                         <td className="px-4 py-3 text-gray-700">{appt.doctor_name || '-'}</td>
                                         <td className="px-4 py-3 text-gray-500">{appt.department || '-'}</td>
-                                        <td className="px-4 py-3 text-gray-500 text-xs max-w-[200px] truncate">{appt.reason_for_visit || '-'}</td>
+                                        <td className="px-4 py-3 text-gray-500 text-xs max-w-[260px]">
+                                            <p className="truncate">{appt.reason_for_visit || '-'}</p>
+                                            {appt.status === 'Cancelled' && appt.cancellation_reason && (
+                                                <p className="mt-1 text-[10px] leading-relaxed text-rose-600" title={appt.cancellation_reason}>
+                                                    Cancelled: {appt.cancellation_reason}
+                                                </p>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-3">
                                             <span className={`inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full border ${getStatusColor(appt.status)}`}>
                                                 {appt.status}

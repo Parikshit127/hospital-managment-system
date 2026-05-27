@@ -224,11 +224,19 @@ export default function AppointmentsPage() {
 
     const handleCancel = async () => {
         if (!cancelTarget) return;
-        await cancelAppointment(cancelTarget, cancelReason);
-        setCancelTarget(null);
-        setCancelReason('');
-        toast.success('Appointment cancelled');
-        loadData();
+        if (!cancelReason.trim()) {
+            toast.error('Cancellation reason is required');
+            return;
+        }
+        const result = await cancelAppointment(cancelTarget, cancelReason);
+        if (result.success) {
+            setCancelTarget(null);
+            setCancelReason('');
+            toast.success('Appointment cancelled');
+            loadData();
+        } else {
+            toast.error(result.error || 'Failed to cancel appointment');
+        }
     };
 
     const handleReschedule = async () => {
@@ -646,8 +654,8 @@ export default function AppointmentsPage() {
                                     className="flex-1 py-2 bg-gray-100 text-gray-600 text-sm font-bold rounded-xl">
                                     Keep
                                 </button>
-                                <button onClick={handleCancel}
-                                    className="flex-1 py-2 bg-red-500 text-white text-sm font-bold rounded-xl">
+                                <button onClick={handleCancel} disabled={!cancelReason.trim()}
+                                    className="flex-1 py-2 bg-red-500 disabled:opacity-50 text-white text-sm font-bold rounded-xl">
                                     Cancel It
                                 </button>
                             </div>

@@ -3,6 +3,7 @@
 import { postExpenseToGL } from './gl-actions';
 import { syncExpenseToBudget } from './budget-actions';
 import { sendExpenseApprovedEmail, sendExpenseRejectedEmail, sendExpensePaidEmail } from '@/backend/email';
+import { getSignedDownloadUrl } from '@/app/lib/s3';
 
 import { requireTenantContext } from '@/backend/tenant';
 
@@ -181,7 +182,7 @@ export async function getExpenses(filters?: {
                 vendor: { select: { vendor_name: true, vendor_code: true } },
             },
             orderBy: { created_at: 'desc' },
-            take: filters?.limit || 100,
+            take: filters?.limit || 500,
         });
         return { success: true, data: serialize(expenses) };
     } catch (error: any) {
@@ -199,6 +200,7 @@ export async function createExpense(data: {
     payment_date?: string;
     reference_no?: string;
     notes?: string;
+    receipt_key?: string;
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
@@ -218,6 +220,7 @@ export async function createExpense(data: {
                 payment_date: data.payment_date ? new Date(data.payment_date) : null,
                 reference_no: data.reference_no || null,
                 notes: data.notes || null,
+                receipt_key: data.receipt_key || null,
                 status: 'Pending',
             },
         });
@@ -369,6 +372,34 @@ export async function rejectExpense(id: number, reason: string) {
         }
 
         return { success: true, data: serialize(expense) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function attachReceiptToExpense(expenseId: number, receiptKey: string) {
+    try {
+        const { db } = await requireTenantContext();
+        const expense = await db.expense.update({
+            where: { id: expenseId },
+            data: { receipt_key: receiptKey },
+        });
+        return { success: true, data: serialize(expense) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function getExpenseReceiptUrl(expenseId: number) {
+    try {
+        const { db } = await requireTenantContext();
+        const expense = await db.expense.findUnique({
+            where: { id: expenseId },
+            select: { receipt_key: true },
+        });
+        if (!expense?.receipt_key) return { success: false, error: 'No receipt attached' };
+        const url = await getSignedDownloadUrl(expense.receipt_key);
+        return { success: true, url };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
