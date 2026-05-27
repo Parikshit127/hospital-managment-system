@@ -25,11 +25,11 @@ async function main() {
     // =============================================
     const org = await prisma.organization.upsert({
         where: { id: DEFAULT_ORG_ID },
-        update: { name: 'Avani Hospital', slug: 'avani', code: 'AVN' },
+        update: { name: 'Axten Hospitals', slug: 'axten', code: 'AXT' },
         create: {
             id: DEFAULT_ORG_ID,
-            name: 'Avani Hospital',
-            slug: 'avani',
+            name: 'Axten Hospitals',
+            slug: 'axten',
             code: 'AVN',
             address: '123 Health Avenue, Medical District',
             phone: '+91 80000 00000',

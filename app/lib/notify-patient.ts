@@ -102,7 +102,7 @@ interface PatientContact {
 export async function notifyPatient(
     contact: PatientContact,
     event: NotifyEvent,
-    hospitalName: string = 'Avani Hospital',
+    hospitalName: string = 'Axten Hospitals',
     organizationId?: string
 ): Promise<void> {
     const promises: Promise<void>[] = [];

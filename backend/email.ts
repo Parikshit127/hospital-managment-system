@@ -289,7 +289,7 @@ export async function sendLabReportEmail(to: string, patientName: string, testNa
 /**
  * Template: Discharge Summary
  */
-export async function sendDischargeEmail(to: string, patientName: string, doctorName: string, hospitalName: string = 'Avani Hospital', organizationId?: string) {
+export async function sendDischargeEmail(to: string, patientName: string, doctorName: string, hospitalName: string = 'Axten Hospitals', organizationId?: string) {
     const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
@@ -312,7 +312,7 @@ export async function sendDischargeEmail(to: string, patientName: string, doctor
 /**
  * Template: Invoice / Billing Notification
  */
-export async function sendInvoiceEmail(to: string, patientName: string, invoiceNumber: string, amount: string, hospitalName: string = 'Avani Hospital', organizationId?: string) {
+export async function sendInvoiceEmail(to: string, patientName: string, invoiceNumber: string, amount: string, hospitalName: string = 'Axten Hospitals', organizationId?: string) {
     const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
