@@ -850,12 +850,27 @@ export async function rescheduleAppointment(appointmentId: string, newDate: stri
 
 export async function cancelAppointment(appointmentId: string, reason: string) {
     try {
-        const { db } = await requireTenantContext();
-        const cancellationReason = reason?.trim();
+        const { db, session, organizationId } = await requireTenantContext();
+        const cancellationReason = (reason || '').trim();
 
         if (!cancellationReason) {
-            return { success: false, error: 'Cancellation reason is required' };
+            return { success: false, error: 'Cancellation reason is required.' };
         }
+        if (cancellationReason.length < 10) {
+            return { success: false, error: 'Cancellation reason must be at least 10 characters.' };
+        }
+
+        // Prevent re-cancelling an already-cancelled appointment
+        const existing = await db.appointments.findUnique({
+            where: { appointment_id: appointmentId },
+            select: { status: true },
+        });
+        if (!existing) return { success: false, error: 'Appointment not found.' };
+        if (existing.status === 'Cancelled') {
+            return { success: false, error: 'Appointment is already cancelled.' };
+        }
+
+        const actor = (session as any)?.username || (session as any)?.name || (session as any)?.id || 'system';
 
         await db.appointments.update({
             where: { appointment_id: appointmentId },
@@ -865,13 +880,29 @@ export async function cancelAppointment(appointmentId: string, reason: string) {
             },
         });
 
+        await db.system_audit_logs.create({
+            data: {
+                action: 'CANCEL_APPOINTMENT',
+                module: 'reception',
+                entity_type: 'appointment',
+                entity_id: appointmentId,
+                details: JSON.stringify({
+                    reason: cancellationReason,
+                    cancelled_by: actor,
+                    cancelled_at: new Date().toISOString(),
+                    previous_status: existing.status,
+                }),
+                organizationId,
+            },
+        });
+
         revalidatePath('/reception/appointments');
         revalidatePath('/reception');
         revalidatePath('/reception/patient/[id]', 'page');
         return { success: true };
-    } catch (error) {
+    } catch (error: any) {
         console.error('Cancel Appointment Error:', error);
-        return { success: false, error: 'Failed to cancel appointment' };
+        return { success: false, error: error?.message || 'Failed to cancel appointment' };
     }
 }
 

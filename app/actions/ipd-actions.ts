@@ -1616,10 +1616,13 @@ export async function markBedAvailable(bedId: string) {
 export async function cancelAdmission(admissionId: string, reason: string) {
   try {
     const { db, organizationId } = await requireTenantContext();
-    const cancellationReason = reason?.trim();
+    const cancellationReason = (reason || '').trim();
 
     if (!cancellationReason) {
-      return { success: false, error: 'Cancellation reason is required' };
+      return { success: false, error: 'Cancellation reason is required.' };
+    }
+    if (cancellationReason.length < 10) {
+      return { success: false, error: 'Cancellation reason must be at least 10 characters.' };
     }
 
     const admission = await db.admissions.findUnique({
