@@ -210,14 +210,20 @@ export default function AdminPatientDetailsPage() {
             className="flex items-center gap-2 px-3 py-1.5 bg-white border border-emerald-200 text-emerald-700 text-[10px] font-bold rounded-lg hover:bg-emerald-50 disabled:opacity-50">
             <Pencil className="h-3 w-3" /> Edit
           </button>
-          <button onClick={handleArchive} disabled={archiving || deleting}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-500 text-[10px] font-bold rounded-lg hover:bg-gray-50 disabled:opacity-50">
-            <Clock className="h-3 w-3" /> {archiving ? 'Archiving…' : 'Archive'}
-          </button>
-          <button onClick={handleDelete} disabled={archiving || deleting}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-red-200 text-red-500 text-[10px] font-bold rounded-lg hover:bg-red-50 disabled:opacity-50">
-            <Trash2 className="h-3 w-3" /> {deleting ? 'Deleting…' : 'Delete Mistake'}
-          </button>
+          {data?.currentUserRole === 'admin' && (
+            <>
+              <button onClick={handleArchive} disabled={archiving || deleting}
+                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-500 text-[10px] font-bold rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                title="Admin-only: archive this patient">
+                <Clock className="h-3 w-3" /> {archiving ? 'Archiving…' : 'Archive'}
+              </button>
+              <button onClick={handleDelete} disabled={archiving || deleting}
+                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-red-200 text-red-500 text-[10px] font-bold rounded-lg hover:bg-red-50 disabled:opacity-50"
+                title="Admin-only: permanently delete a mistakenly-registered patient">
+                <Trash2 className="h-3 w-3" /> {deleting ? 'Deleting…' : 'Delete Mistake'}
+              </button>
+            </>
+          )}
         </>
       )}
     </div>

@@ -1465,7 +1465,13 @@ export async function getQueueWithSLA() {
 
 export async function archivePatient(patientId: string) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, session } = await requireTenantContext();
+
+        // Admin-only operation
+        if (session.role !== 'admin') {
+            return { success: false, error: 'Only admins can archive patient records.' };
+        }
+
         await db.oPD_REG.update({
             where: { patient_id: patientId },
             data: { is_archived: true, archived_at: new Date() },
@@ -1479,11 +1485,16 @@ export async function archivePatient(patientId: string) {
 
 /**
  * Permanently delete a patient record if created by mistake.
- * SAFETY CHECK: Blocks deletion if any clinical or financial records exist.
+ * Admin-only. SAFETY CHECK: Blocks deletion if any clinical or financial records exist.
  */
 export async function hardDeletePatient(patientId: string) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, session, organizationId } = await requireTenantContext();
+
+        // Admin-only operation — destructive, irreversible
+        if (session.role !== 'admin') {
+            return { success: false, error: 'Only admins can permanently delete a patient record.' };
+        }
 
         // 1. Check for primary dependencies
         const [

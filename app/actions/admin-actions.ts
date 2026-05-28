@@ -1004,7 +1004,7 @@ export async function getAdminPatientStats() {
 // Get comprehensive patient details for admin detail view
 export async function getAdminPatientFullDetails(patientId: string) {
   try {
-    const { db } = await requireTenantContext();
+    const { db, session } = await requireTenantContext();
 
     const [
       patient,
@@ -1184,6 +1184,7 @@ export async function getAdminPatientFullDetails(patientId: string) {
           totalDeposits,
           activeAdmission: !!activeAdmission,
         },
+        currentUserRole: session.role,
       },
     };
   } catch (error: any) {

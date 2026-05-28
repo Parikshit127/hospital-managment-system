@@ -7,6 +7,7 @@ import { usePullToRefresh } from '@/app/lib/hooks/usePullToRefresh';
 import { requestVideoCall } from '@/app/actions/video-call-actions';
 import { getActiveDoctors } from '@/app/actions/doctor-list-actions';
 import { useToast } from '@/app/components/ui/Toast';
+import { formatDoctorName } from '@/app/lib/format-name';
 import Link from 'next/link';
 
 function getGreeting() {
@@ -104,7 +105,7 @@ function DoctorSelectionModal({ isOpen, onClose, onSelect, loading }: any) {
                             className="w-full text-left p-4 rounded-2xl border border-gray-100 hover:border-emerald-500 hover:bg-emerald-50/30 transition-all group flex items-center justify-between"
                         >
                             <div>
-                                <p className="font-black text-gray-900 group-hover:text-emerald-700">Dr. {doc.name}</p>
+                                <p className="font-black text-gray-900 group-hover:text-emerald-700">{formatDoctorName(doc.name)}</p>
                                 <p className="text-xs text-gray-500 font-bold uppercase">{doc.specialty || 'General'}</p>
                             </div>
                             <div className="text-right">
@@ -186,7 +187,7 @@ export default function PatientDashboard() {
                         <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest mb-2">Next Appointment</p>
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <div>
-                                <h3 className="text-xl font-black">Dr. {nextAppt.doctor_name || nextAppt.doctor_id}</h3>
+                                <h3 className="text-xl font-black">{formatDoctorName(nextAppt.doctor_name || nextAppt.doctor_id)}</h3>
                                 <p className="text-emerald-100 font-medium mt-1">{nextAppt.department || 'General'}</p>
                             </div>
                             <div className="sm:text-right">
@@ -279,10 +280,10 @@ export default function PatientDashboard() {
                         const res = await requestVideoCall({
                             patientId: data.patient.patient_id,
                             doctorId: doctor.id,
-                            reason: `Video consultation request for Dr. ${doctor.name}`
+                            reason: `Video consultation request for ${formatDoctorName(doctor.name)}`
                         });
                         if (res.success) {
-                            toast.success(`Request sent to Dr. ${doctor.name} successfully!`);
+                            toast.success(`Request sent to ${formatDoctorName(doctor.name)} successfully!`);
                             setShowDoctorModal(false);
                             refresh();
                         } else {
@@ -340,7 +341,7 @@ export default function PatientDashboard() {
                             <div key={app.id || app.appointment_id} className="p-3 rounded-xl border border-gray-100 bg-gray-50 flex justify-between items-center">
                                 <div>
                                     <p className="text-sm font-bold text-gray-900">{new Date(app.appointment_date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</p>
-                                    <p className="text-xs text-indigo-600 font-bold mt-0.5">Dr. {app.doctor_name || app.doctor_id} &middot; {app.department || 'General'}</p>
+                                    <p className="text-xs text-indigo-600 font-bold mt-0.5">{formatDoctorName(app.doctor_name || app.doctor_id)} &middot; {app.department || 'General'}</p>
                                 </div>
                                 <span className="text-xs font-bold text-gray-500 bg-white px-2 py-1 rounded-lg border border-gray-200">
                                     {new Date(app.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
