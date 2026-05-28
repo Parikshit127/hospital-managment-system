@@ -135,7 +135,7 @@ export async function getApprovalQueue(filter: ApprovalFilter = {}) {
     // Refunds: status = Pending
     const refundsRaw =
       !filter.type || filter.type === "refund"
-        ? await db.refunds.findMany({
+        ? await db.refund.findMany({
             where: { organizationId, status: "Pending" },
             orderBy: { created_at: "desc" },
             take: limit,
@@ -331,8 +331,8 @@ export async function getApprovalKPIs() {
 
     const [refundCount, refundAgg, cnCount, cnAgg, woCount, woAgg, postedCount, postedAgg, expCount, expAgg] =
       await Promise.all([
-        db.refunds.count({ where: { organizationId, status: "Pending" } }),
-        db.refunds.aggregate({
+        db.refund.count({ where: { organizationId, status: "Pending" } }),
+        db.refund.aggregate({
           where: { organizationId, status: "Pending" },
           _sum: { amount: true },
         }),
@@ -447,7 +447,7 @@ export async function rejectItem(input: {
 async function approveRefund(refundId: number, comment?: string) {
   try {
     const { db, session } = await requireTenantContext();
-    const refund = await db.refunds.findUnique({ where: { id: refundId } });
+    const refund = await db.refund.findUnique({ where: { id: refundId } });
     if (!refund) return { success: false, error: "Refund not found" };
     if (refund.status !== "Pending") {
       return { success: false, error: `Cannot approve refund in status ${refund.status}` };
@@ -461,7 +461,7 @@ async function approveRefund(refundId: number, comment?: string) {
       };
     }
 
-    const updated = await db.refunds.update({
+    const updated = await db.refund.update({
       where: { id: refundId },
       data: { status: "Approved", processed_by: session.username ?? refund.processed_by },
     });
@@ -485,7 +485,7 @@ async function approveRefund(refundId: number, comment?: string) {
 async function rejectRefund(refundId: number, reason: string) {
   try {
     const { db, session } = await requireTenantContext();
-    const refund = await db.refunds.findUnique({ where: { id: refundId } });
+    const refund = await db.refund.findUnique({ where: { id: refundId } });
     if (!refund) return { success: false, error: "Refund not found" };
     if (refund.status !== "Pending") {
       return { success: false, error: `Cannot reject refund in status ${refund.status}` };
@@ -498,7 +498,7 @@ async function rejectRefund(refundId: number, reason: string) {
       };
     }
 
-    const updated = await db.refunds.update({
+    const updated = await db.refund.update({
       where: { id: refundId },
       data: { status: "Rejected" },
     });
