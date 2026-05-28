@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, Suspense } from "react";
+import React, { useEffect, useRef, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ClipboardList, Loader2, Plus, Check, X, ArrowRight } from "lucide-react";
@@ -422,20 +422,42 @@ function SearchPicker({
   const [results, setResults] = useState<Array<{ value: string; display: string; sub?: string }>>([]);
   const [searching, setSearching] = useState(false);
   const [open, setOpen] = useState(false);
+  const [err, setErr] = useState<string>("");
+
+  // Keep latest fetcher in a ref so the search effect doesn't re-fire when
+  // the parent re-renders (inline arrow fetchers get a new identity each
+  // render — without this, typing during any parent state change would
+  // restart the debounce and the dropdown could appear stuck on "Searching…").
+  const fetcherRef = useRef(fetcher);
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+  }, [fetcher]);
 
   useEffect(() => {
+    setErr("");
     if (!open || query.trim().length < 2) {
       setResults([]);
+      setSearching(false);
       return;
     }
     setSearching(true);
+    let cancelled = false;
     const t = setTimeout(async () => {
-      const r = await fetcher(query.trim());
-      setResults(r);
-      setSearching(false);
+      try {
+        const r = await fetcherRef.current(query.trim());
+        if (cancelled) return;
+        setResults(Array.isArray(r) ? r : []);
+      } catch (e: any) {
+        if (cancelled) return;
+        setResults([]);
+        setErr(e?.message || "Search failed");
+        console.error("[SearchPicker] fetcher error:", e);
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
     }, 200);
-    return () => clearTimeout(t);
-  }, [query, open, fetcher]);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [query, open]); // Intentionally NOT [fetcher] — see ref above
 
   if (selectedLabel) {
     return (
@@ -451,6 +473,8 @@ function SearchPicker({
     );
   }
 
+  const trimmedLen = query.trim().length;
+
   return (
     <div className="relative">
       <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{label}</label>
@@ -459,29 +483,41 @@ function SearchPicker({
         value={query}
         placeholder={placeholder}
         onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 200)}
+        onBlur={() => setTimeout(() => setOpen(false), 250)}
         onChange={(e) => setQuery(e.target.value)}
         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-400 focus:outline-none"
+        autoComplete="off"
       />
-      {open && query.trim().length >= 2 && (
-        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-auto">
-          {searching ? (
-            <div className="px-3 py-3 text-xs text-gray-400 flex items-center gap-2">
-              <Loader2 className="h-3 w-3 animate-spin" /> Searching…
+      {open && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+          {trimmedLen < 2 ? (
+            <div className="px-3 py-3 text-xs text-gray-400">
+              Type at least 2 characters to search…
+            </div>
+          ) : searching ? (
+            <div className="px-3 py-3 text-xs text-gray-500 flex items-center gap-2">
+              <Loader2 className="h-3 w-3 animate-spin" /> Searching for &quot;{query.trim()}&quot;…
+            </div>
+          ) : err ? (
+            <div className="px-3 py-3 text-xs text-rose-600">
+              Search failed: {err}. Check your network / login and try again.
             </div>
           ) : results.length === 0 ? (
-            <div className="px-3 py-3 text-xs text-gray-400">No matches.</div>
+            <div className="px-3 py-3 text-xs text-gray-400">
+              No matches for &quot;{query.trim()}&quot;.
+            </div>
           ) : (
             results.map((r) => (
               <button
                 key={r.value}
                 type="button"
                 onMouseDown={(e) => {
-                  // onMouseDown fires before onBlur — preserves selection
+                  // onMouseDown fires BEFORE input's onBlur — preserves selection
                   e.preventDefault();
                   onPick(r.value, r.display);
                   setQuery("");
                   setOpen(false);
+                  setResults([]);
                 }}
                 className="block w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-50"
               >
