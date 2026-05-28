@@ -4,6 +4,7 @@ import { requireTenantContext } from "@/backend/tenant";
 import { prisma } from "@/backend/db";
 import { logAudit } from "@/app/lib/audit";
 import { revalidatePath } from "next/cache";
+import { postChargeToIpdBill } from "@/app/actions/ipd-finance-actions";
 
 function serialize<T>(data: T): T {
   return JSON.parse(
@@ -473,16 +474,39 @@ export async function saveOTChecklist(input: {
       update: fieldData as any,
     });
 
+    // If all 3 WHO phases (sign_in / time_out / sign_out) are now signed,
+    // auto-advance the surgery request to "Ready" so OT manager can see
+    // it's cleared for theatre start. Subsequent recordWheelIn / startSurgery
+    // will move it through InProgress → Completed.
+    const allSigned = !!(checklist as any).sign_in_at &&
+      !!(checklist as any).time_out_at &&
+      !!(checklist as any).sign_out_at;
+    if (allSigned) {
+      const current = await db.surgeryRequest.findUnique({
+        where: { id: input.surgery_request_id },
+        select: { status: true },
+      });
+      // Only auto-advance from earlier states — don't overwrite InProgress / Completed
+      const advanceableStates = ['PAC_Cleared', 'PAC_Pending', 'Scheduled'];
+      if (current && advanceableStates.includes(current.status)) {
+        await db.surgeryRequest.update({
+          where: { id: input.surgery_request_id },
+          data: { status: 'Ready' },
+        });
+      }
+    }
+
     await logAudit({
       action: "SAVE_OT_CHECKLIST",
       module: "ot",
       entity_type: "OTChecklist",
       entity_id: checklist.id,
-      details: `${input.phase} signed by ${input.signed_by}`,
+      details: `${input.phase} signed by ${input.signed_by}${allSigned ? ' — surgery now READY' : ''}`,
     });
 
     revalidatePath(`/ot/checklist/${input.surgery_request_id}`);
-    return { success: true, data: serialize(checklist) };
+    revalidatePath(`/ot/worklist`);
+    return { success: true, data: serialize(checklist), now_ready: allSigned };
   } catch (error: any) {
     console.error("saveOTChecklist error:", error);
     return { success: false, error: error?.message };
@@ -775,26 +799,118 @@ export async function generateSurgeryBill(surgery_request_id: string) {
   }
 }
 
+/**
+ * Post OT surgery charges to the patient's active IPD invoice.
+ *
+ * Previously this only flipped `posted_to_ipd = true` without actually
+ * creating any invoice line items — silent revenue loss at discharge.
+ *
+ * Now: creates one invoice_item per charge component (surgeon fee, anesthesia,
+ * OT room) plus one row per consumable / implant, via the standard
+ * postChargeToIpdBill helper. Implants are tagged separately (per spec
+ * exclusion: implants are NEVER covered by IPD packages).
+ *
+ * Idempotent on the SurgeryBilling.posted_to_ipd flag — won't double-post.
+ */
 export async function postSurgeryChargesToIPD(surgery_request_id: string) {
   try {
     const { db } = await requireTenantContext();
     const req = await db.surgeryRequest.findUnique({
       where: { id: surgery_request_id },
-      include: { billing: true },
+      include: {
+        billing: true,
+        consumables: true,
+      },
     });
     if (!req?.admission_id) {
       return { success: false, error: "Surgery is not linked to an admission" };
     }
     if (!req.billing) {
-      return { success: false, error: "No billing generated yet" };
+      return { success: false, error: "No billing generated yet — click Generate Bill first" };
     }
     if (req.billing.posted_to_ipd) {
       return { success: false, error: "Already posted to IPD" };
     }
 
+    const admissionId = req.admission_id;
+    const billingId = String(req.billing.id);
+    const surgeryName = req.surgery_name || 'Surgery';
+
+    // 1. Surgeon fee
+    if (Number(req.billing.surgeon_fee) > 0) {
+      await postChargeToIpdBill({
+        admission_id: admissionId,
+        source_module: 'ot',
+        source_ref_id: `OT-${billingId}-surgeon`,
+        description: `${surgeryName} — Surgeon Fee`,
+        quantity: 1,
+        unit_price: Number(req.billing.surgeon_fee),
+        service_category: 'Procedure',
+        hsn_sac_code: '9993',
+      });
+    }
+
+    // 2. Anesthesia fee
+    if (Number(req.billing.anesthesia_fee) > 0) {
+      await postChargeToIpdBill({
+        admission_id: admissionId,
+        source_module: 'ot',
+        source_ref_id: `OT-${billingId}-anesthesia`,
+        description: `${surgeryName} — Anesthesia Fee`,
+        quantity: 1,
+        unit_price: Number(req.billing.anesthesia_fee),
+        service_category: 'Procedure',
+        hsn_sac_code: '9993',
+      });
+    }
+
+    // 3. OT room charges
+    if (Number(req.billing.ot_charges) > 0) {
+      await postChargeToIpdBill({
+        admission_id: admissionId,
+        source_module: 'ot',
+        source_ref_id: `OT-${billingId}-room`,
+        description: `${surgeryName} — OT Room Charges`,
+        quantity: 1,
+        unit_price: Number(req.billing.ot_charges),
+        service_category: 'Procedure',
+        hsn_sac_code: '9993',
+      });
+    }
+
+    // 4. Each consumable / implant (line-by-line for transparency)
+    //    Implants get a clear "(Implant)" suffix so they're easy to spot — and
+    //    they're correctly excluded from any IPD package coverage per spec.
+    for (const c of (req.consumables || [])) {
+      const isImplant = !!(c as any).is_implant;
+      const lineLabel = `${surgeryName} — ${c.item_name}${isImplant ? ' (Implant)' : ''}` +
+        (c.batch_no ? ` [Batch ${c.batch_no}]` : '');
+      await postChargeToIpdBill({
+        admission_id: admissionId,
+        source_module: 'ot',
+        source_ref_id: `OT-${billingId}-cons-${c.id}`,
+        description: lineLabel,
+        quantity: Number(c.quantity || 1),
+        unit_price: Number(c.unit_price || 0),
+        service_category: isImplant ? 'Implant' : 'Consumable',
+        hsn_sac_code: '9993',
+      });
+    }
+
+    // 5. Mark posted + capture link to the IPD invoice for the SurgeryBilling row
+    //    (find the active IPD invoice for this admission)
+    const invoice = await db.invoices.findFirst({
+      where: { admission_id: admissionId, status: { not: 'Cancelled' } },
+      orderBy: { created_at: 'desc' },
+      select: { id: true },
+    });
+
     await db.surgeryBilling.update({
       where: { surgery_request_id },
-      data: { posted_to_ipd: true },
+      data: {
+        posted_to_ipd: true,
+        invoice_id: invoice?.id ?? null,
+      },
     });
 
     await logAudit({
@@ -802,13 +918,23 @@ export async function postSurgeryChargesToIPD(surgery_request_id: string) {
       module: "ot",
       entity_type: "SurgeryBilling",
       entity_id: req.billing.id,
-      details: `Posted ${req.billing.total_amount} to admission ${req.admission_id}`,
+      details: `Posted ${req.billing.total_amount} to admission ${admissionId}; invoice_id=${invoice?.id ?? 'n/a'}; consumables=${(req.consumables || []).length}`,
     });
 
     revalidatePath("/ot/billing");
     revalidatePath("/ipd/billing");
-    return { success: true };
+    revalidatePath(`/ipd/admission/${admissionId}`);
+    return {
+      success: true,
+      data: {
+        admission_id: admissionId,
+        invoice_id: invoice?.id ?? null,
+        total: Number(req.billing.total_amount),
+        lines_posted: 3 + (req.consumables || []).length,
+      },
+    };
   } catch (error: any) {
+    console.error('postSurgeryChargesToIPD error:', error);
     return { success: false, error: error?.message };
   }
 }
