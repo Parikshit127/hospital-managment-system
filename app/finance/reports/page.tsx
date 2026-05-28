@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import {
     getCollectionsReport, getARAgingReport, getCashFlowReport,
     getProfitLossReport, getInsuranceCollectionReport, getRevenueByDepartment,
-    getPnLIncomeBreakdown, getPnLExpenseBreakdown,
+    getPnLIncomeBreakdown, getPnLExpenseBreakdown, getInvoiceItemsBrief,
 } from '@/app/actions/report-actions';
 import { DateRangePicker } from '@/app/components/finance/DateRangePicker';
 import { ReportChart } from '@/app/components/finance/ReportChart';
@@ -397,6 +397,124 @@ function ProfitLossReport({ data, fmt, from, to }: { data: any; fmt: (n: number)
     );
 }
 
+function InvoiceItemsInline({ invoiceId, fmt }: { invoiceId: number; fmt: (n: number) => string }) {
+    const [loading, setLoading] = useState(true);
+    const [items, setItems] = useState<any[]>([]);
+    const [err, setErr] = useState('');
+
+    useEffect(() => {
+        let cancelled = false;
+        setLoading(true);
+        getInvoiceItemsBrief(invoiceId).then((res) => {
+            if (cancelled) return;
+            if (res.success) setItems(res.data || []);
+            else setErr((res as any).error || 'Failed to load items');
+            setLoading(false);
+        });
+        return () => { cancelled = true; };
+    }, [invoiceId]);
+
+    if (loading) return (
+        <div className="px-4 py-3 bg-emerald-50/50 text-xs text-gray-500 flex items-center gap-2">
+            <Loader2 className="h-3 w-3 animate-spin" /> Loading invoice line items...
+        </div>
+    );
+    if (err) return <div className="px-4 py-3 bg-rose-50 text-xs text-rose-700">{err}</div>;
+    if (items.length === 0) return <div className="px-4 py-3 bg-emerald-50/50 text-xs text-gray-400">No line items on this invoice.</div>;
+
+    const subtotal = items.reduce((s, it) => s + Number(it.net_price) + Number(it.tax_amount || 0), 0);
+
+    return (
+        <div className="bg-emerald-50/40 border-l-4 border-emerald-300 px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 mb-2">Invoice line items</p>
+            <table className="w-full text-[11px]">
+                <thead>
+                    <tr className="text-gray-500">
+                        <th className="text-left py-1 font-semibold">Description</th>
+                        <th className="text-left py-1 font-semibold">Dept / Category</th>
+                        <th className="text-right py-1 font-semibold">Qty</th>
+                        <th className="text-right py-1 font-semibold">Unit ₹</th>
+                        <th className="text-right py-1 font-semibold">GST%</th>
+                        <th className="text-right py-1 font-semibold">Net</th>
+                        <th className="text-right py-1 font-semibold">Total</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-emerald-100/70">
+                    {items.map((it) => (
+                        <tr key={it.id}>
+                            <td className="py-1 text-gray-800">{it.description}</td>
+                            <td className="py-1 text-gray-500">{it.department}{it.service_category && it.service_category !== it.department ? ` · ${it.service_category}` : ''}</td>
+                            <td className="py-1 text-right text-gray-700">{it.quantity}</td>
+                            <td className="py-1 text-right text-gray-700">{fmt(it.unit_price)}</td>
+                            <td className="py-1 text-right text-gray-500">{it.tax_rate}%</td>
+                            <td className="py-1 text-right text-gray-700">{fmt(it.net_price)}</td>
+                            <td className="py-1 text-right font-semibold text-gray-900">{fmt(it.net_price + it.tax_amount)}</td>
+                        </tr>
+                    ))}
+                </tbody>
+                <tfoot>
+                    <tr className="border-t-2 border-emerald-300">
+                        <td colSpan={6} className="py-1.5 text-right font-bold text-emerald-800">Invoice total (incl. GST)</td>
+                        <td className="py-1.5 text-right font-bold text-emerald-900">{fmt(subtotal)}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    );
+}
+
+function IncomeRow({ r, fmt }: { r: any; fmt: (n: number) => string }) {
+    const [open, setOpen] = useState(false);
+    return (
+        <>
+            <tr className="hover:bg-white">
+                <td className="px-2 py-2 align-top">
+                    {r.invoice_id ? (
+                        <button
+                            type="button"
+                            onClick={() => setOpen(!open)}
+                            className="text-emerald-700 hover:text-emerald-900 text-xs font-bold w-5"
+                            title={open ? 'Hide items' : 'Show line items'}
+                        >
+                            {open ? '▼' : '▶'}
+                        </button>
+                    ) : null}
+                </td>
+                <td className="px-3 py-2 text-gray-500">{new Date(r.date).toLocaleDateString('en-IN')}</td>
+                <td className="px-3 py-2 text-gray-900">{r.patient_name}</td>
+                <td className="px-3 py-2 font-mono text-gray-600">
+                    {r.invoice_id ? (
+                        <Link
+                            href={`/finance/invoices/${r.invoice_id}`}
+                            className="text-emerald-700 hover:text-emerald-900 hover:underline font-semibold"
+                            title="Open full invoice page"
+                        >
+                            {r.invoice_number} ↗
+                        </Link>
+                    ) : (
+                        r.invoice_number
+                    )}
+                </td>
+                <td className="px-3 py-2">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${r.invoice_type === 'IPD' ? 'bg-violet-100 text-violet-700' : 'bg-sky-100 text-sky-700'}`}>
+                        {r.invoice_type}
+                    </span>
+                </td>
+                <td className="px-3 py-2 text-gray-700">{r.description}</td>
+                <td className="px-3 py-2 text-right text-gray-600">{r.quantity}</td>
+                <td className="px-3 py-2 text-right font-semibold text-gray-900">{fmt(r.net_price + r.tax_amount)}</td>
+            </tr>
+            {open && r.invoice_id && (
+                <tr>
+                    <td colSpan={8} className="p-0">
+                        <InvoiceItemsInline invoiceId={r.invoice_id} fmt={fmt} />
+                    </td>
+                </tr>
+            )}
+        </>
+    );
+}
+
 function DrillPanel({ loading, data, fmt, kind }: { loading: boolean; data: any; fmt: (n: number) => string; kind: 'income' | 'expense' }) {
     if (loading) {
         return (
@@ -423,6 +541,7 @@ function DrillPanel({ loading, data, fmt, kind }: { loading: boolean; data: any;
                     <thead className="bg-white border-b border-gray-200">
                         {kind === 'income' ? (
                             <tr>
+                                <th className="px-2 py-2 w-8 text-left font-semibold text-gray-400" title="Click ▶ to expand items"></th>
                                 <th className="px-3 py-2 text-left font-semibold text-gray-500">Date</th>
                                 <th className="px-3 py-2 text-left font-semibold text-gray-500">Patient</th>
                                 <th className="px-3 py-2 text-left font-semibold text-gray-500">Invoice</th>
@@ -445,33 +564,7 @@ function DrillPanel({ loading, data, fmt, kind }: { loading: boolean; data: any;
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                         {kind === 'income'
-                            ? rows.map((r: any) => (
-                                <tr key={r.id} className="hover:bg-white">
-                                    <td className="px-3 py-2 text-gray-500">{new Date(r.date).toLocaleDateString('en-IN')}</td>
-                                    <td className="px-3 py-2 text-gray-900">{r.patient_name}</td>
-                                    <td className="px-3 py-2 font-mono text-gray-600">
-                                        {r.invoice_id ? (
-                                            <Link
-                                                href={`/finance/invoices/${r.invoice_id}`}
-                                                className="text-emerald-700 hover:text-emerald-900 hover:underline font-semibold"
-                                                title="Open invoice"
-                                            >
-                                                {r.invoice_number} ↗
-                                            </Link>
-                                        ) : (
-                                            r.invoice_number
-                                        )}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${r.invoice_type === 'IPD' ? 'bg-violet-100 text-violet-700' : 'bg-sky-100 text-sky-700'}`}>
-                                            {r.invoice_type}
-                                        </span>
-                                    </td>
-                                    <td className="px-3 py-2 text-gray-700">{r.description}</td>
-                                    <td className="px-3 py-2 text-right text-gray-600">{r.quantity}</td>
-                                    <td className="px-3 py-2 text-right font-semibold text-gray-900">{fmt(r.net_price + r.tax_amount)}</td>
-                                </tr>
-                            ))
+                            ? rows.map((r: any) => <IncomeRow key={r.id} r={r} fmt={fmt} />)
                             : rows.map((r: any) => (
                                 <tr key={r.id} className="hover:bg-white">
                                     <td className="px-3 py-2 text-gray-500">{new Date(r.date).toLocaleDateString('en-IN')}</td>
@@ -490,7 +583,7 @@ function DrillPanel({ loading, data, fmt, kind }: { loading: boolean; data: any;
                     </tbody>
                     <tfoot>
                         <tr className="bg-white border-t border-gray-200">
-                            <td colSpan={kind === 'income' ? 6 : 6} className="px-3 py-2 text-right font-bold text-gray-600">Subtotal</td>
+                            <td colSpan={kind === 'income' ? 7 : 6} className="px-3 py-2 text-right font-bold text-gray-600">Subtotal</td>
                             <td className="px-3 py-2 text-right font-bold text-gray-900">{fmt(data.total || 0)}</td>
                         </tr>
                     </tfoot>

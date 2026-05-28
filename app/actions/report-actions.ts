@@ -202,6 +202,47 @@ export async function getPnLIncomeBreakdown(filters: {
     }
 }
 
+/**
+ * Tiny fetch for P&L drill-down — inline invoice items for one invoice,
+ * no patient/admin context loaded. Used to expand an invoice row inline
+ * in /finance/reports without navigating to /finance/invoices/[id].
+ */
+export async function getInvoiceItemsBrief(invoiceId: number) {
+    try {
+        const { db } = await requireTenantContext();
+        const items = await db.invoice_items.findMany({
+            where: { invoice_id: invoiceId },
+            orderBy: { created_at: 'asc' },
+            select: {
+                id: true,
+                description: true,
+                department: true,
+                service_category: true,
+                quantity: true,
+                unit_price: true,
+                discount: true,
+                net_price: true,
+                tax_rate: true,
+                tax_amount: true,
+                hsn_sac_code: true,
+            },
+        });
+        return {
+            success: true as const,
+            data: items.map((it: any) => ({
+                ...it,
+                unit_price: Number(it.unit_price),
+                discount: Number(it.discount || 0),
+                net_price: Number(it.net_price),
+                tax_rate: Number(it.tax_rate || 0),
+                tax_amount: Number(it.tax_amount || 0),
+            })),
+        };
+    } catch (error: any) {
+        return { success: false as const, error: error?.message };
+    }
+}
+
 export async function getPnLExpenseBreakdown(filters: {
     categoryLabel: string;
     from: string;
