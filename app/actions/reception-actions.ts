@@ -863,7 +863,12 @@ export async function cancelAppointment(appointmentId: string, reason: string) {
         // Prevent re-cancelling an already-cancelled appointment
         const existing = await db.appointments.findUnique({
             where: { appointment_id: appointmentId },
-            select: { status: true },
+            select: {
+                status: true,
+                appointment_date: true,
+                doctor_name: true,
+                patient: { select: { full_name: true, phone: true } },
+            },
         });
         if (!existing) return { success: false, error: 'Appointment not found.' };
         if (existing.status === 'Cancelled') {
@@ -895,6 +900,24 @@ export async function cancelAppointment(appointmentId: string, reason: string) {
                 organizationId,
             },
         });
+
+        // Patient SMS notification (non-blocking — never fails the cancel)
+        if (existing.patient?.phone) {
+            const { sendSMS } = await import('@/app/lib/sms');
+            const apptDateStr = existing.appointment_date
+                ? new Date(existing.appointment_date).toLocaleString('en-IN', {
+                    day: '2-digit', month: 'short', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit',
+                })
+                : 'your scheduled time';
+            const drName = existing.doctor_name || 'your doctor';
+            const msg = `Hi ${existing.patient.full_name || 'Patient'}, your appointment with ${drName} on ${apptDateStr} has been cancelled. Reason: ${cancellationReason}. To rebook, call reception. — Axten Hospitals`;
+            sendSMS({
+                to: existing.patient.phone,
+                message: msg,
+                organizationId,
+            }).catch((err) => console.error('[cancelAppointment] SMS failed:', err));
+        }
 
         revalidatePath('/reception/appointments');
         revalidatePath('/reception');
