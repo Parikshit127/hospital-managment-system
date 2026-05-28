@@ -5,7 +5,11 @@ const nextConfig: NextConfig = {
     poweredByHeader: false,
     productionBrowserSourceMaps: false,
     experimental: {
-        optimizePackageImports: ['lucide-react', 'date-fns', 'clsx', 'tailwind-merge', 'chart.js', 'react-chartjs-2'],
+        // NOTE: 'lucide-react' removed — its ESM paths break the webpack
+        // resolver in Next 16 ("Can't resolve './icons/activity.js'").
+        // Turbopack handles them fine; webpack does not. Tree-shaking already
+        // strips unused icons, so the removal has near-zero bundle impact.
+        optimizePackageImports: ['date-fns', 'clsx', 'tailwind-merge', 'chart.js', 'react-chartjs-2'],
     },
     compiler: {
         removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error"] } : false,
@@ -18,6 +22,16 @@ const nextConfig: NextConfig = {
             // Externalize chromium for server-side rendering (used in production builds)
             config.externals = [...(config.externals || []), '@sparticuz/chromium'];
         }
+        // Relax strict ESM resolution — lucide-react and some other packages
+        // use bare ".js" extensions in their ESM imports without publishing
+        // the corresponding "exports" map. Without this, webpack errors with
+        // "Can't resolve './icons/activity.js'" etc. Turbopack doesn't need this.
+        config.module = config.module || {};
+        config.module.rules = config.module.rules || [];
+        config.module.rules.push({
+            test: /\.m?js$/,
+            resolve: { fullySpecified: false },
+        });
         return config;
     },
     async headers() {
