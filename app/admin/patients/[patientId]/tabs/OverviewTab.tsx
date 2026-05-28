@@ -17,6 +17,74 @@ interface OverviewTabProps {
   patient: any;
   insurancePolicies: any[];
   pillReminders: any[];
+  isEditing?: boolean;
+  draft?: Record<string, string>;
+  onDraftChange?: (field: string, value: string) => void;
+}
+
+// Reusable read-or-input cell used in edit mode.
+function EditableField({
+  label,
+  field,
+  value,
+  isEditing,
+  draft,
+  onChange,
+  type = 'text',
+  options,
+  placeholder,
+}: {
+  label: string;
+  field: string;
+  value: string;
+  isEditing: boolean;
+  draft?: Record<string, string>;
+  onChange?: (field: string, value: string) => void;
+  type?: 'text' | 'date' | 'select' | 'textarea';
+  options?: string[];
+  placeholder?: string;
+}) {
+  if (!isEditing) {
+    return (
+      <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{label}</p>
+        <p className="text-sm font-semibold text-gray-800 mt-0.5">{value || 'N/A'}</p>
+      </div>
+    );
+  }
+  const v = draft?.[field] ?? '';
+  const handle = (nv: string) => onChange?.(field, nv);
+  return (
+    <div className="bg-emerald-50/40 border border-emerald-200 rounded-xl p-3">
+      <label className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide block mb-1">{label}</label>
+      {type === 'select' && options ? (
+        <select
+          value={v}
+          onChange={(e) => handle(e.target.value)}
+          className="w-full text-sm font-semibold text-gray-800 bg-white border border-gray-200 rounded-md px-2 py-1"
+        >
+          <option value="">— Select —</option>
+          {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+        </select>
+      ) : type === 'textarea' ? (
+        <textarea
+          value={v}
+          onChange={(e) => handle(e.target.value)}
+          placeholder={placeholder}
+          rows={2}
+          className="w-full text-sm font-semibold text-gray-800 bg-white border border-gray-200 rounded-md px-2 py-1"
+        />
+      ) : (
+        <input
+          type={type}
+          value={v}
+          onChange={(e) => handle(e.target.value)}
+          placeholder={placeholder}
+          className="w-full text-sm font-semibold text-gray-800 bg-white border border-gray-200 rounded-md px-2 py-1"
+        />
+      )}
+    </div>
+  );
 }
 
 const fmtDate = (v?: string | Date | null) => {
@@ -28,13 +96,18 @@ const fmtDate = (v?: string | Date | null) => {
   });
 };
 
-export default function OverviewTab({ patient, insurancePolicies, pillReminders }: OverviewTabProps) {
+export default function OverviewTab({ patient, insurancePolicies, pillReminders, isEditing = false, draft, onDraftChange }: OverviewTabProps) {
   const bloodGroupColor = (bg?: string) => {
     if (!bg) return 'bg-gray-100 text-gray-600 border-gray-200';
     return 'bg-rose-50 text-rose-700 border-rose-200';
   };
 
   const activeReminders = pillReminders.filter((r: any) => r.status === 'Active');
+
+  // Shortcut: render an EditableField with shared props
+  const F = (props: Omit<React.ComponentProps<typeof EditableField>, 'isEditing' | 'draft' | 'onChange'>) => (
+    <EditableField {...props} isEditing={isEditing} draft={draft} onChange={onDraftChange} />
+  );
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -50,42 +123,48 @@ export default function OverviewTab({ patient, insurancePolicies, pillReminders 
             <span className="h-11 w-11 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
               <User className="h-6 w-6 text-indigo-600" />
             </span>
-            <div>
-              <p className="text-lg font-black text-gray-900">{patient.full_name || 'N/A'}</p>
+            <div className="flex-1">
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={draft?.full_name ?? ''}
+                  onChange={(e) => onDraftChange?.('full_name', e.target.value)}
+                  placeholder="Full name"
+                  className="w-full text-lg font-black text-gray-900 bg-white border border-emerald-200 rounded-md px-2 py-1"
+                />
+              ) : (
+                <p className="text-lg font-black text-gray-900">{patient.full_name || 'N/A'}</p>
+              )}
               <p className="text-xs text-gray-500 font-semibold">{patient.patient_id}</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: 'Age', value: patient.age ? `${patient.age} years` : 'N/A' },
-              { label: 'Gender', value: patient.gender || 'N/A' },
-              { label: 'Date of Birth', value: fmtDate(patient.date_of_birth) },
-              {
-                label: 'Blood Group',
-                value: patient.blood_group || 'N/A',
-                isBadge: true,
-              },
-              { label: 'Department', value: patient.department || 'General' },
-              { label: 'Aadhar Card', value: patient.aadhar_number || 'N/A' },
-              { label: 'ABHA Number', value: patient.abha_number || 'N/A' },
-              { label: 'PAN Number', value: patient.pan_number || 'N/A' },
-              { label: 'Registration Date', value: fmtDate(patient.created_at) },
-            ].map((item) => (
-              <div key={item.label} className="bg-gray-50 border border-gray-200 rounded-xl p-3">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-                  {item.label}
-                </p>
-                {item.isBadge ? (
-                  <span
-                    className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-xs font-bold border ${bloodGroupColor(patient.blood_group)}`}
-                  >
-                    {item.value}
-                  </span>
-                ) : (
-                  <p className="text-sm font-semibold text-gray-800 mt-0.5">{item.value}</p>
-                )}
+            <F label="Age" field="age" value={patient.age ? `${patient.age} years` : 'N/A'} type="text" placeholder="e.g. 35" />
+            <F label="Gender" field="gender" value={patient.gender || 'N/A'} type="select" options={['Male', 'Female', 'Other']} />
+            <F label="Date of Birth" field="date_of_birth" value={fmtDate(patient.date_of_birth)} type="date" />
+            {isEditing ? (
+              <F label="Blood Group" field="blood_group" value={patient.blood_group || ''} type="select" options={['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']} />
+            ) : (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Blood Group</p>
+                <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-xs font-bold border ${bloodGroupColor(patient.blood_group)}`}>
+                  {patient.blood_group || 'N/A'}
+                </span>
               </div>
-            ))}
+            )}
+            {/* Department is read-only — derived from appointments, not user-editable */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Department</p>
+              <p className="text-sm font-semibold text-gray-800 mt-0.5">{patient.department || 'General'}</p>
+            </div>
+            <F label="Aadhar Card" field="aadhar_card" value={patient.aadhar_card || 'N/A'} placeholder="XXXX-XXXX-XXXX" />
+            <F label="ABHA Number" field="abha_number" value={patient.abha_number || 'N/A'} placeholder="14-digit ABHA" />
+            <F label="PAN Number" field="pan_number" value={patient.pan_number || 'N/A'} placeholder="ABCDE1234F" />
+            {/* Registration date is system-generated — always read-only */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Registration Date</p>
+              <p className="text-sm font-semibold text-gray-800 mt-0.5">{fmtDate(patient.created_at)}</p>
+            </div>
           </div>
         </div>
 
@@ -96,27 +175,9 @@ export default function OverviewTab({ patient, insurancePolicies, pillReminders 
             Contact Information
           </h3>
           <div className="space-y-3">
-            <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl p-3">
-              <Phone className="h-4 w-4 text-orange-600 shrink-0" />
-              <div>
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Phone</p>
-                <p className="text-sm font-semibold text-gray-800">{patient.phone || 'N/A'}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl p-3">
-              <Mail className="h-4 w-4 text-cyan-600 shrink-0" />
-              <div>
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Email</p>
-                <p className="text-sm font-semibold text-gray-800 truncate">{patient.email || 'N/A'}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl p-3">
-              <MapPin className="h-4 w-4 text-violet-600 shrink-0" />
-              <div>
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Address</p>
-                <p className="text-sm font-semibold text-gray-800">{patient.address || 'N/A'}</p>
-              </div>
-            </div>
+            <F label="Phone" field="phone" value={patient.phone || 'N/A'} placeholder="10-digit mobile" />
+            <F label="Email" field="email" value={patient.email || 'N/A'} placeholder="name@example.com" />
+            <F label="Address" field="address" value={patient.address || 'N/A'} type="textarea" placeholder="Street, City, PIN" />
           </div>
         </div>
 
@@ -127,18 +188,9 @@ export default function OverviewTab({ patient, insurancePolicies, pillReminders 
             Emergency Contact
           </h3>
           <div className="space-y-3">
-            {[
-              { label: 'Name', value: patient.emergency_contact_name || 'N/A' },
-              { label: 'Phone', value: patient.emergency_contact_phone || 'N/A' },
-              { label: 'Relation', value: patient.emergency_contact_relation || 'N/A' },
-            ].map((item) => (
-              <div key={item.label} className="bg-gray-50 border border-gray-200 rounded-xl p-3">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-                  {item.label}
-                </p>
-                <p className="text-sm font-semibold text-gray-800 mt-0.5">{item.value}</p>
-              </div>
-            ))}
+            <F label="Name" field="emergency_contact_name" value={patient.emergency_contact_name || 'N/A'} />
+            <F label="Phone" field="emergency_contact_phone" value={patient.emergency_contact_phone || 'N/A'} placeholder="10-digit mobile" />
+            <F label="Relation" field="emergency_contact_relation" value={patient.emergency_contact_relation || 'N/A'} placeholder="Spouse / Parent / Sibling" />
           </div>
         </div>
       </div>
@@ -155,18 +207,21 @@ export default function OverviewTab({ patient, insurancePolicies, pillReminders 
           {/* Allergies */}
           <div className="mb-5">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Allergies</p>
-            {patient.allergies ? (
+            {isEditing ? (
+              <input
+                type="text"
+                value={draft?.allergies ?? ''}
+                onChange={(e) => onDraftChange?.('allergies', e.target.value)}
+                placeholder="Comma-separated, e.g. Penicillin, Peanuts"
+                className="w-full text-sm font-medium text-gray-800 bg-white border border-emerald-200 rounded-md px-2 py-1.5"
+              />
+            ) : patient.allergies ? (
               <div className="flex flex-wrap gap-1.5">
-                {String(patient.allergies)
-                  .split(',')
-                  .map((a: string, i: number) => (
-                    <span
-                      key={i}
-                      className="bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded-full text-xs font-bold"
-                    >
-                      {a.trim()}
-                    </span>
-                  ))}
+                {String(patient.allergies).split(',').map((a: string, i: number) => (
+                  <span key={i} className="bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded-full text-xs font-bold">
+                    {a.trim()}
+                  </span>
+                ))}
               </div>
             ) : (
               <p className="text-sm text-gray-400 font-medium">None recorded</p>
@@ -178,18 +233,21 @@ export default function OverviewTab({ patient, insurancePolicies, pillReminders 
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
               Chronic Conditions
             </p>
-            {patient.chronic_conditions ? (
+            {isEditing ? (
+              <input
+                type="text"
+                value={draft?.chronic_conditions ?? ''}
+                onChange={(e) => onDraftChange?.('chronic_conditions', e.target.value)}
+                placeholder="Comma-separated, e.g. Diabetes, Hypertension"
+                className="w-full text-sm font-medium text-gray-800 bg-white border border-emerald-200 rounded-md px-2 py-1.5"
+              />
+            ) : patient.chronic_conditions ? (
               <div className="flex flex-wrap gap-1.5">
-                {String(patient.chronic_conditions)
-                  .split(',')
-                  .map((c: string, i: number) => (
-                    <span
-                      key={i}
-                      className="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-xs font-bold"
-                    >
-                      {c.trim()}
-                    </span>
-                  ))}
+                {String(patient.chronic_conditions).split(',').map((c: string, i: number) => (
+                  <span key={i} className="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-xs font-bold">
+                    {c.trim()}
+                  </span>
+                ))}
               </div>
             ) : (
               <p className="text-sm text-gray-400 font-medium">None recorded</p>

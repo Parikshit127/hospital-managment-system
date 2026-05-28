@@ -18,11 +18,14 @@ import {
   BedDouble,
   Trash2,
   Clock,
+  Pencil,
+  Save,
+  X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AdminPage } from "../../components/AdminPage";
 import { getAdminPatientFullDetails } from "@/app/actions/admin-actions";
-import { archivePatient, hardDeletePatient } from "@/app/actions/reception-actions";
+import { archivePatient, hardDeletePatient, updatePatient } from "@/app/actions/reception-actions";
 import { useToast } from "@/app/components/ui/Toast";
 
 import OverviewTab from "./tabs/OverviewTab";
@@ -60,6 +63,11 @@ export default function AdminPatientDetailsPage() {
   const [archiving, setArchiving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Edit mode for patient demographics (Overview tab)
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+
   const router = useRouter();
   const toast = useToast();
 
@@ -73,6 +81,62 @@ export default function AdminPatientDetailsPage() {
       router.push("/admin/patients");
     } else {
       toast.error(res.error || "Archive failed");
+    }
+  };
+
+  const startEdit = () => {
+    if (!data?.patient) return;
+    setActiveTab("overview"); // Edit mode only meaningful on Overview tab
+    const p = data.patient;
+    setDraft({
+      full_name: p.full_name ?? '',
+      phone: p.phone ?? '',
+      email: p.email ?? '',
+      address: p.address ?? '',
+      age: p.age ?? '',
+      gender: p.gender ?? '',
+      date_of_birth: p.date_of_birth ?? '',
+      blood_group: p.blood_group ?? '',
+      aadhar_card: p.aadhar_card ?? '',
+      abha_number: p.abha_number ?? '',
+      pan_number: p.pan_number ?? '',
+      emergency_contact_name: p.emergency_contact_name ?? '',
+      emergency_contact_phone: p.emergency_contact_phone ?? '',
+      emergency_contact_relation: p.emergency_contact_relation ?? '',
+      allergies: p.allergies ?? '',
+      chronic_conditions: p.chronic_conditions ?? '',
+    });
+    setIsEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setIsEditing(false);
+    setDraft({});
+  };
+
+  const saveEdit = async () => {
+    if (!data?.patient) return;
+    // Compute changed fields only — sending all is fine, but minimizes audit log noise
+    const original = data.patient;
+    const changed: Record<string, string> = {};
+    for (const [k, v] of Object.entries(draft)) {
+      if ((original[k] ?? '') !== v) changed[k] = v;
+    }
+    if (Object.keys(changed).length === 0) {
+      toast.success("No changes to save");
+      setIsEditing(false);
+      return;
+    }
+    setSaving(true);
+    const res = await updatePatient(patientId, changed);
+    setSaving(false);
+    if (res.success) {
+      toast.success(`Updated ${Object.keys(changed).length} field${Object.keys(changed).length > 1 ? 's' : ''}`);
+      setIsEditing(false);
+      setDraft({});
+      loadData();
+    } else {
+      toast.error(res.error || "Failed to update patient");
     }
   };
 
@@ -128,14 +192,34 @@ export default function AdminPatientDetailsPage() {
       <span className="text-xs font-black uppercase tracking-wider bg-orange-500/10 text-orange-700 border border-orange-500/20 px-3 py-1 rounded-lg">
         {patient.patient_id}
       </span>
-      <button onClick={handleArchive} disabled={archiving || deleting}
-        className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-500 text-[10px] font-bold rounded-lg hover:bg-gray-50 disabled:opacity-50">
-        <Clock className="h-3 w-3" /> {archiving ? 'Archiving…' : 'Archive'}
-      </button>
-      <button onClick={handleDelete} disabled={archiving || deleting}
-        className="flex items-center gap-2 px-3 py-1.5 bg-white border border-red-200 text-red-500 text-[10px] font-bold rounded-lg hover:bg-red-50 disabled:opacity-50">
-        <Trash2 className="h-3 w-3" /> {deleting ? 'Deleting…' : 'Delete Mistake'}
-      </button>
+      {isEditing ? (
+        <>
+          <button onClick={saveEdit} disabled={saving}
+            className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50">
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+          <button onClick={cancelEdit} disabled={saving}
+            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 text-[10px] font-bold rounded-lg hover:bg-gray-50 disabled:opacity-50">
+            <X className="h-3 w-3" /> Cancel
+          </button>
+        </>
+      ) : (
+        <>
+          <button onClick={startEdit} disabled={archiving || deleting}
+            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-emerald-200 text-emerald-700 text-[10px] font-bold rounded-lg hover:bg-emerald-50 disabled:opacity-50">
+            <Pencil className="h-3 w-3" /> Edit
+          </button>
+          <button onClick={handleArchive} disabled={archiving || deleting}
+            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-500 text-[10px] font-bold rounded-lg hover:bg-gray-50 disabled:opacity-50">
+            <Clock className="h-3 w-3" /> {archiving ? 'Archiving…' : 'Archive'}
+          </button>
+          <button onClick={handleDelete} disabled={archiving || deleting}
+            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-red-200 text-red-500 text-[10px] font-bold rounded-lg hover:bg-red-50 disabled:opacity-50">
+            <Trash2 className="h-3 w-3" /> {deleting ? 'Deleting…' : 'Delete Mistake'}
+          </button>
+        </>
+      )}
     </div>
   ) : null;
 
@@ -321,6 +405,9 @@ export default function AdminPatientDetailsPage() {
                     patient={patient}
                     insurancePolicies={data.insurancePolicies || []}
                     pillReminders={data.pillReminders || []}
+                    isEditing={isEditing}
+                    draft={draft}
+                    onDraftChange={(field, value) => setDraft(prev => ({ ...prev, [field]: value }))}
                   />
                 )}
                 {activeTab === "opd" && (

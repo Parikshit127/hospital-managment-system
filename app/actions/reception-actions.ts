@@ -245,6 +245,10 @@ export async function updatePatientField(patientId: string, field: string, value
             'full_name', 'phone', 'email', 'address', 'age', 'gender',
             'department', 'blood_group', 'date_of_birth',
             'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relation',
+            // Identity documents
+            'aadhar_card', 'abha_number', 'pan_number',
+            // Medical
+            'allergies', 'chronic_conditions',
         ];
 
         if (!allowedFields.includes(field)) {
@@ -257,10 +261,51 @@ export async function updatePatientField(patientId: string, field: string, value
         });
 
         revalidatePath(`/reception/patient/${patientId}`);
+        revalidatePath(`/admin/patients/${patientId}`);
         return { success: true };
     } catch (error) {
         console.error('Update Patient Field Error:', error);
         return { success: false, error: 'Failed to update' };
+    }
+}
+
+/**
+ * Batch-update multiple editable patient fields atomically.
+ * Used by the admin patient-detail edit mode (Save button).
+ */
+export async function updatePatient(patientId: string, payload: Record<string, string | null>) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const allowedFields = [
+            'full_name', 'phone', 'email', 'address', 'age', 'gender',
+            'department', 'blood_group', 'date_of_birth',
+            'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relation',
+            'aadhar_card', 'abha_number', 'pan_number',
+            'allergies', 'chronic_conditions',
+        ];
+
+        const data: Record<string, string | null> = {};
+        for (const [k, v] of Object.entries(payload)) {
+            if (!allowedFields.includes(k)) continue;
+            data[k] = (typeof v === 'string' && v.trim() === '') ? null : v;
+        }
+
+        if (Object.keys(data).length === 0) {
+            return { success: false, error: 'No editable fields provided' };
+        }
+
+        await db.oPD_REG.update({
+            where: { patient_id: patientId },
+            data,
+        });
+
+        revalidatePath(`/reception/patient/${patientId}`);
+        revalidatePath(`/admin/patients/${patientId}`);
+        return { success: true, updated: Object.keys(data) };
+    } catch (error: any) {
+        console.error('updatePatient Error:', error);
+        return { success: false, error: error?.message || 'Failed to update patient' };
     }
 }
 
