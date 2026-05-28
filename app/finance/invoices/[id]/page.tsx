@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { FileText, ArrowLeft, Printer, Edit, Trash2, Plus, CheckCircle, Save, X, History } from 'lucide-react';
-import { getInvoiceDetail, addInvoiceItem, removeInvoiceItem, finalizeInvoice } from '@/app/actions/finance-actions';
+import { FileText, ArrowLeft, Printer, Edit, Trash2, Plus, CheckCircle, Save, X, History, Ban, AlertTriangle, Loader2 } from 'lucide-react';
+import { getInvoiceDetail, addInvoiceItem, removeInvoiceItem, finalizeInvoice, cancelInvoice } from '@/app/actions/finance-actions';
 import { getAuditLogs } from '@/app/actions/audit-actions';
 import { getIpdServices } from '@/app/actions/ipd-master-actions';
 import { useParams, useRouter } from 'next/navigation';
@@ -29,6 +29,11 @@ export default function InvoiceDetailPage() {
     const [actionLoading, setActionLoading] = useState(false);
 
     const [auditLogs, setAuditLogs] = useState<any[]>([]);
+
+    // Cancel invoice modal
+    const [showCancelModal, setShowCancelModal] = useState(false);
+    const [cancelReason, setCancelReason] = useState('');
+    const [cancelSubmitting, setCancelSubmitting] = useState(false);
 
     const loadInvoice = async () => {
         setLoading(true);
@@ -93,6 +98,25 @@ export default function InvoiceDetailPage() {
             await loadInvoice();
         } else {
             toast.error(res.error || 'Failed to remove item');
+        }
+    };
+
+    const handleCancelSubmit = async () => {
+        const trimmed = cancelReason.trim();
+        if (trimmed.length < 10) {
+            toast.error('Reason must be at least 10 characters.');
+            return;
+        }
+        setCancelSubmitting(true);
+        const res = await cancelInvoice(invoiceId, trimmed);
+        setCancelSubmitting(false);
+        if (res.success) {
+            toast.success('Invoice cancelled. Reason recorded in audit log.');
+            setShowCancelModal(false);
+            setCancelReason('');
+            await loadInvoice();
+        } else {
+            toast.error(res.error || 'Failed to cancel invoice');
         }
     };
 
@@ -174,11 +198,40 @@ export default function InvoiceDetailPage() {
                                 {isEditMode ? <><X className="h-4 w-4" /> Cancel Edit</> : <><Edit className="h-4 w-4" /> Edit Draft</>}
                             </button>
                         )}
+                        {invoice.status !== 'Cancelled' && (
+                            <button
+                                onClick={() => setShowCancelModal(true)}
+                                disabled={actionLoading}
+                                className="inline-flex items-center gap-1.5 px-4 py-2 bg-white text-rose-700 border border-rose-200 hover:bg-rose-50 font-bold rounded-xl text-sm transition-colors shadow-sm disabled:opacity-50"
+                                title="Cancel this invoice — requires a reason"
+                            >
+                                <Ban className="h-4 w-4" /> Cancel Invoice
+                            </button>
+                        )}
                         <button onClick={handlePrint} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-sm transition-colors shadow-sm">
                             <Printer className="h-4 w-4" /> Print
                         </button>
                     </div>
                 </div>
+
+                {/* Cancellation banner — visible whenever invoice is Cancelled */}
+                {invoice.status === 'Cancelled' && (
+                    <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 mb-6">
+                        <div className="flex items-start gap-3">
+                            <Ban className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-rose-800">This invoice has been CANCELLED.</p>
+                                <p className="text-[12px] text-rose-700 mt-1 break-words">
+                                    <span className="font-semibold">Reason:</span>{' '}
+                                    {invoice.notes || '(no reason on record — check audit log)'}
+                                </p>
+                                <p className="text-[11px] text-rose-600 mt-1">
+                                    Full audit history below shows who cancelled it and when.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Editable Section (Hidden in Print) */}
                 {isEditMode && invoice.status === 'Draft' && (
@@ -504,6 +557,66 @@ export default function InvoiceDetailPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Cancel Invoice Modal */}
+            {showCancelModal && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 print-hidden">
+                    <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
+                        <div className="p-4 border-b bg-rose-50 flex items-start gap-3">
+                            <AlertTriangle className="h-5 w-5 text-rose-600 mt-0.5 shrink-0" />
+                            <div className="flex-1">
+                                <h3 className="font-bold text-rose-900">Cancel Invoice {invoice.invoice_number}?</h3>
+                                <p className="text-xs text-rose-700 mt-1">
+                                    This action cannot be undone from the UI. Reason is mandatory and will be recorded in the audit log.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => { setShowCancelModal(false); setCancelReason(''); }}
+                                className="text-rose-400 hover:text-rose-700 font-bold text-xl"
+                            >&times;</button>
+                        </div>
+                        <div className="p-5 space-y-3">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-600">
+                                Cancellation Reason <span className="text-rose-500">*</span>
+                            </label>
+                            <textarea
+                                value={cancelReason}
+                                onChange={(e) => setCancelReason(e.target.value)}
+                                rows={4}
+                                placeholder="e.g. Duplicate invoice — replaced by INV-XYZ. Or: Patient cancelled procedure before billing."
+                                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:border-rose-400 focus:outline-none"
+                                disabled={cancelSubmitting}
+                            />
+                            <div className="flex items-center justify-between text-xs">
+                                <span className={`font-medium ${cancelReason.trim().length < 10 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                                    {cancelReason.trim().length < 10
+                                        ? `${10 - cancelReason.trim().length} more character(s) required`
+                                        : '✓ Reason looks good'}
+                                </span>
+                                <span className="text-gray-400">{cancelReason.length} chars</span>
+                            </div>
+                        </div>
+                        <div className="p-4 border-t bg-gray-50 flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => { setShowCancelModal(false); setCancelReason(''); }}
+                                disabled={cancelSubmitting}
+                                className="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-200 hover:bg-gray-100 rounded-xl disabled:opacity-50"
+                            >Keep Invoice</button>
+                            <button
+                                type="button"
+                                onClick={handleCancelSubmit}
+                                disabled={cancelSubmitting || cancelReason.trim().length < 10}
+                                className="px-5 py-2 text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl disabled:opacity-50 inline-flex items-center gap-2"
+                            >
+                                {cancelSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+                                {cancelSubmitting ? 'Cancelling...' : 'Confirm Cancellation'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AppShell>
     );
 }

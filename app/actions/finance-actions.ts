@@ -468,16 +468,45 @@ export async function finalizeInvoice(invoiceId: number) {
 }
 
 // Cancel invoice (soft delete)
-export async function cancelInvoice(invoiceId: number, reason?: string) {
+/**
+ * Cancel an invoice with a MANDATORY reason. Stores a formatted note
+ * "[CANCELLED YYYY-MM-DD by USERNAME] reason text" and writes a full audit
+ * log entry so the reason is always recoverable.
+ *
+ * Rejects empty / sub-10-char / already-cancelled requests.
+ */
+export async function cancelInvoice(invoiceId: number, reason: string) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const trimmed = (reason || '').trim();
+        if (!trimmed) {
+            return { success: false, error: 'Cancellation reason is required.' };
+        }
+        if (trimmed.length < 10) {
+            return { success: false, error: 'Cancellation reason must be at least 10 characters.' };
+        }
+
+        const { db, session, organizationId } = await requireTenantContext();
+
+        // Don't allow double-cancellation
+        const existing = await db.invoices.findUnique({
+            where: { id: invoiceId },
+            select: { status: true, invoice_number: true },
+        });
+        if (!existing) return { success: false, error: 'Invoice not found.' };
+        if (existing.status === 'Cancelled') {
+            return { success: false, error: 'Invoice is already cancelled.' };
+        }
+
+        const stamp = new Date().toISOString().slice(0, 10);
+        const actor = (session as any)?.username || (session as any)?.name || (session as any)?.id || 'system';
+        const formattedNote = `[CANCELLED ${stamp} by ${actor}] ${trimmed}`;
 
         const invoice = await db.invoices.update({
             where: { id: invoiceId },
-            data: { 
-                status: 'Cancelled', 
-                notes: reason || 'Cancelled by admin',
-                version: { increment: 1 }
+            data: {
+                status: 'Cancelled',
+                notes: formattedNote,
+                version: { increment: 1 },
             },
         });
 
@@ -487,7 +516,12 @@ export async function cancelInvoice(invoiceId: number, reason?: string) {
                 module: 'finance',
                 entity_type: 'invoice',
                 entity_id: invoice.invoice_number,
-                details: JSON.stringify({ reason }),
+                details: JSON.stringify({
+                    reason: trimmed,
+                    cancelled_by: actor,
+                    cancelled_at: new Date().toISOString(),
+                    previous_status: existing.status,
+                }),
                 organizationId,
             },
         });
