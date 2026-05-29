@@ -6,7 +6,7 @@ import {
     BarChart3, TrendingUp, AlertTriangle, IndianRupee, Package,
     ArrowUpRight, ArrowDownRight, Pill, Clock, RotateCcw
 } from 'lucide-react';
-import { getPharmacyAnalytics, getExpiringBatches, getLowStockAlerts } from '@/app/actions/pharmacy-actions';
+import { getPharmacyAnalytics, getExpiringBatches, getLowStockAlerts, getInventoryMovements, getNarcoticRegister } from '@/app/actions/pharmacy-actions';
 import { SkeletonCard } from '@/app/components/ui/Skeleton';
 
 export default function PharmacyReportsPage() {
@@ -14,7 +14,10 @@ export default function PharmacyReportsPage() {
     const [expiringBatches, setExpiringBatches] = useState<any[]>([]);
     const [lowStock, setLowStock] = useState<any[]>([]);
     const [refreshing, setRefreshing] = useState(false);
-    const [activeTab, setActiveTab] = useState<'overview' | 'expiry' | 'stock'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'expiry' | 'stock' | 'movements' | 'narcotics'>('overview');
+    const [movements, setMovements] = useState<any[]>([]);
+    const [movementFilter, setMovementFilter] = useState('');
+    const [narcotics, setNarcotics] = useState<any[]>([]);
 
     const loadData = async () => {
         setRefreshing(true);
@@ -28,6 +31,21 @@ export default function PharmacyReportsPage() {
         if (low.success) setLowStock(low.data);
         setRefreshing(false);
     };
+
+    const loadMovements = async (type?: string) => {
+        const res = await getInventoryMovements({ movement_type: type || undefined, limit: 200 });
+        if (res.success) setMovements(res.data || []);
+    };
+
+    const loadNarcotics = async () => {
+        const res = await getNarcoticRegister();
+        if (res.success) setNarcotics(res.data || []);
+    };
+
+    useEffect(() => {
+        if (activeTab === 'movements') loadMovements(movementFilter);
+        if (activeTab === 'narcotics') loadNarcotics();
+    }, [activeTab, movementFilter]);
 
     useEffect(() => { loadData(); }, []);
 
@@ -89,6 +107,8 @@ export default function PharmacyReportsPage() {
                             { id: 'overview', label: 'Revenue & Movers' },
                             { id: 'expiry', label: `Expiry Alerts (${data.expiring30Count + data.expiring60Count + data.expiring90Count + data.expiredCount})` },
                             { id: 'stock', label: `Stock Alerts (${data.lowStockCount + data.outOfStockCount})` },
+                            { id: 'movements', label: 'Movement Ledger' },
+                            { id: 'narcotics', label: 'Controlled Drugs' },
                         ].map(tab => (
                             <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
                                 className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -212,6 +232,101 @@ export default function PharmacyReportsPage() {
                                                     <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">LOW STOCK</span>
                                                 )}
                                             </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {/* Movement Ledger Tab */}
+                    {activeTab === 'movements' && (
+                        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                            <div className="p-4 border-b border-gray-200 flex gap-2 flex-wrap items-center">
+                                <span className="text-xs font-black text-gray-400 uppercase">Filter:</span>
+                                {['', 'GRN_RECEIPT', 'DISPENSE', 'PATIENT_RETURN', 'SUPPLIER_RETURN', 'EXPIRY_WRITEOFF', 'ADJUSTMENT'].map(t => (
+                                    <button key={t} onClick={() => setMovementFilter(t)}
+                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition ${movementFilter === t ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                                        {t || 'All'}
+                                    </button>
+                                ))}
+                            </div>
+                            <table className="w-full text-xs">
+                                <thead className="bg-gray-50 border-b">
+                                    <tr>
+                                        <th className="text-left px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">Date</th>
+                                        <th className="text-left px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">Medicine</th>
+                                        <th className="text-left px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">Batch</th>
+                                        <th className="text-left px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">Type</th>
+                                        <th className="text-right px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">In</th>
+                                        <th className="text-right px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">Out</th>
+                                        <th className="text-right px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">Cost</th>
+                                        <th className="text-right px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                    {movements.length === 0 ? (
+                                        <tr><td colSpan={8} className="text-center py-8 text-gray-400">No movements found</td></tr>
+                                    ) : movements.map((m: any) => {
+                                        const typeColors: Record<string, string> = {
+                                            GRN_RECEIPT: 'bg-emerald-100 text-emerald-700',
+                                            DISPENSE: 'bg-blue-100 text-blue-700',
+                                            PATIENT_RETURN: 'bg-purple-100 text-purple-700',
+                                            SUPPLIER_RETURN: 'bg-orange-100 text-orange-700',
+                                            EXPIRY_WRITEOFF: 'bg-red-100 text-red-700',
+                                            ADJUSTMENT: 'bg-amber-100 text-amber-700',
+                                        };
+                                        return (
+                                            <tr key={m.id} className="hover:bg-gray-50">
+                                                <td className="px-4 py-2 text-gray-500">{new Date(m.created_at).toLocaleDateString('en-IN')} {new Date(m.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</td>
+                                                <td className="px-4 py-2 font-bold text-gray-900">{m.medicine?.brand_name}</td>
+                                                <td className="px-4 py-2 font-mono text-gray-500">{m.batch?.batch_no || '—'}</td>
+                                                <td className="px-4 py-2"><span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${typeColors[m.movement_type] || 'bg-gray-100 text-gray-600'}`}>{m.movement_type}</span></td>
+                                                <td className="px-4 py-2 text-right font-bold text-emerald-600">{m.quantity_in > 0 ? `+${m.quantity_in}` : ''}</td>
+                                                <td className="px-4 py-2 text-right font-bold text-red-600">{m.quantity_out > 0 ? `-${m.quantity_out}` : ''}</td>
+                                                <td className="px-4 py-2 text-right text-gray-500">{m.unit_cost ? `₹${Number(m.unit_cost).toFixed(2)}` : '—'}</td>
+                                                <td className="px-4 py-2 text-right font-black text-gray-900">{m.balance_after}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {/* Controlled Drug Register Tab */}
+                    {activeTab === 'narcotics' && (
+                        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                            <table className="w-full text-xs">
+                                <thead className="bg-gray-50 border-b">
+                                    <tr>
+                                        <th className="text-left px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">Date</th>
+                                        <th className="text-left px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">Drug</th>
+                                        <th className="text-left px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">Batch</th>
+                                        <th className="text-left px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">Source</th>
+                                        <th className="text-left px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">Patient</th>
+                                        <th className="text-left px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">Prescriber</th>
+                                        <th className="text-right px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">In</th>
+                                        <th className="text-right px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">Out</th>
+                                        <th className="text-right px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">Balance</th>
+                                        <th className="text-left px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase">Witness</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                    {narcotics.length === 0 ? (
+                                        <tr><td colSpan={10} className="text-center py-8 text-gray-400">No controlled drug entries</td></tr>
+                                    ) : narcotics.map((n: any) => (
+                                        <tr key={n.id} className="hover:bg-gray-50">
+                                            <td className="px-4 py-2 text-gray-500">{new Date(n.created_at).toLocaleDateString('en-IN')}</td>
+                                            <td className="px-4 py-2 font-bold text-gray-900">{n.drug_name}</td>
+                                            <td className="px-4 py-2 font-mono text-gray-500">{n.batch_no || '—'}</td>
+                                            <td className="px-4 py-2"><span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-gray-100 text-gray-600">{n.source_type || n.transaction_type}</span></td>
+                                            <td className="px-4 py-2 text-gray-600">{n.patient_name || '—'}</td>
+                                            <td className="px-4 py-2 text-gray-600">{n.prescriber_name || '—'}</td>
+                                            <td className="px-4 py-2 text-right font-bold text-emerald-600">{n.quantity_in > 0 ? `+${n.quantity_in}` : ''}</td>
+                                            <td className="px-4 py-2 text-right font-bold text-red-600">{n.quantity_out > 0 ? `-${n.quantity_out}` : ''}</td>
+                                            <td className="px-4 py-2 text-right font-black text-gray-900">{n.balance}</td>
+                                            <td className="px-4 py-2 text-gray-500">{n.witness_name || '—'}</td>
                                         </tr>
                                     ))}
                                 </tbody>

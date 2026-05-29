@@ -223,6 +223,11 @@ model Organization {
   billing_order_sets   BillingOrderSet[]
   discount_schemes     DiscountScheme[]
 
+  // Pharmacy Upgrade — Procurement & Inventory
+  pharmacy_inventory_movements PharmacyInventoryMovement[]
+  pharmacy_purchase_invoices   PharmacyPurchaseInvoice[]
+  dispense_allocations         DispenseAllocation[]
+
   @@map("organizations")
 }
 
@@ -796,6 +801,8 @@ model pharmacy_medicine_master {
   batches      pharmacy_batch_inventory[]
   order_items  pharmacy_order_items[]
   ward_stock   WardStock[]
+  inventory_movements      PharmacyInventoryMovement[]
+  purchase_invoice_lines   PharmacyPurchaseInvoiceLine[]
 
   @@index([organizationId])
 }
@@ -809,15 +816,22 @@ model pharmacy_batch_inventory {
   expiry_date      DateTime                // Section 7.3 — required
   cost_price       Float?                  // Purchase Price at time of receipt — Section 7.3
   mrp              Float?                  // MRP per unit for this batch — Section 7.3
+  actual_cost      Float?                  // Actual purchase cost from GRN (for COGS)
   rack_location    String?
   supplier_name    String?
+  vendor_id        Int?                    // Unified vendor reference
   grn_id           Int?
+  is_quarantined   Boolean   @default(false) // Expiry/damage quarantine
 
-  medicine pharmacy_medicine_master @relation(fields: [medicine_id], references: [id])
-  grn      GoodsReceiptNote?        @relation(fields: [grn_id], references: [id])
+  medicine            pharmacy_medicine_master   @relation(fields: [medicine_id], references: [id])
+  grn                 GoodsReceiptNote?          @relation(fields: [grn_id], references: [id])
+  inventory_movements PharmacyInventoryMovement[]
+  dispense_allocations DispenseAllocation[]
 
   @@unique([medicine_id, batch_no])
   @@index([grn_id])
+  @@index([vendor_id])
+  @@index([expiry_date])
 }
 
 model pharmacy_sales_audit {
@@ -866,7 +880,9 @@ model NarcoticRegister {
   id              String   @id @default(uuid())
   organizationId  String
   drug_name       String
+  medicine_id     Int?
   batch_no        String?
+  batch_id        Int?
   patient_id      String?
   patient_name    String?
   prescriber_id   String?
@@ -876,6 +892,8 @@ model NarcoticRegister {
   quantity_out    Float    @default(0)
   balance         Float    @default(0)
   transaction_type String  // IN | OUT
+  source_type     String?  // GRN, DISPENSE, PATIENT_RETURN, SUPPLIER_RETURN, EXPIRY_WRITEOFF, ADJUSTMENT
+  source_id       String?  // ID of the source record
   notes           String?
   created_at      DateTime @default(now())
 
@@ -883,6 +901,8 @@ model NarcoticRegister {
 
   @@index([organizationId])
   @@index([drug_name])
+  @@index([medicine_id])
+  @@index([source_type])
 }
 
 model pharmacy_order_items {
@@ -900,8 +920,9 @@ model pharmacy_order_items {
   tax_amount         Float?  @default(0)
   hsn_sac_code       String?
 
-  order    pharmacy_orders           @relation(fields: [order_id], references: [id])
-  medicine pharmacy_medicine_master? @relation(fields: [medicine_id], references: [id])
+  order                pharmacy_orders           @relation(fields: [order_id], references: [id])
+  medicine             pharmacy_medicine_master? @relation(fields: [medicine_id], references: [id])
+  dispense_allocations DispenseAllocation[]
 
   @@index([medicine_id])
 }
@@ -1754,29 +1775,40 @@ model PurchaseOrder {
   id             Int       @id @default(autoincrement())
   po_number      String    @unique
   supplier_id    Int
-  status         String    @default("Draft") // Draft, Ordered, Partially Received, Received, Cancelled
+  vendor_id      Int?      // Unified vendor reference (replaces supplier_id over time)
+  status         String    @default("Draft") // Draft, Submitted, Approved, Rejected, Partially Received, Received, Cancelled
   total_amount   Float     @default(0)
+  gst_amount     Float     @default(0)
   ordered_at     DateTime?
+  approved_at    DateTime?
+  approved_by    String?
   received_at    DateTime?
+  notes          String?
   organizationId String
   created_at     DateTime  @default(now())
 
-  organization Organization        @relation(fields: [organizationId], references: [id])
-  supplier     PharmacySupplier    @relation(fields: [supplier_id], references: [id])
-  items        PurchaseOrderItem[]
-  grns         GoodsReceiptNote[]
+  organization         Organization              @relation(fields: [organizationId], references: [id])
+  supplier             PharmacySupplier          @relation(fields: [supplier_id], references: [id])
+  vendor               Vendor?                   @relation("VendorPurchaseOrders", fields: [vendor_id], references: [id])
+  items                PurchaseOrderItem[]
+  grns                 GoodsReceiptNote[]
+  purchase_invoices    PharmacyPurchaseInvoice[]
 
   @@index([organizationId])
+  @@index([vendor_id])
   @@map("purchase_orders")
 }
 
 model PurchaseOrderItem {
-  id                Int   @id @default(autoincrement())
+  id                Int    @id @default(autoincrement())
   po_id             Int
   medicine_id       Int
   quantity_ordered  Int
-  quantity_received Int   @default(0)
+  quantity_received Int    @default(0)
   unit_price        Float
+  gst_rate          Float  @default(0)
+  hsn_code          String?
+  notes             String?
 
   purchase_order PurchaseOrder @relation(fields: [po_id], references: [id])
 
@@ -1789,24 +1821,29 @@ model PurchaseOrderItem {
 // ========================================
 
 model GoodsReceiptNote {
-  id             Int      @id @default(autoincrement())
-  grn_number     String   @unique
-  po_id          Int?
-  supplier_id    Int?
-  received_by    String?
-  remarks        String?
-  total_amount   Float    @default(0)
-  organizationId String
-  received_at    DateTime @default(now())
-  created_at     DateTime @default(now())
+  id                Int      @id @default(autoincrement())
+  grn_number        String   @unique
+  po_id             Int?
+  supplier_id       Int?
+  vendor_id         Int?      // Unified vendor reference
+  received_by       String?
+  remarks           String?
+  total_amount      Float    @default(0)
+  rejected_quantity Int      @default(0)
+  rejection_reason  String?
+  organizationId    String
+  received_at       DateTime @default(now())
+  created_at        DateTime @default(now())
 
   organization   Organization               @relation(fields: [organizationId], references: [id])
   purchase_order PurchaseOrder?             @relation(fields: [po_id], references: [id])
   supplier       PharmacySupplier?          @relation(fields: [supplier_id], references: [id])
+  vendor         Vendor?                    @relation("VendorGRNs", fields: [vendor_id], references: [id])
   batches        pharmacy_batch_inventory[]
 
   @@index([organizationId])
   @@index([po_id])
+  @@index([vendor_id])
   @@map("goods_receipt_notes")
 }
 
@@ -1815,19 +1852,30 @@ model GoodsReceiptNote {
 // ========================================
 
 model PharmacyReturn {
-  id             Int      @id @default(autoincrement())
-  return_type    String // patient_return, expired_stock
-  medicine_id    Int
-  batch_id       String?
-  quantity       Int
-  reason         String?
-  processed_by   String?
-  organizationId String
-  created_at     DateTime @default(now())
+  id               Int      @id @default(autoincrement())
+  return_type      String   // patient_return, supplier_return, expired_stock, damage_writeoff
+  medicine_id      Int
+  batch_id         String?
+  batch_record_id  Int?     // FK to pharmacy_batch_inventory
+  quantity         Int
+  unit_cost        Float?   // batch actual cost at time of return
+  reason           String?
+  vendor_id        Int?     // for supplier returns
+  po_id            Int?     // original PO reference
+  invoice_id       Int?     // original purchase invoice reference
+  original_invoice_id Int?  // patient's original sale invoice
+  status           String   @default("Pending") // Pending, Approved, Processed, Rejected
+  approved_by      String?
+  processed_by     String?
+  gl_posted        Boolean  @default(false)
+  organizationId   String
+  created_at       DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
+  @@index([return_type])
+  @@index([vendor_id])
   @@map("pharmacy_returns")
 }
 
@@ -2302,10 +2350,19 @@ model Vendor {
   organizationId String
   created_at     DateTime @default(now())
 
-  organization      Organization       @relation(fields: [organizationId], references: [id])
-  expenses          Expense[]
-  fixed_assets      FixedAsset[]
-  asset_maintenance AssetMaintenance[]
+  // Pharmacy supplier fields
+  is_pharmacy_supplier  Boolean   @default(false)
+  drug_license_number   String?
+  drug_license_expiry   DateTime?
+  pharmacy_payment_terms Int?     @default(30)
+
+  organization             Organization              @relation(fields: [organizationId], references: [id])
+  expenses                 Expense[]
+  fixed_assets             FixedAsset[]
+  asset_maintenance        AssetMaintenance[]
+  pharmacy_purchase_orders PurchaseOrder[]            @relation("VendorPurchaseOrders")
+  pharmacy_grns            GoodsReceiptNote[]         @relation("VendorGRNs")
+  pharmacy_purchase_invoices PharmacyPurchaseInvoice[]
 
   @@unique([vendor_code, organizationId])
   @@index([organizationId])
@@ -4457,4 +4514,119 @@ model DiscountScheme {
   organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
+}
+
+// ========================================
+// MODULE — Pharmacy Upgrade: Inventory Movement Ledger
+// ========================================
+
+model PharmacyInventoryMovement {
+  id              Int      @id @default(autoincrement())
+  organizationId  String
+  medicine_id     Int
+  batch_id        Int?
+  movement_type   String   // OPENING, GRN_RECEIPT, DISPENSE, PATIENT_RETURN, SUPPLIER_RETURN, EXPIRY_WRITEOFF, ADJUSTMENT
+  quantity_in     Int      @default(0)
+  quantity_out    Int      @default(0)
+  unit_cost       Float?
+  balance_after   Int
+  source_type     String?  // PO, GRN, INVOICE, ORDER, RETURN, ADJUSTMENT
+  source_id       String?
+  user_id         String?
+  reason          String?
+  created_at      DateTime @default(now())
+
+  organization Organization            @relation(fields: [organizationId], references: [id])
+  medicine     pharmacy_medicine_master @relation(fields: [medicine_id], references: [id])
+  batch        pharmacy_batch_inventory? @relation(fields: [batch_id], references: [id])
+
+  @@index([organizationId])
+  @@index([medicine_id])
+  @@index([batch_id])
+  @@index([movement_type])
+  @@index([created_at])
+  @@map("pharmacy_inventory_movements")
+}
+
+// ========================================
+// MODULE — Pharmacy Upgrade: Purchase Invoice & 3-Way Matching
+// ========================================
+
+model PharmacyPurchaseInvoice {
+  id                  Int       @id @default(autoincrement())
+  organizationId      String
+  invoice_number      String
+  vendor_id           Int
+  po_id               Int?
+  invoice_date        DateTime
+  due_date            DateTime?
+  subtotal            Float     @default(0)
+  cgst_amount         Float     @default(0)
+  sgst_amount         Float     @default(0)
+  igst_amount         Float     @default(0)
+  total_amount        Float     @default(0)
+  amount_paid         Float     @default(0)
+  tds_amount          Float     @default(0)
+  status              String    @default("Draft") // Draft, PendingApproval, Posted, PartiallyPaid, Paid, Cancelled
+  variance_approved   Boolean   @default(false)
+  matching_notes      String?
+  gl_posted           Boolean   @default(false)
+  vendor_gstin        String?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+
+  organization Organization              @relation(fields: [organizationId], references: [id])
+  vendor       Vendor                    @relation(fields: [vendor_id], references: [id])
+  po           PurchaseOrder?            @relation(fields: [po_id], references: [id])
+  line_items   PharmacyPurchaseInvoiceLine[]
+
+  @@unique([invoice_number, organizationId])
+  @@index([organizationId])
+  @@index([vendor_id])
+  @@index([status])
+  @@map("pharmacy_purchase_invoices")
+}
+
+model PharmacyPurchaseInvoiceLine {
+  id              Int    @id @default(autoincrement())
+  invoice_id      Int
+  medicine_id     Int
+  grn_id          Int?
+  po_item_id      Int?
+  quantity        Int
+  unit_price      Float
+  gst_rate        Float  @default(0)
+  cgst_amount     Float  @default(0)
+  sgst_amount     Float  @default(0)
+  igst_amount     Float  @default(0)
+  line_total      Float
+  hsn_code        String?
+
+  invoice  PharmacyPurchaseInvoice  @relation(fields: [invoice_id], references: [id])
+  medicine pharmacy_medicine_master @relation(fields: [medicine_id], references: [id])
+
+  @@index([invoice_id])
+  @@map("pharmacy_purchase_invoice_lines")
+}
+
+// ========================================
+// MODULE — Pharmacy Upgrade: Dispense Allocations (Multi-batch FEFO)
+// ========================================
+
+model DispenseAllocation {
+  id              Int      @id @default(autoincrement())
+  organizationId  String
+  order_item_id   Int
+  batch_id        Int
+  quantity        Int
+  unit_cost       Float
+  created_at      DateTime @default(now())
+
+  organization Organization            @relation(fields: [organizationId], references: [id])
+  order_item   pharmacy_order_items    @relation(fields: [order_item_id], references: [id])
+  batch        pharmacy_batch_inventory @relation(fields: [batch_id], references: [id])
+
+  @@index([order_item_id])
+  @@index([batch_id])
+  @@map("dispense_allocations")
 }

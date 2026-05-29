@@ -1,15 +1,11 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { AppShell } from '@/app/components/layout/AppShell';
-import { FileText, ArrowLeft, Printer, Edit, Trash2, Plus, CheckCircle, Save, X, History, Ban, AlertTriangle, Loader2 } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
 import { getInvoiceDetail, addInvoiceItem, removeInvoiceItem, finalizeInvoice, cancelInvoice } from '@/app/actions/finance-actions';
 import { getAuditLogs } from '@/app/actions/audit-actions';
 import { getIpdServices } from '@/app/actions/ipd-master-actions';
-import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useToast } from '@/app/components/ui/Toast';
-import { PrintLetterhead } from '@/app/components/print/PrintLetterhead';
 
 export default function InvoiceDetailPage() {
     const params = useParams();
@@ -20,7 +16,7 @@ export default function InvoiceDetailPage() {
     const [invoice, setInvoice] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [isEditMode, setIsEditMode] = useState(false);
-    
+
     // Master Services for Editing
     const [services, setServices] = useState<any[]>([]);
     const [selectedServiceId, setSelectedServiceId] = useState<number | null>(null);
@@ -56,10 +52,6 @@ export default function InvoiceDetailPage() {
         });
     }, [invoiceId]);
 
-    const handlePrint = () => {
-        window.print();
-    };
-
     const handleAddItem = async () => {
         if (!selectedServiceId) return;
         const svc = services.find(s => s.id === selectedServiceId);
@@ -76,7 +68,7 @@ export default function InvoiceDetailPage() {
             tax_rate: Number(svc.tax_rate) || 0,
             service_category: svc.service_category
         });
-        
+
         setActionLoading(false);
         if (res.success) {
             toast.success('Item added');
@@ -134,505 +126,304 @@ export default function InvoiceDetailPage() {
         }
     };
 
-    if (loading && !invoice) return <AppShell pageTitle="Loading..."><div className="p-12 text-center text-gray-400 font-medium">Scanning Invoice Data...</div></AppShell>;
-    if (!invoice) return <AppShell pageTitle="Not Found"><div className="p-12 text-center text-rose-500 font-bold">Invoice records missing or deleted.</div></AppShell>;
+    if (loading) {
+        return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-400">Loading invoice...</div>;
+    }
 
-    const statusStyle = invoice.status === 'Paid' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-        invoice.status === 'Partial' ? 'bg-amber-100 text-amber-700 border-amber-200' :
-            invoice.status === 'Draft' ? 'bg-gray-100 text-gray-700 border-gray-200' :
-                invoice.status === 'Cancelled' ? 'bg-rose-100 text-rose-700 border-rose-200' :
-                    invoice.status === 'Final' ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                    'bg-indigo-100 text-indigo-700 border-indigo-200';
+    if (!invoice) {
+        return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-red-500">Invoice not found or deleted.</div>;
+    }
 
-    // Grouping
-    const groupedItems = invoice.items?.reduce((acc: any, item: any) => {
-        const cat = item.service_category || item.department || 'Other Services';
-        if (!acc[cat]) acc[cat] = [];
-        acc[cat].push(item);
+    const fmt = (n: number) => n.toLocaleString('en-IN', { style: 'currency', currency: 'INR' });
+
+    // Group items by category
+    const categoryGroups = invoice.items?.reduce((acc: any, item: any) => {
+        const cat = item.service_category || item.department || 'Other';
+        if (!acc[cat]) acc[cat] = { items: [], total: 0 };
+        acc[cat].items.push(item);
+        acc[cat].total += (Number(item.net_price) || 0) + (Number(item.tax_amount) || 0);
         return acc;
-    }, {});
+    }, {} as Record<string, { items: any[]; total: number }>) || {};
 
-    // Compute GST Summaries for proper breakup
-    const gstMap = new Map<number, { taxable: number, tax: number }>();
-    invoice.items?.forEach((item: any) => {
-        if (item.tax_rate > 0) {
-            const current = gstMap.get(item.tax_rate) || { taxable: 0, tax: 0 };
-            current.taxable += Number(item.net_price);
-            current.tax += Number(item.tax_amount || 0);
-            gstMap.set(item.tax_rate, current);
-        }
-    });
+    const statusBadge: Record<string, string> = {
+        Draft: 'bg-gray-100 text-gray-700',
+        Final: 'bg-blue-100 text-blue-700',
+        Paid: 'bg-emerald-100 text-emerald-700',
+        Partial: 'bg-amber-100 text-amber-700',
+        Cancelled: 'bg-red-100 text-red-700',
+    };
 
     return (
-        <AppShell
-            pageTitle={`Invoice ${invoice.invoice_number}`}
-            pageIcon={<FileText className="h-5 w-5" />}
-        >
-            <style jsx global>{`
-                @media print {
-                    @page { margin: 0; size: A4 portrait; }
-                    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white; }
-                    /* Hide AppShell layout elements */
-                    nav, aside, header { display: none !important; }
-                    .print-hidden { display: none !important; }
-                    .print-m-0 { margin: 0 !important; max-width: 100% !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; }
-                    main { padding: 0 !important; }
-                }
-            `}</style>
+        <div className="min-h-screen bg-gray-50 p-4">
+            <div className="max-w-5xl mx-auto space-y-4">
 
-            <div className="max-w-4xl mx-auto print-m-0 print:w-full mb-12">
-                
-                {/* Print Hidden Toolbar */}
-                <div className="flex items-center justify-between mb-6 print-hidden">
-                    <Link href="/finance/invoices" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 font-bold transition-colors">
-                        <ArrowLeft className="h-4 w-4" /> Back to Ledger
-                    </Link>
-                    <div className="flex items-center gap-2">
-                        {invoice.status === 'Draft' && !isEditMode && (
-                            <button onClick={handleFinalize} disabled={actionLoading} className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-colors shadow-sm disabled:opacity-50">
-                                <CheckCircle className="h-4 w-4" /> Finalize Bill
-                            </button>
-                        )}
-                        {invoice.status === 'Draft' && (
-                            <button onClick={() => setIsEditMode(!isEditMode)} className={`inline-flex items-center gap-1.5 px-4 py-2 font-bold rounded-xl text-sm transition-colors shadow-sm border ${isEditMode ? 'bg-slate-200 text-slate-800 border-slate-300' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}>
-                                {isEditMode ? <><X className="h-4 w-4" /> Cancel Edit</> : <><Edit className="h-4 w-4" /> Edit Draft</>}
-                            </button>
-                        )}
-                        {invoice.status !== 'Cancelled' && (
-                            <button
-                                onClick={() => setShowCancelModal(true)}
-                                disabled={actionLoading}
-                                className="inline-flex items-center gap-1.5 px-4 py-2 bg-white text-rose-700 border border-rose-200 hover:bg-rose-50 font-bold rounded-xl text-sm transition-colors shadow-sm disabled:opacity-50"
-                                title="Cancel this invoice — requires a reason"
-                            >
-                                <Ban className="h-4 w-4" /> Cancel Invoice
-                            </button>
-                        )}
-                        <button onClick={handlePrint} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-sm transition-colors shadow-sm">
-                            <Printer className="h-4 w-4" /> Print
-                        </button>
+                {/* Patient Header */}
+                <div className="bg-white rounded-lg shadow p-4">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <h1 className="text-xl font-bold text-gray-900">{invoice.patient?.full_name || 'Patient'}</h1>
+                            <p className="text-sm text-gray-500">
+                                UHID: {invoice.patient_id} | Invoice: {invoice.invoice_number}
+                            </p>
+                            {invoice.admission && (
+                                <p className="text-sm text-gray-500">
+                                    Dr. {invoice.admission.doctor_name || 'N/A'} | {invoice.admission.ward_name || 'N/A'} | Bed: {invoice.admission.bed_id || 'N/A'}
+                                </p>
+                            )}
+                            <p className="text-xs text-gray-400">
+                                Date: {new Date(invoice.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} |
+                                Type: {invoice.invoice_type}
+                                {invoice.admission && ` | Admitted: ${new Date(invoice.admission.admission_date).toLocaleDateString('en-IN')}`}
+                                {invoice.admission?.diagnosis && ` | Dx: ${invoice.admission.diagnosis}`}
+                            </p>
+                        </div>
+                        <span className={`px-3 py-1 rounded-lg text-sm font-bold ${statusBadge[invoice.status] || 'bg-gray-100 text-gray-700'}`}>
+                            {invoice.status}
+                        </span>
                     </div>
                 </div>
 
-                {/* Cancellation banner — visible whenever invoice is Cancelled */}
+                {/* Cancelled Banner */}
                 {invoice.status === 'Cancelled' && (
-                    <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 mb-6">
-                        <div className="flex items-start gap-3">
-                            <Ban className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm font-bold text-rose-800">This invoice has been CANCELLED.</p>
-                                <p className="text-[12px] text-rose-700 mt-1 break-words">
-                                    <span className="font-semibold">Reason:</span>{' '}
-                                    {invoice.notes || '(no reason on record — check audit log)'}
-                                </p>
-                                <p className="text-[11px] text-rose-600 mt-1">
-                                    Full audit history below shows who cancelled it and when.
-                                </p>
-                            </div>
-                        </div>
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <p className="text-sm font-bold text-red-800">This invoice has been CANCELLED.</p>
+                        <p className="text-xs text-red-700 mt-1">
+                            Reason: {invoice.notes || '(check audit log)'}
+                        </p>
                     </div>
                 )}
 
-                {/* Editable Section (Hidden in Print) */}
+                {/* Add Item (Edit Mode) */}
                 {isEditMode && invoice.status === 'Draft' && (
-                    <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 mb-8 print-hidden shadow-sm">
-                        <h3 className="text-sm font-black text-indigo-900 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <Plus className="h-4 w-4" /> Append Service to Bill
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div className="bg-white rounded-lg shadow p-4">
+                        <h2 className="font-semibold text-sm mb-3">Add Service to Bill</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                             <div className="md:col-span-2">
-                                <label className="block text-[10px] font-bold text-indigo-500 uppercase tracking-wider mb-1">Master Service</label>
-                                <select 
-                                    value={selectedServiceId || ''} 
+                                <label className="text-xs text-gray-500">Service</label>
+                                <select
+                                    value={selectedServiceId || ''}
                                     onChange={e => setSelectedServiceId(Number(e.target.value))}
-                                    className="w-full p-2.5 bg-white border border-indigo-200 rounded-lg text-sm font-medium outline-none text-indigo-900"
+                                    className="w-full px-2 py-1.5 border rounded text-sm"
                                 >
-                                    <option value="">-- Choose --</option>
+                                    <option value="">Select service</option>
                                     {services.map(s => (
-                                        <option key={s.id} value={s.id}>{s.service_name} (₹{Number(s.default_rate)})</option>
+                                        <option key={s.id} value={s.id}>{s.service_name} ({fmt(Number(s.default_rate))})</option>
                                     ))}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-[10px] font-bold text-indigo-500 uppercase tracking-wider mb-1">Qty</label>
-                                <input 
-                                    type="number" min="1" 
-                                    value={draftQty} onChange={e => setDraftQty(Number(e.target.value))}
-                                    className="w-full p-2.5 bg-white border border-indigo-200 rounded-lg text-sm font-medium outline-none text-indigo-900"
-                                />
+                                <label className="text-xs text-gray-500">Qty</label>
+                                <input type="number" min="1" value={draftQty} onChange={e => setDraftQty(Number(e.target.value))}
+                                    className="w-full px-2 py-1.5 border rounded text-sm" />
                             </div>
                             <div>
-                                <label className="block text-[10px] font-bold text-indigo-500 uppercase tracking-wider mb-1">Discount (₹)</label>
-                                <input 
-                                    type="number" min="0" 
-                                    value={draftDiscount} onChange={e => setDraftDiscount(Number(e.target.value))}
-                                    className="w-full p-2.5 bg-white border border-indigo-200 rounded-lg text-sm font-medium outline-none text-indigo-900"
-                                />
+                                <label className="text-xs text-gray-500">Discount</label>
+                                <input type="number" min="0" value={draftDiscount} onChange={e => setDraftDiscount(Number(e.target.value))}
+                                    className="w-full px-2 py-1.5 border rounded text-sm" />
                             </div>
                             <div className="flex items-end">
-                                <button 
-                                    onClick={handleAddItem}
-                                    disabled={!selectedServiceId || actionLoading}
-                                    className="w-full p-2.5 bg-indigo-600 text-white rounded-lg text-sm font-bold disabled:opacity-50 hover:bg-indigo-700 transition-colors"
-                                >
-                                    {actionLoading ? 'Saving...' : 'Add Item'}
+                                <button onClick={handleAddItem} disabled={!selectedServiceId || actionLoading}
+                                    className="w-full px-2 py-1.5 bg-blue-600 text-white rounded text-sm font-medium disabled:opacity-50 hover:bg-blue-700">
+                                    {actionLoading ? 'Adding...' : 'Add Item'}
                                 </button>
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* THE PRINTABLE INVOICE DOCUMENT */}
-                <div className="bg-white border border-gray-200 rounded-2xl print-m-0 p-8 sm:p-12 shadow-md relative"
-                    style={{ position: 'relative' }}
-                >
-                    {/* Letterhead as actual img — prints in all browsers */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                        src="/letter head.png"
-                        alt="Axten Hospitals"
-                        className="hidden print:block w-full"
-                        style={{ height: 'auto', maxHeight: '160px', objectFit: 'cover', objectPosition: 'top', marginBottom: '16px' }}
-                    />
-
-                    {/* Status Watermark */}
-                    {(invoice.status === 'Draft' || invoice.status === 'Cancelled') && (
-                        <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none z-0">
-                            <span className="text-[150px] font-black uppercase transform -rotate-45">{invoice.status}</span>
-                        </div>
-                    )}
-
-                    {/* Hospital Branding Header — hidden in print (letterhead image has it) */}
-                    <div className="relative z-10 print:hidden">
-                        <PrintLetterhead
-                            className="mb-8"
-                            rightSlot={
-                                <div className="mt-6 md:mt-0">
-                                    <h2 className="text-3xl font-black tracking-wider uppercase mb-2" style={{ color: '#1e3a6e', opacity: 0.15 }}>TAX INVOICE</h2>
-                                    <div className="text-sm font-mono text-slate-700"><span className="font-bold">Bill No:</span> {invoice.invoice_number}</div>
-                                    <div className="text-sm font-mono text-slate-700"><span className="font-bold">Date:</span> {new Date(invoice.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-                                    <div className="text-sm font-mono text-slate-700"><span className="font-bold">Type:</span> {invoice.invoice_type} BILLING</div>
-                                    <div className="mt-2 text-right flex justify-end">
-                                        <span className={`inline-flex px-3 py-1 text-[11px] uppercase tracking-wider font-bold rounded border print:text-black print:border-black ${statusStyle}`}>
-                                            {invoice.status}
-                                        </span>
-                                    </div>
-                                </div>
-                            }
-                        />
-                    </div>
-                    {/* Print-only invoice info */}
-                    <div className="hidden print:flex justify-between items-start mb-8">
-                        <div />
-                        <div className="text-right">
-                            <h2 className="text-2xl font-black tracking-wider uppercase mb-1" style={{ color: '#1e3a6e' }}>TAX INVOICE</h2>
-                            <div className="text-sm font-mono text-slate-700"><span className="font-bold">Bill No:</span> {invoice.invoice_number}</div>
-                            <div className="text-sm font-mono text-slate-700"><span className="font-bold">Date:</span> {new Date(invoice.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-                            <div className="text-sm font-mono text-slate-700"><span className="font-bold">Type:</span> {invoice.invoice_type} BILLING</div>
-                        </div>
-                    </div>
-
-                    {/* Patient Context Block */}
-                    <div className="relative z-10 grid grid-cols-2 gap-8 bg-slate-50 border border-slate-200 p-6 rounded-xl mb-8">
-                        <div>
-                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Billed To</h3>
-                            <p className="text-lg font-black text-slate-900">{invoice.patient?.full_name}</p>
-                            <p className="text-sm text-slate-700 font-medium">UHID: <span className="font-mono">{invoice.patient_id}</span></p>
-                            <p className="text-sm text-slate-700 mt-0.5">Contact: {invoice.patient?.phone || 'N/A'}</p>
-                        </div>
-                        <div className="text-right">
-                            {invoice.admission && (
-                                <>
-                                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Admission Details</h3>
-                                    <p className="text-sm text-slate-700 font-medium">IPD No: <span className="font-mono">{invoice.admission.admission_id}</span></p>
-                                    <p className="text-sm text-slate-700">Ward: {invoice.admission.ward_name} · Bed: {invoice.admission.bed_id}</p>
-                                    <p className="text-sm text-slate-700">Admitted: {new Date(invoice.admission.admission_date).toLocaleDateString('en-IN')}</p>
-                                    <p className="text-sm text-slate-700 font-bold mt-1 max-w-[200px] ml-auto truncate" title={invoice.admission.diagnosis}>Dx: {invoice.admission.diagnosis}</p>
-                                </>
-                            )}
-                            {!invoice.admission && (
-                                <>
-                                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Consulting Doctor</h3>
-                                    <p className="text-sm text-slate-700 mt-4 italic font-medium">As assigned in OPD</p>
-                                </>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Proper Itemized Break Up */}
-                    <div className="relative z-10 mb-8 max-w-[100%] overflow-x-auto">
-                        <table className="w-full text-left text-sm print:text-xs">
-                            <thead className="bg-slate-900 text-white font-black uppercase text-[10px] tracking-wider">
-                                <tr>
-                                    <th className="px-4 py-3 rounded-tl-lg">S.No</th>
-                                    <th className="px-4 py-3">Particulars & Description</th>
-                                    <th className="px-4 py-3 text-right">Qty</th>
-                                    <th className="px-4 py-3 text-right">Rate</th>
-                                    <th className="px-4 py-3 text-right">Disc</th>
-                                    <th className="px-4 py-3 text-right whitespace-nowrap">Taxable</th>
-                                    <th className="px-4 py-3 text-right">GST %</th>
-                                    <th className="px-4 py-3 text-right rounded-tr-lg">Amount</th>
-                                    {isEditMode && <th className="px-4 py-3 print-hidden w-8"></th>}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {Object.keys(groupedItems).map((category) => (
-                                    <React.Fragment key={category}>
-                                        <tr className="bg-slate-100">
-                                            <td colSpan={isEditMode ? 9 : 8} className="px-4 py-2 font-black text-[11px] text-slate-600 uppercase tracking-widest">{category}</td>
-                                        </tr>
-                                        {groupedItems[category].map((item: any, idx: number) => (
-                                            <tr key={item.id} className="hover:bg-slate-50 transition-colors group">
-                                                <td className="px-4 py-3 font-mono text-slate-400">{idx + 1}</td>
-                                                <td className="px-4 py-3">
-                                                    <p className="font-bold text-slate-900">{item.description}</p>
-                                                    {(item.ref_id || item.hsn_sac_code) && (
-                                                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                                            {item.hsn_sac_code ? `HSN/SAC: ${item.hsn_sac_code}` : ''} {item.ref_id ? `| Ref: ${item.ref_id}` : ''}
-                                                        </p>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-medium text-slate-700">{item.quantity}</td>
-                                                <td className="px-4 py-3 text-right font-medium text-slate-700">₹{Number(item.unit_price).toFixed(2)}</td>
-                                                <td className="px-4 py-3 text-right text-rose-500">{Number(item.discount) > 0 ? `-₹${Number(item.discount).toFixed(2)}` : '—'}</td>
-                                                <td className="px-4 py-3 text-right font-bold text-slate-700">₹{Number(item.net_price).toFixed(2)}</td>
-                                                <td className="px-4 py-3 text-right text-slate-500">{Number(item.tax_rate) > 0 ? `${item.tax_rate}%` : 'EXEMPT'}</td>
-                                                <td className="px-4 py-3 text-right font-black text-slate-900">₹{(Number(item.net_price) + Number(item.tax_amount || 0)).toFixed(2)}</td>
+                {/* Charge Summary */}
+                <div className="bg-white rounded-lg shadow p-4">
+                    <h2 className="font-semibold text-sm mb-3">Charge Summary</h2>
+                    <div className="space-y-1 mb-3">
+                        {Object.entries(categoryGroups).map(([cat, data]: [string, any]) => (
+                            <details key={cat} className="group">
+                                <summary className="flex justify-between text-sm p-2 bg-gray-50 rounded cursor-pointer hover:bg-gray-100">
+                                    <span>{cat} <span className="text-gray-400 text-xs">({data.items.length} items)</span></span>
+                                    <span className="font-medium">{fmt(data.total)}</span>
+                                </summary>
+                                <div className="ml-4 mt-1 space-y-0.5">
+                                    {data.items.map((item: any) => (
+                                        <div key={item.id} className="flex justify-between items-center text-xs py-1.5 px-2 border-l-2 border-gray-200">
+                                            <div className="flex-1">
+                                                <span className="text-gray-700">{item.description}</span>
+                                                <span className="text-gray-400 ml-2">x{item.quantity}</span>
+                                                {Number(item.discount) > 0 && <span className="text-green-600 ml-2">-{fmt(Number(item.discount))}</span>}
+                                                {Number(item.tax_rate) > 0 && <span className="text-gray-400 ml-2">GST {item.tax_rate}%</span>}
+                                                {item.hsn_sac_code && <span className="text-gray-300 ml-2 font-mono">HSN:{item.hsn_sac_code}</span>}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-medium text-gray-700">{fmt(Number(item.net_price) + Number(item.tax_amount || 0))}</span>
                                                 {isEditMode && (
-                                                    <td className="px-4 py-3 text-right print-hidden">
-                                                        <button disabled={actionLoading} onClick={() => handleRemoveItem(item.id)} className="text-slate-300 hover:text-rose-500 transition-colors">
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </button>
-                                                    </td>
+                                                    <button onClick={() => handleRemoveItem(item.id)} disabled={actionLoading}
+                                                        className="text-red-400 hover:text-red-600 text-lg">&times;</button>
                                                 )}
-                                            </tr>
-                                        ))}
-                                    </React.Fragment>
-                                ))}
-                                {(!invoice.items || invoice.items.length === 0) && (
-                                    <tr>
-                                        <td colSpan={isEditMode ? 9 : 8} className="px-4 py-12 text-center text-slate-400 font-medium">No items added to this bill yet.</td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Financial Summary & GST Engine */}
-                    <div className="relative z-10 flex flex-col md:flex-row justify-between items-start gap-8 border-t-2 border-slate-900 pt-6">
-                        
-                        {/* GST Breakup */}
-                        <div className="w-full md:w-1/2">
-                            {gstMap.size > 0 && (
-                                <div className="border border-slate-200 rounded-lg overflow-hidden">
-                                    <div className="bg-slate-50 px-3 py-2 border-b border-slate-200">
-                                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">GST Summary Breakup</p>
-                                    </div>
-                                    <table className="w-full text-left text-xs">
-                                        <thead className="bg-white text-slate-500 font-bold border-b border-slate-100">
-                                            <tr>
-                                                <th className="px-3 py-2">Tax %</th>
-                                                <th className="px-3 py-2 text-right">Taxable Amt</th>
-                                                <th className="px-3 py-2 text-right">CGST</th>
-                                                <th className="px-3 py-2 text-right">SGST</th>
-                                                <th className="px-3 py-2 text-right">Tax Total</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-50">
-                                            {Array.from(gstMap.entries()).map(([rate, vals]) => (
-                                                <tr key={rate}>
-                                                    <td className="px-3 py-1.5 font-bold text-slate-700">{rate}%</td>
-                                                    <td className="px-3 py-1.5 text-right font-mono">₹{vals.taxable.toFixed(2)}</td>
-                                                    <td className="px-3 py-1.5 text-right font-mono">₹{(vals.tax / 2).toFixed(2)}</td>
-                                                    <td className="px-3 py-1.5 text-right font-mono">₹{(vals.tax / 2).toFixed(2)}</td>
-                                                    <td className="px-3 py-1.5 text-right font-mono font-bold">₹{vals.tax.toFixed(2)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                            <div className="mt-4">
-                                <p className="text-[10px] uppercase font-bold text-slate-400">Amount in Words:</p>
-                                <p className="text-xs font-bold text-slate-700 italic mt-0.5">Rupees {convertNumberToWords(Number(invoice.net_amount))} Only.</p>
-                            </div>
-                        </div>
-
-                        {/* Grand Totals */}
-                        <div className="w-full md:w-[350px] space-y-1 bg-slate-50 p-5 rounded-xl border border-slate-200">
-                            <div className="flex justify-between text-sm font-bold text-slate-600 mb-1">
-                                <span>Subtotal</span>
-                                <span className="font-mono">₹{Number(invoice.total_amount).toFixed(2)}</span>
-                            </div>
-                            <div className="flex justify-between text-sm font-bold text-rose-500 mb-1">
-                                <span>Total Discount</span>
-                                <span className="font-mono">-₹{Number(invoice.total_discount).toFixed(2)}</span>
-                            </div>
-                            <div className="flex justify-between text-sm font-bold text-slate-600 mb-3 border-b border-slate-300 pb-3">
-                                <span>Total Estimated Tax (GST)</span>
-                                <span className="font-mono">+₹{Number(invoice.total_tax || 0).toFixed(2)}</span>
-                            </div>
-                            
-                            <div className="flex justify-between items-end">
-                                <span className="text-sm font-black text-slate-900 uppercase tracking-widest">Net Bill Amount</span>
-                                <span className="text-3xl font-black text-slate-900 tracking-tight">₹{Number(invoice.net_amount).toFixed(2)}</span>
-                            </div>
-
-                            <div className="h-4"></div>
-                            
-                            <div className="flex justify-between text-sm font-bold text-emerald-600">
-                                <span>Less: Paid / Advanced</span>
-                                <span className="font-mono">₹{Number(invoice.paid_amount || 0).toFixed(2)}</span>
-                            </div>
-                            
-                            <div className="flex justify-between items-end pt-3 mt-1 border-t-2 border-slate-300 border-dashed">
-                                <span className={`text-sm font-black uppercase tracking-widest ${Number(invoice.balance_due) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>Balance Payable</span>
-                                <span className={`text-xl font-black tracking-tight ${Number(invoice.balance_due) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>₹{Number(invoice.balance_due).toFixed(2)}</span>
-                            </div>
-                        </div>
-
-                    </div>
-
-                    {/* Print Footer / Terms */}
-                    <div className="relative z-10 mt-16 pt-8 break-inside-avoid">
-                        <div className="flex justify-between items-end">
-                            <div className="w-1/2">
-                                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Terms & Conditions</h4>
-                                <ul className="text-[9px] text-slate-500 space-y-1 list-disc pl-3">
-                                    <li>All disputes are subject to local jurisdiction only.</li>
-                                    <li>Goods/Services once billed cannot be cancelled unless approved by management.</li>
-                                    <li>This is a computer generated invoice and does not require a physical signature.</li>
-                                </ul>
-                            </div>
-                            <div className="text-center w-[200px]">
-                                <div className="h-16 border-b border-slate-300 mb-2 flex items-end justify-center pb-2">
-                                    <span className="text-slate-300 italic font-medium">Digital Signature</span>
-                                </div>
-                                <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Authorized Signatory</p>
-                                <p className="text-[9px] text-slate-400 font-bold">For Axten Hospitals</p>
-                            </div>
-                        </div>
-                    </div>
-
-                </div>
-
-                {/* Audit Trail / Version History (Hidden in Print) */}
-                <div className="mt-8 print-hidden">
-                    <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-                        <History className="h-5 w-5 text-indigo-500" /> Version & Audit History
-                    </h3>
-                    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                        {auditLogs.length > 0 ? (
-                            <table className="w-full text-left text-sm">
-                                <thead className="bg-slate-50 text-slate-500 font-bold text-[11px] uppercase tracking-wider">
-                                    <tr>
-                                        <th className="px-4 py-3">Date</th>
-                                        <th className="px-4 py-3">Action</th>
-                                        <th className="px-4 py-3">User</th>
-                                        <th className="px-4 py-3">Details</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {auditLogs.map((log: any) => (
-                                        <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-4 py-3 font-mono text-slate-500 text-xs">
-                                                {new Date(log.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700">
-                                                    {log.action}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3 font-medium text-slate-700">{log.username || 'System'}</td>
-                                            <td className="px-4 py-3 text-slate-500 text-xs max-w-xs truncate" title={log.details || ''}>
-                                                {log.details || '-'}
-                                            </td>
-                                        </tr>
+                                            </div>
+                                        </div>
                                     ))}
-                                </tbody>
-                            </table>
-                        ) : (
-                            <div className="p-8 text-center text-slate-400 font-medium">No audit logs found for this invoice.</div>
+                                </div>
+                            </details>
+                        ))}
+                        {(!invoice.items || invoice.items.length === 0) && (
+                            <div className="text-center py-8 text-gray-400 text-sm">No items in this bill yet.</div>
                         )}
                     </div>
+
+                    {/* Financial Totals */}
+                    <div className="border-t pt-2 space-y-1">
+                        <div className="flex justify-between text-sm">
+                            <span className="text-gray-500">Sub-Total</span>
+                            <span>{fmt(Number(invoice.total_amount || 0))}</span>
+                        </div>
+                        {Number(invoice.total_discount) > 0 && (
+                            <div className="flex justify-between text-sm text-green-600">
+                                <span>Discount</span>
+                                <span>-{fmt(Number(invoice.total_discount))}</span>
+                            </div>
+                        )}
+                        <div className="flex justify-between text-sm">
+                            <span className="text-gray-500">GST</span>
+                            <span>{fmt(Number(invoice.total_tax || 0))}</span>
+                        </div>
+                        {(Number(invoice.cgst_amount) > 0 || Number(invoice.sgst_amount) > 0) && (
+                            <div className="flex justify-between text-xs text-gray-400 pl-4">
+                                <span>CGST: {fmt(Number(invoice.cgst_amount || 0))} | SGST: {fmt(Number(invoice.sgst_amount || 0))}</span>
+                            </div>
+                        )}
+                        <div className="flex justify-between text-sm font-bold border-t pt-1">
+                            <span>NET BILL</span>
+                            <span>{fmt(Number(invoice.net_amount || 0))}</span>
+                        </div>
+                    </div>
                 </div>
+
+                {/* Adjustments */}
+                <div className="bg-white rounded-lg shadow p-4">
+                    <h2 className="font-semibold text-sm mb-3">Payment Summary</h2>
+                    <div className="space-y-2">
+                        {Number(invoice.paid_amount) > 0 && (
+                            <div className="flex justify-between text-sm p-2 bg-green-50 rounded">
+                                <span>Paid / Received</span>
+                                <span className="text-green-700 font-medium">-{fmt(Number(invoice.paid_amount))}</span>
+                            </div>
+                        )}
+                        <div className={`flex justify-between text-sm font-bold p-3 rounded ${Number(invoice.balance_due) > 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                            <span>BALANCE DUE</span>
+                            <span>{fmt(Number(invoice.balance_due || 0))}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="bg-white rounded-lg shadow p-4 flex flex-wrap gap-3">
+                    {invoice.status === 'Draft' && !isEditMode && (
+                        <button onClick={handleFinalize} disabled={actionLoading}
+                            className="px-4 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 text-sm">
+                            Finalize Bill
+                        </button>
+                    )}
+                    {invoice.status === 'Draft' && (
+                        <button onClick={() => setIsEditMode(!isEditMode)}
+                            className={`px-4 py-3 border rounded-lg text-sm font-medium ${isEditMode ? 'bg-gray-200 text-gray-800 border-gray-300' : 'border-gray-300 hover:bg-gray-50'}`}>
+                            {isEditMode ? 'Cancel Edit' : 'Edit Draft'}
+                        </button>
+                    )}
+                    {invoice.status !== 'Cancelled' && (
+                        <button onClick={() => setShowCancelModal(true)} disabled={actionLoading}
+                            className="px-4 py-3 border border-red-300 text-red-700 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50">
+                            Cancel Invoice
+                        </button>
+                    )}
+                    {invoice.admission_id && (
+                        <>
+                            <button
+                                onClick={() => window.open(`/api/discharge/${invoice.admission_id}/bill`, '_blank')}
+                                className="px-4 py-3 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
+                                Print Detailed Bill
+                            </button>
+                            <button
+                                onClick={() => window.open(`/api/discharge/${invoice.admission_id}/summary-bill`, '_blank')}
+                                className="px-4 py-3 border border-emerald-300 bg-emerald-50 text-emerald-700 rounded-lg text-sm hover:bg-emerald-100">
+                                Print Summary Bill
+                            </button>
+                        </>
+                    )}
+                    {!invoice.admission_id && (
+                        <button onClick={() => window.print()}
+                            className="px-4 py-3 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
+                            Print
+                        </button>
+                    )}
+                    <button onClick={() => router.back()}
+                        className="px-4 py-3 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
+                        Back
+                    </button>
+                </div>
+
+                {/* Audit Trail */}
+                {auditLogs.length > 0 && (
+                    <div className="bg-white rounded-lg shadow p-4">
+                        <h2 className="font-semibold text-sm mb-3">Audit History</h2>
+                        <div className="space-y-1">
+                            {auditLogs.map((log: any) => (
+                                <div key={log.id} className="flex items-center gap-3 text-xs p-2 bg-gray-50 rounded">
+                                    <span className="text-gray-400 font-mono whitespace-nowrap">
+                                        {new Date(log.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-bold text-[10px]">
+                                        {log.action}
+                                    </span>
+                                    <span className="text-gray-600">{log.username || 'System'}</span>
+                                    <span className="text-gray-400 truncate flex-1" title={log.details || ''}>
+                                        {log.details || ''}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Cancel Invoice Modal */}
             {showCancelModal && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 print-hidden">
-                    <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
-                        <div className="p-4 border-b bg-rose-50 flex items-start gap-3">
-                            <AlertTriangle className="h-5 w-5 text-rose-600 mt-0.5 shrink-0" />
-                            <div className="flex-1">
-                                <h3 className="font-bold text-rose-900">Cancel Invoice {invoice.invoice_number}?</h3>
-                                <p className="text-xs text-rose-700 mt-1">
-                                    This action cannot be undone from the UI. Reason is mandatory and will be recorded in the audit log.
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => { setShowCancelModal(false); setCancelReason(''); }}
-                                className="text-rose-400 hover:text-rose-700 font-bold text-xl"
-                            >&times;</button>
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg w-full max-w-lg overflow-hidden shadow-2xl">
+                        <div className="p-4 border-b bg-red-50">
+                            <h3 className="font-bold text-red-900">Cancel Invoice {invoice.invoice_number}?</h3>
+                            <p className="text-xs text-red-700 mt-1">This action cannot be undone. Reason is mandatory.</p>
                         </div>
-                        <div className="p-5 space-y-3">
-                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-600">
-                                Cancellation Reason <span className="text-rose-500">*</span>
-                            </label>
+                        <div className="p-4 space-y-3">
+                            <label className="text-xs font-bold uppercase text-gray-600">Cancellation Reason *</label>
                             <textarea
                                 value={cancelReason}
                                 onChange={(e) => setCancelReason(e.target.value)}
                                 rows={4}
-                                placeholder="e.g. Duplicate invoice — replaced by INV-XYZ. Or: Patient cancelled procedure before billing."
-                                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:border-rose-400 focus:outline-none"
+                                placeholder="e.g. Duplicate invoice, patient cancelled procedure..."
+                                className="w-full p-3 border rounded-lg text-sm"
                                 disabled={cancelSubmitting}
                             />
-                            <div className="flex items-center justify-between text-xs">
-                                <span className={`font-medium ${cancelReason.trim().length < 10 ? 'text-rose-600' : 'text-emerald-700'}`}>
-                                    {cancelReason.trim().length < 10
-                                        ? `${10 - cancelReason.trim().length} more character(s) required`
-                                        : '✓ Reason looks good'}
-                                </span>
-                                <span className="text-gray-400">{cancelReason.length} chars</span>
-                            </div>
+                            <span className={`text-xs ${cancelReason.trim().length < 10 ? 'text-red-600' : 'text-green-700'}`}>
+                                {cancelReason.trim().length < 10
+                                    ? `${10 - cancelReason.trim().length} more characters required`
+                                    : 'Reason looks good'}
+                            </span>
                         </div>
                         <div className="p-4 border-t bg-gray-50 flex justify-end gap-3">
                             <button
-                                type="button"
                                 onClick={() => { setShowCancelModal(false); setCancelReason(''); }}
                                 disabled={cancelSubmitting}
-                                className="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-200 hover:bg-gray-100 rounded-xl disabled:opacity-50"
-                            >Keep Invoice</button>
+                                className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-100 disabled:opacity-50">
+                                Keep Invoice
+                            </button>
                             <button
-                                type="button"
                                 onClick={handleCancelSubmit}
                                 disabled={cancelSubmitting || cancelReason.trim().length < 10}
-                                className="px-5 py-2 text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl disabled:opacity-50 inline-flex items-center gap-2"
-                            >
-                                {cancelSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+                                className="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50">
                                 {cancelSubmitting ? 'Cancelling...' : 'Confirm Cancellation'}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
-        </AppShell>
+        </div>
     );
-}
-
-// Simple internal helper for words
-function convertNumberToWords(num: number): string {
-    if (num === 0) return "Zero";
-    const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
-    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-    
-    // basic converter for common hospital bill sizes
-    if (num < 20) return a[Math.floor(num)].trim();
-    if (num < 100) return b[Math.floor(num / 10)] + (num % 10 !== 0 ? ' ' + a[Math.floor(num % 10)].trim() : '');
-    if (num < 1000) return a[Math.floor(num / 100)].trim() + ' Hundred' + (num % 100 !== 0 ? ' and ' + convertNumberToWords(num % 100) : '');
-    if (num < 100000) return convertNumberToWords(num / 1000) + ' Thousand' + (num % 1000 !== 0 ? ' ' + convertNumberToWords(num % 1000) : '');
-    if (num < 10000000) return convertNumberToWords(num / 100000) + ' Lakh' + (num % 100000 !== 0 ? ' ' + convertNumberToWords(num % 100000) : '');
-    
-    return num.toLocaleString('en-IN');
 }

@@ -2,10 +2,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { Users, Plus, Mail, Phone, Hash, X, Loader2, Pencil, CheckCircle } from 'lucide-react';
+import { Users, Plus, Mail, Phone, Hash, X, Loader2, Pencil, CheckCircle, Shield } from 'lucide-react';
 import { getSuppliers, createSupplier, updateSupplier } from '@/app/actions/pharmacy-actions';
 
-const emptyForm = { name: '', contact_person: '', phone: '', email: '', gst_no: '' };
+const emptyForm = { name: '', contact_person: '', phone: '', email: '', gst_no: '', drug_license_number: '', drug_license_expiry: '', pharmacy_payment_terms: 30 };
 const sanitizeName = (value: string) => value.replace(/[^a-zA-Z0-9\s.&'()-]/g, '');
 const sanitizePerson = (value: string) => value.replace(/[^a-zA-Z\s.'-]/g, '');
 const sanitizePhone = (value: string) => value.replace(/\D/g, '').slice(0, 10);
@@ -42,6 +42,9 @@ export default function SuppliersPage() {
             phone: sup.phone || '',
             email: sup.email || '',
             gst_no: sup.gst_no || '',
+            drug_license_number: sup.drug_license_number || '',
+            drug_license_expiry: sup.drug_license_expiry ? new Date(sup.drug_license_expiry).toISOString().slice(0, 10) : '',
+            pharmacy_payment_terms: sup.pharmacy_payment_terms || 30,
         });
         setShowModal(true);
     };
@@ -118,6 +121,23 @@ export default function SuppliersPage() {
                                     <span className="text-xs font-mono">{sup.gst_no}</span>
                                 </div>
                             )}
+                            {sup.drug_license_number && (
+                                <div className="flex items-center gap-2">
+                                    <Shield className="h-3.5 w-3.5 text-gray-400" />
+                                    <span className="text-xs font-mono">{sup.drug_license_number}</span>
+                                    {sup.drug_license_expiry && (
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${new Date(sup.drug_license_expiry) < new Date() ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                                            {new Date(sup.drug_license_expiry) < new Date() ? 'Expired' : `Valid till ${new Date(sup.drug_license_expiry).toLocaleDateString('en-IN')}`}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+                            {sup.vendor_code && (
+                                <div className="flex items-center gap-2">
+                                    <Hash className="h-3.5 w-3.5 text-blue-400" />
+                                    <span className="text-[10px] font-mono text-blue-600">{sup.vendor_code}</span>
+                                </div>
+                            )}
                         </div>
 
                         <div className="mt-4 flex justify-end">
@@ -186,6 +206,27 @@ export default function SuppliersPage() {
                                         pattern="[0-9A-Z]{15}"
                                     className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-mono font-medium text-gray-900 placeholder:text-gray-400"
                                     placeholder="e.g. 27AABCU9603R1ZM" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Drug License No.</label>
+                                    <input value={form.drug_license_number} onChange={e => setForm({ ...form, drug_license_number: e.target.value })}
+                                        maxLength={30}
+                                        className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-mono font-medium text-gray-900 placeholder:text-gray-400"
+                                        placeholder="DL-XX-XXXXX" />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">License Expiry</label>
+                                    <input type="date" value={form.drug_license_expiry} onChange={e => setForm({ ...form, drug_license_expiry: e.target.value })}
+                                        className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-medium text-gray-900" />
+                                </div>
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Payment Terms (Days)</label>
+                                <input type="number" value={form.pharmacy_payment_terms} onChange={e => setForm({ ...form, pharmacy_payment_terms: parseInt(e.target.value) || 30 })}
+                                    min={0} max={365}
+                                    className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-medium text-gray-900 placeholder:text-gray-400"
+                                    placeholder="30" />
                             </div>
                         </div>
 

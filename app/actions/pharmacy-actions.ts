@@ -47,15 +47,30 @@ export async function generateInvoice(patientId: string, items: any[]) {
         let totalTax = 0;
         const invoiceItems: any[] = [];
 
-        // 1. Deduct stock & build line items with GST
+        // 0. OTC Controls — block controlled drugs for walk-in sales
+        if (patientId === 'WALKIN') {
+            for (const item of items) {
+                const med = await db.pharmacy_medicine_master.findUnique({ where: { id: item.medicine_id } });
+                if (med && (med.is_narcotic || ['H', 'H1', 'X', 'NDPS'].includes(med.drug_schedule || ''))) {
+                    return { success: false, error: `Controlled drug "${med.brand_name}" (Schedule ${med.drug_schedule || 'Narcotic'}) requires a valid prescription — OTC sale blocked` };
+                }
+            }
+        }
+
+        // 1. Deduct stock & build line items with GST + FEFO + movement ledger
+        let totalCogs = 0;
         for (const item of items) {
+            // FEFO: select earliest non-expired batch if batch_no not specified
+            const batchWhere: any = { medicine_id: item.medicine_id, current_stock: { gte: item.quantity }, expiry_date: { gt: new Date() }, is_quarantined: false };
+            if (item.batch_no) batchWhere.batch_no = item.batch_no;
             const batch = await db.pharmacy_batch_inventory.findFirst({
-                where: { batch_no: item.batch_no, medicine_id: item.medicine_id },
-                include: { medicine: true }
+                where: batchWhere,
+                include: { medicine: true },
+                orderBy: { expiry_date: 'asc' }, // FEFO
             });
 
             if (batch && batch.current_stock >= item.quantity) {
-                await db.pharmacy_batch_inventory.update({
+                const updatedBatch = await db.pharmacy_batch_inventory.update({
                     where: { id: batch.id },
                     data: { current_stock: { decrement: item.quantity } }
                 });
@@ -64,6 +79,8 @@ export async function generateInvoice(patientId: string, items: any[]) {
                 const netPrice = unitPrice * item.quantity;
                 const taxRate = Number(batch.medicine.gst_percent) || Number(batch.medicine.tax_rate) || 0;
                 const taxAmount = netPrice * taxRate / 100;
+                const batchCost = Number(batch.actual_cost || batch.cost_price || 0);
+                totalCogs += batchCost * item.quantity;
 
                 totalAmount += netPrice;
                 totalTax += taxAmount;
@@ -78,8 +95,49 @@ export async function generateInvoice(patientId: string, items: any[]) {
                     tax_amount: taxAmount,
                     hsn_sac_code: batch.medicine.hsn_sac_code || '3004',
                     mrp: Number(batch.medicine.mrp) || unitPrice,
-                    batch_no: item.batch_no
+                    batch_no: batch.batch_no,
+                    batch_id: batch.id,
+                    batch_cost: batchCost,
                 });
+
+                // Record inventory movement
+                await db.pharmacyInventoryMovement.create({
+                    data: {
+                        organizationId,
+                        medicine_id: batch.medicine.id,
+                        batch_id: batch.id,
+                        movement_type: 'DISPENSE',
+                        quantity_out: item.quantity,
+                        unit_cost: batchCost,
+                        balance_after: updatedBatch.current_stock,
+                        source_type: 'INVOICE',
+                        source_id: `COUNTER-${patientId}`,
+                    }
+                });
+
+                // Auto narcotic register
+                if (batch.medicine.is_narcotic || ['H', 'H1', 'X', 'NDPS'].includes(batch.medicine.drug_schedule || '')) {
+                    const lastEntry = await db.narcoticRegister.findFirst({
+                        where: { organizationId, drug_name: batch.medicine.brand_name },
+                        orderBy: { created_at: 'desc' }
+                    });
+                    await db.narcoticRegister.create({
+                        data: {
+                            organizationId,
+                            drug_name: batch.medicine.brand_name,
+                            medicine_id: batch.medicine.id,
+                            batch_no: batch.batch_no,
+                            batch_id: batch.id,
+                            patient_id: patientId !== 'WALKIN' ? patientId : null,
+                            quantity_in: 0,
+                            quantity_out: item.quantity,
+                            balance: (lastEntry?.balance || 0) - item.quantity,
+                            transaction_type: 'OUT',
+                            source_type: 'DISPENSE',
+                            notes: `Counter sale dispense`,
+                        }
+                    });
+                }
             }
         }
 
@@ -576,7 +634,7 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
                     throw new Error(`Insufficient stock for batch ${item.batch_no} of ${batch?.medicine?.brand_name || 'requested medicine'}`);
                 }
 
-                await tx.pharmacy_batch_inventory.update({
+                const updatedBatch = await tx.pharmacy_batch_inventory.update({
                     where: { id: batch.id },
                     data: { current_stock: { decrement: item.quantity } }
                 });
@@ -585,6 +643,7 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
                 const netPrice = unitPrice * item.quantity;
                 const taxRate = Number(batch.medicine.gst_percent) || Number(batch.medicine.tax_rate) || 0;
                 const taxAmount = netPrice * taxRate / 100;
+                const batchCost = Number(batch.actual_cost || batch.cost_price || 0);
 
                 totalAmount += netPrice;
                 totalTax += taxAmount;
@@ -599,7 +658,60 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
                     tax_amount: taxAmount,
                     hsn_sac_code: batch.medicine.hsn_sac_code || '3004',
                     batch_no: item.batch_no,
+                    batch_id: batch.id,
+                    batch_cost: batchCost,
                 });
+
+                // Record inventory movement
+                await tx.pharmacyInventoryMovement.create({
+                    data: {
+                        organizationId,
+                        medicine_id: batch.medicine.id,
+                        batch_id: batch.id,
+                        movement_type: 'DISPENSE',
+                        quantity_out: item.quantity,
+                        unit_cost: batchCost,
+                        balance_after: updatedBatch.current_stock,
+                        source_type: 'ORDER',
+                        source_id: String(orderId),
+                    }
+                });
+
+                // Dispense allocation for multi-batch traceability
+                if (item.order_item_id) {
+                    await tx.dispenseAllocation.create({
+                        data: {
+                            organizationId,
+                            order_item_id: item.order_item_id,
+                            batch_id: batch.id,
+                            quantity: item.quantity,
+                            unit_cost: batchCost,
+                        }
+                    });
+                }
+
+                // Auto narcotic register for controlled drugs
+                if (batch.medicine.is_narcotic || ['H', 'H1', 'X', 'NDPS'].includes(batch.medicine.drug_schedule || '')) {
+                    const lastEntry = await tx.narcoticRegister.findFirst({
+                        where: { organizationId, drug_name: batch.medicine.brand_name },
+                        orderBy: { created_at: 'desc' }
+                    });
+                    await tx.narcoticRegister.create({
+                        data: {
+                            organizationId,
+                            drug_name: batch.medicine.brand_name,
+                            medicine_id: batch.medicine.id,
+                            batch_no: item.batch_no,
+                            batch_id: batch.id,
+                            quantity_in: 0,
+                            quantity_out: item.quantity,
+                            balance: (lastEntry?.balance || 0) - item.quantity,
+                            transaction_type: 'OUT',
+                            source_type: 'DISPENSE',
+                            source_id: String(orderId),
+                        }
+                    });
+                }
 
                 // Update order item with tax info
                 if (item.order_item_id) {
@@ -798,11 +910,31 @@ export async function getExpiringBatches(days: number = 30) {
     }
 }
 
+// ── Pharmacy Vendors (unified with finance Vendor master) ──
+
 export async function getSuppliers() {
     try {
         const { db } = await requireTenantContext();
-        const suppliers = await db.pharmacySupplier.findMany({ orderBy: { name: 'asc' } });
-        return { success: true, data: suppliers };
+        // Fetch from unified Vendor table, filtered to pharmacy suppliers
+        const vendors = await db.vendor.findMany({
+            where: { is_pharmacy_supplier: true },
+            orderBy: { vendor_name: 'asc' },
+        });
+        // Map to legacy shape for backward compat with UI
+        const data = vendors.map((v: any) => ({
+            id: v.id,
+            name: v.vendor_name,
+            vendor_code: v.vendor_code,
+            contact_person: v.contact_person,
+            phone: v.phone,
+            email: v.email,
+            gst_no: v.gst_number,
+            drug_license_number: v.drug_license_number,
+            drug_license_expiry: v.drug_license_expiry,
+            pharmacy_payment_terms: v.pharmacy_payment_terms,
+            is_active: v.is_active,
+        }));
+        return { success: true, data };
     } catch (error) {
         return { success: false, data: [] };
     }
@@ -814,22 +946,34 @@ export async function createSupplier(data: {
     phone?: string;
     email?: string;
     gst_no?: string;
+    drug_license_number?: string;
+    drug_license_expiry?: string;
+    pharmacy_payment_terms?: number;
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
-        const supplier = await db.pharmacySupplier.create({
+        // Generate vendor_code from name
+        const codeBase = data.name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase();
+        const vendor_code = `PH-${codeBase}-${Date.now().toString().slice(-4)}`;
+
+        const vendor = await db.vendor.create({
             data: {
-                name: data.name,
+                vendor_name: data.name,
+                vendor_code,
                 contact_person: data.contact_person || null,
                 phone: data.phone || null,
                 email: data.email || null,
-                gst_no: data.gst_no || null,
+                gst_number: data.gst_no || null,
+                is_pharmacy_supplier: true,
+                drug_license_number: data.drug_license_number || null,
+                drug_license_expiry: data.drug_license_expiry ? new Date(data.drug_license_expiry) : null,
+                pharmacy_payment_terms: data.pharmacy_payment_terms || 30,
                 is_active: true,
                 organizationId,
             }
         });
         revalidatePath('/pharmacy/suppliers');
-        return { success: true, data: supplier };
+        return { success: true, data: vendor };
     } catch (error) {
         return { success: false, error: 'Failed to create supplier' };
     }
@@ -841,40 +985,88 @@ export async function updateSupplier(id: number, data: {
     phone?: string;
     email?: string;
     gst_no?: string;
+    drug_license_number?: string;
+    drug_license_expiry?: string;
+    pharmacy_payment_terms?: number;
     is_active?: boolean;
 }) {
     try {
         const { db } = await requireTenantContext();
-        const supplier = await db.pharmacySupplier.update({
+        const updateData: any = {};
+        if (data.name !== undefined) updateData.vendor_name = data.name;
+        if (data.contact_person !== undefined) updateData.contact_person = data.contact_person;
+        if (data.phone !== undefined) updateData.phone = data.phone;
+        if (data.email !== undefined) updateData.email = data.email;
+        if (data.gst_no !== undefined) updateData.gst_number = data.gst_no;
+        if (data.drug_license_number !== undefined) updateData.drug_license_number = data.drug_license_number;
+        if (data.drug_license_expiry !== undefined) updateData.drug_license_expiry = data.drug_license_expiry ? new Date(data.drug_license_expiry) : null;
+        if (data.pharmacy_payment_terms !== undefined) updateData.pharmacy_payment_terms = data.pharmacy_payment_terms;
+        if (data.is_active !== undefined) updateData.is_active = data.is_active;
+
+        const vendor = await db.vendor.update({
             where: { id },
-            data,
+            data: updateData,
         });
         revalidatePath('/pharmacy/suppliers');
-        return { success: true, data: supplier };
+        return { success: true, data: vendor };
     } catch (error) {
         return { success: false, error: 'Failed to update supplier' };
     }
 }
 
-export async function createPurchaseOrder(supplier_id: number, items: { medicine_id: number, quantity: number, unit_price: number }[]) {
+export async function createPurchaseOrder(
+    supplier_id: number,
+    items: { medicine_id: number, quantity: number, unit_price: number, gst_rate?: number, hsn_code?: string }[],
+    options?: { vendor_id?: number; notes?: string; submit?: boolean }
+) {
     try {
         const { db, organizationId } = await requireTenantContext();
 
         const totalAmount = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+        const gstAmount = items.reduce((sum, item) => {
+            const rate = item.gst_rate || 0;
+            return sum + (item.quantity * item.unit_price * rate / 100);
+        }, 0);
         const poNumber = `PO-${Date.now().toString().slice(-6)}`;
 
-        await db.purchaseOrder.create({
+        // Check auto-approve threshold from module config
+        let status = 'Draft';
+        if (options?.submit) {
+            const config = await db.moduleConfig.findFirst({
+                where: { organizationId, module_key: 'pharmacy' }
+            });
+            const settings = config?.settings as any || {};
+            const autoApproveBelow = settings.po_auto_approve_below ?? 5000;
+            const requireApprovalAbove = settings.po_require_approval_above ?? 50000;
+
+            if (totalAmount < autoApproveBelow) {
+                status = 'Approved';
+            } else if (totalAmount >= requireApprovalAbove) {
+                status = 'Submitted'; // needs manual approval
+            } else {
+                status = 'Submitted';
+            }
+        }
+
+        const po = await db.purchaseOrder.create({
             data: {
                 po_number: poNumber,
                 supplier_id,
-                status: 'Draft',
+                vendor_id: options?.vendor_id || null,
+                status,
                 total_amount: totalAmount,
+                gst_amount: gstAmount,
+                approved_at: status === 'Approved' ? new Date() : null,
+                approved_by: status === 'Approved' ? 'AUTO' : null,
+                notes: options?.notes || null,
                 organizationId,
                 items: {
                     create: items.map(item => ({
                         medicine_id: item.medicine_id,
                         quantity_ordered: item.quantity,
                         unit_price: item.unit_price,
+                        gst_rate: item.gst_rate || 0,
+                        hsn_code: item.hsn_code || null,
                         quantity_received: 0
                     }))
                 }
@@ -882,48 +1074,228 @@ export async function createPurchaseOrder(supplier_id: number, items: { medicine
         });
 
         revalidatePath('/pharmacy/purchase-orders');
-        return { success: true };
+        return { success: true, data: po };
     } catch (error: any) {
         return { success: false, error: 'Failed to create PO' };
     }
 }
 
-export async function receivePurchaseOrder(poId: number, receivedItems: { itemId: number, qtyReceived: number, batch_no: string, expiry: string }[]) {
+export async function submitPurchaseOrder(poId: number) {
     try {
         const { db } = await requireTenantContext();
+        const po = await db.purchaseOrder.findUnique({ where: { id: poId } });
+        if (!po || po.status !== 'Draft') return { success: false, error: 'PO must be in Draft status' };
+
+        const config = await db.moduleConfig.findFirst({
+            where: { organizationId: po.organizationId, module_key: 'pharmacy' }
+        });
+        const settings = config?.settings as any || {};
+        const autoApproveBelow = settings.po_auto_approve_below ?? 5000;
+
+        const newStatus = po.total_amount < autoApproveBelow ? 'Approved' : 'Submitted';
+
+        await db.purchaseOrder.update({
+            where: { id: poId },
+            data: {
+                status: newStatus,
+                ordered_at: new Date(),
+                approved_at: newStatus === 'Approved' ? new Date() : null,
+                approved_by: newStatus === 'Approved' ? 'AUTO' : null,
+            }
+        });
+
+        revalidatePath('/pharmacy/purchase-orders');
+        return { success: true, status: newStatus };
+    } catch (error) {
+        return { success: false, error: 'Failed to submit PO' };
+    }
+}
+
+export async function approvePurchaseOrder(poId: number, userId: string, approve: boolean, reason?: string) {
+    try {
+        const { db } = await requireTenantContext();
+        const po = await db.purchaseOrder.findUnique({ where: { id: poId } });
+        if (!po || po.status !== 'Submitted') return { success: false, error: 'PO must be in Submitted status' };
+
+        await db.purchaseOrder.update({
+            where: { id: poId },
+            data: {
+                status: approve ? 'Approved' : 'Rejected',
+                approved_at: new Date(),
+                approved_by: userId,
+                notes: !approve && reason ? `Rejected: ${reason}` : po.notes,
+            }
+        });
+
+        revalidatePath('/pharmacy/purchase-orders');
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: 'Failed to process PO approval' };
+    }
+}
+
+export async function receivePurchaseOrder(
+    poId: number,
+    receivedItems: {
+        itemId: number;
+        qtyReceived: number;
+        batch_no: string;
+        expiry: string;
+        actual_cost?: number;
+        mrp?: number;
+        manufacture_date?: string;
+        rejected_qty?: number;
+        rejection_reason?: string;
+        rack_location?: string;
+    }[]
+) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const po = await db.purchaseOrder.findUnique({
+            where: { id: poId },
+            include: { items: true }
+        });
+        if (!po) return { success: false, error: 'PO not found' };
+        if (!['Approved', 'Partially Received'].includes(po.status)) {
+            return { success: false, error: 'PO must be Approved or Partially Received to receive items' };
+        }
+
+        const grnNumber = `GRN-${Date.now().toString().slice(-8)}`;
 
         await db.$transaction(async (tx: any) => {
-            // Update PO and Items
+            // Create GRN record
+            const grn = await tx.goodsReceiptNote.create({
+                data: {
+                    grn_number: grnNumber,
+                    po_id: poId,
+                    supplier_id: po.supplier_id,
+                    vendor_id: po.vendor_id || null,
+                    total_amount: receivedItems.reduce((s, i) => s + (i.qtyReceived * (i.actual_cost || 0)), 0),
+                    rejected_quantity: receivedItems.reduce((s, i) => s + (i.rejected_qty || 0), 0),
+                    rejection_reason: receivedItems.filter(i => i.rejection_reason).map(i => i.rejection_reason).join('; ') || null,
+                    organizationId,
+                }
+            });
+
             for (const item of receivedItems) {
-                const poItem = await tx.purchaseOrderItem.update({
+                // Validate: don't exceed ordered qty
+                const poItem = po.items.find((pi: any) => pi.id === item.itemId);
+                if (!poItem) continue;
+                const maxReceivable = poItem.quantity_ordered - poItem.quantity_received;
+                if (item.qtyReceived > maxReceivable) {
+                    throw new Error(`Over-receipt: item ${poItem.id} can receive max ${maxReceivable}, got ${item.qtyReceived}`);
+                }
+
+                // Validate: reject expired batches
+                const expiryDate = new Date(item.expiry);
+                if (expiryDate <= new Date()) {
+                    throw new Error(`Batch ${item.batch_no} is already expired (${item.expiry})`);
+                }
+
+                // Update PO item received qty
+                await tx.purchaseOrderItem.update({
                     where: { id: item.itemId },
                     data: { quantity_received: { increment: item.qtyReceived } },
-                    include: { medicine: true }
                 });
 
-                // Add to Batch Inventory
-                await tx.pharmacy_batch_inventory.create({
+                // Upsert batch inventory (increment if same medicine+batch exists)
+                const existingBatch = await tx.pharmacy_batch_inventory.findUnique({
+                    where: { medicine_id_batch_no: { medicine_id: poItem.medicine_id, batch_no: item.batch_no } }
+                });
+
+                let batchRecord;
+                if (existingBatch) {
+                    batchRecord = await tx.pharmacy_batch_inventory.update({
+                        where: { id: existingBatch.id },
+                        data: {
+                            current_stock: { increment: item.qtyReceived },
+                            actual_cost: item.actual_cost ?? existingBatch.actual_cost,
+                            cost_price: item.actual_cost ?? existingBatch.cost_price,
+                            mrp: item.mrp ?? existingBatch.mrp,
+                            vendor_id: po.vendor_id || null,
+                            grn_id: grn.id,
+                        }
+                    });
+                } else {
+                    batchRecord = await tx.pharmacy_batch_inventory.create({
+                        data: {
+                            medicine_id: poItem.medicine_id,
+                            batch_no: item.batch_no,
+                            current_stock: item.qtyReceived,
+                            expiry_date: expiryDate,
+                            manufacture_date: item.manufacture_date ? new Date(item.manufacture_date) : null,
+                            cost_price: item.actual_cost || poItem.unit_price,
+                            actual_cost: item.actual_cost || poItem.unit_price,
+                            mrp: item.mrp || null,
+                            rack_location: item.rack_location || 'PO-RECEIVE',
+                            supplier_name: null,
+                            vendor_id: po.vendor_id || null,
+                            grn_id: grn.id,
+                        }
+                    });
+                }
+
+                // Record inventory movement
+                await tx.pharmacyInventoryMovement.create({
                     data: {
+                        organizationId,
                         medicine_id: poItem.medicine_id,
-                        batch_no: item.batch_no,
-                        current_stock: item.qtyReceived,
-                        expiry_date: new Date(item.expiry),
-                        rack_location: 'PO-RECEIVE'
+                        batch_id: batchRecord.id,
+                        movement_type: 'GRN_RECEIPT',
+                        quantity_in: item.qtyReceived,
+                        unit_cost: item.actual_cost || poItem.unit_price,
+                        balance_after: batchRecord.current_stock,
+                        source_type: 'GRN',
+                        source_id: String(grn.id),
                     }
                 });
+
+                // Auto narcotic register for controlled drugs
+                const medicine = await tx.pharmacy_medicine_master.findUnique({ where: { id: poItem.medicine_id } });
+                if (medicine && (medicine.is_narcotic || ['H', 'H1', 'X', 'NDPS'].includes(medicine.drug_schedule || ''))) {
+                    const lastEntry = await tx.narcoticRegister.findFirst({
+                        where: { organizationId, drug_name: medicine.brand_name },
+                        orderBy: { created_at: 'desc' }
+                    });
+                    await tx.narcoticRegister.create({
+                        data: {
+                            organizationId,
+                            drug_name: medicine.brand_name,
+                            medicine_id: medicine.id,
+                            batch_no: item.batch_no,
+                            batch_id: batchRecord.id,
+                            quantity_in: item.qtyReceived,
+                            quantity_out: 0,
+                            balance: (lastEntry?.balance || 0) + item.qtyReceived,
+                            transaction_type: 'IN',
+                            source_type: 'GRN',
+                            source_id: String(grn.id),
+                            notes: `GRN ${grnNumber} receipt`,
+                        }
+                    });
+                }
             }
+
+            // Determine PO status: fully received or partially
+            const updatedItems = await tx.purchaseOrderItem.findMany({ where: { po_id: poId } });
+            const allReceived = updatedItems.every((i: any) => i.quantity_received >= i.quantity_ordered);
+            const someReceived = updatedItems.some((i: any) => i.quantity_received > 0);
 
             await tx.purchaseOrder.update({
                 where: { id: poId },
-                data: { status: 'Received', received_at: new Date() }
+                data: {
+                    status: allReceived ? 'Received' : (someReceived ? 'Partially Received' : po.status),
+                    received_at: allReceived ? new Date() : null,
+                }
             });
         });
 
         revalidatePath('/pharmacy/purchase-orders');
         revalidatePath('/pharmacy/inventory');
-        return { success: true };
-    } catch (error) {
-        return { success: false, error: 'Failed to receive PO' };
+        return { success: true, grn_number: grnNumber };
+    } catch (error: any) {
+        return { success: false, error: error.message || 'Failed to receive PO' };
     }
 }
 
@@ -932,7 +1304,12 @@ export async function getPurchaseOrders() {
         const { db } = await requireTenantContext();
         const pos = await db.purchaseOrder.findMany({
             orderBy: { created_at: 'desc' },
-            include: { supplier: true, items: { include: { medicine: true } } }
+            include: {
+                supplier: true,
+                vendor: { select: { id: true, vendor_name: true, vendor_code: true, gst_number: true } },
+                items: { include: { medicine: true } },
+                grns: { select: { id: true, grn_number: true, received_at: true } },
+            }
         });
         return { success: true, data: pos };
     } catch (error) {
@@ -941,12 +1318,15 @@ export async function getPurchaseOrders() {
 }
 
 export async function processReturn(data: {
-    return_type: string,
+    return_type: string,  // patient_return, supplier_return, expired_stock, damage_writeoff
     medicine_id: number,
     batch_id?: string,
     quantity: number,
     reason: string,
-    invoice_id?: number, // link to original invoice for credit note
+    invoice_id?: number,    // original sale invoice for patient returns
+    vendor_id?: number,     // for supplier returns
+    po_id?: number,         // for supplier returns
+    purchase_invoice_id?: number, // for supplier returns
 }) {
     try {
         const { db, organizationId, session } = await requireTenantContext();
@@ -955,53 +1335,136 @@ export async function processReturn(data: {
         let refundAmount = 0;
 
         await db.$transaction(async (tx: any) => {
-            // Get medicine details for value calculation
             const medicine = await tx.pharmacy_medicine_master.findUnique({
                 where: { id: data.medicine_id }
             });
             const unitPrice = Number(medicine?.selling_price) || Number(medicine?.price_per_unit) || 0;
             const taxRate = Number(medicine?.gst_percent) || Number(medicine?.tax_rate) || 0;
-            const netPrice = unitPrice * data.quantity;
-            const taxAmount = netPrice * taxRate / 100;
-            refundAmount = netPrice + taxAmount;
+
+            // Find the batch record
+            let batchRecord: any = null;
+            if (data.batch_id) {
+                batchRecord = await tx.pharmacy_batch_inventory.findFirst({
+                    where: { batch_no: data.batch_id, medicine_id: data.medicine_id }
+                });
+            }
+            const batchCost = Number(batchRecord?.actual_cost || batchRecord?.cost_price || unitPrice);
+
+            // Determine movement type and stock action
+            let movementType: string;
+            let returnTypeNormalized = data.return_type;
+
+            if (data.return_type === 'Patient' || data.return_type === 'patient_return') {
+                movementType = 'PATIENT_RETURN';
+                returnTypeNormalized = 'patient_return';
+                refundAmount = (unitPrice * data.quantity) + (unitPrice * data.quantity * taxRate / 100);
+
+                // Restock sealed items
+                if (batchRecord) {
+                    const updated = await tx.pharmacy_batch_inventory.update({
+                        where: { id: batchRecord.id },
+                        data: { current_stock: { increment: data.quantity } }
+                    });
+                    await tx.pharmacyInventoryMovement.create({
+                        data: {
+                            organizationId, medicine_id: data.medicine_id, batch_id: batchRecord.id,
+                            movement_type: 'PATIENT_RETURN', quantity_in: data.quantity, unit_cost: batchCost,
+                            balance_after: updated.current_stock, source_type: 'RETURN', reason: data.reason,
+                        }
+                    });
+                }
+            } else if (data.return_type === 'supplier_return') {
+                movementType = 'SUPPLIER_RETURN';
+                refundAmount = batchCost * data.quantity;
+
+                // Deduct stock
+                if (batchRecord) {
+                    if (batchRecord.current_stock < data.quantity) {
+                        throw new Error(`Insufficient stock for supplier return: have ${batchRecord.current_stock}, need ${data.quantity}`);
+                    }
+                    const updated = await tx.pharmacy_batch_inventory.update({
+                        where: { id: batchRecord.id },
+                        data: { current_stock: { decrement: data.quantity } }
+                    });
+                    await tx.pharmacyInventoryMovement.create({
+                        data: {
+                            organizationId, medicine_id: data.medicine_id, batch_id: batchRecord.id,
+                            movement_type: 'SUPPLIER_RETURN', quantity_out: data.quantity, unit_cost: batchCost,
+                            balance_after: updated.current_stock, source_type: 'RETURN', reason: data.reason,
+                        }
+                    });
+                }
+            } else {
+                // Expired / damage_writeoff
+                movementType = 'EXPIRY_WRITEOFF';
+                returnTypeNormalized = data.return_type === 'Expired' ? 'expired_stock' : 'damage_writeoff';
+                refundAmount = batchCost * data.quantity;
+
+                if (batchRecord) {
+                    if (batchRecord.current_stock < data.quantity) {
+                        throw new Error(`Insufficient stock for write-off: have ${batchRecord.current_stock}, need ${data.quantity}`);
+                    }
+                    const updated = await tx.pharmacy_batch_inventory.update({
+                        where: { id: batchRecord.id },
+                        data: { current_stock: { decrement: data.quantity } }
+                    });
+                    await tx.pharmacyInventoryMovement.create({
+                        data: {
+                            organizationId, medicine_id: data.medicine_id, batch_id: batchRecord.id,
+                            movement_type: 'EXPIRY_WRITEOFF', quantity_out: data.quantity, unit_cost: batchCost,
+                            balance_after: updated.current_stock, source_type: 'RETURN', reason: data.reason,
+                        }
+                    });
+                }
+            }
 
             await tx.pharmacyReturn.create({
                 data: {
-                    return_type: data.return_type,
+                    return_type: returnTypeNormalized,
                     medicine_id: data.medicine_id,
                     batch_id: data.batch_id,
+                    batch_record_id: batchRecord?.id || null,
                     quantity: data.quantity,
+                    unit_cost: batchCost,
                     reason: data.reason,
+                    vendor_id: data.vendor_id || null,
+                    po_id: data.po_id || null,
+                    invoice_id: data.purchase_invoice_id || null,
+                    original_invoice_id: data.invoice_id || null,
+                    status: 'Processed',
                     processed_by: session.id,
+                    gl_posted: false,
                     organizationId
                 }
             });
 
-            if (data.batch_id && data.return_type === 'Patient') {
-                const existingBatch = await tx.pharmacy_batch_inventory.findFirst({
-                    where: { batch_no: data.batch_id, medicine_id: data.medicine_id }
+            // Auto narcotic register for controlled drugs
+            if (medicine && (medicine.is_narcotic || ['H', 'H1', 'X', 'NDPS'].includes(medicine.drug_schedule || ''))) {
+                const lastEntry = await tx.narcoticRegister.findFirst({
+                    where: { organizationId, drug_name: medicine.brand_name },
+                    orderBy: { created_at: 'desc' }
                 });
-                if (existingBatch) {
-                    await tx.pharmacy_batch_inventory.update({
-                        where: { id: existingBatch.id },
-                        data: { current_stock: { increment: data.quantity } }
-                    });
-                }
-            } else if (data.batch_id && data.return_type === 'Expired') {
-                const existingBatch = await tx.pharmacy_batch_inventory.findFirst({
-                    where: { batch_no: data.batch_id, medicine_id: data.medicine_id }
+                const isStockIn = movementType === 'PATIENT_RETURN';
+                await tx.narcoticRegister.create({
+                    data: {
+                        organizationId,
+                        drug_name: medicine.brand_name,
+                        medicine_id: medicine.id,
+                        batch_no: data.batch_id,
+                        batch_id: batchRecord?.id,
+                        quantity_in: isStockIn ? data.quantity : 0,
+                        quantity_out: isStockIn ? 0 : data.quantity,
+                        balance: (lastEntry?.balance || 0) + (isStockIn ? data.quantity : -data.quantity),
+                        transaction_type: isStockIn ? 'IN' : 'OUT',
+                        source_type: movementType,
+                        notes: `${returnTypeNormalized}: ${data.reason}`,
+                    }
                 });
-                if (existingBatch) {
-                    await tx.pharmacy_batch_inventory.update({
-                        where: { id: existingBatch.id },
-                        data: { current_stock: { decrement: data.quantity } }
-                    });
-                }
             }
         });
 
-        // Create credit note if linked to an invoice (patient returns)
-        if (data.invoice_id && data.return_type === 'Patient' && refundAmount > 0) {
+        // Patient return: create credit note
+        if (data.invoice_id && (data.return_type === 'Patient' || data.return_type === 'patient_return') && refundAmount > 0) {
             const { createCreditNote } = await import('@/app/actions/deposit-actions');
             const medicine = await db.pharmacy_medicine_master.findUnique({ where: { id: data.medicine_id } });
 
@@ -1019,11 +1482,8 @@ export async function processReturn(data: {
                 notes: `Return type: ${data.return_type}, Batch: ${data.batch_id || 'N/A'}`,
             });
 
-            if (cnResult.success) {
-                creditNoteId = cnResult.data?.id;
-            }
+            if (cnResult.success) creditNoteId = cnResult.data?.id;
 
-            // Update invoice balance
             const invoice = await db.invoices.findUnique({ where: { id: data.invoice_id } });
             if (invoice) {
                 const newNetAmount = Number(invoice.net_amount) - refundAmount;
@@ -1038,27 +1498,54 @@ export async function processReturn(data: {
             }
         }
 
-        // Audit log for expiry write-offs (finance impact)
-        if (data.return_type === 'Expired') {
+        // GL posting for write-offs and supplier returns
+        if (['Expired', 'expired_stock', 'damage_writeoff'].includes(data.return_type)) {
+            try {
+                const { postJournalEntry } = await import('@/app/actions/gl-actions');
+                await postJournalEntry({
+                    entry_date: new Date().toISOString(),
+                    reference: `PHARM-WRITEOFF-${Date.now()}`,
+                    description: `Pharmacy write-off: ${data.reason}`,
+                    lines: [
+                        { account_code: '7110', debit: refundAmount, credit: 0, description: 'Pharmacy write-off expense' },
+                        { account_code: '1160', debit: 0, credit: refundAmount, description: 'Pharmacy inventory reduction' },
+                    ]
+                });
+            } catch (glErr) {
+                console.error('GL posting failed for pharmacy write-off:', glErr);
+            }
+
             await logAudit({
                 action: 'PHARMACY_EXPIRY_WRITEOFF',
                 module: 'Pharmacy',
                 entity_type: 'pharmacy_return',
-                details: JSON.stringify({
-                    medicine_id: data.medicine_id,
-                    quantity: data.quantity,
-                    write_off_value: refundAmount,
-                    batch: data.batch_id,
-                }),
+                details: JSON.stringify({ medicine_id: data.medicine_id, quantity: data.quantity, write_off_value: refundAmount, batch: data.batch_id }),
             });
+        }
+
+        if (data.return_type === 'supplier_return' && refundAmount > 0) {
+            try {
+                const { postJournalEntry } = await import('@/app/actions/gl-actions');
+                await postJournalEntry({
+                    entry_date: new Date().toISOString(),
+                    reference: `PHARM-SUPRET-${Date.now()}`,
+                    description: `Supplier return: ${data.reason}`,
+                    lines: [
+                        { account_code: '3110', debit: refundAmount, credit: 0, description: 'Vendor payable reduction' },
+                        { account_code: '1160', debit: 0, credit: refundAmount, description: 'Pharmacy inventory reduction' },
+                    ]
+                });
+            } catch (glErr) {
+                console.error('GL posting failed for supplier return:', glErr);
+            }
         }
 
         revalidatePath('/pharmacy/returns');
         revalidatePath('/pharmacy/inventory');
         return { success: true, credit_note_id: creditNoteId, refund_amount: refundAmount };
-    } catch (error) {
+    } catch (error: any) {
         console.error('Return processing error:', error);
-        return { success: false, error: 'Failed to process return' };
+        return { success: false, error: error.message || 'Failed to process return' };
     }
 }
 
@@ -1442,5 +1929,425 @@ export async function getPharmacyAnalytics() {
     } catch (error) {
         console.error('Analytics Error:', error);
         return { success: false, error: 'Failed to load analytics' };
+    }
+}
+
+// ============================================
+// PHASE 3 — INVENTORY MOVEMENT LEDGER QUERIES
+// ============================================
+
+export async function getInventoryMovements(filters?: {
+    medicine_id?: number;
+    batch_id?: number;
+    movement_type?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+}) {
+    try {
+        const { db } = await requireTenantContext();
+        const where: any = {};
+        if (filters?.medicine_id) where.medicine_id = filters.medicine_id;
+        if (filters?.batch_id) where.batch_id = filters.batch_id;
+        if (filters?.movement_type) where.movement_type = filters.movement_type;
+        if (filters?.from || filters?.to) {
+            where.created_at = {};
+            if (filters.from) where.created_at.gte = new Date(filters.from);
+            if (filters.to) where.created_at.lte = new Date(filters.to + 'T23:59:59');
+        }
+
+        const movements = await db.pharmacyInventoryMovement.findMany({
+            where,
+            orderBy: { created_at: 'desc' },
+            take: filters?.limit || 500,
+            include: {
+                medicine: { select: { brand_name: true, generic_name: true } },
+                batch: { select: { batch_no: true, expiry_date: true } },
+            }
+        });
+        return { success: true, data: movements };
+    } catch (error) {
+        return { success: false, error: 'Failed to load movements' };
+    }
+}
+
+// ============================================
+// PHASE 5 — PURCHASE INVOICE & 3-WAY MATCHING
+// ============================================
+
+export async function createPurchaseInvoice(data: {
+    vendor_id: number;
+    po_id?: number;
+    invoice_number: string;
+    invoice_date: string;
+    due_date?: string;
+    vendor_gstin?: string;
+    lines: Array<{
+        medicine_id: number;
+        grn_id?: number;
+        po_item_id?: number;
+        quantity: number;
+        unit_price: number;
+        gst_rate: number;
+        hsn_code?: string;
+    }>;
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const lines = data.lines.map(line => {
+            const taxable = line.quantity * line.unit_price;
+            const gstAmt = taxable * line.gst_rate / 100;
+            const isInter = false; // TODO: derive from vendor state vs org state
+            return {
+                ...line,
+                line_total: taxable + gstAmt,
+                cgst_amount: isInter ? 0 : gstAmt / 2,
+                sgst_amount: isInter ? 0 : gstAmt / 2,
+                igst_amount: isInter ? gstAmt : 0,
+            };
+        });
+
+        const subtotal = lines.reduce((s, l) => s + l.quantity * l.unit_price, 0);
+        const totalCgst = lines.reduce((s, l) => s + l.cgst_amount, 0);
+        const totalSgst = lines.reduce((s, l) => s + l.sgst_amount, 0);
+        const totalIgst = lines.reduce((s, l) => s + l.igst_amount, 0);
+        const totalAmount = lines.reduce((s, l) => s + l.line_total, 0);
+
+        const invoice = await db.pharmacyPurchaseInvoice.create({
+            data: {
+                organizationId,
+                invoice_number: data.invoice_number,
+                vendor_id: data.vendor_id,
+                po_id: data.po_id || null,
+                invoice_date: new Date(data.invoice_date),
+                due_date: data.due_date ? new Date(data.due_date) : null,
+                subtotal,
+                cgst_amount: totalCgst,
+                sgst_amount: totalSgst,
+                igst_amount: totalIgst,
+                total_amount: totalAmount,
+                vendor_gstin: data.vendor_gstin || null,
+                status: 'Draft',
+                line_items: {
+                    create: lines.map(l => ({
+                        medicine_id: l.medicine_id,
+                        grn_id: l.grn_id || null,
+                        po_item_id: l.po_item_id || null,
+                        quantity: l.quantity,
+                        unit_price: l.unit_price,
+                        gst_rate: l.gst_rate,
+                        cgst_amount: l.cgst_amount,
+                        sgst_amount: l.sgst_amount,
+                        igst_amount: l.igst_amount,
+                        line_total: l.line_total,
+                        hsn_code: l.hsn_code || null,
+                    }))
+                }
+            }
+        });
+
+        revalidatePath('/pharmacy/purchase-invoices');
+        return { success: true, data: invoice };
+    } catch (error: any) {
+        return { success: false, error: error.message || 'Failed to create purchase invoice' };
+    }
+}
+
+export async function matchPurchaseInvoice(invoiceId: number) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const invoice = await db.pharmacyPurchaseInvoice.findUnique({
+            where: { id: invoiceId },
+            include: { line_items: true, po: { include: { items: true, grns: { include: { batches: true } } } } }
+        });
+        if (!invoice) return { success: false, error: 'Invoice not found' };
+
+        const config = await db.moduleConfig.findFirst({
+            where: { organizationId: invoice.organizationId, module_key: 'pharmacy' }
+        });
+        const tolerance = (config?.settings as any)?.matching_tolerance_pct ?? 5;
+
+        const variances: any[] = [];
+        let allWithinTolerance = true;
+
+        for (const line of invoice.line_items) {
+            const poItem = invoice.po?.items.find((pi: any) => pi.id === line.po_item_id);
+            const variance: any = {
+                medicine_id: line.medicine_id,
+                invoice_qty: line.quantity,
+                invoice_rate: line.unit_price,
+                po_qty: poItem?.quantity_ordered || null,
+                po_rate: poItem?.unit_price || null,
+                grn_qty: poItem?.quantity_received || null,
+            };
+
+            // Quantity variance
+            if (poItem && line.quantity !== poItem.quantity_received) {
+                variance.qty_variance = line.quantity - poItem.quantity_received;
+                const pct = Math.abs(variance.qty_variance) / poItem.quantity_received * 100;
+                if (pct > tolerance) allWithinTolerance = false;
+                variance.qty_variance_pct = pct;
+            }
+
+            // Rate variance
+            if (poItem && Math.abs(line.unit_price - poItem.unit_price) > 0.01) {
+                variance.rate_variance = line.unit_price - poItem.unit_price;
+                const pct = Math.abs(variance.rate_variance) / poItem.unit_price * 100;
+                if (pct > tolerance) allWithinTolerance = false;
+                variance.rate_variance_pct = pct;
+            }
+
+            variances.push(variance);
+        }
+
+        return {
+            success: true,
+            data: {
+                invoice_id: invoiceId,
+                variances,
+                all_within_tolerance: allWithinTolerance,
+                tolerance_pct: tolerance,
+                can_auto_post: allWithinTolerance,
+            }
+        };
+    } catch (error: any) {
+        return { success: false, error: error.message || 'Matching failed' };
+    }
+}
+
+export async function postPurchaseInvoice(invoiceId: number) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const invoice = await db.pharmacyPurchaseInvoice.findUnique({
+            where: { id: invoiceId },
+            include: { line_items: true, vendor: true }
+        });
+        if (!invoice) return { success: false, error: 'Invoice not found' };
+        if (!['Draft', 'PendingApproval'].includes(invoice.status)) {
+            return { success: false, error: 'Invoice must be Draft or PendingApproval to post' };
+        }
+
+        // GL posting: debit Inventory + GST Input, credit Vendor Payable
+        try {
+            const { postJournalEntry } = await import('@/app/actions/gl-actions');
+            const lines: any[] = [];
+
+            // Debit: Pharmacy Inventory at taxable amount
+            if (invoice.subtotal > 0) {
+                lines.push({ account_code: '1160', debit: Number(invoice.subtotal), credit: 0, description: `Purchase: ${invoice.invoice_number}` });
+            }
+            // Debit: GST Input
+            if (Number(invoice.cgst_amount) > 0) {
+                lines.push({ account_code: '1170', debit: Number(invoice.cgst_amount), credit: 0, description: 'CGST Input Credit' });
+            }
+            if (Number(invoice.sgst_amount) > 0) {
+                lines.push({ account_code: '1171', debit: Number(invoice.sgst_amount), credit: 0, description: 'SGST Input Credit' });
+            }
+            if (Number(invoice.igst_amount) > 0) {
+                lines.push({ account_code: '1172', debit: Number(invoice.igst_amount), credit: 0, description: 'IGST Input Credit' });
+            }
+            // Credit: Vendor Payable
+            lines.push({ account_code: '3110', debit: 0, credit: Number(invoice.total_amount), description: `Payable: ${invoice.vendor?.vendor_name}` });
+
+            await postJournalEntry({
+                entry_date: invoice.invoice_date.toISOString(),
+                reference: `PI-${invoice.invoice_number}`,
+                description: `Pharmacy purchase invoice ${invoice.invoice_number} from ${invoice.vendor?.vendor_name}`,
+                lines,
+            });
+        } catch (glErr) {
+            console.error('GL posting failed for purchase invoice:', glErr);
+        }
+
+        // GST inward register entry
+        try {
+            await db.gST_Invoice_Register.create({
+                data: {
+                    organizationId,
+                    transaction_type: 'Inward',
+                    invoice_number: invoice.invoice_number,
+                    invoice_date: invoice.invoice_date,
+                    party_name: invoice.vendor?.vendor_name || '',
+                    party_gstin: invoice.vendor_gstin || invoice.vendor?.gst_number || '',
+                    taxable_amount: Number(invoice.subtotal),
+                    cgst_amount: Number(invoice.cgst_amount),
+                    sgst_amount: Number(invoice.sgst_amount),
+                    igst_amount: Number(invoice.igst_amount),
+                    total_amount: Number(invoice.total_amount),
+                    hsn_code: invoice.line_items[0]?.hsn_code || '3004',
+                    place_of_supply: '',
+                    is_reverse_charge: false,
+                    status: 'Filed',
+                }
+            });
+        } catch (gstErr) {
+            console.error('GST register failed for purchase invoice:', gstErr);
+        }
+
+        await db.pharmacyPurchaseInvoice.update({
+            where: { id: invoiceId },
+            data: { status: 'Posted', gl_posted: true }
+        });
+
+        revalidatePath('/pharmacy/purchase-invoices');
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message || 'Failed to post purchase invoice' };
+    }
+}
+
+export async function recordSupplierPayment(data: {
+    invoice_id: number;
+    amount: number;
+    payment_method: string;
+    payment_reference?: string;
+}) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const invoice = await db.pharmacyPurchaseInvoice.findUnique({
+            where: { id: data.invoice_id },
+            include: { vendor: true }
+        });
+        if (!invoice) return { success: false, error: 'Invoice not found' };
+        if (!['Posted', 'PartiallyPaid'].includes(invoice.status)) {
+            return { success: false, error: 'Invoice must be Posted or PartiallyPaid' };
+        }
+
+        const newPaid = Number(invoice.amount_paid) + data.amount;
+        const fullyPaid = newPaid >= Number(invoice.total_amount);
+
+        await db.pharmacyPurchaseInvoice.update({
+            where: { id: data.invoice_id },
+            data: {
+                amount_paid: newPaid,
+                status: fullyPaid ? 'Paid' : 'PartiallyPaid',
+            }
+        });
+
+        // GL: debit Vendor Payable, credit Cash/Bank
+        try {
+            const { postJournalEntry } = await import('@/app/actions/gl-actions');
+            await postJournalEntry({
+                entry_date: new Date().toISOString(),
+                reference: `SUPPAY-${invoice.invoice_number}-${Date.now()}`,
+                description: `Supplier payment: ${invoice.vendor?.vendor_name} — ${invoice.invoice_number}`,
+                lines: [
+                    { account_code: '3110', debit: data.amount, credit: 0, description: 'Vendor payable settlement' },
+                    { account_code: data.payment_method === 'Bank' ? '1010' : '1000', debit: 0, credit: data.amount, description: `Payment via ${data.payment_method}` },
+                ]
+            });
+        } catch (glErr) {
+            console.error('GL posting failed for supplier payment:', glErr);
+        }
+
+        revalidatePath('/pharmacy/purchase-invoices');
+        return { success: true, fully_paid: fullyPaid };
+    } catch (error: any) {
+        return { success: false, error: error.message || 'Failed to record payment' };
+    }
+}
+
+export async function getPurchaseInvoices(filters?: { status?: string; vendor_id?: number }) {
+    try {
+        const { db } = await requireTenantContext();
+        const where: any = {};
+        if (filters?.status) where.status = filters.status;
+        if (filters?.vendor_id) where.vendor_id = filters.vendor_id;
+
+        const invoices = await db.pharmacyPurchaseInvoice.findMany({
+            where,
+            orderBy: { created_at: 'desc' },
+            include: {
+                vendor: { select: { vendor_name: true, vendor_code: true } },
+                po: { select: { po_number: true } },
+                line_items: { include: { medicine: { select: { brand_name: true } } } },
+            }
+        });
+        return { success: true, data: invoices };
+    } catch (error) {
+        return { success: false, error: 'Failed to load purchase invoices' };
+    }
+}
+
+// ============================================
+// PHASE 7 — STOCK ADJUSTMENT (controlled)
+// ============================================
+
+export async function adjustStock(data: {
+    medicine_id: number;
+    batch_id: number;
+    adjustment_qty: number; // positive = add, negative = deduct
+    reason: string;
+}) {
+    try {
+        const { db, organizationId, session } = await requireTenantContext();
+
+        const batch = await db.pharmacy_batch_inventory.findUnique({ where: { id: data.batch_id } });
+        if (!batch) return { success: false, error: 'Batch not found' };
+
+        const newStock = batch.current_stock + data.adjustment_qty;
+        if (newStock < 0) return { success: false, error: 'Adjustment would result in negative stock' };
+
+        const updated = await db.pharmacy_batch_inventory.update({
+            where: { id: data.batch_id },
+            data: { current_stock: newStock }
+        });
+
+        await db.pharmacyInventoryMovement.create({
+            data: {
+                organizationId,
+                medicine_id: data.medicine_id,
+                batch_id: data.batch_id,
+                movement_type: 'ADJUSTMENT',
+                quantity_in: data.adjustment_qty > 0 ? data.adjustment_qty : 0,
+                quantity_out: data.adjustment_qty < 0 ? Math.abs(data.adjustment_qty) : 0,
+                unit_cost: Number(batch.actual_cost || batch.cost_price || 0),
+                balance_after: updated.current_stock,
+                source_type: 'ADJUSTMENT',
+                user_id: session.id,
+                reason: data.reason,
+            }
+        });
+
+        // Narcotic register for controlled drugs
+        const medicine = await db.pharmacy_medicine_master.findUnique({ where: { id: data.medicine_id } });
+        if (medicine && (medicine.is_narcotic || ['H', 'H1', 'X', 'NDPS'].includes(medicine.drug_schedule || ''))) {
+            const lastEntry = await db.narcoticRegister.findFirst({
+                where: { organizationId, drug_name: medicine.brand_name },
+                orderBy: { created_at: 'desc' }
+            });
+            await db.narcoticRegister.create({
+                data: {
+                    organizationId,
+                    drug_name: medicine.brand_name,
+                    medicine_id: medicine.id,
+                    batch_no: batch.batch_no,
+                    batch_id: batch.id,
+                    quantity_in: data.adjustment_qty > 0 ? data.adjustment_qty : 0,
+                    quantity_out: data.adjustment_qty < 0 ? Math.abs(data.adjustment_qty) : 0,
+                    balance: (lastEntry?.balance || 0) + data.adjustment_qty,
+                    transaction_type: data.adjustment_qty > 0 ? 'IN' : 'OUT',
+                    source_type: 'ADJUSTMENT',
+                    notes: `Stock adjustment: ${data.reason}`,
+                }
+            });
+        }
+
+        await logAudit({
+            action: 'PHARMACY_STOCK_ADJUSTMENT',
+            module: 'Pharmacy',
+            entity_type: 'pharmacy_batch_inventory',
+            entity_id: String(data.batch_id),
+            details: JSON.stringify({ adjustment_qty: data.adjustment_qty, reason: data.reason, new_stock: updated.current_stock }),
+        });
+
+        revalidatePath('/pharmacy/inventory');
+        return { success: true, new_stock: updated.current_stock };
+    } catch (error: any) {
+        return { success: false, error: error.message || 'Failed to adjust stock' };
     }
 }

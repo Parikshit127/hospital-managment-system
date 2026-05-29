@@ -246,6 +246,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       items: [
         { label: "Stock", href: "/pharmacy/inventory", icon: Package },
         { label: "Purchase Orders", href: "/pharmacy/purchase-orders", icon: ShoppingCart },
+        { label: "Purchase Invoices", href: "/pharmacy/purchase-invoices", icon: FileText },
         { label: "Suppliers", href: "/pharmacy/suppliers", icon: Truck },
         { label: "Returns", href: "/pharmacy/returns", icon: RotateCcw },
       ],
