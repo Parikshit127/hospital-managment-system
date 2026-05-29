@@ -49,7 +49,7 @@ export async function createSession(data: SessionData): Promise<void> {
     const cookieStore = await cookies();
     cookieStore.set('session', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: process.env.NEXT_PUBLIC_APP_URL?.startsWith('https') ?? false,
         sameSite: 'lax',
         maxAge: 60 * 60 * 8,
         path: '/',
@@ -57,7 +57,7 @@ export async function createSession(data: SessionData): Promise<void> {
 
     cookieStore.set('last_activity', Date.now().toString(), {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: process.env.NEXT_PUBLIC_APP_URL?.startsWith('https') ?? false,
         sameSite: 'lax',
         path: '/',
     });
@@ -95,7 +95,7 @@ export async function createSuperAdminSession(data: SuperAdminSessionData): Prom
     const cookieStore = await cookies();
     cookieStore.set('superadmin_session', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: process.env.NEXT_PUBLIC_APP_URL?.startsWith('https') ?? false,
         sameSite: 'lax',
         maxAge: 60 * 60 * 2,
         path: '/',
@@ -132,7 +132,7 @@ export async function createMfaPendingSession(data: SessionData): Promise<void> 
     const cookieStore = await cookies();
     cookieStore.set('mfa_pending', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: process.env.NEXT_PUBLIC_APP_URL?.startsWith('https') ?? false,
         sameSite: 'lax',
         maxAge: 60 * 5,
         path: '/',
@@ -162,7 +162,7 @@ export async function createPatientSession(data: PatientSessionData): Promise<vo
     const cookieStore = await cookies();
     cookieStore.set('patient_session', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: process.env.NEXT_PUBLIC_APP_URL?.startsWith('https') ?? false,
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 7,
         path: '/',

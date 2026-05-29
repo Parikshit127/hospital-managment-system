@@ -184,7 +184,7 @@ export async function proxy(request: NextRequest) {
       const resp = NextResponse.next();
       resp.cookies.set("patient_last_activity", Date.now().toString(), {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: process.env.NEXT_PUBLIC_APP_URL?.startsWith("https") ?? false,
         sameSite: "lax",
       });
       return resp;
@@ -281,7 +281,7 @@ export async function proxy(request: NextRequest) {
     const response = NextResponse.next();
     response.cookies.set("last_activity", Date.now().toString(), {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: process.env.NEXT_PUBLIC_APP_URL?.startsWith("https") ?? false,
       sameSite: "lax",
     });
     return response;
