@@ -9,6 +9,41 @@ import { postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
 import { postInvoiceToGL } from '@/app/actions/gl-actions';
 import { syncInvoiceToGSTRegister } from '@/app/actions/gst-compliance-actions';
 
+// Helper: post a GL journal entry using account codes (resolves to account IDs)
+async function postPharmacyJournal(db: any, organizationId: string, data: {
+    narration: string;
+    reference_number?: string;
+    lines: Array<{ account_code: string; debit: number; credit: number; description?: string }>;
+}) {
+    const { createJournalEntry } = await import('@/app/actions/gl-actions');
+    const resolvedLines = [];
+    for (const line of data.lines) {
+        const account = await db.gL_Account.findFirst({
+            where: { organizationId, account_code: line.account_code },
+            select: { id: true }
+        });
+        if (!account) {
+            console.warn(`GL account ${line.account_code} not found for org ${organizationId}, skipping line`);
+            continue;
+        }
+        resolvedLines.push({
+            account_id: account.id,
+            debit_amount: line.debit,
+            credit_amount: line.credit,
+            description: line.description,
+        });
+    }
+    if (resolvedLines.length < 2) return; // need at least debit + credit
+    return createJournalEntry({
+        organizationId,
+        entry_date: new Date(),
+        entry_type: 'Pharmacy',
+        narration: data.narration,
+        reference_number: data.reference_number,
+        lines: resolvedLines,
+    });
+}
+
 function generatePharmacyInvoiceNumber() {
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
@@ -1501,11 +1536,9 @@ export async function processReturn(data: {
         // GL posting for write-offs and supplier returns
         if (['Expired', 'expired_stock', 'damage_writeoff'].includes(data.return_type)) {
             try {
-                const { postJournalEntry } = await import('@/app/actions/gl-actions');
-                await postJournalEntry({
-                    entry_date: new Date().toISOString(),
-                    reference: `PHARM-WRITEOFF-${Date.now()}`,
-                    description: `Pharmacy write-off: ${data.reason}`,
+                await postPharmacyJournal(db, organizationId, {
+                    narration: `Pharmacy write-off: ${data.reason}`,
+                    reference_number: `PHARM-WRITEOFF-${Date.now()}`,
                     lines: [
                         { account_code: '7110', debit: refundAmount, credit: 0, description: 'Pharmacy write-off expense' },
                         { account_code: '1160', debit: 0, credit: refundAmount, description: 'Pharmacy inventory reduction' },
@@ -1525,11 +1558,9 @@ export async function processReturn(data: {
 
         if (data.return_type === 'supplier_return' && refundAmount > 0) {
             try {
-                const { postJournalEntry } = await import('@/app/actions/gl-actions');
-                await postJournalEntry({
-                    entry_date: new Date().toISOString(),
-                    reference: `PHARM-SUPRET-${Date.now()}`,
-                    description: `Supplier return: ${data.reason}`,
+                await postPharmacyJournal(db, organizationId, {
+                    narration: `Supplier return: ${data.reason}`,
+                    reference_number: `PHARM-SUPRET-${Date.now()}`,
                     lines: [
                         { account_code: '3110', debit: refundAmount, credit: 0, description: 'Vendor payable reduction' },
                         { account_code: '1160', debit: 0, credit: refundAmount, description: 'Pharmacy inventory reduction' },
@@ -2132,31 +2163,26 @@ export async function postPurchaseInvoice(invoiceId: number) {
 
         // GL posting: debit Inventory + GST Input, credit Vendor Payable
         try {
-            const { postJournalEntry } = await import('@/app/actions/gl-actions');
-            const lines: any[] = [];
+            const glLines: Array<{ account_code: string; debit: number; credit: number; description?: string }> = [];
 
-            // Debit: Pharmacy Inventory at taxable amount
             if (invoice.subtotal > 0) {
-                lines.push({ account_code: '1160', debit: Number(invoice.subtotal), credit: 0, description: `Purchase: ${invoice.invoice_number}` });
+                glLines.push({ account_code: '1160', debit: Number(invoice.subtotal), credit: 0, description: `Purchase: ${invoice.invoice_number}` });
             }
-            // Debit: GST Input
             if (Number(invoice.cgst_amount) > 0) {
-                lines.push({ account_code: '1170', debit: Number(invoice.cgst_amount), credit: 0, description: 'CGST Input Credit' });
+                glLines.push({ account_code: '1170', debit: Number(invoice.cgst_amount), credit: 0, description: 'CGST Input Credit' });
             }
             if (Number(invoice.sgst_amount) > 0) {
-                lines.push({ account_code: '1171', debit: Number(invoice.sgst_amount), credit: 0, description: 'SGST Input Credit' });
+                glLines.push({ account_code: '1171', debit: Number(invoice.sgst_amount), credit: 0, description: 'SGST Input Credit' });
             }
             if (Number(invoice.igst_amount) > 0) {
-                lines.push({ account_code: '1172', debit: Number(invoice.igst_amount), credit: 0, description: 'IGST Input Credit' });
+                glLines.push({ account_code: '1172', debit: Number(invoice.igst_amount), credit: 0, description: 'IGST Input Credit' });
             }
-            // Credit: Vendor Payable
-            lines.push({ account_code: '3110', debit: 0, credit: Number(invoice.total_amount), description: `Payable: ${invoice.vendor?.vendor_name}` });
+            glLines.push({ account_code: '3110', debit: 0, credit: Number(invoice.total_amount), description: `Payable: ${invoice.vendor?.vendor_name}` });
 
-            await postJournalEntry({
-                entry_date: invoice.invoice_date.toISOString(),
-                reference: `PI-${invoice.invoice_number}`,
-                description: `Pharmacy purchase invoice ${invoice.invoice_number} from ${invoice.vendor?.vendor_name}`,
-                lines,
+            await postPharmacyJournal(db, organizationId, {
+                narration: `Pharmacy purchase invoice ${invoice.invoice_number} from ${invoice.vendor?.vendor_name}`,
+                reference_number: `PI-${invoice.invoice_number}`,
+                lines: glLines,
             });
         } catch (glErr) {
             console.error('GL posting failed for purchase invoice:', glErr);
@@ -2230,11 +2256,9 @@ export async function recordSupplierPayment(data: {
 
         // GL: debit Vendor Payable, credit Cash/Bank
         try {
-            const { postJournalEntry } = await import('@/app/actions/gl-actions');
-            await postJournalEntry({
-                entry_date: new Date().toISOString(),
-                reference: `SUPPAY-${invoice.invoice_number}-${Date.now()}`,
-                description: `Supplier payment: ${invoice.vendor?.vendor_name} — ${invoice.invoice_number}`,
+            await postPharmacyJournal(db, invoice.organizationId, {
+                narration: `Supplier payment: ${invoice.vendor?.vendor_name} — ${invoice.invoice_number}`,
+                reference_number: `SUPPAY-${invoice.invoice_number}-${Date.now()}`,
                 lines: [
                     { account_code: '3110', debit: data.amount, credit: 0, description: 'Vendor payable settlement' },
                     { account_code: data.payment_method === 'Bank' ? '1010' : '1000', debit: 0, credit: data.amount, description: `Payment via ${data.payment_method}` },

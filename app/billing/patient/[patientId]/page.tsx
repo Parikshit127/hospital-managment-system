@@ -509,6 +509,26 @@ function InvoicesTab({
                       Collect Payment
                     </button>
                   )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(`/api/invoice/${inv.id}/summary-bill`, '_blank');
+                    }}
+                    className="px-2.5 py-1 bg-white border border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-xs font-bold text-gray-700 rounded"
+                  >
+                    Print Bill
+                  </button>
+                  {inv.admission_id && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(`/api/discharge/${inv.admission_id}/bill`, '_blank');
+                      }}
+                      className="px-2.5 py-1 bg-white border border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-xs font-bold text-gray-700 rounded"
+                    >
+                      Detailed Bill
+                    </button>
+                  )}
                   <ActionLink href="/finance/credit-notes">Credit Note</ActionLink>
                   <ActionLink href="/finance/refunds">Refund</ActionLink>
                 </div>
