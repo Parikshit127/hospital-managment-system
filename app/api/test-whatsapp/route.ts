@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendWhatsAppMessage, sendWhatsAppTemplate, formatPhoneNumber } from '@/app/lib/whatsapp';
+import { logger, maskPhone } from '@/app/lib/logger';
 
 /**
  * Test endpoint to verify WhatsApp API configuration (AiSensy/Combirds)
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
         }
 
         const formattedPhone = formatPhoneNumber(phone);
-        console.log('[Test WhatsApp] Testing with phone:', formattedPhone);
+        logger.info('[Test WhatsApp] Testing with phone:', maskPhone(formattedPhone));
 
         let result;
         if (template) {

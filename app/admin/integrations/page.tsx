@@ -2,7 +2,7 @@
 
 import { useState, useEffect, type CSSProperties, type ElementType } from 'react';
 import {
-    Plug, CreditCard, MessageSquare, Brain, Mail, Database,
+    Plug, CreditCard, MessageSquare, Brain, Mail,
     ChevronDown, ChevronUp, Loader2, CheckCircle2, XCircle,
     AlertTriangle, Eye, EyeOff, RefreshCw, Save, Info,
     Shield, Send,
@@ -132,6 +132,8 @@ const INTEGRATIONS: IntegrationDef[] = [
             { key: 'smtp_host', label: 'SMTP Host', type: 'text', placeholder: 'smtp.gmail.com' },
             { key: 'smtp_user', label: 'SMTP Username', type: 'text', placeholder: 'alerts@yourhospital.com' },
             { key: 'smtp_pass', label: 'SMTP Password', type: 'password', placeholder: 'Enter SMTP password or app password' },
+            { key: 'smtp_port', label: 'SMTP Port', type: 'text', placeholder: '587 (default if empty)' },
+            { key: 'smtp_secure', label: 'TLS / SSL Mode', type: 'text', placeholder: 'true or false (default: false)' },
         ],
         hasTestButton: true,
     },
@@ -155,18 +157,6 @@ const INTEGRATIONS: IntegrationDef[] = [
             { key: 'sender_phone_number', label: 'Sender Phone Number', type: 'text', placeholder: 'e.g., +91 99999 99999' },
         ],
         hasTestButton: true,
-    },
-    {
-        key: 'supabase',
-        name: 'Supabase Storage',
-        description: 'Cloud object storage for patient documents, lab report PDFs, medical imaging files, and discharge summaries.',
-        icon: Database,
-        color: 'text-emerald-600',
-        bgColor: 'bg-emerald-50',
-        borderColor: 'border-emerald-500',
-        statusCheck: () => 'connected',
-        fields: [],
-        envNote: 'Supabase credentials are configured via environment variables (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY). Contact your system administrator to modify.',
     },
 ];
 

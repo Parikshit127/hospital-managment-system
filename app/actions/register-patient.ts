@@ -9,6 +9,7 @@ import { sendWelcomeEmail } from '@/backend/email';
 import { createPatientPasswordSetupToken } from '@/app/lib/password-setup';
 import { patientRegistrationSchema } from '@/app/lib/validations/patient';
 import { generateUHID, generateAppointmentId } from '@/app/lib/uhid';
+import { logger, maskEmail } from '@/app/lib/logger';
 
 /**
  * Check for duplicate patients by phone number.
@@ -221,8 +222,8 @@ export async function registerPatient(formData: FormData) {
             if (rawData.email && rawData.email !== "not given") {
                 sendWelcomeEmail(rawData.email, rawData.full_name, agentPatientId, setupLink)
                     .then(res => {
-                        if (!res.success) console.warn('[Email] Welcome email failed:', res.error);
-                        else console.log('[Email] Welcome email sent to', rawData.email);
+                        if (!res.success) logger.warn('[Email] Welcome email failed:', res.error);
+                        else logger.info('[Email] Welcome email sent to', maskEmail(rawData.email));
                     })
                     .catch(err => console.error('[Email] Welcome email error:', err));
             }

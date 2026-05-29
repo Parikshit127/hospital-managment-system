@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { logger, redact } from '@/app/lib/logger';
 
 /**
  * WhatsApp Webhook Endpoint
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
     const challenge = searchParams.get('hub.challenge');
 
     if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
-        console.log('[WhatsApp Webhook] Verification successful');
+        logger.info('[WhatsApp Webhook] Verification successful');
         return new Response(challenge, { status: 200 });
     }
 
@@ -27,8 +28,8 @@ export async function POST(request: Request) {
     try {
         const body = await request.json();
         
-        // Log incoming message for debugging
-        console.log('[WhatsApp Webhook] Received event:', JSON.stringify(body, null, 2));
+        // Log incoming event for debugging (PII redacted; full body only in debug)
+        logger.debug('[WhatsApp Webhook] Received event:', JSON.stringify(redact(body), null, 2));
 
         // Note: In a production app, you would parse the body to handle specific events:
         // - body.entry[0].changes[0].value.messages (Incoming messages)

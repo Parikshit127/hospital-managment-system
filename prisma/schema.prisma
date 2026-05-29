@@ -288,6 +288,8 @@ model OrganizationConfig {
   smtp_host                     String?
   smtp_user                     String?
   smtp_pass                     String?
+  smtp_port                     Int?
+  smtp_secure                   String?
   whatsapp_api_token            String?
   whatsapp_phone_id             String?
   whatsapp_webhook_verify_token String?

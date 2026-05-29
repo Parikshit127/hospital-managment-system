@@ -1,4 +1,5 @@
 import { getWhatsAppCredentials } from '@/app/lib/secure-config';
+import { logger, maskPhone } from '@/app/lib/logger';
 
 export interface WhatsAppMessage {
   to: string;
@@ -74,7 +75,7 @@ export async function sendWhatsAppMessage(
     }
 
     const data = await response.json();
-    console.log(`[WhatsApp] Session Message sent to ${payload.to}`);
+    logger.info(`[WhatsApp] Session Message sent to ${maskPhone(payload.to)}`);
     return { success: true, messageId: data.messageId };
   } catch (error) {
     // Fall back to template on any error
@@ -132,7 +133,7 @@ export async function sendWhatsAppTemplate(
     }
 
     const data = await response.json();
-    console.log(`[WhatsApp] Template '${payload.templateName}' sent to ${payload.to}`);
+    logger.info(`[WhatsApp] Template '${payload.templateName}' sent to ${maskPhone(payload.to)}`);
     return { success: true, messageId: data.messageId };
   } catch (error) {
     console.error("WhatsApp template service error:", error);

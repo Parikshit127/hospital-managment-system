@@ -1,4 +1,5 @@
 import { getOrganizationIntegrationConfig } from '@/app/lib/secure-config';
+import { logger, maskPhone } from '@/app/lib/logger';
 
 export interface SMSPayload {
     to: string;
@@ -30,7 +31,7 @@ export async function sendSMS(payload: SMSPayload): Promise<SMSResponse> {
             return { success: false, skipped: true };
         }
 
-        console.log(`[SMS] Dispatching SMS to ${payload.to} via ${gatewayUrl} (Sender ID: ${senderId})`);
+        logger.info(`[SMS] Dispatching SMS to ${maskPhone(payload.to)} (Sender ID: ${senderId})`);
 
         const response = await fetch(gatewayUrl, {
             method: 'POST',

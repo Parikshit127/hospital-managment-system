@@ -13,7 +13,7 @@ import { sendSMS } from '@/app/lib/sms';
 
 const ADMIN_ROLES = ['admin', 'superadmin'];
 type IntegrationConfig = Record<string, string | boolean | Date | null | undefined>;
-type IntegrationUpdate = Record<string, string | boolean | null | undefined>;
+type IntegrationUpdate = Record<string, string | boolean | number | null | undefined>;
 
 const ALLOWED_FIELDS = new Set([
     'enable_whatsapp',
@@ -33,6 +33,8 @@ const ALLOWED_FIELDS = new Set([
     'sms_api_key',
     'sms_sender_id',
     'sender_phone_number',
+    'smtp_port',
+    'smtp_secure',
 ]);
 
 function getErrorMessage(error: unknown) {
@@ -63,12 +65,19 @@ function sanitizeUpdate(data: IntegrationUpdate) {
             continue;
         }
 
+        if (key === 'smtp_port') {
+            const num = parseInt(String(rawValue), 10);
+            update[key] = isNaN(num) ? null : num;
+            continue;
+        }
+
         const value = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
         if (INTEGRATION_SECRET_FIELDS.has(key)) {
-            if (!value || /^\*+$/.test(value) || /^.{0,4}\*+.{0,4}$/.test(value)) {
+            const strValue = String(value ?? '');
+            if (!value || /^\*+$/.test(strValue) || /^.{0,4}\*+.{0,4}$/.test(strValue)) {
                 continue;
             }
-            update[key] = encryptSecret(value);
+            update[key] = encryptSecret(strValue);
         } else {
             update[key] = value || null;
         }
@@ -176,8 +185,8 @@ async function runIntegrationTest(integrationKey: string, config: IntegrationCon
         }
         const transporter = nodemailer.createTransport({
             host,
-            port: Number(process.env.SMTP_PORT || 587),
-            secure: process.env.SMTP_SECURE === 'true',
+            port: config.smtp_port ? Number(config.smtp_port) : Number(process.env.SMTP_PORT || 587),
+            secure: config.smtp_secure ? String(config.smtp_secure) === 'true' : process.env.SMTP_SECURE === 'true',
             auth: { user, pass },
         });
         await transporter.verify();
@@ -232,18 +241,12 @@ async function runIntegrationTest(integrationKey: string, config: IntegrationCon
         return { success: true, message: 'SMS Gateway credentials successfully validated.' };
     }
 
-    if (integrationKey === 'supabase') {
-        const missing = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'].filter((key) => !process.env[key]);
-        if (missing.length) return { success: false, error: `Missing ${missing.join(', ')}.` };
-        return { success: true, message: 'Supabase public configuration is present.' };
-    }
-
     return { success: false, error: 'Unknown integration.' };
 }
 
 function getProductionReadinessSnapshot() {
     const required = ['DATABASE_URL', 'DIRECT_URL', 'JWT_SECRET', 'APP_BASE_URL'];
-    const recommended = ['CRON_SECRET', 'CONFIG_ENCRYPTION_KEY', 'NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'];
+    const recommended = ['CRON_SECRET', 'CONFIG_ENCRYPTION_KEY'];
     const missingRequired = required.filter((key) => !process.env[key]);
     const missingRecommended = recommended.filter((key) => !process.env[key]);
 
@@ -263,6 +266,9 @@ export async function sendRealTestNotification(channel: 'smtp' | 'whatsapp' | 's
         const config = await db.organizationConfig.findUnique({ where: { organizationId } });
         if (!config) return { success: false, error: 'Integration configuration was not found.' };
 
+        const org = await db.organization.findUnique({ where: { id: organizationId }, select: { name: true } });
+        const orgName = org?.name || 'Hospital';
+
         const plainPass = decryptSecret(asString(config.smtp_pass));
         const host = asString(config.smtp_host);
         const user = asString(config.smtp_user);
@@ -273,12 +279,12 @@ export async function sendRealTestNotification(channel: 'smtp' | 'whatsapp' | 's
             }
             const transporter = nodemailer.createTransport({
                 host,
-                port: Number(process.env.SMTP_PORT || 587),
-                secure: process.env.SMTP_SECURE === 'true',
+                port: config.smtp_port ? Number(config.smtp_port) : Number(process.env.SMTP_PORT || 587),
+                secure: config.smtp_secure ? String(config.smtp_secure) === 'true' : process.env.SMTP_SECURE === 'true',
                 auth: { user, pass: plainPass },
             });
             const info = await transporter.sendMail({
-                from: `"Axten Hospitals" <${user}>`,
+                from: `"${orgName}" <${user}>`,
                 to: recipient,
                 subject: '🔌 Live Integration System Verification Test',
                 html: `
@@ -309,7 +315,7 @@ export async function sendRealTestNotification(channel: 'smtp' | 'whatsapp' | 's
                 templateName: 'appointment_confirmed',
                 userName: 'Test Patient',
                 params: [
-                    'Axten Hospitals',
+                    orgName,
                     'Test Patient',
                     'Dr. Akshay Pandey',
                     'General Medicine',
@@ -331,7 +337,7 @@ export async function sendRealTestNotification(channel: 'smtp' | 'whatsapp' | 's
             }
             const res = await sendSMS({
                 to: formattedPhone,
-                message: `Dear Test Patient, your dynamic SMS integration is fully working! Sent from Axten Hospitals at ${new Date().toLocaleTimeString()}.`,
+                message: `Dear Test Patient, your dynamic SMS integration is fully working! Sent from ${orgName} at ${new Date().toLocaleTimeString()}.`,
                 organizationId,
             });
             if (!res.success) {

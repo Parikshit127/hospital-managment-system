@@ -41,7 +41,7 @@ let transporter = nodemailer.createTransport({
 /**
  * Get a transporter — uses org-level SMTP if provided, else falls back to global .env
  */
-function getTransporter(orgConfig?: { smtp_host?: string | null; smtp_user?: string | null; smtp_pass?: string | null }) {
+function getTransporter(orgConfig?: { smtp_host?: string | null; smtp_user?: string | null; smtp_pass?: string | null; smtp_port?: number | null; smtp_secure?: string | null }) {
     const host = orgConfig?.smtp_host || process.env.SMTP_HOST;
     const user = orgConfig?.smtp_user || process.env.SMTP_USER;
     const pass = orgConfig?.smtp_pass || process.env.SMTP_PASS;
@@ -50,8 +50,8 @@ function getTransporter(orgConfig?: { smtp_host?: string | null; smtp_user?: str
 
     return nodemailer.createTransport({
         host,
-        port: parseInt(process.env.SMTP_PORT || '587'),
-        secure: process.env.SMTP_SECURE === 'true',
+        port: orgConfig?.smtp_port || parseInt(process.env.SMTP_PORT || '587'),
+        secure: orgConfig?.smtp_secure ? orgConfig.smtp_secure === 'true' : process.env.SMTP_SECURE === 'true',
         auth: { user, pass },
     });
 }
@@ -80,6 +80,8 @@ export async function sendEmail({
         smtp_host: orgConfig.smtp_host as string | null,
         smtp_user: orgConfig.smtp_user as string | null,
         smtp_pass: orgConfig.smtp_pass as string | null,
+        smtp_port: orgConfig.smtp_port as number | null,
+        smtp_secure: orgConfig.smtp_secure as string | null,
     } : undefined);
     if (!t) {
         console.warn('⚠️ SMTP credentials are not fully configured. Email skipped:', subject);

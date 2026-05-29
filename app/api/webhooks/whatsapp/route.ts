@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logger, maskPhone } from "@/app/lib/logger";
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,10 +9,10 @@ export async function POST(req: NextRequest) {
     // Track delivery status updates from AiSensy
     if (topic === "message.status.updated") {
       const { messageId, status, to } = data;
-      console.log(`[WhatsApp Webhook] Status update: ${messageId} -> ${status} (to: ${to})`);
+      logger.info(`[WhatsApp Webhook] Status update: ${messageId} -> ${status} (to: ${maskPhone(to)})`);
 
       if (status === "failed") {
-        console.warn(`[WhatsApp] Delivery failed to: ${to}`);
+        logger.warn(`[WhatsApp] Delivery failed to: ${maskPhone(to)}`);
       }
     }
 
