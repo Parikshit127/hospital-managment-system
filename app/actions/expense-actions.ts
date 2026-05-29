@@ -405,15 +405,26 @@ export async function getExpenseReceiptUrl(expenseId: number) {
     }
 }
 
-export async function getExpenseDashboardStats() {
+export async function getExpenseDashboardStats(period?: 'monthly' | 'quarterly' | 'yearly') {
     try {
         const { db } = await requireTenantContext();
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const periodStart = new Date();
+        periodStart.setHours(0, 0, 0, 0);
+        if (period === 'yearly') {
+            periodStart.setMonth(0, 1);
+        } else if (period === 'quarterly') {
+            const currentMonth = periodStart.getMonth();
+            const quarterStartMonth = Math.floor(currentMonth / 3) * 3;
+            periodStart.setMonth(quarterStartMonth, 1);
+        } else {
+            // Default/fallback to monthly
+            periodStart.setDate(1);
+        }
 
-        const [totalExpenses, pendingApproval, thisMonthTotal, todayTotal, byCategory] = await Promise.all([
+        const [totalExpenses, pendingApproval, periodExpenses, todayTotal, byCategory] = await Promise.all([
             db.expense.aggregate({
                 _sum: { total_amount: true },
                 where: { status: { in: ['Approved', 'Paid'] } },
@@ -421,7 +432,7 @@ export async function getExpenseDashboardStats() {
             db.expense.count({ where: { status: 'Pending' } }),
             db.expense.aggregate({
                 _sum: { total_amount: true },
-                where: { status: { in: ['Approved', 'Paid'] }, created_at: { gte: firstOfMonth } },
+                where: { status: { in: ['Approved', 'Paid'] }, created_at: { gte: periodStart } },
             }),
             db.expense.aggregate({
                 _sum: { total_amount: true },
@@ -430,7 +441,7 @@ export async function getExpenseDashboardStats() {
             db.expense.groupBy({
                 by: ['category_id'],
                 _sum: { total_amount: true },
-                where: { status: { in: ['Approved', 'Paid'] }, created_at: { gte: firstOfMonth } },
+                where: { status: { in: ['Approved', 'Paid'] }, created_at: { gte: periodStart } },
             }),
         ]);
 
@@ -439,7 +450,8 @@ export async function getExpenseDashboardStats() {
             data: {
                 totalExpenses: Number(totalExpenses._sum.total_amount || 0),
                 pendingApproval,
-                thisMonthTotal: Number(thisMonthTotal._sum.total_amount || 0),
+                periodExpenses: Number(periodExpenses._sum.total_amount || 0),
+                thisMonthTotal: Number(periodExpenses._sum.total_amount || 0), // backward compatibility fallback
                 todayTotal: Number(todayTotal._sum.total_amount || 0),
                 byCategory: byCategory.map((c: any) => ({
                     category_id: c.category_id,

@@ -927,12 +927,24 @@ export async function updateCatalogItem(id: number, data: {
 // FINANCE ANALYTICS
 // ============================================
 
-export async function getFinanceDashboardStats() {
+export async function getFinanceDashboardStats(period?: 'monthly' | 'quarterly' | 'yearly') {
     try {
         const { db } = await requireTenantContext();
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
+
+        const periodStart = new Date();
+        periodStart.setHours(0, 0, 0, 0);
+        if (period === 'yearly') {
+            periodStart.setMonth(0, 1);
+        } else if (period === 'quarterly') {
+            const currentMonth = periodStart.getMonth();
+            const quarterStartMonth = Math.floor(currentMonth / 3) * 3;
+            periodStart.setMonth(quarterStartMonth, 1);
+        } else if (period === 'monthly') {
+            periodStart.setDate(1);
+        }
 
         // Outstanding aging dates
         const thirtyDaysAgo = new Date();
@@ -947,6 +959,7 @@ export async function getFinanceDashboardStats() {
             pendingBalance,
             todayRevenue,
             totalRevenue,
+            periodRevenue,
             totalPaymentsToday,
             outstandingInvoices,
             revenueByDept,
@@ -968,6 +981,10 @@ export async function getFinanceDashboardStats() {
                 _sum: { amount: true },
                 where: { status: 'Completed' },
             }),
+            db.payments.aggregate({
+                _sum: { amount: true },
+                where: { status: 'Completed', created_at: { gte: period ? periodStart : new Date(0) } },
+            }),
             db.payments.count({
                 where: { status: 'Completed', created_at: { gte: today } },
             }),
@@ -977,6 +994,7 @@ export async function getFinanceDashboardStats() {
             db.invoice_items.groupBy({
                 by: ['department'],
                 _sum: { net_price: true },
+                where: period ? { created_at: { gte: periodStart } } : undefined,
             }),
             db.invoices.aggregate({
                 _sum: { balance_due: true },
@@ -1012,6 +1030,7 @@ export async function getFinanceDashboardStats() {
                 pendingBalance: Number(pendingBalance._sum.balance_due || 0),
                 todayRevenue: Number(todayRevenue._sum.amount || 0),
                 totalRevenue: Number(totalRevenue._sum.amount || 0),
+                periodRevenue: Number(periodRevenue._sum.amount || 0),
                 totalPaymentsToday,
                 outstandingInvoices,
                 revenueByDepartment: revenueByDept.map((d: any) => ({

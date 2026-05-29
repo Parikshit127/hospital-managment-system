@@ -13,13 +13,13 @@ export default function IncomeExpensePage() {
     const [loading, setLoading] = useState(true);
     const [viewPeriod, setViewPeriod] = useState<ViewPeriod>('monthly');
 
-    useEffect(() => { loadData(); }, []);
+    useEffect(() => { loadData(); }, [viewPeriod]);
 
     async function loadData() {
         setLoading(true);
         const [revRes, expRes, catRes] = await Promise.all([
-            getFinanceDashboardStats(),
-            getExpenseDashboardStats(),
+            getFinanceDashboardStats(viewPeriod),
+            getExpenseDashboardStats(viewPeriod),
             getExpenseCategories(),
         ]);
         if (revRes.success) setRevenueStats(revRes.data);
@@ -28,12 +28,13 @@ export default function IncomeExpensePage() {
         setLoading(false);
     }
 
-    const totalRevenue = revenueStats?.totalRevenue || 0;
-    const totalExpenses = expenseStats?.totalExpenses || 0;
-    const monthRevenue = revenueStats?.todayRevenue || 0;
-    const monthExpenses = expenseStats?.thisMonthTotal || 0;
+    const allTimeRevenue = revenueStats?.totalRevenue || 0;
+    const allTimeExpenses = expenseStats?.totalExpenses || 0;
+    const allTimeNetIncome = allTimeRevenue - allTimeExpenses;
+
+    const totalRevenue = revenueStats?.periodRevenue || 0;
+    const totalExpenses = expenseStats?.periodExpenses || 0;
     const netIncome = totalRevenue - totalExpenses;
-    const monthNetIncome = monthRevenue - monthExpenses;
 
     // Map category IDs to names
     const categoryMap = new Map(categories.map((c: any) => [c.id, c.name]));
@@ -78,13 +79,13 @@ export default function IncomeExpensePage() {
                         <p className="text-xs text-gray-500 mb-1">Total Expenses</p>
                         <p className="text-2xl font-bold text-red-700">{fmt(totalExpenses)}</p>
                     </div>
-                    <div className={`rounded-lg shadow p-4 ${netIncome >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+                    <div className={`rounded-lg shadow p-4 ${allTimeNetIncome >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
                         <p className="text-xs text-gray-500 mb-1">Net Income (All Time)</p>
-                        <p className={`text-2xl font-bold ${netIncome >= 0 ? 'text-green-700' : 'text-red-700'}`}>{fmt(netIncome)}</p>
+                        <p className={`text-2xl font-bold ${allTimeNetIncome >= 0 ? 'text-green-700' : 'text-red-700'}`}>{fmt(allTimeNetIncome)}</p>
                     </div>
-                    <div className={`rounded-lg shadow p-4 ${monthNetIncome >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-                        <p className="text-xs text-gray-500 mb-1">Net Income (This Month)</p>
-                        <p className={`text-2xl font-bold ${monthNetIncome >= 0 ? 'text-green-700' : 'text-red-700'}`}>{fmt(monthNetIncome)}</p>
+                    <div className={`rounded-lg shadow p-4 ${netIncome >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+                        <p className="text-xs text-gray-500 mb-1 capitalize">Net Income (This {viewPeriod === 'monthly' ? 'Month' : viewPeriod === 'quarterly' ? 'Quarter' : 'Year'})</p>
+                        <p className={`text-2xl font-bold ${netIncome >= 0 ? 'text-green-700' : 'text-red-700'}`}>{fmt(netIncome)}</p>
                     </div>
                 </div>
 
@@ -158,8 +159,8 @@ export default function IncomeExpensePage() {
                                 <span className="font-medium">{fmt(expenseStats?.todayTotal || 0)}</span>
                             </div>
                             <div className="flex justify-between text-sm">
-                                <span className="text-gray-500">This Month</span>
-                                <span className="font-medium">{fmt(expenseStats?.thisMonthTotal || 0)}</span>
+                                <span className="text-gray-500 capitalize">this {viewPeriod === 'monthly' ? 'month' : viewPeriod === 'quarterly' ? 'quarter' : 'year'}</span>
+                                <span className="font-medium">{fmt(expenseStats?.periodExpenses || 0)}</span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-gray-500">Pending Approval</span>
