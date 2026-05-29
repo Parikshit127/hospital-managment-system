@@ -47,11 +47,11 @@ const nextConfig: NextConfig = {
                         key: 'Content-Security-Policy',
                         value: [
                             "default-src 'self'",
-                            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://cdn.razorpay.com",
+                            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://cdn.razorpay.com https://*.razorpay.com",
                             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
                             "font-src 'self' https://fonts.gstatic.com data: https:",
-                            "img-src 'self' data: https:",
-                            "connect-src 'self' https://*.supabase.co https://api.razorpay.com https://lumberjack-cx.razorpay.com https://cdn.razorpay.com",
+                            "img-src 'self' data: https: blob:",
+                            "connect-src 'self' https://*.supabase.co https://*.razorpay.com https://api.razorpay.com https://lumberjack.razorpay.com https://lumberjack-cx.razorpay.com https://cdn.razorpay.com",
                             "frame-src https://api.razorpay.com https://checkout.razorpay.com",
                         ].join('; ')
                     },
