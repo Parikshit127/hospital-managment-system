@@ -41,6 +41,8 @@ import {
   getPatientTimeline,
 } from "@/app/actions/master-billing-actions";
 import { recordPayment } from "@/app/actions/finance-actions";
+import { getCashComplianceConfig } from "@/app/actions/cash-compliance-actions";
+import { CASH_COMPLIANCE_DEFAULTS, isValidPan } from "@/app/lib/cash-compliance";
 
 // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -603,9 +605,28 @@ function CollectPaymentModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [panNumber, setPanNumber] = useState("");
+  const [panName, setPanName] = useState("");
+  const [thresholds, setThresholds] = useState<{ pan_threshold: number; cash_limit: number }>(CASH_COMPLIANCE_DEFAULTS);
+
+  useEffect(() => {
+    getCashComplianceConfig().then((res) => {
+      if (res.success && res.data) {
+        setThresholds({ pan_threshold: res.data.pan_threshold, cash_limit: res.data.cash_limit });
+      }
+    });
+  }, []);
 
   const numAmount = Number(amount) || 0;
   const isValid = numAmount > 0 && numAmount <= balanceDue;
+
+  // Cash compliance (mirrors server-side rules; the server remains the source of truth)
+  const isCash = method === "Cash";
+  const cashAmount = isCash ? numAmount : 0;
+  const cashBlocked = isCash && cashAmount > thresholds.cash_limit;
+  const panRequired = isCash && cashAmount >= thresholds.pan_threshold && !cashBlocked;
+  const panProvidedValid = isValidPan(panNumber) && panName.trim().length > 0;
+  const canSubmit = isValid && !cashBlocked && (!panRequired || panProvidedValid);
 
   const handleRazorpay = async () => {
     setError(null);
@@ -705,6 +726,8 @@ function CollectPaymentModal({
       return handleRazorpay();
     }
 
+    if (cashBlocked || (panRequired && !panProvidedValid)) return;
+
     setError(null);
     setSaving(true);
     try {
@@ -713,6 +736,8 @@ function CollectPaymentModal({
         amount: numAmount,
         payment_method: method,
         payment_type: "Settlement",
+        payer_pan_number: isCash ? panNumber.trim().toUpperCase() : undefined,
+        payer_pan_name: isCash ? panName.trim() : undefined,
         notes: [notes, reference ? `Ref: ${reference}` : ""].filter(Boolean).join(" | ") || undefined,
       });
       if (res.success) {
@@ -825,6 +850,49 @@ function CollectPaymentModal({
               )}
             </div>
 
+            {/* Cash compliance — block over limit / capture PAN at threshold */}
+            {cashBlocked && (
+              <div className="flex items-start gap-2 px-3 py-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium rounded-lg">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  Cash receipts above ₹{fmtMoney(thresholds.cash_limit)} are not permitted. Please use UPI, Card, Bank Transfer, or another approved payment method.
+                </span>
+              </div>
+            )}
+            {panRequired && (
+              <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                <div className="flex items-start gap-2 text-xs font-medium text-amber-800">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+                  <span>PAN details are mandatory for cash payments of ₹{fmtMoney(thresholds.pan_threshold)} or more.</span>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">PAN Number *</label>
+                  <input
+                    type="text"
+                    value={panNumber}
+                    onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                    placeholder="ABCDE1234F"
+                    maxLength={10}
+                    className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm font-mono uppercase focus:border-amber-500 outline-none"
+                  />
+                  {panNumber.length > 0 && !isValidPan(panNumber) && (
+                    <p className="text-[11px] text-rose-500 mt-1">Invalid PAN format. Expected: ABCDE1234F.</p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">PAN Holder Name *</label>
+                  <input
+                    type="text"
+                    value={panName}
+                    onChange={(e) => setPanName(e.target.value)}
+                    placeholder="As per PAN card"
+                    className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-amber-500 outline-none"
+                  />
+                </div>
+                <p className="text-[11px] text-amber-700 font-medium">Payment cannot proceed without valid PAN details.</p>
+              </div>
+            )}
+
             {/* Reference (for Card/UPI/Bank — not for Cash or Online) */}
             {method !== "Cash" && method !== "Online" && (
               <div>
@@ -872,7 +940,7 @@ function CollectPaymentModal({
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={saving || !isValid}
+                disabled={saving || !canSubmit}
                 className="flex-[2] flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {saving ? (

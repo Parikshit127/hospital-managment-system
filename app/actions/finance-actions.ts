@@ -5,6 +5,7 @@ import { logAudit } from '@/app/lib/audit';
 import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
 import { billingInvoiceMsg, paymentReceiptMsg } from '@/app/lib/whatsapp-templates';
 import { postInvoiceToGL, postPaymentToGL } from './gl-actions';
+import { getCashThresholds, validateCashCompliance, normalizePan, CASH_METHOD } from '@/app/lib/cash-compliance';
 
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
@@ -609,6 +610,8 @@ export async function recordPayment(data: {
     payment_type: string;
     razorpay_order_id?: string;
     razorpay_payment_id?: string;
+    payer_pan_number?: string;
+    payer_pan_name?: string;
     notes?: string;
 }) {
     try {
@@ -616,6 +619,29 @@ export async function recordPayment(data: {
 
         // Phase 4: Period Locking
         await checkPeriodLock(db);
+
+        // Cash compliance (Rule 1 PAN / Rule 2 limit) — only the cash portion.
+        const isCash = data.payment_method === CASH_METHOD;
+        const cashTotal = isCash ? Number(data.amount) || 0 : 0;
+        if (cashTotal > 0) {
+            const thresholds = await getCashThresholds(db);
+            const compliance = validateCashCompliance({
+                thresholds,
+                cashTotal,
+                panNumber: data.payer_pan_number,
+                panName: data.payer_pan_name,
+            });
+            if (!compliance.ok) {
+                await logAudit({
+                    action: 'CASH_COMPLIANCE_BLOCK',
+                    module: 'finance',
+                    entity_type: 'payment',
+                    entity_id: String(data.invoice_id),
+                    details: JSON.stringify({ rule: compliance.rule, cash_amount: cashTotal, ...thresholds }),
+                }).catch(() => {});
+                return { success: false, error: compliance.error };
+            }
+        }
 
         // Phase 4: Duplicate Payment Detection
         const duplicateWindow = new Date(Date.now() - 30 * 60 * 1000); // 30 minutes
@@ -641,8 +667,11 @@ export async function recordPayment(data: {
                 payment_type: data.payment_type,
                 razorpay_order_id: data.razorpay_order_id || null,
                 razorpay_payment_id: data.razorpay_payment_id || null,
+                payer_pan_number: isCash ? (normalizePan(data.payer_pan_number) || null) : null,
+                payer_pan_name: isCash ? ((data.payer_pan_name || '').trim() || null) : null,
                 status: 'Completed',
                 notes: data.notes || null,
+                organizationId,
             },
         });
 
@@ -725,6 +754,8 @@ export async function recordSplitPayment(data: {
         payment_method: string;
         reference?: string;
     }>;
+    payer_pan_number?: string;
+    payer_pan_name?: string;
     notes?: string;
 }) {
     try {
@@ -742,11 +773,40 @@ export async function recordSplitPayment(data: {
             if (split.amount <= 0) return { success: false, error: 'Each split must have a positive amount' };
         }
 
+        // Cash compliance — validate the SUMMED cash portion (so splitting cash
+        // across multiple lines cannot dodge the threshold / limit).
+        const cashTotal = data.splits
+            .filter((s) => s.payment_method === CASH_METHOD)
+            .reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+        if (cashTotal > 0) {
+            const thresholds = await getCashThresholds(db);
+            const compliance = validateCashCompliance({
+                thresholds,
+                cashTotal,
+                panNumber: data.payer_pan_number,
+                panName: data.payer_pan_name,
+            });
+            if (!compliance.ok) {
+                await logAudit({
+                    action: 'CASH_COMPLIANCE_BLOCK',
+                    module: 'finance',
+                    entity_type: 'payment',
+                    entity_id: String(data.invoice_id),
+                    details: JSON.stringify({ rule: compliance.rule, cash_amount: cashTotal, ...thresholds }),
+                }).catch(() => {});
+                return { success: false, error: compliance.error };
+            }
+        }
+
+        const panNumber = normalizePan(data.payer_pan_number) || null;
+        const panName = (data.payer_pan_name || '').trim() || null;
+
         const transactionGroupId = `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const payments: any[] = [];
 
         // Create one payment record per split
         for (const split of data.splits) {
+            const splitIsCash = split.payment_method === CASH_METHOD;
             const payment = await db.payments.create({
                 data: {
                     receipt_number: generateReceiptNumber(),
@@ -756,6 +816,8 @@ export async function recordSplitPayment(data: {
                     payment_type: 'Settlement',
                     transaction_group_id: transactionGroupId,
                     reference: split.reference || null,
+                    payer_pan_number: splitIsCash ? panNumber : null,
+                    payer_pan_name: splitIsCash ? panName : null,
                     status: 'Completed',
                     notes: data.notes || null,
                     organizationId,

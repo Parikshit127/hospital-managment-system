@@ -86,6 +86,9 @@ const DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
         late_payment_penalty_pct: 0,
         dunning_enabled: true,
         receipt_print_format: 'standard',
+        // Cash compliance thresholds (Rule 1 / Rule 2) — configurable, never hardcode at call sites
+        pan_threshold: 50000,
+        cash_limit: 200000,
     },
     hr: {
         shift_types: ['Morning', 'Afternoon', 'Night'],

@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { getIPDAdmissions } from '@/app/actions/ipd-actions';
 import { generateInterimBill, postChargeToIpdBill, getGstSummary } from '@/app/actions/ipd-finance-actions';
 import { recordPayment, recordSplitPayment } from '@/app/actions/finance-actions';
+import { getCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
+import { CASH_COMPLIANCE_DEFAULTS, isValidPan } from '@/app/lib/cash-compliance';
 import { collectDeposit, getPatientDeposits, applyDepositToInvoice } from '@/app/actions/deposit-actions';
 import { getIpdServices } from '@/app/actions/ipd-master-actions';
 import { DepositTracker } from '@/app/components/ipd/DepositTracker';
@@ -24,6 +26,23 @@ export default function IpdBillingPage() {
     // Split Payment modal state
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [paymentSplits, setPaymentSplits] = useState<Array<{ amount: string; method: string; reference: string }>>([{ amount: '', method: 'Cash', reference: '' }]);
+
+    // Cash compliance (PAN capture + limit) — thresholds from Finance Settings
+    const [panNumber, setPanNumber] = useState('');
+    const [panName, setPanName] = useState('');
+    const [cashThresholds, setCashThresholds] = useState<{ pan_threshold: number; cash_limit: number }>(CASH_COMPLIANCE_DEFAULTS);
+    useEffect(() => {
+        getCashComplianceConfig().then((res) => {
+            if (res.success && res.data) setCashThresholds({ pan_threshold: res.data.pan_threshold, cash_limit: res.data.cash_limit });
+        });
+    }, []);
+    const ipdCashTotal = paymentSplits
+        .filter((s) => s.method === 'Cash')
+        .reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
+    const ipdCashBlocked = ipdCashTotal > cashThresholds.cash_limit;
+    const ipdPanRequired = ipdCashTotal >= cashThresholds.pan_threshold && !ipdCashBlocked;
+    const ipdPanValid = isValidPan(panNumber) && panName.trim().length > 0;
+    const ipdPaymentBlocked = ipdCashBlocked || (ipdPanRequired && !ipdPanValid);
 
     // Charge entry state
     const [showChargeModal, setShowChargeModal] = useState(false);
@@ -87,6 +106,22 @@ export default function IpdBillingPage() {
         const validSplits = paymentSplits.filter(s => parseFloat(s.amount) > 0);
         if (validSplits.length === 0) return;
 
+        // Cash compliance guard (server re-validates as the source of truth)
+        if (ipdPaymentBlocked) {
+            showToast(
+                ipdCashBlocked
+                    ? `Cash receipts above ₹${cashThresholds.cash_limit.toLocaleString('en-IN')} are not permitted. Use UPI/Card/Bank.`
+                    : 'PAN Number and PAN Holder Name are required for this cash amount.',
+                'error',
+            );
+            return;
+        }
+
+        const panArgs = {
+            payer_pan_number: panNumber.trim().toUpperCase() || undefined,
+            payer_pan_name: panName.trim() || undefined,
+        };
+
         setActionLoading(true);
         const totalAmount = validSplits.reduce((sum, s) => sum + parseFloat(s.amount), 0);
 
@@ -97,11 +132,13 @@ export default function IpdBillingPage() {
                 amount: parseFloat(validSplits[0].amount),
                 payment_method: validSplits[0].method,
                 payment_type: 'Settlement',
+                ...panArgs,
             });
             setActionLoading(false);
             if (res.success) {
                 setShowPaymentModal(false);
                 setPaymentSplits([{ amount: '', method: 'Cash', reference: '' }]);
+                setPanNumber(''); setPanName('');
                 showToast(`Payment of ₹${totalAmount.toLocaleString('en-IN')} recorded`);
                 await refreshBill();
             } else {
@@ -116,11 +153,13 @@ export default function IpdBillingPage() {
                     payment_method: s.method,
                     reference: s.reference || undefined,
                 })),
+                ...panArgs,
             });
             setActionLoading(false);
             if (res.success) {
                 setShowPaymentModal(false);
                 setPaymentSplits([{ amount: '', method: 'Cash', reference: '' }]);
+                setPanNumber(''); setPanName('');
                 showToast(`Split payment of ₹${totalAmount.toLocaleString('en-IN')} recorded (${validSplits.length} methods)`);
                 await refreshBill();
             } else {
@@ -723,10 +762,47 @@ export default function IpdBillingPage() {
                                 </div>
                             );
                         })()}
+
+                        {/* Cash compliance — block over limit / capture PAN at threshold (cash portion) */}
+                        {ipdCashBlocked && (
+                            <div className="mb-3 p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium rounded">
+                                Cash receipts above ₹{cashThresholds.cash_limit.toLocaleString('en-IN')} are not permitted. Please use UPI, Card, Bank Transfer, or another approved method.
+                            </div>
+                        )}
+                        {ipdPanRequired && (
+                            <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded space-y-2">
+                                <p className="text-xs font-medium text-amber-800">
+                                    PAN details are mandatory for cash payments of ₹{cashThresholds.pan_threshold.toLocaleString('en-IN')} or more (cash portion: ₹{ipdCashTotal.toLocaleString('en-IN')}).
+                                </p>
+                                <div className="flex gap-2">
+                                    <div className="flex-1">
+                                        <input
+                                            type="text"
+                                            value={panNumber}
+                                            onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                                            placeholder="PAN Number * (ABCDE1234F)"
+                                            maxLength={10}
+                                            className="w-full px-2 py-1.5 border rounded text-sm font-mono uppercase"
+                                        />
+                                        {panNumber.length > 0 && !isValidPan(panNumber) && (
+                                            <p className="text-[11px] text-rose-500 mt-1">Invalid PAN format.</p>
+                                        )}
+                                    </div>
+                                    <input
+                                        type="text"
+                                        value={panName}
+                                        onChange={(e) => setPanName(e.target.value)}
+                                        placeholder="PAN Holder Name *"
+                                        className="flex-1 px-2 py-1.5 border rounded text-sm"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
                         <div className="flex gap-2">
                             <button
                                 onClick={handleRecordPayment}
-                                disabled={actionLoading}
+                                disabled={actionLoading || ipdPaymentBlocked}
                                 className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-md text-sm disabled:opacity-50"
                             >
                                 {actionLoading ? 'Processing...' : 'Confirm & Print Receipt'}

@@ -1218,6 +1218,9 @@ model payments {
   reference            String?
   status               String   @default("Completed")
   notes                String?
+  // Cash compliance — PAN captured for high-value cash receipts (Rule 1)
+  payer_pan_number     String?
+  payer_pan_name       String?
   organizationId       String
   created_at           DateTime @default(now())
   version              Int      @default(1)

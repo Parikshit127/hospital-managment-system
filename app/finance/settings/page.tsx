@@ -3,11 +3,12 @@
 import { useState, useEffect } from 'react';
 import { getTaxConfigs, addTaxConfig, updateTaxConfig } from '@/app/actions/tax-actions';
 import { getExpenseCategories, addExpenseCategory, updateExpenseCategory } from '@/app/actions/expense-actions';
-import { Settings, Plus, Percent, FolderTree, AlertCircle, Star, Edit2, Power } from 'lucide-react';
+import { getCashComplianceConfig, saveCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
+import { Settings, Plus, Percent, FolderTree, AlertCircle, Star, Edit2, Power, ShieldCheck, Loader2 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 
 export default function FinanceSettingsPage() {
-    const [tab, setTab] = useState<'tax' | 'categories'>('tax');
+    const [tab, setTab] = useState<'tax' | 'categories' | 'cash_compliance'>('tax');
     const [taxConfigs, setTaxConfigs] = useState<any[]>([]);
     const [categories, setCategories] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -39,7 +40,14 @@ export default function FinanceSettingsPage() {
                     className={`px-4 py-2 text-sm font-medium rounded-md flex items-center gap-2 transition ${tab === 'categories' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                     <FolderTree className="h-4 w-4" /> Expense Categories
                 </button>
+                <button onClick={() => setTab('cash_compliance')}
+                    className={`px-4 py-2 text-sm font-medium rounded-md flex items-center gap-2 transition ${tab === 'cash_compliance' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                    <ShieldCheck className="h-4 w-4" /> Cash Compliance
+                </button>
             </div>
+
+            {/* Cash Compliance Tab */}
+            {tab === 'cash_compliance' && <CashComplianceTab />}
 
             {/* Tax Rates Tab */}
             {tab === 'tax' && (
@@ -328,6 +336,108 @@ function CategoryModal({ categories, onClose, onSave }: { categories: any[]; onC
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+    );
+}
+
+function CashComplianceTab() {
+    const [panThreshold, setPanThreshold] = useState('');
+    const [cashLimit, setCashLimit] = useState('');
+    const [meta, setMeta] = useState<{ updated_by: string | null; updated_at: string | null }>({ updated_by: null, updated_at: null });
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+
+    useEffect(() => {
+        (async () => {
+            setLoading(true);
+            const res = await getCashComplianceConfig();
+            if (res.success && res.data) {
+                setPanThreshold(String(res.data.pan_threshold));
+                setCashLimit(String(res.data.cash_limit));
+                setMeta({ updated_by: res.data.updated_by, updated_at: res.data.updated_at });
+            }
+            setLoading(false);
+        })();
+    }, []);
+
+    async function handleSave() {
+        setError(''); setSuccess('');
+        const pan = parseInt(panThreshold, 10);
+        const cash = parseInt(cashLimit, 10);
+        if (!Number.isFinite(pan) || pan <= 0) { setError('PAN threshold must be a positive amount.'); return; }
+        if (!Number.isFinite(cash) || cash <= 0) { setError('Maximum cash limit must be a positive amount.'); return; }
+        if (pan > cash) { setError('PAN threshold cannot exceed the maximum cash limit.'); return; }
+        setSaving(true);
+        const res = await saveCashComplianceConfig({ pan_threshold: pan, cash_limit: cash });
+        setSaving(false);
+        if (res.success) {
+            setSuccess('Cash compliance settings saved. New thresholds apply immediately.');
+            setMeta({ updated_by: 'you', updated_at: new Date().toISOString() });
+        } else {
+            setError(res.error || 'Failed to save settings.');
+        }
+    }
+
+    if (loading) {
+        return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>;
+    }
+
+    return (
+        <div className="space-y-4 max-w-2xl">
+            <p className="text-sm text-gray-500">
+                Mandatory PAN capture and cash-receipt limits for cash payments (per Income Tax compliance). Applies to the
+                <span className="font-medium"> cash portion</span> of every payment; non-cash methods are unaffected.
+            </p>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+                {error && <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg flex items-center gap-2"><AlertCircle className="h-4 w-4" />{error}</div>}
+                {success && <div className="p-3 bg-emerald-50 text-emerald-700 text-sm rounded-lg flex items-center gap-2"><ShieldCheck className="h-4 w-4" />{success}</div>}
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">PAN Mandatory Threshold (₹)</label>
+                    <input
+                        type="number" min={1} step={1}
+                        value={panThreshold}
+                        onChange={(e) => setPanThreshold(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                        placeholder="50000"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">PAN Number &amp; PAN Holder Name become mandatory when a cash payment is ≥ this amount.</p>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Maximum Cash Receipt Limit (₹)</label>
+                    <input
+                        type="number" min={1} step={1}
+                        value={cashLimit}
+                        onChange={(e) => setCashLimit(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                        placeholder="200000"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Cash payments above this amount are blocked — the user must use UPI, Card, or Bank Transfer.</p>
+                </div>
+
+                <div className="flex items-center justify-between pt-2">
+                    <p className="text-xs text-gray-400">
+                        {meta.updated_at ? `Last updated by ${meta.updated_by || 'system'} on ${new Date(meta.updated_at).toLocaleString()}` : 'Using default thresholds.'}
+                    </p>
+                    <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="px-6 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
+                    >
+                        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        {saving ? 'Saving...' : 'Save Settings'}
+                    </button>
+                </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-700">
+                <p className="font-medium">How cash compliance works</p>
+                <p className="mt-1">These limits are enforced centrally on every payment (single &amp; split). Only finance managers and admins can change them. Changes take effect immediately and are recorded in the audit log.</p>
             </div>
         </div>
     );

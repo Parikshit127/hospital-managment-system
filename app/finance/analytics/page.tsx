@@ -1,19 +1,24 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getRevenueLeakageInsights, getFinancialAnalytics } from '@/app/actions/analytics-actions';
+import { getRevenueLeakageInsights, getFinancialAnalytics, getRevenueForecast } from '@/app/actions/analytics-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { 
-    TrendingUp, AlertTriangle, IndianRupee, Activity, 
-    BarChart3, PieChart, ShieldAlert, ArrowUpRight, ArrowDownRight, Loader2
+import { ReportChart } from '@/app/components/finance/ReportChart';
+import {
+    TrendingUp, AlertTriangle, IndianRupee, Activity,
+    BarChart3, PieChart, ShieldAlert, ArrowUpRight, ArrowDownRight, Loader2, CalendarRange
 } from 'lucide-react';
 import { useToast } from '@/app/components/ui/Toast';
+
+type Horizon = 'monthly' | 'quarterly' | 'yearly';
 
 export default function AnalyticsDashboard() {
     const toast = useToast();
     const [loading, setLoading] = useState(true);
     const [leakageData, setLeakageData] = useState<any>(null);
     const [financialData, setFinancialData] = useState<any>(null);
+    const [forecastData, setForecastData] = useState<any>(null);
+    const [horizon, setHorizon] = useState<Horizon>('monthly');
 
     useEffect(() => {
         loadData();
@@ -22,13 +27,15 @@ export default function AnalyticsDashboard() {
     async function loadData() {
         setLoading(true);
         try {
-            const [leakageRes, financeRes] = await Promise.all([
+            const [leakageRes, financeRes, forecastRes] = await Promise.all([
                 getRevenueLeakageInsights(),
-                getFinancialAnalytics()
+                getFinancialAnalytics(),
+                getRevenueForecast()
             ]);
 
             if (leakageRes.success) setLeakageData(leakageRes.data);
             if (financeRes.success) setFinancialData(financeRes.data);
+            if (forecastRes.success) setForecastData(forecastRes.data);
         } catch (error) {
             toast.error("Failed to load analytics data");
         }
@@ -145,6 +152,14 @@ export default function AnalyticsDashboard() {
                                 </div>
                             </div>
                         </div>
+
+                        {/* REVENUE FORECAST (multi-horizon: monthly / quarterly / yearly / 5-year) */}
+                        <ForecastSection
+                            forecast={forecastData}
+                            horizon={horizon}
+                            setHorizon={setHorizon}
+                            fmt={fmt}
+                        />
 
                         {/* ROW 2: Leakage Details & Top Departments */}
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -295,5 +310,139 @@ export default function AnalyticsDashboard() {
                 )}
             </div>
         </AppShell>
+    );
+}
+
+function ForecastSection({
+    forecast,
+    horizon,
+    setHorizon,
+    fmt,
+}: {
+    forecast: any;
+    horizon: Horizon;
+    setHorizon: (h: Horizon) => void;
+    fmt: (n: number) => string;
+}) {
+    if (!forecast) return null;
+
+    const horizons: { key: Horizon; label: string }[] = [
+        { key: 'monthly', label: 'Monthly · 12 mo' },
+        { key: 'quarterly', label: 'Quarterly · 8 qtr' },
+        { key: 'yearly', label: 'Yearly · 5 yr' },
+    ];
+
+    const rows: { label: string; range?: string; revenue: number }[] =
+        horizon === 'monthly' ? forecast.monthly || []
+            : horizon === 'quarterly' ? forecast.quarterly || []
+                : forecast.yearly || [];
+
+    // Monthly view overlays actuals + forecast as two line series; quarterly /
+    // yearly render the projected buckets as bars.
+    let chartType: 'line' | 'bar' = 'bar';
+    let labels: string[] = [];
+    let datasets: { label: string; data: (number | null)[]; color?: string }[] = [];
+
+    if (horizon === 'monthly') {
+        chartType = 'line';
+        const hist = forecast.history || [];
+        const proj = forecast.monthly || [];
+        labels = [...hist.map((h: any) => h.label), ...proj.map((m: any) => m.label)];
+        datasets = [
+            { label: 'Actual', data: [...hist.map((h: any) => h.revenue), ...proj.map(() => null)] },
+            {
+                label: 'Forecast',
+                data: [...hist.map(() => null), ...proj.map((m: any) => m.revenue)],
+                color: 'rgba(139, 92, 246, 0.9)',
+            },
+        ];
+    } else {
+        labels = rows.map((r) => r.label);
+        datasets = [{ label: 'Projected Revenue', data: rows.map((r) => r.revenue) }];
+    }
+
+    const summary = forecast.summary || {};
+    const growthPct = (forecast.annualGrowthRate ?? 0) * 100;
+    const noData = rows.length === 0 || rows.every((r) => r.revenue === 0);
+    const periodHeader = horizon === 'monthly' ? 'Month' : horizon === 'quarterly' ? 'Quarter' : 'Year';
+
+    return (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-2">
+                    <CalendarRange className="w-5 h-5 text-indigo-500" />
+                    <h2 className="text-lg font-black text-gray-900">Revenue Forecast</h2>
+                </div>
+                <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+                    {horizons.map((h) => (
+                        <button
+                            key={h.key}
+                            onClick={() => setHorizon(h.key)}
+                            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                                horizon === h.key ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            {h.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Horizon summary */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <ForecastStat label="Next Month" value={fmt(summary.nextMonth)} />
+                <ForecastStat label="Next Quarter" value={fmt(summary.nextQuarter)} />
+                <ForecastStat label="Next Year" value={fmt(summary.nextYear)} />
+                <ForecastStat label="5-Year Total" value={fmt(summary.fiveYearTotal)} highlight />
+            </div>
+
+            {/* Chart */}
+            {noData ? (
+                <div className="py-12 text-center text-sm font-medium text-gray-400">{forecast.method}</div>
+            ) : (
+                <ReportChart type={chartType} labels={labels} datasets={datasets as any} height={280} />
+            )}
+
+            {/* Detail table */}
+            {!noData && (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-4 py-2 font-semibold text-gray-500">{periodHeader}</th>
+                                <th className="px-4 py-2 font-semibold text-gray-500">Period</th>
+                                <th className="px-4 py-2 font-semibold text-gray-500 text-right">Projected Revenue</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {rows.map((r, i) => (
+                                <tr key={i} className="hover:bg-gray-50">
+                                    <td className="px-4 py-2 font-bold text-gray-800">{r.label}</td>
+                                    <td className="px-4 py-2 text-gray-500">{r.range || r.label}</td>
+                                    <td className="px-4 py-2 text-right font-black text-gray-900">{fmt(r.revenue)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            <p className="text-xs text-gray-400 font-medium flex items-start gap-1.5">
+                <Activity className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>
+                    {forecast.method}
+                    {forecast.historyMonths >= 3 ? ` · ~${growthPct.toFixed(1)}% projected annual growth.` : ''}
+                </span>
+            </p>
+        </div>
+    );
+}
+
+function ForecastStat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+    return (
+        <div className={`rounded-xl border p-4 ${highlight ? 'bg-indigo-50 border-indigo-200' : 'bg-gray-50 border-gray-200'}`}>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1">{label}</p>
+            <p className={`text-xl font-black ${highlight ? 'text-indigo-700' : 'text-gray-900'}`}>{value}</p>
+        </div>
     );
 }
