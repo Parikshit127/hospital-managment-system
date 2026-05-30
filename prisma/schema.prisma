@@ -1154,6 +1154,11 @@ model invoices {
   parent_invoice_id  String?
   addendum_reason    String?
 
+  // Cancellation tracking (soft-cancel audit fields — set when status = "Cancelled")
+  cancelled_at        DateTime?
+  cancelled_by        String?
+  cancellation_reason String?
+
   organization          Organization         @relation(fields: [organizationId], references: [id])
   patient               OPD_REG              @relation(fields: [patient_id], references: [patient_id])
   admission             admissions?          @relation(fields: [admission_id], references: [admission_id])

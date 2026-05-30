@@ -243,6 +243,121 @@ export async function getInvoiceItemsBrief(invoiceId: number) {
     }
 }
 
+/**
+ * Accounting voucher for a single invoice (READ-ONLY) — powers the P&L
+ * drill-down "View Voucher" action.
+ *
+ * Reuses the auto-generated GL journal entry (GL_JournalEntry where
+ * reference_type = 'Invoice') for the voucher identity — voucher number, date,
+ * type and posting status. Because invoice GL postings aggregate all revenue
+ * into a single line, the income-head credit breakdown is DERIVED from
+ * invoice_items grouped by service category / department, so finance can see
+ * exactly which income heads were credited (matching the requested layout:
+ * "Patient/TPA Ledger Dr / To <income heads> / To GST Payable").
+ *
+ * Degrades gracefully when no GL entry exists yet (posted = false): the voucher
+ * is still rendered from invoice data so the drill-down never dead-ends.
+ */
+export async function getInvoiceVoucher(invoiceId: number) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const invoice = await db.invoices.findFirst({
+            where: { id: invoiceId },
+            include: {
+                items: true,
+                patient: { select: { full_name: true, patient_id: true } },
+            },
+        });
+        if (!invoice) return { success: false, error: 'Invoice not found' };
+
+        // Reuse the auto-posted GL journal entry for this invoice (skip reversed)
+        const journal = await db.gL_JournalEntry.findFirst({
+            where: {
+                reference_type: 'Invoice',
+                reference_id: String(invoiceId),
+                status: { not: 'Reversed' },
+            },
+            include: {
+                lines: { include: { account: true }, orderBy: { line_number: 'asc' } },
+            },
+        });
+
+        // Which ledger is debited depends on who pays the bill.
+        const payerType = invoice.billing_patient_type || 'cash';
+        const debitLedger =
+            payerType === 'corporate'
+                ? { label: 'Corporate Ledger A/c', code: '1140' }
+                : payerType === 'tpa_insurance'
+                ? { label: 'TPA / Insurance Ledger A/c', code: '1150' }
+                : { label: 'Patient Ledger A/c', code: '1130' };
+
+        // Derive income-head credits from line items (GL stores revenue aggregated).
+        const headMap = new Map<string, number>();
+        for (const it of invoice.items as any[]) {
+            const head =
+                (it.service_category || it.department || 'Other Income').toString().trim() ||
+                'Other Income';
+            headMap.set(head, (headMap.get(head) || 0) + Number(it.net_price || 0));
+        }
+        const credits = Array.from(headMap.entries())
+            .map(([head, amount]) => ({ head, amount }))
+            .filter((c) => c.amount !== 0)
+            .sort((a, b) => b.amount - a.amount);
+
+        const incomeTotal = credits.reduce((s, c) => s + c.amount, 0);
+        const gstAmount =
+            (invoice.items as any[]).reduce((s, it) => s + Number(it.tax_amount || 0), 0) ||
+            Number(invoice.total_tax || 0);
+        const totalDebit = incomeTotal + gstAmount;
+
+        const voucher = {
+            posted: !!journal,
+            voucher_type: journal ? journal.entry_type || 'Invoice' : 'Sales / Invoice',
+            voucher_number: journal?.journal_number ?? null,
+            voucher_date: journal?.entry_date ?? invoice.created_at,
+            gl_status: journal?.status ?? null,
+            narration: journal?.narration ?? `Patient Invoice - ${invoice.invoice_number}`,
+
+            invoice_id: invoice.id,
+            invoice_number: invoice.invoice_number,
+            invoice_status: invoice.status,
+            invoice_type: invoice.invoice_type,
+            patient_name: invoice.patient?.full_name || '-',
+            patient_id: invoice.patient?.patient_id || invoice.patient_id,
+            patient_type: payerType,
+
+            debit_ledger: debitLedger.label,
+            debit_account_code: debitLedger.code,
+            credits,
+            gst_amount: gstAmount,
+            income_total: incomeTotal,
+            total_debit: totalDebit,
+            total_credit: totalDebit,
+
+            net_amount: Number(invoice.net_amount || 0),
+            total_amount: Number(invoice.total_amount || 0),
+
+            // Raw posted GL lines (revenue may be a single aggregated line) — shown
+            // as a secondary "as posted to GL" reference for full transparency.
+            gl_lines: journal
+                ? (journal.lines as any[]).map((l) => ({
+                      account_code: l.account?.account_code ?? '',
+                      account_name: l.account?.account_name ?? '',
+                      debit: Number(l.debit_amount || 0),
+                      credit: Number(l.credit_amount || 0),
+                      description: l.description ?? '',
+                  }))
+                : [],
+        };
+
+        return { success: true, data: serialize(voucher) };
+    } catch (error: any) {
+        console.error('getInvoiceVoucher error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 export async function getPnLExpenseBreakdown(filters: {
     categoryLabel: string;
     from: string;

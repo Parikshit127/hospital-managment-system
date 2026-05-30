@@ -40,6 +40,7 @@ import {
   type GlobalFinanceSearchHit,
   type MasterBillingFilter,
 } from "@/app/actions/master-billing-actions";
+import { CancelInvoiceModal } from "@/app/components/finance/CancelInvoiceModal";
 
 // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -63,7 +64,7 @@ function InvoiceBadge({ status }: { status: string }) {
     Partial: "bg-amber-100 text-amber-700 border-amber-200",
     Paid: "bg-emerald-100 text-emerald-700 border-emerald-200",
     Overdue: "bg-rose-100 text-rose-700 border-rose-200",
-    Cancelled: "bg-gray-100 text-gray-500 border-gray-200 line-through",
+    Cancelled: "bg-rose-100 text-rose-700 border-rose-200 line-through",
     Voided: "bg-gray-100 text-gray-500 border-gray-200",
     Refunded: "bg-purple-100 text-purple-700 border-purple-200",
   };
@@ -128,6 +129,16 @@ function RiskDot({ level, reasons }: { level: "low" | "medium" | "high"; reasons
 
 // ── main page ─────────────────────────────────────────────────────────────
 
+// Cancel is offered for any non-terminal invoice. Invoices that already have
+// payments are still surfaced — the modal shows the "use Refund / Credit Note"
+// validation (and the server-side guard in cancelInvoice blocks them), so the
+// reviewer can attempt a cancel and see the validation. Already cancelled /
+// voided / refunded invoices have nothing left to cancel.
+const TERMINAL_STATUSES = ["Cancelled", "Voided", "Refunded"];
+function canCancelInvoice(r: any): boolean {
+  return !TERMINAL_STATUSES.includes(r?.invoice_status);
+}
+
 const STATUS_FILTERS = ["", "Draft", "Finalized", "Partial", "Paid", "Overdue", "Cancelled"];
 const PAYMENT_FILTERS = ["", "Paid", "Partial", "Overdue", "Draft", "Refunded"];
 const PATIENT_TYPES = ["", "cash", "corporate", "tpa_insurance"];
@@ -147,6 +158,7 @@ export default function MasterBillingPage() {
   const [loading, setLoading] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<any | null>(null);
 
   const loadGrid = useCallback(async () => {
     setLoading(true);
@@ -319,12 +331,23 @@ export default function MasterBillingPage() {
                     <Td>{fmtDateTime(r.last_payment_date)}</Td>
                     <Td><RiskDot level={r.risk_level} reasons={r.risk_reasons} /></Td>
                     <Td align="right">
-                      <Link
-                        href={`/billing/patient/${r.patient_id}`}
-                        className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold rounded"
-                      >
-                        Open
-                      </Link>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Link
+                          href={`/billing/patient/${r.patient_id}`}
+                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold rounded"
+                        >
+                          Open
+                        </Link>
+                        {canCancelInvoice(r) && (
+                          <button
+                            onClick={() => setCancelTarget(r)}
+                            className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[10px] font-bold rounded transition-colors"
+                            title="Cancel this invoice"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
                     </Td>
                   </tr>
                 ))}
@@ -361,6 +384,22 @@ export default function MasterBillingPage() {
 
       {/* Global Finance Search modal */}
       {searchOpen && <FinanceSearchModal onClose={() => setSearchOpen(false)} />}
+
+      {/* Cancel Invoice confirmation modal */}
+      {cancelTarget && (
+        <CancelInvoiceModal
+          invoiceId={cancelTarget.invoice_id}
+          invoiceNumber={cancelTarget.invoice_number}
+          patientName={cancelTarget.patient_name}
+          amount={Number(cancelTarget.total_amount ?? 0)}
+          paidAmount={Number(cancelTarget.paid_amount ?? 0)}
+          onClose={() => setCancelTarget(null)}
+          onCancelled={() => {
+            loadGrid();
+            loadKpis();
+          }}
+        />
+      )}
     </AppShell>
   );
 }

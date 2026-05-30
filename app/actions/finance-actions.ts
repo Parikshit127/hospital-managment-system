@@ -467,13 +467,18 @@ export async function finalizeInvoice(invoiceId: number) {
     }
 }
 
-// Cancel invoice (soft delete)
+// Cancel invoice (soft cancellation — never deletes)
 /**
- * Cancel an invoice with a MANDATORY reason. Stores a formatted note
- * "[CANCELLED YYYY-MM-DD by USERNAME] reason text" and writes a full audit
- * log entry so the reason is always recoverable.
+ * Cancel an invoice with a MANDATORY reason. Sets status = "Cancelled" and
+ * records the cancellation on dedicated audit columns (cancelled_by /
+ * cancelled_at / cancellation_reason) so the cancelled-invoice banner can read
+ * them directly. Also keeps the legacy formatted note and writes a
+ * system_audit_logs entry (action = CANCEL_INVOICE) — the immutable trail.
  *
- * Rejects empty / sub-10-char / already-cancelled requests.
+ * Rejects: empty / sub-10-char reasons, already-cancelled invoices, and — for
+ * safety — invoices that already have money collected (paid_amount > 0). Such
+ * invoices must be reversed via Refund / Credit Note, not cancelled, so the
+ * recorded payments are never silently orphaned.
  */
 export async function cancelInvoice(invoiceId: number, reason: string) {
     try {
@@ -490,14 +495,26 @@ export async function cancelInvoice(invoiceId: number, reason: string) {
         // Don't allow double-cancellation
         const existing = await db.invoices.findUnique({
             where: { id: invoiceId },
-            select: { status: true, invoice_number: true },
+            select: { status: true, invoice_number: true, paid_amount: true },
         });
         if (!existing) return { success: false, error: 'Invoice not found.' };
         if (existing.status === 'Cancelled') {
             return { success: false, error: 'Invoice is already cancelled.' };
         }
 
-        const stamp = new Date().toISOString().slice(0, 10);
+        // Safety: never cancel an invoice that already has money collected against
+        // it. Payments must be reversed via Refund / Credit Note first (separate
+        // audited flows) — cancellation does not touch paid_amount or payments.
+        const paid = Number(existing.paid_amount ?? 0);
+        if (paid > 0) {
+            return {
+                success: false,
+                error: `Cannot cancel: ₹${paid.toLocaleString('en-IN')} already collected on this invoice. Reverse the payment via Refund or issue a Credit Note first.`,
+            };
+        }
+
+        const now = new Date();
+        const stamp = now.toISOString().slice(0, 10);
         const actor = (session as any)?.username || (session as any)?.name || (session as any)?.id || 'system';
         const formattedNote = `[CANCELLED ${stamp} by ${actor}] ${trimmed}`;
 
@@ -506,6 +523,9 @@ export async function cancelInvoice(invoiceId: number, reason: string) {
             data: {
                 status: 'Cancelled',
                 notes: formattedNote,
+                cancelled_at: now,
+                cancelled_by: actor,
+                cancellation_reason: trimmed,
                 version: { increment: 1 },
             },
         });
@@ -519,7 +539,7 @@ export async function cancelInvoice(invoiceId: number, reason: string) {
                 details: JSON.stringify({
                     reason: trimmed,
                     cancelled_by: actor,
-                    cancelled_at: new Date().toISOString(),
+                    cancelled_at: now.toISOString(),
                     previous_status: existing.status,
                 }),
                 organizationId,
@@ -551,6 +571,10 @@ export async function revertInvoice(invoiceId: number, reason?: string) {
                 status: newStatus,
                 balance_due: balanceDue > 0 ? balanceDue : 0,
                 notes: reason ? `Reverted: ${reason}` : 'Reverted by admin',
+                // Clear cancellation audit fields so the cancelled banner stops showing
+                cancelled_at: null,
+                cancelled_by: null,
+                cancellation_reason: null,
                 version: { increment: 1 },
             },
         });

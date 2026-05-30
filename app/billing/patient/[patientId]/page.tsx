@@ -410,6 +410,27 @@ function InvoicesTab({
 
             {expanded && (
               <div className="border-t border-gray-100 px-4 py-3 bg-gray-50/40 space-y-3">
+                {/* Cancelled invoice warning banner */}
+                {inv.status === "Cancelled" && (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
+                    <div className="flex items-start gap-2.5">
+                      <XCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                      <div className="text-xs text-rose-700 space-y-0.5">
+                        <p className="font-bold text-rose-800">This invoice has been cancelled.</p>
+                        {inv.cancellation_reason && (
+                          <p><span className="font-semibold">Reason:</span> {inv.cancellation_reason}</p>
+                        )}
+                        {inv.cancelled_by && (
+                          <p><span className="font-semibold">Cancelled by:</span> {inv.cancelled_by}</p>
+                        )}
+                        {inv.cancelled_at && (
+                          <p><span className="font-semibold">Cancelled on:</span> {fmtDateTime(inv.cancelled_at)}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Line items (Section D) */}
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2">
@@ -507,7 +528,7 @@ function InvoicesTab({
                   {inv.status === "Draft" && (
                     <ActionLink href="/billing">Finalize</ActionLink>
                   )}
-                  {Number(inv.balance_due) > 0 && (
+                  {Number(inv.balance_due) > 0 && inv.status !== "Cancelled" && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

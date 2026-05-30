@@ -11,9 +11,10 @@ import { ReportChart } from '@/app/components/finance/ReportChart';
 import { ExportButton } from '@/app/components/finance/ExportButton';
 import {
     BarChart3, Clock, TrendingUp, IndianRupee, ShieldCheck, Building2,
-    Loader2, FileText,
+    Loader2, FileText, BookOpenCheck,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { VoucherModal } from '@/app/components/finance/VoucherModal';
 import Link from 'next/link';
 
 type ReportType = 'collections' | 'aging' | 'cashflow' | 'pnl' | 'insurance' | 'department';
@@ -279,6 +280,9 @@ function ProfitLossReport({ data, fmt, from, to }: { data: any; fmt: (n: number)
     const [openKey, setOpenKey] = useState<string | null>(null);
     const [drillData, setDrillData] = useState<any | null>(null);
     const [drillLoading, setDrillLoading] = useState(false);
+    // Voucher drill-down: invoice whose accounting voucher is open (null = closed).
+    // Held at this level so the modal renders outside the drill-down tables.
+    const [voucherInvoiceId, setVoucherInvoiceId] = useState<number | null>(null);
 
     async function toggleIncome(department: string) {
         const key = `inc:${department}`;
@@ -350,7 +354,7 @@ function ProfitLossReport({ data, fmt, from, to }: { data: any; fmt: (n: number)
                                         <span className="font-medium text-gray-900">{fmt(i.amount)}</span>
                                     </button>
                                     {open && (
-                                        <DrillPanel loading={drillLoading} data={drillData} fmt={fmt} kind="income" />
+                                        <DrillPanel loading={drillLoading} data={drillData} fmt={fmt} kind="income" onViewVoucher={setVoucherInvoiceId} />
                                     )}
                                 </div>
                             );
@@ -393,6 +397,10 @@ function ProfitLossReport({ data, fmt, from, to }: { data: any; fmt: (n: number)
                     </div>
                 </div>
             </div>
+
+            {voucherInvoiceId != null && (
+                <VoucherModal invoiceId={voucherInvoiceId} onClose={() => setVoucherInvoiceId(null)} />
+            )}
         </>
     );
 }
@@ -463,7 +471,7 @@ function InvoiceItemsInline({ invoiceId, fmt }: { invoiceId: number; fmt: (n: nu
     );
 }
 
-function IncomeRow({ r, fmt }: { r: any; fmt: (n: number) => string }) {
+function IncomeRow({ r, fmt, onViewVoucher }: { r: any; fmt: (n: number) => string; onViewVoucher?: (id: number) => void }) {
     const [open, setOpen] = useState(false);
     return (
         <>
@@ -484,13 +492,23 @@ function IncomeRow({ r, fmt }: { r: any; fmt: (n: number) => string }) {
                 <td className="px-3 py-2 text-gray-900">{r.patient_name}</td>
                 <td className="px-3 py-2 font-mono text-gray-600">
                     {r.invoice_id ? (
-                        <Link
-                            href={`/finance/invoices/${r.invoice_id}`}
-                            className="text-emerald-700 hover:text-emerald-900 hover:underline font-semibold"
-                            title="Open full invoice page"
-                        >
-                            {r.invoice_number} ↗
-                        </Link>
+                        <div className="flex flex-col items-start gap-0.5">
+                            <Link
+                                href={`/finance/invoices/${r.invoice_id}`}
+                                className="text-emerald-700 hover:text-emerald-900 hover:underline font-semibold"
+                                title="Open full invoice page"
+                            >
+                                {r.invoice_number} ↗
+                            </Link>
+                            <button
+                                type="button"
+                                onClick={() => onViewVoucher?.(r.invoice_id)}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-700 hover:text-sky-900"
+                                title="View accounting voucher"
+                            >
+                                <BookOpenCheck className="h-3 w-3" /> Voucher
+                            </button>
+                        </div>
                     ) : (
                         r.invoice_number
                     )}
@@ -515,7 +533,7 @@ function IncomeRow({ r, fmt }: { r: any; fmt: (n: number) => string }) {
     );
 }
 
-function DrillPanel({ loading, data, fmt, kind }: { loading: boolean; data: any; fmt: (n: number) => string; kind: 'income' | 'expense' }) {
+function DrillPanel({ loading, data, fmt, kind, onViewVoucher }: { loading: boolean; data: any; fmt: (n: number) => string; kind: 'income' | 'expense'; onViewVoucher?: (id: number) => void }) {
     if (loading) {
         return (
             <div className="my-2 ml-6 mr-2 py-4 px-3 bg-gray-50 rounded-lg flex items-center gap-2 text-xs text-gray-500">
@@ -564,7 +582,7 @@ function DrillPanel({ loading, data, fmt, kind }: { loading: boolean; data: any;
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                         {kind === 'income'
-                            ? rows.map((r: any) => <IncomeRow key={r.id} r={r} fmt={fmt} />)
+                            ? rows.map((r: any) => <IncomeRow key={r.id} r={r} fmt={fmt} onViewVoucher={onViewVoucher} />)
                             : rows.map((r: any) => (
                                 <tr key={r.id} className="hover:bg-white">
                                     <td className="px-3 py-2 text-gray-500">{new Date(r.date).toLocaleDateString('en-IN')}</td>
