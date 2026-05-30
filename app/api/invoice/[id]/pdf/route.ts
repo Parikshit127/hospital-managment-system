@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { validateZealthixApiKey } from '@/app/lib/zealthix/auth'
+import { getBillBranding, inlineHeaderHtml, billFooterHtml, type BillBranding } from '@/app/lib/bill-branding'
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager'];
 
@@ -71,13 +72,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             }
         }
 
-        // Fetch organization details
-        const org = await prisma.organization.findUnique({
-            where: { id: organizationId! },
-            include: { branding: true },
-        });
-
-        const html = generateInvoiceHTML(invoice, org)
+        const branding = await getBillBranding(organizationId!);
+        const html = generateInvoiceHTML(invoice, branding)
 
         // Return HTML for browser viewing (works for both API key and regular auth)
         return new NextResponse(html, {
@@ -111,7 +107,7 @@ function numberToWords(n: number): string {
     return result + ' Only';
 }
 
-function generateInvoiceHTML(invoice: any, org: any) {
+function generateInvoiceHTML(invoice: any, branding: BillBranding) {
     const items = invoice.items || []
     const payments = invoice.payments || []
     const creditNotes = (invoice as any).credit_notes || []
@@ -127,11 +123,11 @@ function generateInvoiceHTML(invoice: any, org: any) {
     const isInterState = invoice.is_inter_state || false
     const invoiceDate = invoice.created_at ? new Date(invoice.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''
 
-    const hospitalName = org?.name || 'Hospital'
-    const hospitalAddress = org?.address || ''
-    const hospitalPhone = org?.phone || ''
-    const hospitalEmail = org?.email || ''
-    const gstin = org?.registration_number || 'N/A'
+    const hospitalName = branding.hospitalName
+    const hospitalAddress = branding.hospitalAddress
+    const hospitalPhone = branding.hospitalPhone
+    const hospitalEmail = branding.hospitalEmail
+    const gstin = branding.gstin
 
     // Group items by service_category
     const categoryMap: Record<string, any[]> = {}
@@ -206,47 +202,13 @@ function generateInvoiceHTML(invoice: any, org: any) {
 
     <div style="max-width:800px;margin:0 auto;padding:30px;">
         <!-- Header -->
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;border-bottom:3px solid #1e3a6e;padding-bottom:16px;">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 130" width="293" height="87" style="display:block;flex-shrink:0;">
-              <!-- "Axten" wordmark -->
-              <text x="10" y="70" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="66" fill="#1e3a6e" letter-spacing="-2">Axten</text>
-              <!-- Left orange strip -->
-              <rect x="10" y="78" width="50" height="7" fill="#f97316" rx="2"/>
-              <!-- HOSPITALS text — clear of left strip -->
-              <text x="65" y="87" font-family="Arial, sans-serif" font-weight="700" font-size="14" fill="#1e3a6e" letter-spacing="4.5">HOSPITALS</text>
-              <!-- Right orange strip — after HOSPITALS ends -->
-              <rect x="210" y="78" width="50" height="7" fill="#f97316" rx="2"/>
-              <!-- Tagline -->
-              <text x="10" y="110" font-family="Arial, sans-serif" font-weight="400" font-size="11" fill="#1e3a6e">A Unit of TAH Global Healthcare Pvt. Ltd.</text>
-
-              <!-- Outer circle emblem -->
-              <circle cx="390" cy="58" r="50" fill="none" stroke="#1e3a6e" stroke-width="3"/>
-              <circle cx="390" cy="58" r="42" fill="none" stroke="#1e3a6e" stroke-width="1"/>
-
-              <!-- Curved "AXTEN HOSPITALS" upper arc -->
-              <path id="ua" d="M 343,55 A 47,47 0 0,1 437,55" fill="none"/>
-              <text font-family="Arial, sans-serif" font-weight="700" font-size="8" fill="#1e3a6e" letter-spacing="2">
-                <textPath href="#ua" startOffset="5%">AXTEN HOSPITALS</textPath>
-              </text>
-
-              <!-- Curved "TAH GLOBAL HEALTHCARE" lower arc -->
-              <path id="la" d="M 342,63 A 47,47 0 0,0 438,63" fill="none"/>
-              <text font-family="Arial, sans-serif" font-weight="400" font-size="7" fill="#1e3a6e" letter-spacing="1.2">
-                <textPath href="#la" startOffset="3%">TAH GLOBAL HEALTHCARE</textPath>
-              </text>
-
-              <!-- Inner cross / plus emblem -->
-              <rect x="382" y="38" width="16" height="40" fill="none" stroke="#f97316" stroke-width="3" rx="3"/>
-              <rect x="371" y="49" width="38" height="18" fill="none" stroke="#f97316" stroke-width="3" rx="3"/>
-            </svg>
-            <div style="text-align:right;">
-                <h2 style="font-size:18px;font-weight:800;color:#1e3a6e;">TAX INVOICE</h2>
+        ${inlineHeaderHtml(branding, `
+                <h2 style="font-size:18px;font-weight:800;color:${branding.accentColor};">TAX INVOICE</h2>
                 <p style="font-size:13px;font-weight:700;color:#f97316;">${invoice.invoice_number}</p>
                 <p style="font-size:11px;color:#6b7280;">Date: ${invoiceDate}</p>
                 <p style="font-size:11px;color:#6b7280;">Type: ${invoice.invoice_type || 'OPD'}</p>
                 <p style="font-size:11px;font-weight:600;color:${invoice.status === 'Paid' ? '#059669' : '#dc2626'};">${invoice.status}</p>
-            </div>
-        </div>
+        `)}
 
         <!-- Patient Info -->
         <div style="background:#f9fafb;border-radius:8px;padding:14px;margin-bottom:20px;">
@@ -341,18 +303,7 @@ function generateInvoiceHTML(invoice: any, org: any) {
         </div>` : ''}
 
         <!-- Footer -->
-        <div style="border-top:1px solid #e5e7eb;padding-top:14px;margin-top:20px;">
-            <div style="display:flex;justify-content:space-between;">
-                <div>
-                    <p style="font-size:10px;color:#9ca3af;">Terms: Payment due on receipt. Subject to local jurisdiction.</p>
-                </div>
-                <div style="text-align:right;">
-                    <p style="font-size:10px;color:#6b7280;margin-bottom:30px;">Authorized Signatory</p>
-                    <p style="font-size:10px;border-top:1px solid #d1d5db;padding-top:4px;color:#9ca3af;">For ${hospitalName}</p>
-                </div>
-            </div>
-            <p style="font-size:9px;color:#d1d5db;text-align:center;margin-top:16px;">Computer-generated invoice. ${hospitalName}</p>
-        </div>
+        ${billFooterHtml(branding)}
     </div>
 </body>
 </html>`

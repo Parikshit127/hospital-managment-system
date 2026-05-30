@@ -67,6 +67,8 @@ import { TemplatePicker } from "@/app/components/clinical/TemplatePicker";
 import { PrescriptionPrint, type PrescriptionData } from "@/app/components/clinical/PrescriptionPrint";
 import { useToast } from "@/app/components/ui/Toast";
 import { PrintLetterhead } from "@/app/components/print/PrintLetterhead";
+import { fetchBillBranding } from '@/app/actions/branding-actions';
+import type { BillBranding } from '@/app/lib/bill-branding';
 
 export default function DoctorDashboard() {
   // ─── SESSION STATE ───
@@ -159,6 +161,8 @@ export default function DoctorDashboard() {
   const [allVideoRequests, setAllVideoRequests] = useState<any[]>([]);
   const [loadingVideoRequests, setLoadingVideoRequests] = useState(false);
 
+  const [branding, setBranding] = useState<BillBranding | null>(null);
+
   // ─── MORNING BRIEFING STATE ───
   const [morningSummary, setMorningSummary] = useState<any>(null);
   const [showMorningSummary, setShowMorningSummary] = useState(true);
@@ -199,6 +203,8 @@ export default function DoctorDashboard() {
 
   // ─── FETCH SESSION ───
   useEffect(() => {
+    fetchBillBranding().then(res => { if (res.success && res.data) setBranding(res.data); });
+
     async function fetchSession() {
       try {
         const res = await fetch("/api/session");
@@ -1025,9 +1031,10 @@ export default function DoctorDashboard() {
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden print-area">
             {/* Letterhead bg for print */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/letter head.png" alt="Axten Hospitals" className="hidden print:block w-full" style={{ height: 'auto', maxHeight: '160px', objectFit: 'cover', objectPosition: 'top', marginBottom: '16px' }} />
+            <img src={branding?.letterheadUrl || '/letter head.png'} alt={branding?.hospitalName || 'Hospital'} className="hidden print:block w-full" style={{ height: 'auto', maxHeight: '160px', objectFit: 'cover', objectPosition: 'top', marginBottom: '16px' }} />
             <div className="p-8 border-b border-slate-200 bg-slate-50 print:hidden">
               <PrintLetterhead
+                branding={branding}
                 rightSlot={
                   <div>
                     <p className="text-xs font-bold text-slate-400 uppercase">Doctor</p>
@@ -2721,6 +2728,7 @@ export default function DoctorDashboard() {
         <PrescriptionPrint
           data={prescriptionData}
           onClose={() => setShowPrescriptionPrint(false)}
+          branding={branding}
         />
       )}
     </div>

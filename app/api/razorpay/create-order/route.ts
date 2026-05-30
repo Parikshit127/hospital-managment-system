@@ -3,17 +3,19 @@ import { getRazorpayClient, getRazorpayPublicKey } from "@/app/lib/razorpay";
 import { prisma } from "@/backend/db";
 import { resolveRouteAuth } from "@/app/lib/route-auth";
 
-const ALLOWED_STAFF_ROLES = ["admin", "finance", "receptionist"];
-
 export async function POST(req: NextRequest) {
   try {
     const auth = await resolveRouteAuth({
       allowPatient: true,
-      allowedStaffRoles: ALLOWED_STAFF_ROLES,
     });
     if (!auth.ok) return auth.response;
     const razorpay = await getRazorpayClient(auth.context.organizationId);
     const keyId = await getRazorpayPublicKey(auth.context.organizationId);
+    const org = await prisma.organization.findUnique({
+      where: { id: auth.context.organizationId },
+      select: { name: true },
+    });
+    const hospitalName = org?.name || "Hospital";
 
     const body = await req.json();
     const invoiceIdRaw = body.invoice_id ?? body.invoiceId;
@@ -102,9 +104,11 @@ export async function POST(req: NextRequest) {
         amount: order.amount,
         currency: order.currency,
         key_id: keyId,
+        hospital_name: hospitalName,
       },
       orderId: order.id,
       keyId,
+      hospital_name: hospitalName,
     });
   } catch (error: unknown) {
     console.error("Razorpay create-order error:", error);

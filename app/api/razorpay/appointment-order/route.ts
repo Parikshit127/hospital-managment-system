@@ -32,6 +32,11 @@ export async function POST(req: NextRequest) {
     }
 
     const db = getTenantPrisma(session.organization_id);
+    const org = await db.organization.findUnique({
+      where: { id: session.organization_id },
+      select: { name: true },
+    });
+    const hospitalName = org?.name || "Hospital";
 
     // Check if doctor exists
     const doctor = await db.user.findUnique({
@@ -119,6 +124,7 @@ export async function POST(req: NextRequest) {
       gst,
       total_amount: totalAmount,
       specialty,
+      hospital_name: hospitalName,
     });
   } catch (error: unknown) {
     console.error("Appointment order creation error:", error);

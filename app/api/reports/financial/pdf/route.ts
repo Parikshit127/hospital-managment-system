@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
+import { getBillBranding, type BillBranding } from '@/app/lib/bill-branding';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance'];
 
@@ -35,6 +36,8 @@ export async function GET(req: NextRequest) {
         const invoiceCount = invoices.length;
 
         const periodLabel = `${startDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} - ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+
+        const branding = await getBillBranding(auth.context.organizationId);
 
         // Group by department
         const deptRevenue: Record<string, number> = {};
@@ -96,13 +99,13 @@ export async function GET(req: NextRequest) {
 </head>
 <body>
     <div class="no-print" style="background:#f3f4f6;padding:12px;text-align:center;margin-bottom:20px;">
-        <button onclick="window.print()" style="padding:8px 24px;background:#059669;color:white;border:none;border-radius:8px;font-weight:bold;cursor:pointer;font-size:14px;">
+        <button onclick="window.print()" style="padding:8px 24px;background:${branding.accentColor};color:white;border:none;border-radius:8px;font-weight:bold;cursor:pointer;font-size:14px;">
             Print / Download PDF
         </button>
     </div>
 
     <div class="header">
-        <h1>Financial Summary Report</h1>
+        <h1>${branding.hospitalName} — Financial Summary Report</h1>
         <p>Period: ${periodLabel}</p>
     </div>
 

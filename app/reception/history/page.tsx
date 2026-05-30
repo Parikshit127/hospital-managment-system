@@ -16,6 +16,8 @@ import {
     Printer
 } from "lucide-react";
 import { getRecentPatientHistory } from "@/app/actions/patient-history-actions";
+import { fetchBillBranding } from '@/app/actions/branding-actions';
+import type { BillBranding } from '@/app/lib/bill-branding';
 
 export default function PatientHistoryPage() {
     const [searchQuery, setSearchQuery] = useState("");
@@ -25,9 +27,11 @@ export default function PatientHistoryPage() {
     const [dateFrom, setDateFrom] = useState("");
     const [dateTo, setDateTo] = useState("");
     const [printingRecord, setPrintingRecord] = useState<any>(null);
+    const [branding, setBranding] = useState<BillBranding | null>(null);
 
     useEffect(() => {
         loadHistory();
+        fetchBillBranding().then(res => { if (res.success && res.data) setBranding(res.data); });
     }, []);
 
     const loadHistory = async (query?: string, from?: string, to?: string) => {
@@ -244,7 +248,7 @@ export default function PatientHistoryPage() {
                 <div className="hidden print:block fixed inset-0 z-[100] text-black" style={{ padding: '0 60px 80px 60px' }}>
                     {/* Letterhead as actual img — prints in all browsers */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/letter head.png" alt="Axten Hospitals" style={{ width: '100%', height: 'auto', maxHeight: '160px', objectFit: 'cover', objectPosition: 'top', display: 'block', marginBottom: '16px' }} />
+                    <img src={branding?.letterheadUrl || '/letter head.png'} alt={branding?.hospitalName || 'Hospital'} style={{ width: '100%', height: 'auto', maxHeight: '160px', objectFit: 'cover', objectPosition: 'top', display: 'block', marginBottom: '16px' }} />
                     <div className="max-w-3xl mx-auto space-y-8">
                         {/* Invoice number top-right */}
                         <div className="flex justify-end border-b-2 border-gray-300 pb-4">

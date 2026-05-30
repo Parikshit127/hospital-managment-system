@@ -35,6 +35,8 @@ import {
 } from "@/app/actions/fee-receipt-actions";
 import { PrintLetterhead } from "@/app/components/print/PrintLetterhead";
 import Link from "next/link";
+import { fetchBillBranding } from "@/app/actions/branding-actions";
+import type { BillBranding } from "@/app/lib/bill-branding";
 
 const sanitizePhone = (v: string) => v.replace(/\D/g, "").slice(0, 10);
 const sanitizePatientName = (v: string) => v.replace(/[^a-zA-Z\s.'-]/g, "");
@@ -851,6 +853,12 @@ function SuccessAndPrintModal({
     onPrint: () => void;
     title?: string;
 }) {
+    const [branding, setBranding] = useState<BillBranding | null>(null);
+
+    useEffect(() => {
+        fetchBillBranding().then(r => r.success && r.data && setBranding(r.data));
+    }, []);
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col no-print print:hidden">
@@ -917,17 +925,17 @@ function SuccessAndPrintModal({
             <div className="fee-receipt-print" style={{ display: 'none', position: 'relative' }}>
                 {/* Full letterhead img — header + watermark + footer */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/letter head.png" alt="" aria-hidden="true" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0, pointerEvents: 'none' }} />
+                <img src={branding?.letterheadUrl || '/letter head.png'} alt="" aria-hidden="true" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0, pointerEvents: 'none' }} />
                 {/* Watermark logo */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/logo.jpeg" alt="" aria-hidden="true" style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '280px', opacity: 0.06, zIndex: 0, pointerEvents: 'none' }} />
+                <img src={branding?.logoUrl || '/logo.jpeg'} alt="" aria-hidden="true" style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '280px', opacity: 0.06, zIndex: 0, pointerEvents: 'none' }} />
                 {/* Content */}
                 <div style={{ position: 'relative', zIndex: 1, padding: '130px 60px 80px 60px' }}>
                 <div className="max-w-3xl mx-auto space-y-6">
                     {/* Invoice number top-right */}
                     <div className="flex justify-end">
                         <div className="text-right">
-                            <p className="text-base font-bold" style={{ color: "#1e3a6e" }}>{receipt.invoice}</p>
+                            <p className="text-base font-bold" style={{ color: branding?.accentColor || "#1e3a6e" }}>{receipt.invoice}</p>
                             <p className="text-xs font-bold text-gray-600">Receipt: {receipt.id || "—"}</p>
                             <p className="text-xs text-gray-500">
                                 {fmtDate(receipt.created_at)} {fmtTime(receipt.created_at)}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { verifySignedReportToken } from '@/app/lib/signed-url';
+import { getBillBranding, inlineHeaderHtml, type BillBranding } from '@/app/lib/bill-branding';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'doctor', 'lab_technician', 'receptionist', 'finance', 'ipd_manager', 'nurse'];
 
@@ -31,7 +32,8 @@ export async function GET(req: NextRequest) {
                 select: { full_name: true, patient_id: true, phone: true, age: true, gender: true },
             });
 
-            return renderLabReport(order, patient, verified.barcode);
+            const branding = await getBillBranding(verified.organizationId);
+            return renderLabReport(order, patient, verified.barcode, branding);
         }
 
         // Standard auth-based access (staff + patient portal)
@@ -69,7 +71,8 @@ export async function GET(req: NextRequest) {
             select: { full_name: true, patient_id: true, phone: true, age: true, gender: true },
         });
 
-        return renderLabReport(order, patient, barcode);
+        const branding = await getBillBranding(auth.context.organizationId);
+        return renderLabReport(order, patient, barcode, branding);
     } catch (error) {
         console.error('Lab PDF Error:', error);
         return NextResponse.json({ error: 'Failed to generate report' }, { status: 500 });
@@ -77,7 +80,7 @@ export async function GET(req: NextRequest) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function renderLabReport(order: any, patient: any, barcode: string): NextResponse {
+function renderLabReport(order: any, patient: any, barcode: string, branding: BillBranding): NextResponse {
     const patientName = patient?.full_name || 'Unknown';
     const orderDate = order.created_at
         ? new Date(order.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -114,21 +117,8 @@ function renderLabReport(order: any, patient: any, barcode: string): NextRespons
         </button>
     </div>
 
-    <div class="header">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="267" height="80" style="display:block;margin:0 auto 10px;">
-          <text x="10" y="72" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="68" fill="#1e3a6e" letter-spacing="-2">Axten</text>
-          <rect x="10" y="80" width="60" height="8" fill="#f97316" rx="2"/>
-          <rect x="130" y="80" width="120" height="8" fill="#f97316" rx="2"/>
-          <text x="75" y="89" font-family="Arial, sans-serif" font-weight="700" font-size="16" fill="#1e3a6e" letter-spacing="6">HOSPITALS</text>
-          <text x="10" y="110" font-family="Arial, sans-serif" font-weight="400" font-size="12" fill="#1e3a6e">A Unit of TAH Global Healthcare Pvt. Ltd.</text>
-          <circle cx="360" cy="55" r="48" fill="none" stroke="#1e3a6e" stroke-width="3"/>
-          <circle cx="360" cy="55" r="42" fill="none" stroke="#1e3a6e" stroke-width="1"/>
-          <rect x="350" y="35" width="20" height="40" fill="none" stroke="#f97316" stroke-width="3" rx="3"/>
-          <rect x="340" y="45" width="40" height="20" fill="none" stroke="#f97316" stroke-width="3" rx="3"/>
-        </svg>
-        <h1>Laboratory Report</h1>
-        <p>Axten Hospitals — Pathology Department</p>
-    </div>
+    ${inlineHeaderHtml(branding, `<h1 style="font-size:18px;font-weight:900;color:${branding.accentColor};">Laboratory Report</h1><p style="font-size:10px;color:#6b7280;margin-top:4px;">${branding.hospitalName} — Pathology Department</p>`)}
+
 
     <div class="info-grid">
         <div class="info-item">

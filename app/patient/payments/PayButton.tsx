@@ -34,6 +34,7 @@ export default function PayButton({ invoiceId, amount }: PayButtonProps) {
             const orderId = data?.data?.order_id || data?.orderId;
             const keyId = data?.data?.key_id || data?.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
             const orderAmount = data?.data?.amount;
+            const hospitalName = data?.data?.hospital_name || data?.hospital_name || 'Hospital';
 
             if (!orderId || !keyId || !orderAmount) {
                 toast.error(data.error || 'Failed to create payment order');
@@ -53,9 +54,17 @@ export default function PayButton({ invoiceId, amount }: PayButtonProps) {
                 key: keyId,
                 amount: orderAmount,
                 currency: 'INR',
-                name: 'Hospital OS',
-                description: `Payment for ${invoiceId} (₹${amount})`,
+                name: hospitalName,
+                description: `Invoice Payment (₹${amount})`,
                 order_id: orderId,
+                method: {
+                    card: true,
+                    netbanking: true,
+                    wallet: true,
+                    upi: true,
+                    emi: true,
+                    paylater: true,
+                },
                 handler: async function (response: any) {
                     // Verify payment
                     const verifyRes = await fetch('/api/razorpay/verify-payment', {

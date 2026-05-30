@@ -215,7 +215,7 @@ const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     ],
     receptionist: [
         'opd.view', 'opd.create', 'opd.edit',
-        'ipd.view',
+        'ipd.view', 'ipd.create', 'ipd.edit',
         'finance.view', 'finance.create',
         'insurance.view',
         'reports.view',

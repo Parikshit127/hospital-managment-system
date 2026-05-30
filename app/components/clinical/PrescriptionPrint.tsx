@@ -3,6 +3,7 @@
 import React, { useRef } from 'react';
 import { Printer, X } from 'lucide-react';
 import { PrintLetterhead, LETTERHEAD_PRINT_CSS, letterheadHtml } from '@/app/components/print/PrintLetterhead';
+import type { BillBranding } from '@/app/lib/bill-branding';
 
 export type PrescriptionData = {
     patient: {
@@ -32,9 +33,10 @@ export type PrescriptionData = {
 interface PrescriptionPrintProps {
     data: PrescriptionData;
     onClose: () => void;
+    branding?: BillBranding | null;
 }
 
-export function PrescriptionPrint({ data, onClose }: PrescriptionPrintProps) {
+export function PrescriptionPrint({ data, onClose, branding }: PrescriptionPrintProps) {
     const printRef = useRef<HTMLDivElement>(null);
 
     function handlePrint() {
@@ -59,7 +61,7 @@ export function PrescriptionPrint({ data, onClose }: PrescriptionPrintProps) {
                 <style>
                     * { margin: 0; padding: 0; box-sizing: border-box; }
                     body { font-family: 'Times New Roman', serif; color: #111; padding: 130px 48px 80px 48px; font-size: 13px; position: relative; }
-                    body::before { content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-image: url('/letter head.png'); background-size: cover; background-position: center; z-index: -1; }
+                    body::before { content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-image: url('${branding?.letterheadUrl || '/letter head.png'}'); background-size: cover; background-position: center; z-index: -1; }
                     ${LETTERHEAD_PRINT_CSS}
                     .rx-patient-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; padding: 10px 0; border-bottom: 1px solid #ccc; margin-bottom: 14px; }
                     .rx-label { font-size: 10px; text-transform: uppercase; color: #666; letter-spacing: 0.05em; }
@@ -116,6 +118,7 @@ export function PrescriptionPrint({ data, onClose }: PrescriptionPrintProps) {
                 <div className="p-6 overflow-y-auto max-h-[80vh]">
                     {/* Letterhead shown in preview (not captured in printRef — printed separately via letterheadHtml) */}
                     <PrintLetterhead
+                        branding={branding}
                         rightSlot={
                             <div>
                                 <p className="font-bold text-sm" style={{ color: '#1e3a6e' }}>Dr. {data.doctor.name}</p>

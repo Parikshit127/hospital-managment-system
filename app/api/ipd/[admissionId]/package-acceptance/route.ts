@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
+import { getBillBranding, type BillBranding } from '@/app/lib/bill-branding';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager'];
 
@@ -37,14 +38,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
         const org = await prisma.organization.findUnique({
             where: { id: auth.context.organizationId },
         });
+        const branding = await getBillBranding(auth.context.organizationId);
 
         if (!admPkg) {
-            return new NextResponse(noPackageHTML(admission, org), {
+            return new NextResponse(noPackageHTML(admission, org, branding), {
                 headers: { 'Content-Type': 'text/html; charset=utf-8' },
             });
         }
 
-        const html = packageAcceptanceHTML(admission, admPkg, org);
+        const html = packageAcceptanceHTML(admission, admPkg, org, branding);
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
         });
@@ -54,11 +56,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
     }
 }
 
-function noPackageHTML(admission: any, org: any): string {
-    const hospitalName = org?.name || 'Hospital';
+function noPackageHTML(admission: any, org: any, branding: BillBranding): string {
+    const hospitalName = branding.hospitalName;
     return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>No Package Attached</title>
-<style>body{font-family:'Segoe UI',Arial,sans-serif;padding:40px;color:#374151;}h1{color:#1e3a6e;}p{font-size:14px;line-height:1.6;}a{color:#1e3a6e;}</style>
+<style>body{font-family:'Segoe UI',Arial,sans-serif;padding:40px;color:#374151;}h1{color:${branding.accentColor};}p{font-size:14px;line-height:1.6;}a{color:${branding.accentColor};}</style>
 </head><body>
 <h1>${hospitalName}</h1>
 <h2 style="color:#f59e0b;">No IPD Package Attached</h2>
@@ -68,7 +70,7 @@ function noPackageHTML(admission: any, org: any): string {
 </body></html>`;
 }
 
-function packageAcceptanceHTML(admission: any, admPkg: any, org: any): string {
+function packageAcceptanceHTML(admission: any, admPkg: any, org: any, branding: BillBranding): string {
     const patient = admission.patient || {};
     const pkg = admPkg.package;
     const inclusions: string[] = Array.isArray(pkg.inclusions) ? pkg.inclusions.filter((x: any) => typeof x === 'string') : [];
@@ -81,8 +83,8 @@ function packageAcceptanceHTML(admission: any, admPkg: any, org: any): string {
         meta = {};
     }
 
-    const hospitalName = org?.name || 'Hospital';
-    const gstin = org?.registration_number || 'N/A';
+    const hospitalName = branding.hospitalName;
+    const gstin = branding.gstin || org?.registration_number || 'N/A';
     const admissionDate = new Date(admission.admission_date).toLocaleDateString('en-IN');
     const amount = Number(admPkg.applied_amount || pkg.total_amount || 0);
 
@@ -103,28 +105,28 @@ function packageAcceptanceHTML(admission: any, admPkg: any, org: any): string {
         body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; background: #fff; }
         @media print { body { margin: 0; } .no-print { display: none !important; } }
         .page { max-width: 780px; margin: 0 auto; padding: 30px; }
-        h1 { color: #1e3a6e; font-size: 22px; font-weight: 900; }
+        h1 { color: ${branding.accentColor}; font-size: 22px; font-weight: 900; }
         h2 { font-size: 16px; font-weight: 800; }
         ul { padding-left: 18px; font-size: 12px; }
     </style>
 </head>
 <body>
     <div class="no-print" style="background:#f3f4f6;padding:12px;text-align:center;">
-        <button onclick="window.print()" style="padding:8px 24px;background:#1e3a6e;color:white;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Print / Download PDF</button>
+        <button onclick="window.print()" style="padding:8px 24px;background:${branding.accentColor};color:white;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Print / Download PDF</button>
         <span style="margin-left:12px;font-size:11px;color:#6b7280;">Have the patient/relative sign before treatment begins. Keep a copy on file.</span>
     </div>
 
     <div class="page">
         <!-- Header -->
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e3a6e;padding-bottom:14px;margin-bottom:18px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${branding.accentColor};padding-bottom:14px;margin-bottom:18px;">
             <div>
                 <h1>${hospitalName}</h1>
                 <p style="font-size:10px;color:#6b7280;margin-top:2px;">A Unit of TAH Global Healthcare Pvt. Ltd.</p>
                 <p style="font-size:10px;color:#6b7280;">GSTIN: ${gstin}</p>
             </div>
             <div style="text-align:right;">
-                <h2 style="color:#1e3a6e;">IPD PACKAGE ACCEPTANCE FORM</h2>
-                <p style="font-size:11px;font-weight:700;color:#1e3a6e;margin-top:4px;">Admission: ${admission.admission_id}</p>
+                <h2 style="color:${branding.accentColor};">IPD PACKAGE ACCEPTANCE FORM</h2>
+                <p style="font-size:11px;font-weight:700;color:${branding.accentColor};margin-top:4px;">Admission: ${admission.admission_id}</p>
                 <p style="font-size:10px;color:#6b7280;">Date: ${new Date().toLocaleDateString('en-IN')}</p>
             </div>
         </div>

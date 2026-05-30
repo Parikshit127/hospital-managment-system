@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireTenantContext } from '@/backend/tenant';
+import { getBillBranding, inlineHeaderHtml } from '@/app/lib/bill-branding';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ admissionId: string }> }) {
   try {
     const { admissionId } = await params;
-    const { db } = await requireTenantContext();
+    const { db, organizationId } = await requireTenantContext();
+    const branding = await getBillBranding(organizationId);
     const admission = await (db.admissions as any).findUnique({
       where: { admission_id: admissionId },
     });
@@ -15,44 +17,28 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       patient = await (db.oPD_REG as any).findUnique({ where: { patient_id: admission.patient_id } });
     }
 
-    const hospitalName = 'Axten Hospitals';
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Facesheet</title>
 <style>body{font-family:Arial,sans-serif;padding:30px;color:#111;max-width:800px;margin:0 auto}
-.hdr{display:flex;align-items:flex-start;justify-content:space-between;border-bottom:3px solid #1e3a6e;padding-bottom:14px;margin-bottom:20px}
+.hdr{display:flex;align-items:flex-start;justify-content:space-between;border-bottom:3px solid ${branding.accentColor};padding-bottom:14px;margin-bottom:20px}
 .hdr-left{display:flex;align-items:center;gap:14px}
 .hdr-logo{height:56px;width:auto;object-fit:contain}
-.hdr-name{font-size:26px;font-weight:900;color:#1e3a6e;font-family:'Arial Black',Arial,sans-serif;letter-spacing:-1px;line-height:1}
+.hdr-name{font-size:26px;font-weight:900;color:${branding.accentColor};font-family:'Arial Black',Arial,sans-serif;letter-spacing:-1px;line-height:1}
 .hdr-bar-row{display:flex;align-items:center;gap:4px;margin-top:3px}
 .hdr-bar{display:inline-block;width:24px;height:5px;background:#f97316;border-radius:2px}
-.hdr-hospitals{font-size:10px;font-weight:700;color:#1e3a6e;letter-spacing:0.35em}
-.hdr-sub{font-size:10px;color:#1e3a6e;opacity:0.7;margin-top:3px}
+.hdr-hospitals{font-size:10px;font-weight:700;color:${branding.accentColor};letter-spacing:0.35em}
+.hdr-sub{font-size:10px;color:${branding.accentColor};opacity:0.7;margin-top:3px}
 .hdr-right{text-align:right}
-.ft{font-size:13px;letter-spacing:4px;text-transform:uppercase;color:#1e3a6e;font-weight:700;margin-top:4px}
+.ft{font-size:13px;letter-spacing:4px;text-transform:uppercase;color:${branding.accentColor};font-weight:700;margin-top:4px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:16px}
 .field{margin-bottom:10px}.lbl{font-size:10px;text-transform:uppercase;color:#999;letter-spacing:1px}
 .val{font-size:13px;font-weight:bold;border-bottom:1px solid #ddd;padding-bottom:2px;min-height:18px}
 .sec{margin-top:18px;border-top:1px solid #ccc;padding-top:14px}
-.sec-t{font-size:11px;font-weight:bold;text-transform:uppercase;color:#1e3a6e;letter-spacing:2px;margin-bottom:10px}
-.id-box{display:inline-block;background:#f8f8f8;border:2px solid #1e3a6e;padding:6px 18px;font-size:20px;font-weight:bold;font-family:monospace;letter-spacing:3px;margin-bottom:14px;color:#1e3a6e}
+.sec-t{font-size:11px;font-weight:bold;text-transform:uppercase;color:${branding.accentColor};letter-spacing:2px;margin-bottom:10px}
+.id-box{display:inline-block;background:#f8f8f8;border:2px solid ${branding.accentColor};padding:6px 18px;font-size:20px;font-weight:bold;font-family:monospace;letter-spacing:3px;margin-bottom:14px;color:${branding.accentColor}}
 .foot{margin-top:36px;border-top:1px solid #eee;padding-top:12px;font-size:10px;color:#aaa;text-align:center}
 @media print{body{padding:10px}button{display:none}}</style></head>
 <body>
-<div class="hdr">
-  <div class="hdr-left">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="267" height="80" style="display:block;">
-      <text x="10" y="72" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="68" fill="#1e3a6e" letter-spacing="-2">Axten</text>
-      <rect x="10" y="80" width="60" height="8" fill="#f97316" rx="2"/>
-      <rect x="130" y="80" width="120" height="8" fill="#f97316" rx="2"/>
-      <text x="75" y="89" font-family="Arial, sans-serif" font-weight="700" font-size="16" fill="#1e3a6e" letter-spacing="6">HOSPITALS</text>
-      <text x="10" y="110" font-family="Arial, sans-serif" font-weight="400" font-size="12" fill="#1e3a6e">A Unit of TAH Global Healthcare Pvt. Ltd.</text>
-      <circle cx="360" cy="55" r="48" fill="none" stroke="#1e3a6e" stroke-width="3"/>
-      <circle cx="360" cy="55" r="42" fill="none" stroke="#1e3a6e" stroke-width="1"/>
-      <rect x="350" y="35" width="20" height="40" fill="none" stroke="#f97316" stroke-width="3" rx="3"/>
-      <rect x="340" y="45" width="40" height="20" fill="none" stroke="#f97316" stroke-width="3" rx="3"/>
-    </svg>
-  </div>
-  <div class="hdr-right"><div class="ft">Patient Admission Facesheet</div></div>
-</div>
+${inlineHeaderHtml(branding, `<div class="ft">Patient Admission Facesheet</div>`)}
 <div>
   <span class="id-box">${patient?.patient_id || '—'}</span>&nbsp;&nbsp;
   <span class="id-box">${admission.admission_id}</span>

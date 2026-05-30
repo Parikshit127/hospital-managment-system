@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { ensureIPDRoomChargesAccrued } from '@/app/actions/ipd-billing-helpers';
+import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, type BillBranding } from '@/app/lib/bill-branding';
+import { getBillSections } from '@/app/lib/bill-sections';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager'];
 
@@ -41,14 +43,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 
         const org = await prisma.organization.findUnique({
             where: { id: auth.context.organizationId },
+            include: { branding: true },
         });
+
+        const branding = await getBillBranding(auth.context.organizationId);
+        const sections = await getBillSections(auth.context.organizationId, 'discharge_summary');
 
         const deposits = await prisma.patientDeposit.findMany({
             where: { patient_id: admission.patient_id },
         });
 
         const isFinal = admission.status === 'Discharged';
-        const html = generateSummaryBillHTML(admission, invoice, org, deposits, isFinal);
+        const html = generateSummaryBillHTML(admission, invoice, org, deposits, isFinal, branding, sections);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -75,12 +81,11 @@ function numberToWords(n: number): string {
     return 'Rupees ' + convert(Math.floor(n)) + ' Only';
 }
 
-function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean) {
+function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any) {
     const patient = admission.patient || {};
     const items = invoice.items || [];
 
-    const hospitalName = org?.name || 'Hospital';
-    const gstin = org?.registration_number || 'N/A';
+    const gstin = branding.gstin;
 
     const admissionDate = new Date(admission.admission_date).toLocaleDateString('en-IN');
     const dischargeDate = admission.discharge_date
@@ -101,6 +106,8 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
     const net = Number(invoice.net_amount || 0);
     const paid = Number(invoice.paid_amount || 0);
     const balance = Number(invoice.balance_due || 0);
+
+    const billColor = isFinal ? branding.accentColor : '#f97316';
 
     // Aggregate items by service_category (one row per category)
     const categoryAgg: Record<string, { qty: number; amount: number; tax: number }> = {};
@@ -139,89 +146,16 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; background: #fff; }
-        
-        .letterhead-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-            pointer-events: none;
-        }
-        .letterhead-bg img {
-            width: 100%;
-            height: 100%;
-            object-fit: fill;
-        }
-
-        .print-layout-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .print-layout-header-spacer {
-            height: 130px;
-        }
-
-        .print-layout-footer-spacer {
-            height: 80px;
-        }
-
-        .bill-container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 0 60px;
-            position: relative;
-            z-index: 1;
-        }
-
-        .watermark {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) rotate(-30deg);
-            font-size: 80px;
-            font-weight: 900;
-            color: ${isFinal ? '#1e3a6e' : '#f59e0b'};
-            opacity: 0.04;
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        @media print {
-            @page {
-                margin: 0;
-            }
-            body {
-                margin: 0;
-                background: white;
-            }
-            .bill-container {
-                max-width: 100%;
-                margin: 0;
-                padding: 0 60px;
-            }
-            .no-print {
-                display: none !important;
-            }
-            .watermark {
-                opacity: 0.06;
-            }
-        }
+        ${letterheadCss(branding)}
+        .watermark { color: ${isFinal ? branding.accentColor : '#f59e0b'}; }
     </style>
 </head>
 <body>
-    <div class="letterhead-bg">
-        <img src="/letter head.png" alt="" aria-hidden="true" />
-    </div>
+    ${letterheadBackgroundHtml(branding)}
 
     <div class="watermark">${isFinal ? 'FINAL' : 'INTERIM'} SUMMARY</div>
 
-    <div class="no-print" style="background:#f3f4f6;padding:12px;text-align:center;">
-        <button onclick="window.print()" style="padding:8px 24px;background:#1e3a6e;color:white;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Print / Download PDF</button>
-        <span style="margin-left:12px;font-size:11px;color:#6b7280;">This is a category-level summary. For line-by-line details, see the Detailed Bill.</span>
-    </div>
+    ${printButtonHtml(branding, 'This is a category-level summary. For line-by-line details, see the Detailed Bill.')}
 
     <table class="print-layout-table">
         <thead>
@@ -234,16 +168,17 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                 <td>
                     <div class="bill-container">
                         <!-- Header details matching pharmacy layout (no logo since it is on the letterhead) -->
-                        <div style="display:flex;justify-content:flex-end;border-bottom:2px solid #1e3a6e;padding-bottom:12px;margin-bottom:20px;">
+                        <div style="display:flex;justify-content:flex-end;border-bottom:2px solid ${branding.accentColor};padding-bottom:12px;margin-bottom:20px;">
                             <div style="text-align:right;">
-                                <h2 style="font-size:16px;font-weight:800;color:${isFinal ? '#1e3a6e' : '#f97316'};">${isFinal ? 'SUMMARY BILL' : 'INTERIM SUMMARY'}</h2>
-                                <p style="font-size:12px;font-weight:700;color:#1e3a6e;">${invoice.invoice_number}</p>
+                                <h2 style="font-size:16px;font-weight:800;color:${billColor};">${isFinal ? 'SUMMARY BILL' : 'INTERIM SUMMARY'}</h2>
+                                <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${invoice.invoice_number}</p>
                                 <p style="font-size:10px;color:#6b7280;">Type: <strong>${invoice.invoice_type || 'IPD'}</strong></p>
                                 <p style="font-size:10px;color:#6b7280;">Date: ${new Date().toLocaleDateString('en-IN')}</p>
                                 <p style="font-size:10px;color:#6b7280;">GSTIN: ${gstin}</p>
                             </div>
                         </div>
 
+                        ${sections.showPatientInfo ? `
                         <!-- Patient & Admission -->
                         <div style="background:#f9fafb;border-radius:8px;padding:12px;margin-bottom:16px;">
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
@@ -258,21 +193,22 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                                 <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
                                 <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
                             </div>
-                        </div>
+                        </div>` : ''}
 
+                        ${sections.showLineItems ? `
                         <!-- Category-level Summary -->
-                        <h3 style="font-size:11px;font-weight:800;color:#1e3a6e;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Charges Summary</h3>
+                        <h3 style="font-size:11px;font-weight:800;color:${branding.accentColor};text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Charges Summary</h3>
                         <table style="width:100%;border-collapse:collapse;margin-bottom:14px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;">
                             <thead>
-                                <tr style="border-bottom:2px solid #1e3a6e;background:#f9fafb;">
-                                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#1e3a6e;">Category</th>
-                                    <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:800;color:#1e3a6e;">Items</th>
-                                    <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:800;color:#1e3a6e;">GST</th>
-                                    <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:800;color:#1e3a6e;">Amount</th>
+                                <tr style="border-bottom:2px solid ${branding.accentColor};background:#f9fafb;">
+                                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:${branding.accentColor};">Category</th>
+                                    <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:800;color:${branding.accentColor};">Items</th>
+                                    <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:800;color:${branding.accentColor};">GST</th>
+                                    <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:800;color:${branding.accentColor};">Amount</th>
                                 </tr>
                             </thead>
                             <tbody>${categoryRows || '<tr><td colspan="4" style="padding:16px;text-align:center;color:#9ca3af;font-size:11px;">No charges yet</td></tr>'}</tbody>
-                        </table>
+                        </table>` : ''}
 
                         <!-- Totals -->
                         <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
@@ -291,13 +227,12 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                             </table>
                         </div>
 
+                        ${sections.showAmountInWords ? `
                         <div style="background:#f0fdf4;border-radius:6px;padding:8px 14px;margin-bottom:14px;">
                             <p style="font-size:10px;color:#059669;"><strong>Amount in Words:</strong> ${numberToWords(net)}</p>
-                        </div>
+                        </div>` : ''}
 
-                        <p style="font-size:9px;color:#9ca3af;text-align:center;margin-top:20px;border-top:1px solid #e5e7eb;padding-top:10px;">
-                            This is a category-level summary. For the line-by-line detailed bill, request the Detailed Bill from the billing desk.
-                        </p>
+                        ${sections.showFooter ? billFooterHtml(branding) : ''}
                     </div>
                 </td>
             </tr>

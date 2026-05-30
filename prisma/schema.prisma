@@ -313,7 +313,15 @@ model OrganizationBranding {
   logo_url        String?
   portal_title    String  @default("Hospital OS")
   portal_subtitle String  @default("Management System")
-  footer_text     String?
+  footer_text       String?
+  letterhead_url    String?
+  header_height     Int       @default(130)
+  footer_height     Int       @default(80)
+  accent_color      String    @default("#1e3a6e")
+  tagline           String?
+  terms_conditions  String?
+  signature_title   String?
+  signature_name    String?
 
   organization Organization @relation(fields: [organizationId], references: [id])
 

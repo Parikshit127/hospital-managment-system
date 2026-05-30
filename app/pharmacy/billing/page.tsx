@@ -9,6 +9,8 @@ import {
 import { getInventory, generateInvoice, getPharmacyQueue, markOrderAsPaid, addInventoryBatch, processDoctorOrder } from '@/app/actions/pharmacy-actions';
 import { searchPatientsForBilling } from '@/app/actions/finance-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { fetchBillBranding } from '@/app/actions/branding-actions';
+import type { BillBranding } from '@/app/lib/bill-branding';
 
 type InventoryItem = {
     batch_id: string;
@@ -63,6 +65,7 @@ export default function PharmacyPage() {
     const [showInvoiceModal, setShowInvoiceModal] = useState(false);
     const [invoiceResult, setInvoiceResult] = useState<any>(null);
     const [showInventoryModal, setShowInventoryModal] = useState(false);
+    const [branding, setBranding] = useState<BillBranding | null>(null);
 
     const [invForm, setInvForm] = useState({
         isNewMedicine: false,
@@ -109,6 +112,7 @@ export default function PharmacyPage() {
         loadInventory();
         const interval = setInterval(loadQueue, 5000);
         loadQueue();
+        fetchBillBranding().then(r => r.success && r.data && setBranding(r.data));
         return () => clearInterval(interval);
     }, [loadInventory, loadQueue]);
 
@@ -596,18 +600,18 @@ export default function PharmacyPage() {
             {showInvoiceModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md">
                     <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden print-area relative print:fixed print:inset-0 print:max-w-none print:rounded-none print:shadow-none print:overflow-visible">
-                        <div className="absolute top-0 left-0 right-0 h-[2px] print:hidden" style={{ background: 'linear-gradient(90deg, #1e3a6e, #f97316, #1e3a6e)' }} />
+                        <div className="absolute top-0 left-0 right-0 h-[2px] print:hidden" style={{ background: `linear-gradient(90deg, ${branding?.accentColor || '#1e3a6e'}, #f97316, ${branding?.accentColor || '#1e3a6e'})` }} />
 
                         {invoiceResult ? (
                             /* Invoice Generated - Show Receipt */
                             <>
                                 <div className="p-6 border-b border-dashed border-gray-200" style={{ paddingTop: undefined }}>
                                     {/* Letterhead — hidden in print, letterhead image replaces it */}
-                                    <div className="flex items-start justify-between pb-4 mb-4 print:hidden" style={{ borderBottom: '2px solid #1e3a6e' }}>
+                                    <div className="flex items-start justify-between pb-4 mb-4 print:hidden" style={{ borderBottom: `2px solid ${branding?.accentColor || '#1e3a6e'}` }}>
                                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                                        <img src="/logo.jpeg" alt="Axten Hospitals" className="h-12 w-auto object-contain" />
+                                        <img src={branding?.logoUrl || '/logo.jpeg'} alt={branding?.hospitalName || 'Hospital'} className="h-12 w-auto object-contain" />
                                         <div className="text-right">
-                                            <p className="text-xs font-black uppercase tracking-widest" style={{ color: '#1e3a6e' }}>Pharmacy Invoice</p>
+                                            <p className="text-xs font-black uppercase tracking-widest" style={{ color: branding?.accentColor || '#1e3a6e' }}>Pharmacy Invoice</p>
                                             <p className="text-xs font-mono text-gray-500 mt-0.5">{invoiceResult.invoice_number}</p>
                                             <p className="text-xs text-gray-400">{new Date().toLocaleDateString('en-IN')}</p>
                                         </div>
@@ -615,7 +619,7 @@ export default function PharmacyPage() {
                                     {/* Print-only invoice info with top padding for letterhead */}
                                     <div className="hidden print:flex justify-end mb-4" style={{ paddingTop: '130px' }}>
                                         <div className="text-right">
-                                            <p className="text-xs font-black uppercase tracking-widest" style={{ color: '#1e3a6e' }}>Pharmacy Invoice</p>
+                                            <p className="text-xs font-black uppercase tracking-widest" style={{ color: branding?.accentColor || '#1e3a6e' }}>Pharmacy Invoice</p>
                                             <p className="text-xs font-mono text-gray-500 mt-0.5">{invoiceResult.invoice_number}</p>
                                             <p className="text-xs text-gray-400">{new Date().toLocaleDateString('en-IN')}</p>
                                         </div>
@@ -745,7 +749,7 @@ export default function PharmacyPage() {
                 <div className="pharmacy-print-view" style={{ display: 'none', position: 'relative' }}>
                     {/* Full letterhead as background — header + watermark + footer */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/letter head.png" alt="" aria-hidden="true" style={{
+                    <img src={branding?.letterheadUrl || '/letter head.png'} alt="" aria-hidden="true" style={{
                         position: 'absolute', top: 0, left: 0,
                         width: '100%', height: '100%',
                         objectFit: 'fill',
@@ -756,7 +760,7 @@ export default function PharmacyPage() {
                     <div className="max-w-2xl mx-auto space-y-4">
                         <div className="flex justify-end border-b border-gray-300 pb-3">
                             <div className="text-right">
-                                <p className="text-xs font-black uppercase tracking-widest" style={{ color: '#1e3a6e' }}>Pharmacy Invoice</p>
+                                <p className="text-xs font-black uppercase tracking-widest" style={{ color: branding?.accentColor || '#1e3a6e' }}>Pharmacy Invoice</p>
                                 <p className="text-xs font-mono text-gray-600 mt-0.5">{invoiceResult.invoice_number}</p>
                                 <p className="text-xs text-gray-500">{new Date().toLocaleDateString('en-IN')}</p>
                             </div>

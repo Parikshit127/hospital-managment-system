@@ -1,6 +1,7 @@
 "use server";
 
 import { requireTenantContext } from "@/backend/tenant";
+import { prisma } from "@/backend/db";
 import { addUserSchema, updateUserSchema } from "@/app/lib/validations";
 import * as bcrypt from "bcryptjs";
 
@@ -966,6 +967,47 @@ export async function updateOrganizationBranding(data: any) {
       data,
     });
     return { success: true, data: brand };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function getHospitalBillingInfo() {
+  try {
+    const { organizationId } = await requireTenantContext();
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: {
+        name: true,
+        address: true,
+        phone: true,
+        email: true,
+        organization_gstin: true,
+        gst_state_code: true,
+        registration_number: true,
+      },
+    });
+    return { success: true, data: org };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function updateHospitalBillingInfo(data: {
+  organization_gstin?: string;
+  gst_state_code?: string;
+  registration_number?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+}) {
+  try {
+    const { organizationId } = await requireTenantContext();
+    const org = await prisma.organization.update({
+      where: { id: organizationId },
+      data,
+    });
+    return { success: true, data: org };
   } catch (error: any) {
     return { success: false, error: error.message };
   }

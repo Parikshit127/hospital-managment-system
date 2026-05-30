@@ -219,7 +219,7 @@ function BookAppointmentContent() {
       }
 
       const orderData = await orderResponse.json();
-      const { order_id, key_id, amount, consultation_fee, gst } = orderData;
+      const { order_id, key_id, amount, consultation_fee, gst, hospital_name } = orderData;
 
       setPaymentSummary({
         consultationFee: Number(consultation_fee || 0),
@@ -236,7 +236,7 @@ function BookAppointmentContent() {
           key: key_id,
           amount,
           currency: "INR",
-          name: "Axten Hospitals",
+          name: hospital_name || "Hospital",
           description: "Appointment Payment",
           order_id,
           // Keep methods broadly enabled so Razorpay can render all account-eligible options.

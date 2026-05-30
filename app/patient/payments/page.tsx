@@ -78,11 +78,11 @@ export default async function PatientPaymentsPage() {
                             const remaining = inv.total_amount - inv.paid_amount;
                             const isPaid = inv.status === 'Paid';
                             return (
-                                <div key={inv.invoice_id} className="border border-gray-100 rounded-2xl p-5 hover:bg-gray-50/50 transition">
+                                <div key={inv.id} className="border border-gray-100 rounded-2xl p-5 hover:bg-gray-50/50 transition">
                                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                                         <div>
                                             <div className="flex items-center gap-3 mb-1">
-                                                <p className="font-bold text-gray-900">{inv.invoice_id}</p>
+                                                <p className="font-bold text-gray-900">{inv.invoice_number}</p>
                                                 <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wide ${
                                                     isPaid ? 'bg-green-100 text-green-700' :
                                                     inv.status === 'Partially Paid' ? 'bg-blue-100 text-blue-700' :
@@ -107,7 +107,7 @@ export default async function PatientPaymentsPage() {
                                                     <span className="text-lg font-bold text-gray-900">
                                                         {'\u20B9'}{remaining.toLocaleString()}
                                                     </span>
-                                                    <PayButton invoiceId={inv.invoice_id} amount={remaining} />
+                                                    <PayButton invoiceId={String(inv.id)} amount={remaining} />
                                                 </>
                                             )}
                                             {isPaid && (

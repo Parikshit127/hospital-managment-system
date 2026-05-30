@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireTenantContext } from '@/backend/tenant';
+import { getBillBranding, type BillBranding } from '@/app/lib/bill-branding';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ admissionId: string }> }) {
   try {
     const { admissionId } = await params;
-    const { db } = await requireTenantContext();
+    const { db, organizationId } = await requireTenantContext();
     const admission = await (db.admissions as any).findUnique({
       where: { admission_id: admissionId },
       include: { ward: true, bed: true },
@@ -16,7 +17,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       patient = await (db.oPD_REG as any).findUnique({ where: { patient_id: admission.patient_id } });
     }
 
-    const hospitalName = process.env.HOSPITAL_NAME || 'Hospital';
+    const branding = await getBillBranding(organizationId);
+    const hospitalName = branding.hospitalName;
     const wardName = admission.ward?.ward_name || '—';
     const bedNumber = admission.bed?.bed_number || '—';
     const bloodGroup = patient?.blood_group || '—';

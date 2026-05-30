@@ -7,6 +7,8 @@ import { recordPayment, recordSplitPayment } from '@/app/actions/finance-actions
 import { collectDeposit, getPatientDeposits, applyDepositToInvoice } from '@/app/actions/deposit-actions';
 import { getIpdServices } from '@/app/actions/ipd-master-actions';
 import { DepositTracker } from '@/app/components/ipd/DepositTracker';
+import { fetchBillBranding } from '@/app/actions/branding-actions';
+import type { BillBranding } from '@/app/lib/bill-branding';
 
 export default function IpdBillingPage() {
     const [admissions, setAdmissions] = useState<any[]>([]);
@@ -37,6 +39,7 @@ export default function IpdBillingPage() {
     const [depositAmount, setDepositAmount] = useState('');
     const [depositMethod, setDepositMethod] = useState('Cash');
     const [deposits, setDeposits] = useState<any[]>([]);
+    const [branding, setBranding] = useState<BillBranding | null>(null);
 
     function showToast(message: string, type: 'success' | 'error' = 'success') {
         setToast({ message, type });
@@ -46,6 +49,7 @@ export default function IpdBillingPage() {
     useEffect(() => {
         loadAdmissions();
         loadServices();
+        fetchBillBranding().then(r => r.success && r.data && setBranding(r.data));
     }, []);
 
     async function loadAdmissions() {
@@ -878,7 +882,7 @@ export default function IpdBillingPage() {
                 <div className="ipd-print-view" style={{ display: 'none', position: 'relative' }}>
                     {/* Full letterhead as background — same as pharmacy */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/letter head.png" alt="" aria-hidden="true" style={{
+                    <img src={branding?.letterheadUrl || '/letter head.png'} alt="" aria-hidden="true" style={{
                         position: 'absolute', top: 0, left: 0,
                         width: '100%', height: '100%',
                         objectFit: 'fill',
@@ -889,7 +893,7 @@ export default function IpdBillingPage() {
                         <div className="max-w-3xl mx-auto space-y-4">
 
                             {/* Invoice header row */}
-                            <div className="flex justify-between items-start border-b-2 pb-3" style={{ borderColor: '#1e3a6e' }}>
+                            <div className="flex justify-between items-start border-b-2 pb-3" style={{ borderColor: branding?.accentColor || '#1e3a6e' }}>
                                 <div>
                                     <p className="text-lg font-black text-gray-900">{billData.admission.patient_name}</p>
                                     <p className="text-xs text-gray-500 mt-0.5">{billData.admission.admission_id} | Dr. {billData.admission.doctor_name}</p>
@@ -899,7 +903,7 @@ export default function IpdBillingPage() {
                                     )}
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-xs font-black uppercase tracking-widest" style={{ color: '#1e3a6e' }}>Interim Bill</p>
+                                    <p className="text-xs font-black uppercase tracking-widest" style={{ color: branding?.accentColor || '#1e3a6e' }}>Interim Bill</p>
                                     <p className="text-xs font-mono text-gray-600 mt-0.5">{billData.invoice.invoice_number}</p>
                                     <p className="text-xs text-gray-500">Admitted: {new Date(billData.admission.admission_date).toLocaleDateString('en-IN')}</p>
                                     <p className="text-xs text-gray-500">Printed: {new Date().toLocaleDateString('en-IN')}</p>

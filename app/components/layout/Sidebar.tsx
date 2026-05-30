@@ -212,9 +212,16 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       ],
     },
     {
-      title: "Overview",
+      title: "OPD",
       items: [
-        { label: "OPD Overview", href: "/opd", icon: ClipboardList },
+        { label: "OPD Patients", href: "/reception/opd", icon: Stethoscope },
+      ],
+    },
+    {
+      title: "IPD",
+      items: [
+        { label: "IPD Admissions", href: "/reception/ipd", icon: Bed },
+        { label: "Admit Patient", href: "/reception/ipd/admit", icon: UserPlus },
       ],
     },
   ],

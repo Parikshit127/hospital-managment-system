@@ -4,8 +4,6 @@ import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getRazorpaySigningSecret } from '@/app/lib/razorpay';
 
-const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist'];
-
 function generateReceiptNumber() {
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
@@ -17,7 +15,6 @@ export async function POST(req: NextRequest) {
     try {
         const auth = await resolveRouteAuth({
             allowPatient: true,
-            allowedStaffRoles: ALLOWED_STAFF_ROLES,
         });
         if (!auth.ok) return auth.response;
 

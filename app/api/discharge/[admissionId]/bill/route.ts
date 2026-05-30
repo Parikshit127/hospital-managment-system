@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { ensureIPDRoomChargesAccrued } from '@/app/actions/ipd-billing-helpers'
+import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, type BillBranding } from '@/app/lib/bill-branding';
+import { getBillSections } from '@/app/lib/bill-sections';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager'];
 
@@ -46,12 +48,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             include: { branding: { select: { logo_url: true, primary_color: true } } },
         });
 
+        const branding = await getBillBranding(auth.context.organizationId);
+        const sections = await getBillSections(auth.context.organizationId, 'discharge');
+
         const deposits = await prisma.patientDeposit.findMany({
             where: { patient_id: admission.patient_id },
         });
 
         const isFinal = admission.status === 'Discharged';
-        const html = generateDischargeBillHTML(admission, invoice, org, deposits, isFinal);
+        const html = generateDischargeBillHTML(admission, invoice, org, deposits, isFinal, branding, sections);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -82,14 +87,15 @@ function numberToWords(n: number): string {
     return result + ' Only';
 }
 
-function generateDischargeBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean) {
+function generateDischargeBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any) {
     const patient = admission.patient || {};
     const items = invoice.items || [];
     const payments = invoice.payments || [];
 
-    const hospitalName = org?.name || 'Hospital';
-    const hospitalAddress = org?.address || '';
-    const gstin = org?.registration_number || 'N/A';
+    const hospitalName = branding.hospitalName;
+    const gstin = branding.gstin;
+
+    const billColor = isFinal ? branding.accentColor : '#f97316';
 
     const admissionDate = new Date(admission.admission_date).toLocaleDateString('en-IN');
     const dischargeDate = admission.discharge_date ? new Date(admission.discharge_date).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN');
@@ -190,88 +196,16 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; background: #fff; }
-        
-        .letterhead-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-            pointer-events: none;
-        }
-        .letterhead-bg img {
-            width: 100%;
-            height: 100%;
-            object-fit: fill;
-        }
-
-        .print-layout-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .print-layout-header-spacer {
-            height: 130px;
-        }
-
-        .print-layout-footer-spacer {
-            height: 80px;
-        }
-
-        .bill-container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 0 60px;
-            position: relative;
-            z-index: 1;
-        }
-
-        .watermark {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) rotate(-30deg);
-            font-size: 80px;
-            font-weight: 900;
-            color: ${isFinal ? '#1e3a6e' : '#f59e0b'};
-            opacity: 0.04;
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        @media print {
-            @page {
-                margin: 0;
-            }
-            body {
-                margin: 0;
-                background: white;
-            }
-            .bill-container {
-                max-width: 100%;
-                margin: 0;
-                padding: 0 60px;
-            }
-            .no-print {
-                display: none !important;
-            }
-            .watermark {
-                opacity: 0.06;
-            }
-        }
+        ${letterheadCss(branding)}
+        .watermark { color: ${isFinal ? branding.accentColor : '#f59e0b'}; }
     </style>
 </head>
 <body>
-    <div class="letterhead-bg">
-        <img src="/letter head.png" alt="" aria-hidden="true" />
-    </div>
+    ${letterheadBackgroundHtml(branding)}
 
     <div class="watermark">${isFinal ? 'FINAL BILL' : 'INTERIM'}</div>
 
-    <div class="no-print" style="background:#f3f4f6;padding:12px;text-align:center;">
-        <button onclick="window.print()" style="padding:8px 24px;background:#1e3a6e;color:white;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Print / Download PDF</button>
-    </div>
+    ${printButtonHtml(branding)}
 
     <table class="print-layout-table">
         <thead>
@@ -284,16 +218,17 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                 <td>
                     <div class="bill-container">
                         <!-- Header details matching pharmacy layout (no logo since it is on the letterhead) -->
-                        <div style="display:flex;justify-content:flex-end;border-bottom:2px solid #1e3a6e;padding-bottom:12px;margin-bottom:20px;">
+                        <div style="display:flex;justify-content:flex-end;border-bottom:2px solid ${branding.accentColor};padding-bottom:12px;margin-bottom:20px;">
                             <div style="text-align:right;">
-                                <h2 style="font-size:16px;font-weight:800;color:${isFinal ? '#1e3a6e' : '#f97316'};">${isFinal ? 'FINAL BILL' : 'INTERIM BILL'}</h2>
-                                <p style="font-size:12px;font-weight:700;color:#1e3a6e;">${invoice.invoice_number}</p>
+                                <h2 style="font-size:16px;font-weight:800;color:${billColor};">${isFinal ? 'FINAL BILL' : 'INTERIM BILL'}</h2>
+                                <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${invoice.invoice_number}</p>
                                 <p style="font-size:10px;color:#6b7280;">Type: <strong>${invoice.invoice_type || 'IPD'}</strong></p>
                                 <p style="font-size:10px;color:#6b7280;">Date: ${new Date().toLocaleDateString('en-IN')}</p>
                                 <p style="font-size:10px;color:#6b7280;">GSTIN: ${gstin}</p>
                             </div>
                         </div>
 
+                        ${sections.showPatientInfo ? `
                         <!-- Patient & Admission -->
                         <div style="background:#f9fafb;border-radius:8px;padding:14px;margin-bottom:16px;">
                             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;">
@@ -308,21 +243,22 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
                                 <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
                             </div>
-                        </div>
+                        </div>` : ''}
 
+                        ${sections.showLineItems ? `
                         <!-- Charges -->
                         <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
-                            <thead><tr style="border-y:2px solid #1e3a6e;">
-                                <th style="padding:6px 12px;text-align:left;font-size:9px;font-weight:800;color:#1e3a6e;">Description</th>
-                                <th style="padding:6px 12px;text-align:left;font-size:9px;font-weight:800;color:#1e3a6e;">SAC/HSN</th>
-                                <th style="padding:6px 12px;text-align:center;font-size:9px;font-weight:800;color:#1e3a6e;">Qty</th>
-                                <th style="padding:6px 12px;text-align:right;font-size:9px;font-weight:800;color:#1e3a6e;">Rate</th>
-                                <th style="padding:6px 12px;text-align:center;font-size:9px;font-weight:800;color:#1e3a6e;">GST%</th>
-                                <th style="padding:6px 12px;text-align:right;font-size:9px;font-weight:800;color:#1e3a6e;">GST Amt</th>
-                                <th style="padding:6px 12px;text-align:right;font-size:9px;font-weight:800;color:#1e3a6e;">Total</th>
+                            <thead><tr style="border-y:2px solid ${branding.accentColor};">
+                                <th style="padding:6px 12px;text-align:left;font-size:9px;font-weight:800;color:${branding.accentColor};">Description</th>
+                                <th style="padding:6px 12px;text-align:left;font-size:9px;font-weight:800;color:${branding.accentColor};">SAC/HSN</th>
+                                <th style="padding:6px 12px;text-align:center;font-size:9px;font-weight:800;color:${branding.accentColor};">Qty</th>
+                                <th style="padding:6px 12px;text-align:right;font-size:9px;font-weight:800;color:${branding.accentColor};">Rate</th>
+                                <th style="padding:6px 12px;text-align:center;font-size:9px;font-weight:800;color:${branding.accentColor};">GST%</th>
+                                <th style="padding:6px 12px;text-align:right;font-size:9px;font-weight:800;color:${branding.accentColor};">GST Amt</th>
+                                <th style="padding:6px 12px;text-align:right;font-size:9px;font-weight:800;color:${branding.accentColor};">Total</th>
                             </tr></thead>
                             <tbody>${itemRows}</tbody>
-                        </table>
+                        </table>` : ''}
 
                         <!-- Totals -->
                         <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
@@ -341,19 +277,20 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                             </table>
                         </div>
 
+                        ${sections.showAmountInWords ? `
                         <div style="background:#f0fdf4;border-radius:6px;padding:8px 14px;margin-bottom:14px;">
                             <p style="font-size:10px;color:#059669;"><strong>Amount in Words:</strong> ${numberToWords(net)}</p>
-                        </div>
+                        </div>` : ''}
 
-                        ${payments.length > 0 ? `
+                        ${sections.showPaymentHistory && payments.length > 0 ? `
                         <div style="margin-bottom:14px;">
                             <h3 style="font-size:9px;font-weight:800;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Payments</h3>
                             <table style="width:100%;border-collapse:collapse;background:#f9fafb;">
-                                <thead><tr style="border-bottom:1px solid #1e3a6e;">
-                                    <th style="padding:4px 12px;font-size:9px;text-align:left;color:#1e3a6e;">Receipt</th>
-                                    <th style="padding:4px 12px;font-size:9px;text-align:left;color:#1e3a6e;">Method</th>
-                                    <th style="padding:4px 12px;font-size:9px;text-align:right;color:#1e3a6e;">Amount</th>
-                                    <th style="padding:4px 12px;font-size:9px;text-align:left;color:#1e3a6e;">Date</th>
+                                <thead><tr style="border-bottom:1px solid ${branding.accentColor};">
+                                    <th style="padding:4px 12px;font-size:9px;text-align:left;color:${branding.accentColor};">Receipt</th>
+                                    <th style="padding:4px 12px;font-size:9px;text-align:left;color:${branding.accentColor};">Method</th>
+                                    <th style="padding:4px 12px;font-size:9px;text-align:right;color:${branding.accentColor};">Amount</th>
+                                    <th style="padding:4px 12px;font-size:9px;text-align:left;color:${branding.accentColor};">Date</th>
                                 </tr></thead>
                                 <tbody>${paymentRows}</tbody>
                             </table>
@@ -378,6 +315,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                             </table>
                         </div>` : ''}
 
+                        ${sections.showFooter ? billFooterHtml(branding) : `
                         <div style="border-top:1px solid #e5e7eb;padding-top:12px;margin-top:16px;">
                             <div style="display:flex;justify-content:space-between;">
                                 <p style="font-size:9px;color:#9ca3af;">Terms: Payment due on receipt.</p>
@@ -386,7 +324,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                     <p style="font-size:9px;border-top:1px solid #d1d5db;padding-top:3px;color:#9ca3af;">For ${hospitalName}</p>
                                 </div>
                             </div>
-                        </div>
+                        </div>`}
                     </div>
                 </td>
             </tr>

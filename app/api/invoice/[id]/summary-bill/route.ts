@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
+import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, type BillBranding } from '@/app/lib/bill-branding';
+import { getBillSections } from '@/app/lib/bill-sections';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager'];
 
@@ -40,13 +42,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
         const org = await prisma.organization.findUnique({
             where: { id: auth.context.organizationId },
+            include: { branding: true },
         });
+
+        const branding = await getBillBranding(auth.context.organizationId);
+        const sections = await getBillSections(auth.context.organizationId, 'invoice');
 
         const deposits = invoice.patient_id
             ? await prisma.patientDeposit.findMany({ where: { patient_id: invoice.patient_id } })
             : [];
 
-        const html = generateSummaryBillHTML(invoice, admission, org, deposits);
+        const html = generateSummaryBillHTML(invoice, admission, org, deposits, branding, sections);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -73,15 +79,15 @@ function numberToWords(n: number): string {
     return 'Rupees ' + convert(Math.floor(n)) + ' Only';
 }
 
-function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[]) {
+function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[], branding: BillBranding, sections: any) {
     const patient = invoice.patient || {};
     const items = invoice.items || [];
 
-    const gstin = org?.registration_number || 'N/A';
+    const gstin = branding.gstin;
     const isIPD = !!admission;
     const isFinal = invoice.status === 'Paid' || invoice.status === 'Final' || admission?.status === 'Discharged';
     const billType = isIPD ? (isFinal ? 'SUMMARY BILL' : 'INTERIM SUMMARY') : 'TAX INVOICE';
-    const billColor = isFinal ? '#1e3a6e' : '#f97316';
+    const billColor = isFinal ? branding.accentColor : '#f97316';
     const invoiceDate = new Date(invoice.created_at).toLocaleDateString('en-IN');
 
     let admissionDate = '';
@@ -158,55 +164,42 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; background: #fff; }
-        .letterhead-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
-        .letterhead-bg img { width: 100%; height: 100%; object-fit: fill; }
-        .print-layout-table { width: 100%; border-collapse: collapse; }
-        .print-layout-header-spacer { height: 130px; }
-        .print-layout-footer-spacer { height: 80px; }
-        .bill-container { max-width: 800px; margin: 0 auto; padding: 0 60px; position: relative; z-index: 1; }
-        .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 80px; font-weight: 900; color: ${billColor}; opacity: 0.04; pointer-events: none; z-index: 0; }
-        @media print {
-            @page { margin: 0; }
-            body { margin: 0; background: white; }
-            .bill-container { max-width: 100%; margin: 0; padding: 0 60px; }
-            .no-print { display: none !important; }
-            .watermark { opacity: 0.06; }
-        }
+        ${letterheadCss(branding)}
+        .watermark { color: ${billColor}; }
     </style>
 </head>
 <body>
-    <div class="letterhead-bg"><img src="/letter head.png" alt="" aria-hidden="true" /></div>
+    ${letterheadBackgroundHtml(branding)}
     <div class="watermark">${billType}</div>
-    <div class="no-print" style="background:#f3f4f6;padding:12px;text-align:center;">
-        <button onclick="window.print()" style="padding:8px 24px;background:#1e3a6e;color:white;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Print / Download PDF</button>
-        <span style="margin-left:12px;font-size:11px;color:#6b7280;">Category-level summary bill for ${invoice.invoice_number}</span>
-    </div>
+    ${printButtonHtml(branding, 'Category-level summary bill for ' + invoice.invoice_number)}
     <table class="print-layout-table">
         <thead><tr><td class="print-layout-header-spacer"></td></tr></thead>
         <tbody><tr><td>
             <div class="bill-container">
-                <div style="display:flex;justify-content:flex-end;border-bottom:2px solid #1e3a6e;padding-bottom:12px;margin-bottom:20px;">
+                <div style="display:flex;justify-content:flex-end;border-bottom:2px solid ${branding.accentColor};padding-bottom:12px;margin-bottom:20px;">
                     <div style="text-align:right;">
                         <h2 style="font-size:16px;font-weight:800;color:${billColor};">${billType}</h2>
-                        <p style="font-size:12px;font-weight:700;color:#1e3a6e;">${invoice.invoice_number}</p>
+                        <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${invoice.invoice_number}</p>
                         <p style="font-size:10px;color:#6b7280;">Type: <strong>${invoice.invoice_type || 'OPD'}</strong></p>
                         <p style="font-size:10px;color:#6b7280;">Date: ${invoiceDate}</p>
                         <p style="font-size:10px;color:#6b7280;">GSTIN: ${gstin}</p>
                     </div>
                 </div>
+                ${sections.showPatientInfo ? `
                 <div style="background:#f9fafb;border-radius:8px;padding:12px;margin-bottom:16px;">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">${patientInfoHTML}</div>
-                </div>
-                <h3 style="font-size:11px;font-weight:800;color:#1e3a6e;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Charges Summary</h3>
+                </div>` : ''}
+                ${sections.showLineItems ? `
+                <h3 style="font-size:11px;font-weight:800;color:${branding.accentColor};text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Charges Summary</h3>
                 <table style="width:100%;border-collapse:collapse;margin-bottom:14px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;">
-                    <thead><tr style="border-bottom:2px solid #1e3a6e;background:#f9fafb;">
-                        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#1e3a6e;">Category</th>
-                        <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:800;color:#1e3a6e;">Items</th>
-                        <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:800;color:#1e3a6e;">GST</th>
-                        <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:800;color:#1e3a6e;">Amount</th>
+                    <thead><tr style="border-bottom:2px solid ${branding.accentColor};background:#f9fafb;">
+                        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:${branding.accentColor};">Category</th>
+                        <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:800;color:${branding.accentColor};">Items</th>
+                        <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:800;color:${branding.accentColor};">GST</th>
+                        <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:800;color:${branding.accentColor};">Amount</th>
                     </tr></thead>
                     <tbody>${categoryRows || '<tr><td colspan="4" style="padding:16px;text-align:center;color:#9ca3af;font-size:11px;">No charges</td></tr>'}</tbody>
-                </table>
+                </table>` : ''}
                 <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
                     <table style="width:320px;border-collapse:collapse;">
                         <tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">Subtotal</td><td style="padding:5px 12px;font-size:12px;text-align:right;">${total.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
@@ -220,12 +213,11 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
                         ${balance > 0 ? `<tr style="background:#fef2f2;"><td style="padding:7px 12px;font-size:13px;font-weight:800;color:#dc2626;">Balance Due</td><td style="padding:7px 12px;font-size:13px;text-align:right;font-weight:800;color:#dc2626;">${balance.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : `<tr style="background:#f0fdf4;"><td style="padding:7px 12px;font-size:13px;font-weight:800;color:#059669;">FULLY PAID</td><td style="padding:7px 12px;font-size:13px;text-align:right;font-weight:800;color:#059669;">&#10003;</td></tr>`}
                     </table>
                 </div>
+                ${sections.showAmountInWords ? `
                 <div style="background:#f0fdf4;border-radius:6px;padding:8px 14px;margin-bottom:14px;">
                     <p style="font-size:10px;color:#059669;"><strong>Amount in Words:</strong> ${numberToWords(net)}</p>
-                </div>
-                <p style="font-size:9px;color:#9ca3af;text-align:center;margin-top:20px;border-top:1px solid #e5e7eb;padding-top:10px;">
-                    This is a computer-generated bill and does not require a physical signature.
-                </p>
+                </div>` : ''}
+                ${sections.showFooter ? billFooterHtml(branding) : ''}
             </div>
         </td></tr></tbody>
         <tfoot><tr><td class="print-layout-footer-spacer"></td></tr></tfoot>

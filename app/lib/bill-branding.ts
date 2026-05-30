@@ -1,0 +1,161 @@
+import { prisma } from '@/backend/db';
+import { getSignedDownloadUrl } from '@/app/lib/s3';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export interface BillBranding {
+    hospitalName: string;
+    hospitalAddress: string;
+    hospitalPhone: string;
+    hospitalEmail: string;
+    gstin: string;
+    gstStateCode: string;
+    registrationNumber: string;
+    logoUrl: string | null;
+    letterheadUrl: string | null;
+    accentColor: string;
+    headerHeight: number;
+    footerHeight: number;
+    footerText: string | null;
+    tagline: string | null;
+    termsConditions: string | null;
+    signatureTitle: string | null;
+    signatureName: string | null;
+}
+
+// ─── Fetch branding from DB ──────────────────────────────────────────────────
+
+export async function getBillBranding(organizationId: string): Promise<BillBranding> {
+    const org = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        include: { branding: true },
+    });
+
+    const b = org?.branding;
+
+    let logoUrl = b?.logo_url || org?.logo_url || null;
+    let letterheadUrl = b?.letterhead_url || null;
+
+    // Resolve S3 keys to signed URLs (keys don't start with http)
+    if (logoUrl && !logoUrl.startsWith('http')) {
+        try { logoUrl = await getSignedDownloadUrl(logoUrl, 86400); } catch { /* keep raw */ }
+    }
+    if (letterheadUrl && !letterheadUrl.startsWith('http')) {
+        try { letterheadUrl = await getSignedDownloadUrl(letterheadUrl, 86400); } catch { /* keep raw */ }
+    }
+
+    return {
+        hospitalName: org?.name || 'Hospital',
+        hospitalAddress: org?.address || '',
+        hospitalPhone: org?.phone || '',
+        hospitalEmail: org?.email || '',
+        gstin: org?.organization_gstin || org?.registration_number || 'N/A',
+        gstStateCode: org?.gst_state_code || '',
+        registrationNumber: org?.registration_number || '',
+        logoUrl,
+        letterheadUrl,
+        accentColor: b?.accent_color || '#1e3a6e',
+        headerHeight: b?.header_height ?? 130,
+        footerHeight: b?.footer_height ?? 80,
+        footerText: b?.footer_text || null,
+        tagline: b?.tagline || null,
+        termsConditions: b?.terms_conditions || null,
+        signatureTitle: b?.signature_title || null,
+        signatureName: b?.signature_name || null,
+    };
+}
+
+// ─── Pattern A: Full-page letterhead background ──────────────────────────────
+
+export function letterheadBackgroundHtml(b: BillBranding): string {
+    const src = b.letterheadUrl || '/letter head.png';
+    return `<div class="letterhead-bg"><img src="${src}" alt="" aria-hidden="true" /></div>`;
+}
+
+export function letterheadCss(b: BillBranding): string {
+    return `
+        .letterhead-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+        .letterhead-bg img { width: 100%; height: 100%; object-fit: fill; }
+        .print-layout-table { width: 100%; border-collapse: collapse; }
+        .print-layout-header-spacer { height: ${b.headerHeight}px; }
+        .print-layout-footer-spacer { height: ${b.footerHeight}px; }
+        .bill-container { max-width: 800px; margin: 0 auto; padding: 0 60px; position: relative; z-index: 1; }
+        .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 80px; font-weight: 900; opacity: 0.04; pointer-events: none; z-index: 0; }
+        @media print {
+            @page { margin: 0; }
+            body { margin: 0; background: white; }
+            .bill-container { max-width: 100%; margin: 0; padding: 0 60px; }
+            .no-print { display: none !important; }
+            .watermark { opacity: 0.06; }
+        }
+    `;
+}
+
+// ─── Pattern B: Inline logo header (replaces hardcoded SVG) ──────────────────
+
+export function inlineHeaderHtml(b: BillBranding, rightHtml = ''): string {
+    const logoBlock = b.logoUrl
+        ? `<img src="${b.logoUrl}" alt="${escHtml(b.hospitalName)}" style="height:80px;width:auto;display:block;flex-shrink:0;" />`
+        : `<div>
+            <div style="font-size:26px;font-weight:900;color:${b.accentColor};font-family:'Arial Black',Arial,sans-serif;">${escHtml(b.hospitalName)}</div>
+            ${b.tagline ? `<div style="font-size:10px;color:${b.accentColor};opacity:0.7;margin-top:2px;">${escHtml(b.tagline)}</div>` : ''}
+            ${b.hospitalAddress ? `<div style="font-size:9px;color:#6b7280;margin-top:2px;">${escHtml(b.hospitalAddress)}</div>` : ''}
+            ${b.hospitalPhone ? `<div style="font-size:9px;color:#6b7280;">Ph: ${escHtml(b.hospitalPhone)}${b.hospitalEmail ? ` | ${escHtml(b.hospitalEmail)}` : ''}</div>` : ''}
+           </div>`;
+
+    return `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;border-bottom:3px solid ${b.accentColor};padding-bottom:16px;">
+        ${logoBlock}
+        ${rightHtml ? `<div style="text-align:right;">${rightHtml}</div>` : ''}
+    </div>`;
+}
+
+// ─── Pattern C: Minimal header ───────────────────────────────────────────────
+
+export function minimalHeaderHtml(b: BillBranding): string {
+    return `<div style="text-align:center;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid ${b.accentColor};">
+        <h2 style="font-size:16px;font-weight:800;color:${b.accentColor};">${escHtml(b.hospitalName)}</h2>
+        ${b.hospitalAddress ? `<p style="font-size:10px;color:#6b7280;">${escHtml(b.hospitalAddress)}</p>` : ''}
+    </div>`;
+}
+
+// ─── Shared footer ───────────────────────────────────────────────────────────
+
+export function signatureBlockHtml(b: BillBranding): string {
+    const title = b.signatureTitle || 'Authorized Signatory';
+    const name = b.signatureName || b.hospitalName;
+    return `
+    <div style="text-align:right;">
+        <p style="font-size:10px;color:#6b7280;margin-bottom:30px;">${escHtml(title)}</p>
+        <p style="font-size:10px;border-top:1px solid #d1d5db;padding-top:4px;color:#9ca3af;">For ${escHtml(name)}</p>
+    </div>`;
+}
+
+export function billFooterHtml(b: BillBranding): string {
+    const termsText = b.termsConditions || 'Payment due on receipt. Subject to local jurisdiction.';
+    return `
+    <div style="border-top:1px solid #e5e7eb;padding-top:14px;margin-top:20px;">
+        <div style="display:flex;justify-content:space-between;">
+            <div>
+                <p style="font-size:10px;color:#9ca3af;">Terms: ${escHtml(termsText)}</p>
+            </div>
+            ${signatureBlockHtml(b)}
+        </div>
+        <p style="font-size:9px;color:#d1d5db;text-align:center;margin-top:16px;">Computer-generated document. ${escHtml(b.hospitalName)}</p>
+    </div>`;
+}
+
+// ─── Print button bar ────────────────────────────────────────────────────────
+
+export function printButtonHtml(b: BillBranding, subtitle = ''): string {
+    return `<div class="no-print" style="background:#f3f4f6;padding:12px;text-align:center;">
+        <button onclick="window.print()" style="padding:8px 24px;background:${b.accentColor};color:white;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Print / Download PDF</button>
+        ${subtitle ? `<span style="margin-left:12px;font-size:11px;color:#6b7280;">${subtitle}</span>` : ''}
+    </div>`;
+}
+
+// ─── Utility ─────────────────────────────────────────────────────────────────
+
+function escHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}

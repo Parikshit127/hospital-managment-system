@@ -73,6 +73,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
         items: [
             { label: 'Settings', href: '/admin/settings', icon: Settings },
             { label: 'Branding', href: '/admin/settings/branding', icon: Palette },
+            { label: 'Bill Settings', href: '/admin/settings/bill-settings', icon: Receipt },
             { label: 'Templates', href: '/admin/templates', icon: FileText },
             { label: 'Notifications', href: '/admin/notifications', icon: Bell },
             { label: 'Integrations', href: '/admin/integrations', icon: Plug },

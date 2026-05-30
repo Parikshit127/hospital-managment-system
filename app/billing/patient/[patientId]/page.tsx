@@ -460,6 +460,7 @@ function InvoicesTab({
                           <th className="text-left py-1">Date</th>
                           <th className="text-right py-1">Amount</th>
                           <th className="text-right py-1">Status</th>
+                          <th className="text-right py-1"></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -484,6 +485,14 @@ function InvoicesTab({
                               >
                                 {p.status}
                               </span>
+                            </td>
+                            <td className="py-1 text-right">
+                              <button
+                                onClick={() => window.open(`/api/payment/${p.id}/receipt`, '_blank')}
+                                className="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline"
+                              >
+                                Receipt
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -577,8 +586,104 @@ function CollectPaymentModal({
   const numAmount = Number(amount) || 0;
   const isValid = numAmount > 0 && numAmount <= balanceDue;
 
+  const handleRazorpay = async () => {
+    setError(null);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/razorpay/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoice_id: invoice.id }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Order creation failed (${res.status}): ${text}`);
+      }
+      const data = await res.json();
+      const orderId = data?.data?.order_id || data?.orderId;
+      const keyId = data?.data?.key_id || data?.keyId;
+      const orderAmount = data?.data?.amount;
+      const hospitalName = data?.data?.hospital_name || data?.hospital_name || "Hospital";
+
+      if (!orderId || !keyId || !orderAmount) {
+        throw new Error(data.error || "Failed to create payment order. Check Razorpay configuration.");
+      }
+
+      if (!window.Razorpay) {
+        const script = document.createElement("script");
+        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.async = true;
+        document.body.appendChild(script);
+        await new Promise((resolve, reject) => {
+          script.onload = resolve;
+          script.onerror = () => reject(new Error("Failed to load Razorpay checkout script"));
+        });
+      }
+
+      const options = {
+        key: keyId,
+        amount: orderAmount,
+        currency: "INR",
+        name: hospitalName,
+        description: `Invoice Payment (${invoice.invoice_number})`,
+        order_id: orderId,
+        method: {
+          card: true,
+          netbanking: true,
+          wallet: true,
+          upi: true,
+          emi: true,
+          paylater: true,
+        },
+        handler: async (response: any) => {
+          try {
+            const verifyRes = await fetch("/api/razorpay/verify-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                invoice_id: invoice.id,
+              }),
+            });
+            const verifyData = await verifyRes.json();
+            if (verifyData.success) {
+              setSuccess(true);
+              setTimeout(onSuccess, 1200);
+            } else {
+              setError(verifyData.error || "Payment verification failed.");
+            }
+          } catch (err: any) {
+            setError(err.message || "Payment verification error.");
+          }
+        },
+        modal: {
+          ondismiss: () => setSaving(false),
+        },
+        theme: { color: "#10b981" },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on("payment.failed", (response: any) => {
+        const desc = response?.error?.description || "Payment could not be completed.";
+        setError(desc);
+        setSaving(false);
+      });
+      rzp.open();
+    } catch (err: any) {
+      setError(err.message || "Failed to initiate online payment.");
+      setSaving(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!isValid) return;
+
+    if (method === "Online") {
+      return handleRazorpay();
+    }
+
     setError(null);
     setSaving(true);
     try {
@@ -677,8 +782,8 @@ function CollectPaymentModal({
             {/* Payment Method */}
             <div>
               <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Payment Method</label>
-              <div className="grid grid-cols-4 gap-1.5 mt-1.5">
-                {["Cash", "Card", "UPI", "Bank"].map((m) => (
+              <div className="grid grid-cols-5 gap-1.5 mt-1.5">
+                {["Cash", "Card", "UPI", "Bank", "Online"].map((m) => (
                   <button
                     key={m}
                     onClick={() => setMethod(m)}
@@ -692,10 +797,15 @@ function CollectPaymentModal({
                   </button>
                 ))}
               </div>
+              {method === "Online" && (
+                <p className="text-[11px] text-blue-600 mt-1.5 font-medium">
+                  Razorpay checkout will open for card, UPI, netbanking, wallets, and more.
+                </p>
+              )}
             </div>
 
-            {/* Reference (for Card/UPI/Bank) */}
-            {method !== "Cash" && (
+            {/* Reference (for Card/UPI/Bank — not for Cash or Online) */}
+            {method !== "Cash" && method !== "Online" && (
               <div>
                 <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Reference / Transaction ID</label>
                 <input
@@ -708,17 +818,19 @@ function CollectPaymentModal({
               </div>
             )}
 
-            {/* Notes */}
-            <div>
-              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Notes (optional)</label>
-              <input
-                type="text"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Optional remark"
-                className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-emerald-500 outline-none"
-              />
-            </div>
+            {/* Notes (not for Online — Razorpay handles it) */}
+            {method !== "Online" && (
+              <div>
+                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Notes (optional)</label>
+                <input
+                  type="text"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Optional remark"
+                  className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-emerald-500 outline-none"
+                />
+              </div>
+            )}
 
             {/* Error */}
             {error && (
@@ -747,7 +859,7 @@ function CollectPaymentModal({
                 ) : (
                   <CreditCard className="h-4 w-4" />
                 )}
-                {saving ? "Processing…" : `Record ₹${fmtMoney(numAmount)}`}
+                {saving ? "Processing…" : method === "Online" ? `Pay ₹${fmtMoney(numAmount)} Online` : `Record ₹${fmtMoney(numAmount)}`}
               </button>
             </div>
           </div>
@@ -806,7 +918,13 @@ function PaymentsTab({ invoices }: { invoices: any[] }) {
                 {p.status}
               </span>
             </td>
-            <td className="py-2 text-right">
+            <td className="py-2 text-right flex items-center justify-end gap-2">
+              <button
+                onClick={() => window.open(`/api/payment/${p.id}/receipt`, '_blank')}
+                className="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline"
+              >
+                Receipt
+              </button>
               <ActionLink href={`/finance/payments`}>Reverse</ActionLink>
             </td>
           </tr>
