@@ -911,7 +911,8 @@ export async function cancelAppointment(appointmentId: string, reason: string) {
                 })
                 : 'your scheduled time';
             const drName = existing.doctor_name || 'your doctor';
-            const msg = `Hi ${existing.patient.full_name || 'Patient'}, your appointment with ${drName} on ${apptDateStr} has been cancelled. Reason: ${cancellationReason}. To rebook, call reception. — Axten Hospitals`;
+            const org = await db.organization.findUnique({ where: { id: organizationId }, select: { name: true } });
+            const msg = `Hi ${existing.patient.full_name || 'Patient'}, your appointment with ${drName} on ${apptDateStr} has been cancelled. Reason: ${cancellationReason}. To rebook, call reception. — ${org?.name || 'Hospital'}`;
             sendSMS({
                 to: existing.patient.phone,
                 message: msg,

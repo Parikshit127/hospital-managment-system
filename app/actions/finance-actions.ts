@@ -4,7 +4,7 @@ import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
 import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
 import { billingInvoiceMsg, paymentReceiptMsg } from '@/app/lib/whatsapp-templates';
-import { postInvoiceToGL, postPaymentToGL } from './gl-actions';
+import { postInvoiceToGL, postPaymentToGL, reverseJournalEntry } from './gl-actions';
 import { getCashThresholds, validateCashCompliance, normalizePan, CASH_METHOD } from '@/app/lib/cash-compliance';
 
 
@@ -1647,6 +1647,394 @@ export async function createDiscountScheme(data: {
         });
         return { success: true, data: serialize(scheme) };
     } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+// ============================================
+// INVOICE EDITING — Draft + Final-unpaid invoices
+// Allows in-place edits with GL reversal/repost on Final.
+// Cancelled invoices and invoices with collected payments remain locked.
+// ============================================
+
+type InvoiceEditableCheck = {
+    editable: boolean;
+    reason?: string;
+};
+
+function evaluateInvoiceEditable(invoice: any, expectedVersion?: number): InvoiceEditableCheck {
+    if (!invoice) return { editable: false, reason: 'Invoice not found.' };
+    if (invoice.status === 'Cancelled') {
+        return { editable: false, reason: 'Cancelled invoices cannot be edited. Revert first if needed.' };
+    }
+    if (invoice.status === 'Final' && Number(invoice.paid_amount ?? 0) > 0) {
+        return {
+            editable: false,
+            reason: `Cannot edit: ₹${Number(invoice.paid_amount).toLocaleString('en-IN')} already collected. Reverse the payment via Refund or issue a Credit Note first.`,
+        };
+    }
+    if (expectedVersion !== undefined && Number(invoice.version) !== Number(expectedVersion)) {
+        return {
+            editable: false,
+            reason: 'Invoice was modified by another user. Please reload and try again.',
+        };
+    }
+    return { editable: true };
+}
+
+// Public read: check whether an invoice is editable from the UI without mutating anything.
+export async function checkInvoiceEditable(invoiceId: number) {
+    try {
+        const { db } = await requireTenantContext();
+        const invoice = await db.invoices.findUnique({
+            where: { id: invoiceId },
+            select: { id: true, status: true, paid_amount: true, version: true, created_at: true },
+        });
+        const check = evaluateInvoiceEditable(invoice);
+        if (!check.editable) return { success: true, editable: false, reason: check.reason };
+        // Period lock check (read-only — we throw the same error message the mutation would)
+        try {
+            await checkPeriodLock(db, invoice!.created_at as any);
+        } catch (e: any) {
+            return { success: true, editable: false, reason: e.message };
+        }
+        return { success: true, editable: true, version: invoice!.version };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+// Update a single invoice line item. Recalculates derived fields and invoice totals.
+// Use saveInvoiceEdits for batched edits — this is the one-shot helper.
+export async function updateInvoiceItem(itemId: number, patch: {
+    department?: string;
+    description?: string;
+    quantity?: number;
+    unit_price?: number;
+    discount?: number;
+    tax_rate?: number;
+    hsn_sac_code?: string | null;
+    service_category?: string | null;
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const item = await db.invoice_items.findUnique({
+            where: { id: itemId },
+            include: { invoice: true },
+        });
+        if (!item) return { success: false, error: 'Invoice item not found' };
+
+        const check = evaluateInvoiceEditable(item.invoice);
+        if (!check.editable) return { success: false, error: check.reason };
+
+        await checkPeriodLock(db, item.invoice.created_at as any);
+
+        const quantity = patch.quantity !== undefined ? Number(patch.quantity) : Number(item.quantity);
+        const unit_price = patch.unit_price !== undefined ? Number(patch.unit_price) : Number(item.unit_price);
+        const discount = patch.discount !== undefined ? Number(patch.discount) : Number(item.discount);
+        const tax_rate = patch.tax_rate !== undefined ? Number(patch.tax_rate) : Number(item.tax_rate || 0);
+
+        const total_price = quantity * unit_price;
+        const net_price = total_price - discount;
+        const tax_amount = (net_price * tax_rate) / 100;
+
+        await db.invoice_items.update({
+            where: { id: itemId },
+            data: {
+                department: patch.department ?? item.department,
+                description: patch.description ?? item.description,
+                quantity,
+                unit_price,
+                discount,
+                tax_rate,
+                hsn_sac_code: patch.hsn_sac_code !== undefined ? patch.hsn_sac_code : item.hsn_sac_code,
+                service_category: patch.service_category !== undefined ? patch.service_category : item.service_category,
+                total_price,
+                net_price,
+                tax_amount,
+            },
+        });
+
+        await recalculateInvoice(item.invoice_id);
+        await handleGLRepost(item.invoice_id, item.invoice.status);
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'UPDATE_INVOICE_ITEM',
+                module: 'finance',
+                entity_type: 'invoice',
+                entity_id: item.invoice.invoice_number,
+                details: JSON.stringify({ item_id: itemId, patch }),
+                organizationId,
+            },
+        });
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('updateInvoiceItem error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Update header-only fields (no item changes, no totals impact).
+export async function updateInvoiceHeader(invoiceId: number, patch: {
+    notes?: string;
+    billing_patient_type?: string;
+    corporate_id?: string | null;
+    tpa_provider_id?: number | null;
+    pre_auth_id?: string | null;
+    patient_payable?: number;
+    corporate_payable?: number;
+    tpa_payable?: number;
+    concession_amount?: number;
+    concession_reason?: string;
+    is_inter_state?: boolean;
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const invoice = await db.invoices.findUnique({ where: { id: invoiceId } });
+        if (!invoice) return { success: false, error: 'Invoice not found' };
+
+        const check = evaluateInvoiceEditable(invoice);
+        if (!check.editable) return { success: false, error: check.reason };
+
+        await checkPeriodLock(db, invoice.created_at as any);
+
+        const data: any = {};
+        if (patch.notes !== undefined) data.notes = patch.notes;
+        if (patch.billing_patient_type !== undefined) data.billing_patient_type = patch.billing_patient_type;
+        if (patch.corporate_id !== undefined) data.corporate_id = patch.corporate_id;
+        if (patch.tpa_provider_id !== undefined) data.tpa_provider_id = patch.tpa_provider_id;
+        if (patch.pre_auth_id !== undefined) data.pre_auth_id = patch.pre_auth_id;
+        if (patch.patient_payable !== undefined) data.patient_payable = patch.patient_payable;
+        if (patch.corporate_payable !== undefined) data.corporate_payable = patch.corporate_payable;
+        if (patch.tpa_payable !== undefined) data.tpa_payable = patch.tpa_payable;
+        if (patch.concession_amount !== undefined) data.concession_amount = patch.concession_amount;
+        if (patch.concession_reason !== undefined) data.concession_reason = patch.concession_reason;
+        if (patch.is_inter_state !== undefined) data.is_inter_state = patch.is_inter_state;
+        data.version = { increment: 1 };
+
+        await db.invoices.update({ where: { id: invoiceId }, data });
+
+        // If tax split toggle changed, the CGST/SGST vs IGST allocation must be refreshed.
+        if (patch.is_inter_state !== undefined) {
+            await recalculateInvoice(invoiceId);
+            await handleGLRepost(invoiceId, invoice.status);
+        }
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'UPDATE_INVOICE_HEADER',
+                module: 'finance',
+                entity_type: 'invoice',
+                entity_id: invoice.invoice_number,
+                details: JSON.stringify({ patch }),
+                organizationId,
+            },
+        });
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('updateInvoiceHeader error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Reverse the existing GL journal for an invoice and re-post fresh.
+// Called after totals change on a Final invoice. Safe to call on Draft (no-op).
+async function handleGLRepost(invoiceId: number, status: string) {
+    if (status !== 'Final') return; // Draft has no GL entry to reverse
+    try {
+        const { db, session } = await requireTenantContext();
+        const existing = await db.gL_JournalEntry.findFirst({
+            where: {
+                reference_type: 'Invoice',
+                reference_id: invoiceId.toString(),
+                status: { not: 'Reversed' },
+            },
+        });
+        if (existing) {
+            const actor = (session as any)?.username || (session as any)?.name || undefined;
+            await reverseJournalEntry(existing.id, 'Invoice edit — totals changed', actor);
+        }
+        // postInvoiceToGL is idempotent on non-reversed entries — after reversal it posts fresh
+        await postInvoiceToGL(invoiceId).catch(err => console.error('GL repost failed:', err));
+    } catch (err) {
+        console.error('handleGLRepost error:', err);
+    }
+}
+
+// Batched save used by EditInvoiceModal. Applies item updates / adds / removes
+// + header diff atomically, then refreshes GL once.
+export async function saveInvoiceEdits(invoiceId: number, payload: {
+    expected_version: number;
+    header?: Parameters<typeof updateInvoiceHeader>[1];
+    items_to_update?: Array<{
+        id: number;
+        department?: string;
+        description?: string;
+        quantity?: number;
+        unit_price?: number;
+        discount?: number;
+        tax_rate?: number;
+        hsn_sac_code?: string | null;
+        service_category?: string | null;
+    }>;
+    items_to_add?: Array<{
+        department: string;
+        description: string;
+        quantity: number;
+        unit_price: number;
+        discount?: number;
+        tax_rate?: number;
+        hsn_sac_code?: string | null;
+        service_category?: string | null;
+        ref_id?: string;
+    }>;
+    items_to_remove?: number[];
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const invoice = await db.invoices.findUnique({ where: { id: invoiceId } });
+        if (!invoice) return { success: false, error: 'Invoice not found' };
+
+        const check = evaluateInvoiceEditable(invoice, payload.expected_version);
+        if (!check.editable) return { success: false, error: check.reason };
+
+        await checkPeriodLock(db, invoice.created_at as any);
+
+        const originalStatus = invoice.status;
+
+        // Apply all mutations in a single transaction so a mid-save failure rolls back.
+        await db.$transaction(async (tx: any) => {
+            // Removes first — frees up IDs / decouples references
+            if (payload.items_to_remove?.length) {
+                await tx.invoice_items.deleteMany({
+                    where: { id: { in: payload.items_to_remove }, invoice_id: invoiceId },
+                });
+            }
+
+            // Updates
+            for (const u of payload.items_to_update ?? []) {
+                const existing = await tx.invoice_items.findUnique({ where: { id: u.id } });
+                if (!existing || existing.invoice_id !== invoiceId) continue;
+
+                const quantity = u.quantity !== undefined ? Number(u.quantity) : Number(existing.quantity);
+                const unit_price = u.unit_price !== undefined ? Number(u.unit_price) : Number(existing.unit_price);
+                const discount = u.discount !== undefined ? Number(u.discount) : Number(existing.discount);
+                const tax_rate = u.tax_rate !== undefined ? Number(u.tax_rate) : Number(existing.tax_rate || 0);
+
+                const total_price = quantity * unit_price;
+                const net_price = total_price - discount;
+                const tax_amount = (net_price * tax_rate) / 100;
+
+                await tx.invoice_items.update({
+                    where: { id: u.id },
+                    data: {
+                        department: u.department ?? existing.department,
+                        description: u.description ?? existing.description,
+                        quantity,
+                        unit_price,
+                        discount,
+                        tax_rate,
+                        hsn_sac_code: u.hsn_sac_code !== undefined ? u.hsn_sac_code : existing.hsn_sac_code,
+                        service_category: u.service_category !== undefined ? u.service_category : existing.service_category,
+                        total_price,
+                        net_price,
+                        tax_amount,
+                    },
+                });
+            }
+
+            // Adds
+            for (const a of payload.items_to_add ?? []) {
+                const quantity = Number(a.quantity);
+                const unit_price = Number(a.unit_price);
+                const discount = Number(a.discount || 0);
+                const tax_rate = Number(a.tax_rate || 0);
+                const total_price = quantity * unit_price;
+                const net_price = total_price - discount;
+                const tax_amount = (net_price * tax_rate) / 100;
+
+                await tx.invoice_items.create({
+                    data: {
+                        invoice_id: invoiceId,
+                        department: a.department,
+                        description: a.description,
+                        quantity,
+                        unit_price,
+                        discount,
+                        tax_rate,
+                        total_price,
+                        net_price,
+                        tax_amount,
+                        hsn_sac_code: a.hsn_sac_code || null,
+                        service_category: a.service_category || null,
+                        ref_id: a.ref_id || null,
+                    },
+                });
+            }
+
+            // Header diff
+            if (payload.header) {
+                const h: any = {};
+                const p = payload.header;
+                if (p.notes !== undefined) h.notes = p.notes;
+                if (p.billing_patient_type !== undefined) h.billing_patient_type = p.billing_patient_type;
+                if (p.corporate_id !== undefined) h.corporate_id = p.corporate_id;
+                if (p.tpa_provider_id !== undefined) h.tpa_provider_id = p.tpa_provider_id;
+                if (p.pre_auth_id !== undefined) h.pre_auth_id = p.pre_auth_id;
+                if (p.patient_payable !== undefined) h.patient_payable = p.patient_payable;
+                if (p.corporate_payable !== undefined) h.corporate_payable = p.corporate_payable;
+                if (p.tpa_payable !== undefined) h.tpa_payable = p.tpa_payable;
+                if (p.concession_amount !== undefined) h.concession_amount = p.concession_amount;
+                if (p.concession_reason !== undefined) h.concession_reason = p.concession_reason;
+                if (p.is_inter_state !== undefined) h.is_inter_state = p.is_inter_state;
+                if (Object.keys(h).length) {
+                    await tx.invoices.update({ where: { id: invoiceId }, data: h });
+                }
+            }
+        });
+
+        // Recalculate totals from the new line items + GL refresh outside the tx
+        // (gl-actions use the top-level prisma client, not our tx).
+        await recalculateInvoice(invoiceId);
+        await handleGLRepost(invoiceId, originalStatus);
+
+        const updated = await db.invoices.findUnique({ where: { id: invoiceId } });
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'UPDATE_INVOICE',
+                module: 'finance',
+                entity_type: 'invoice',
+                entity_id: invoice.invoice_number,
+                details: JSON.stringify({
+                    expected_version: payload.expected_version,
+                    new_version: updated?.version,
+                    status: originalStatus,
+                    updated_count: payload.items_to_update?.length ?? 0,
+                    added_count: payload.items_to_add?.length ?? 0,
+                    removed_count: payload.items_to_remove?.length ?? 0,
+                    header_changed: !!payload.header && Object.keys(payload.header).length > 0,
+                    totals_after: {
+                        total_amount: Number(updated?.total_amount ?? 0),
+                        total_discount: Number(updated?.total_discount ?? 0),
+                        total_tax: Number(updated?.total_tax ?? 0),
+                        net_amount: Number(updated?.net_amount ?? 0),
+                        balance_due: Number(updated?.balance_due ?? 0),
+                    },
+                }),
+                organizationId,
+            },
+        });
+
+        return { success: true, data: serialize(updated) };
+    } catch (error: any) {
+        console.error('saveInvoiceEdits error:', error);
         return { success: false, error: error.message };
     }
 }

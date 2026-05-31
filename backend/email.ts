@@ -90,8 +90,16 @@ export async function sendEmail({
 
     try {
         const fromUser = orgConfig?.smtp_user || process.env.SMTP_USER;
+        let orgName = 'Hospital';
+        if (organizationId) {
+            try {
+                const { prisma: rawPrisma } = await import('@/backend/db');
+                const org = await rawPrisma.organization.findUnique({ where: { id: organizationId }, select: { name: true } });
+                if (org?.name) orgName = org.name;
+            } catch { /* use default */ }
+        }
         const info = await t.sendMail({
-            from: `"Axten Hospitals" <${fromUser}>`,
+            from: `"${orgName}" <${fromUser}>`,
             to,
             subject,
             html,
@@ -108,11 +116,11 @@ export async function sendEmail({
 /**
  * Template: Patient Portal Welcome (with credentials)
  */
-export async function sendWelcomeEmail(to: string, patientName: string, patientId: string, setupLink: string, organizationId?: string) {
+export async function sendWelcomeEmail(to: string, patientName: string, patientId: string, setupLink: string, organizationId?: string, hospitalName: string = 'Hospital') {
     const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
-            <h2 style="color: #1e3a6e;">Welcome to Axten Hospitals, ${escapeHtml(patientName)}!</h2>
+            <h2 style="color: #1e3a6e;">Welcome to ${hospitalName}, ${escapeHtml(patientName)}!</h2>
             <p>Your registration is complete. You can now access all your health records, prescriptions, and lab results in your personal Patient Portal.</p>
 
             <div style="background: #f0faf6; padding: 15px; border-radius: 8px; margin: 20px 0;">
@@ -125,7 +133,7 @@ export async function sendWelcomeEmail(to: string, patientName: string, patientI
                 <p style="margin: 8px 0 0 0; font-size: 12px; color: #6b7280;">This setup link is valid for 24 hours.</p>
             </div>
             
-            <p>Please log in at <a href="${appBaseUrl}/patient/login" style="color: #1e3a6e;">Axten Patient Portal</a> after setting your password.</p>
+            <p>Please log in at <a href="${appBaseUrl}/patient/login" style="color: #1e3a6e;">Patient Portal</a> after setting your password.</p>
             <p style="color: #666; font-size: 12px; margin-top: 30px;">For security reasons, please do not share these credentials.</p>
         </div>
     `;
@@ -158,13 +166,13 @@ export async function sendPrescriptionEmail(to: string, patientName: string, doc
 /**
  * Template: Admission Notice
  */
-export async function sendAdmissionEmail(to: string, patientName: string, bedDetails: string, doctorName: string, organizationId?: string) {
+export async function sendAdmissionEmail(to: string, patientName: string, bedDetails: string, doctorName: string, organizationId?: string, hospitalName: string = 'Hospital') {
     const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
             <h2 style="color: #1aab74;">Admission Confirmation</h2>
             <p>Dear ${escapeHtml(patientName)},</p>
-            <p>This email confirms your admission at Axten Hospitals under the care of Dr. ${escapeHtml(doctorName)}.</p>
+            <p>This email confirms your admission at ${hospitalName} under the care of Dr. ${escapeHtml(doctorName)}.</p>
 
             <div style="background: #f0faf6; padding: 15px; border-radius: 8px; margin: 20px 0;">
                 <p style="margin: 0; font-weight: bold; color: #0f8f5e;">Your bed assignment is confirmed as:</p>
@@ -232,6 +240,7 @@ export async function sendPillReminderEmail({
     dosage,
     notes,
     organizationId,
+    hospitalName = 'Hospital',
 }: {
     to: string;
     patientName: string;
@@ -239,6 +248,7 @@ export async function sendPillReminderEmail({
     dosage: string;
     notes?: string | null;
     organizationId?: string;
+    hospitalName?: string;
 }) {
     const appBaseUrl = getAppBaseUrl();
     const html = `
@@ -259,7 +269,7 @@ export async function sendPillReminderEmail({
             <p>Please ensure you take your medication on time. You can track your full prescription history in the <a href="${appBaseUrl}/patient/login" style="color: #1aab74;">Patient Portal</a>.</p>
             
             <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
-            <p style="color: #999; font-size: 12px; text-align: center;">This is an automated reminder from Axten Hospitals. Please do not reply to this email.</p>
+            <p style="color: #999; font-size: 12px; text-align: center;">This is an automated reminder from ${hospitalName}. Please do not reply to this email.</p>
         </div>
     `;
 
@@ -269,7 +279,7 @@ export async function sendPillReminderEmail({
 /**
  * Template: Lab Report Ready
  */
-export async function sendLabReportEmail(to: string, patientName: string, testName: string, hospitalName: string = 'Axten Hospitals', organizationId?: string) {
+export async function sendLabReportEmail(to: string, patientName: string, testName: string, hospitalName: string = 'Hospital', organizationId?: string) {
     const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
@@ -291,7 +301,7 @@ export async function sendLabReportEmail(to: string, patientName: string, testNa
 /**
  * Template: Discharge Summary
  */
-export async function sendDischargeEmail(to: string, patientName: string, doctorName: string, hospitalName: string = 'Axten Hospitals', organizationId?: string) {
+export async function sendDischargeEmail(to: string, patientName: string, doctorName: string, hospitalName: string = 'Hospital', organizationId?: string) {
     const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
@@ -314,7 +324,7 @@ export async function sendDischargeEmail(to: string, patientName: string, doctor
 /**
  * Template: Invoice / Billing Notification
  */
-export async function sendInvoiceEmail(to: string, patientName: string, invoiceNumber: string, amount: string, hospitalName: string = 'Axten Hospitals', organizationId?: string) {
+export async function sendInvoiceEmail(to: string, patientName: string, invoiceNumber: string, amount: string, hospitalName: string = 'Hospital', organizationId?: string) {
     const appBaseUrl = getAppBaseUrl();
     const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">

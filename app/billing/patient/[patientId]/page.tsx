@@ -43,6 +43,8 @@ import {
 import { recordPayment } from "@/app/actions/finance-actions";
 import { getCashComplianceConfig } from "@/app/actions/cash-compliance-actions";
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan } from "@/app/lib/cash-compliance";
+import { EditInvoiceModal } from "@/app/components/finance/EditInvoiceModal";
+import { Pencil } from "lucide-react";
 
 // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -95,6 +97,7 @@ export default function PatientFinancialProfilePage() {
   const [tab, setTab] = useState<Tab>("invoices");
   const [expandedInvoice, setExpandedInvoice] = useState<number | null>(null);
   const [payingInvoice, setPayingInvoice] = useState<any | null>(null);
+  const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -176,6 +179,7 @@ export default function PatientFinancialProfilePage() {
                   expandedInvoice={expandedInvoice}
                   setExpandedInvoice={setExpandedInvoice}
                   onCollectPayment={(inv: any) => setPayingInvoice(inv)}
+                  onEdit={(inv: any) => setEditingInvoiceId(Number(inv.id))}
                 />
               )}
               {tab === "payments" && <PaymentsTab invoices={profile.invoices} />}
@@ -206,6 +210,19 @@ export default function PatientFinancialProfilePage() {
           onClose={() => setPayingInvoice(null)}
           onSuccess={() => {
             setPayingInvoice(null);
+            load();
+          }}
+        />
+      )}
+
+      {/* Edit Invoice Modal */}
+      {editingInvoiceId !== null && (
+        <EditInvoiceModal
+          invoiceId={editingInvoiceId}
+          isOpen
+          onClose={() => setEditingInvoiceId(null)}
+          onSaved={() => {
+            setEditingInvoiceId(null);
             load();
           }}
         />
@@ -344,11 +361,13 @@ function InvoicesTab({
   expandedInvoice,
   setExpandedInvoice,
   onCollectPayment,
+  onEdit,
 }: {
   invoices: any[];
   expandedInvoice: number | null;
   setExpandedInvoice: (id: number | null) => void;
   onCollectPayment: (inv: any) => void;
+  onEdit: (inv: any) => void;
 }) {
   if (!invoices.length) {
     return <div className="text-xs text-gray-400">No invoices yet.</div>;
@@ -529,6 +548,17 @@ function InvoicesTab({
                   <ActionLink href={`/finance/invoices/${inv.id}`}>View Detail</ActionLink>
                   {inv.status === "Draft" && (
                     <ActionLink href="/billing">Finalize</ActionLink>
+                  )}
+                  {inv.status !== "Cancelled" && Number(inv.paid_amount) === 0 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEdit(inv);
+                      }}
+                      className="px-2.5 py-1 bg-white border border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 text-xs font-bold text-gray-700 rounded flex items-center gap-1"
+                    >
+                      <Pencil className="h-3 w-3" /> Edit
+                    </button>
                   )}
                   {Number(inv.balance_due) > 0 && inv.status !== "Cancelled" && (
                     <button

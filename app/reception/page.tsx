@@ -1,19 +1,58 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Users, UserPlus, Search, Filter, Calendar, Phone, Clock,
     ChevronLeft, ChevronRight, Eye, Zap, Loader2, Activity,
-    X, FileText, Thermometer, ArrowRight, AlertCircle, CheckCircle2, Bell
+    X, FileText, Thermometer, ArrowRight, AlertCircle, CheckCircle2, Bell,
+    Stethoscope, Bed, Building2, CalendarCheck, TrendingUp,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Skeleton, SkeletonCard } from '@/app/components/ui/Skeleton';
-import { getRegisteredPatients, getReceptionStats, getPatientDetail, getExpectedArrivals, checkInPatient } from '@/app/actions/reception-actions';
+import { getRegisteredPatients, getReceptionStats, getExpectedArrivals, checkInPatient } from '@/app/actions/reception-actions';
+import { getIPDAdmissions, getWardsWithBeds } from '@/app/actions/ipd-actions';
+
+// ─── IPD helpers ────────────────────────────────────────────────────────────
+
+function formatDate(dateStr: string | null | undefined): string {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '—';
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+}
+
+function formatMoney(amount: number | null | undefined): string {
+    if (amount == null) return '₹0';
+    return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        maximumFractionDigits: 0,
+    }).format(amount);
+}
+
+function getIPDStatusBadge(status: string) {
+    const map: Record<string, string> = {
+        Admitted: 'bg-blue-50 text-blue-700 border-blue-200',
+        Discharged: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        Cancelled: 'bg-red-50 text-red-700 border-red-200',
+    };
+    return map[status] || 'bg-gray-100 text-gray-500 border-gray-200';
+}
+
+const IPD_STATUS_FILTERS = ['All', 'Admitted', 'Discharged', 'Cancelled'] as const;
+type IPDStatusFilter = typeof IPD_STATUS_FILTERS[number];
+
+// ─── Component ──────────────────────────────────────────────────────────────
 
 export default function ReceptionDashboard() {
     const pathname = usePathname();
+
+    // ── OPD Patients state ──
     const [patients, setPatients] = useState<any[]>([]);
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -24,17 +63,24 @@ export default function ReceptionDashboard() {
     const [totalPages, setTotalPages] = useState(0);
     const [total, setTotal] = useState(0);
 
-    // Expected arrivals
+    // ── Expected arrivals state ──
     const [expectedArrivals, setExpectedArrivals] = useState<any[]>([]);
     const [arrivalsLoading, setArrivalsLoading] = useState(true);
     const [checkingIn, setCheckingIn] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<'patients' | 'arrivals'>('arrivals');
 
-    // Patient detail modal
-    const [selectedPatient, setSelectedPatient] = useState<any>(null);
-    const [patientDetail, setPatientDetail] = useState<any>(null);
-    const [detailLoading, setDetailLoading] = useState(false);
+    // ── IPD state ──
+    const [ipdAdmissions, setIpdAdmissions] = useState<any[]>([]);
+    const [ipdWards, setIpdWards] = useState<any[]>([]);
+    const [ipdLoading, setIpdLoading] = useState(false);
+    const [ipdStatusFilter, setIpdStatusFilter] = useState<IPDStatusFilter>('All');
+    const [ipdWardFilter, setIpdWardFilter] = useState('');
+    const [ipdSearch, setIpdSearch] = useState('');
+    const ipdLoaded = useRef(false);
 
+    // ── Tab ──
+    const [activeTab, setActiveTab] = useState<'opd' | 'ipd' | 'arrivals'>('opd');
+
+    // ── OPD data loading ──
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
@@ -54,6 +100,7 @@ export default function ReceptionDashboard() {
         setLoading(false);
     }, [search, department, page, dateRange]);
 
+    // ── Expected arrivals loading ──
     const loadArrivals = useCallback(async () => {
         setArrivalsLoading(true);
         try {
@@ -65,22 +112,46 @@ export default function ReceptionDashboard() {
         setArrivalsLoading(false);
     }, []);
 
+    // ── IPD data loading (lazy) ──
+    const loadIPDData = useCallback(async () => {
+        setIpdLoading(true);
+        try {
+            const [admRes, wardRes] = await Promise.all([
+                getIPDAdmissions(ipdStatusFilter === 'All' ? undefined : ipdStatusFilter),
+                getWardsWithBeds(),
+            ]);
+            if (admRes.success) setIpdAdmissions(admRes.data || []);
+            if (wardRes.success) setIpdWards(wardRes.data || []);
+        } catch (err) {
+            console.error('IPD load error:', err);
+        }
+        setIpdLoading(false);
+        ipdLoaded.current = true;
+    }, [ipdStatusFilter]);
+
     useEffect(() => { loadData(); }, [loadData]);
     useEffect(() => { loadArrivals(); }, [loadArrivals]);
 
-    // Refetch when user navigates back to this page (e.g. after registering a patient)
+    // Lazy-load IPD data when IPD tab is first activated or status filter changes
+    useEffect(() => {
+        if (activeTab === 'ipd') {
+            loadIPDData();
+        }
+    }, [activeTab, loadIPDData]);
+
+    // Refetch when user navigates back
     useEffect(() => {
         const handleVisibility = () => {
             if (document.visibilityState === 'visible') {
                 loadData();
                 loadArrivals();
+                if (ipdLoaded.current) loadIPDData();
             }
         };
         document.addEventListener('visibilitychange', handleVisibility);
         return () => document.removeEventListener('visibilitychange', handleVisibility);
-    }, [loadData, loadArrivals]);
+    }, [loadData, loadArrivals, loadIPDData]);
 
-    // Also refetch when pathname changes back to /reception
     useEffect(() => {
         if (pathname === '/reception') {
             loadData();
@@ -101,7 +172,7 @@ export default function ReceptionDashboard() {
         setCheckingIn(null);
     };
 
-    // Debounced search
+    // Debounced search for OPD
     const [searchInput, setSearchInput] = useState('');
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -110,19 +181,6 @@ export default function ReceptionDashboard() {
         }, 400);
         return () => clearTimeout(timer);
     }, [searchInput]);
-
-    const openPatientDetail = async (patientId: string) => {
-        setSelectedPatient(patientId);
-        setDetailLoading(true);
-        const res = await getPatientDetail(patientId);
-        if (res.success) setPatientDetail(res.data);
-        setDetailLoading(false);
-    };
-
-    const closeDetail = () => {
-        setSelectedPatient(null);
-        setPatientDetail(null);
-    };
 
     const getStatusColor = (status: string | null) => {
         if (!status) return 'bg-gray-100 text-gray-500';
@@ -137,11 +195,32 @@ export default function ReceptionDashboard() {
         return map[status] || 'bg-gray-100 text-gray-500';
     };
 
+    // IPD client-side filtering
+    const ipdFiltered = ipdAdmissions.filter(a => {
+        const q = ipdSearch.toLowerCase();
+        const matchesSearch = !q
+            || a.patient?.full_name?.toLowerCase().includes(q)
+            || a.patient?.patient_id?.toLowerCase().includes(q)
+            || a.patient?.phone?.toLowerCase().includes(q);
+        const matchesWard = !ipdWardFilter
+            || (a.wardName || a.ward?.ward_name || a.bed?.wards?.ward_name || '') === ipdWardFilter;
+        return matchesSearch && matchesWard;
+    });
+
+    // IPD KPI calculations
+    const totalAdmitted = ipdAdmissions.filter(a => a.status === 'Admitted').length;
+    const totalBeds = ipdWards.reduce((sum: number, w: any) => sum + (w.beds?.length || 0), 0);
+    const availableBeds = Math.max(0, totalBeds - totalAdmitted);
+
     const headerActions = (
         <div className="flex items-center gap-2">
             <Link href="/reception/register"
                 className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md transition-all">
                 <UserPlus className="h-3.5 w-3.5" /> Register Patient
+            </Link>
+            <Link href="/reception/ipd/admit"
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all">
+                <Bed className="h-3.5 w-3.5" /> Admit IPD
             </Link>
             <Link href="/reception/triage"
                 className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all">
@@ -155,27 +234,27 @@ export default function ReceptionDashboard() {
             pageTitle="Reception"
             pageIcon={<Users className="h-5 w-5" />}
             headerActions={headerActions}
-            onRefresh={loadData}
+            onRefresh={() => { loadData(); loadArrivals(); if (ipdLoaded.current) loadIPDData(); }}
             refreshing={loading}
         >
             <div className="space-y-6">
                 {/* KPI ROW */}
                 {loading && !stats ? (
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                        {Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)}
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                        {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
                     </div>
                 ) : null}
-                <div className={`grid grid-cols-2 md:grid-cols-5 gap-4 ${loading && !stats ? 'hidden' : ''}`}>
+                <div className={`grid grid-cols-2 md:grid-cols-6 gap-4 ${loading && !stats ? 'hidden' : ''}`}>
                     <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
                         <div className="flex items-center justify-between mb-2">
-                            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Today's Registrations</span>
+                            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Today&apos;s Registrations</span>
                             <div className="p-1.5 bg-orange-50 rounded-lg"><UserPlus className="h-3.5 w-3.5 text-orange-500" /></div>
                         </div>
                         <p className="text-2xl font-black text-gray-900">{stats?.todayRegistrations || 0}</p>
                     </div>
                     <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
                         <div className="flex items-center justify-between mb-2">
-                            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Today's Appointments</span>
+                            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Today&apos;s Appointments</span>
                             <div className="p-1.5 bg-orange-50 rounded-lg"><Calendar className="h-3.5 w-3.5 text-orange-500" /></div>
                         </div>
                         <p className="text-2xl font-black text-gray-900">{stats?.todayAppointments || 0}</p>
@@ -201,10 +280,36 @@ export default function ReceptionDashboard() {
                         </div>
                         <p className="text-2xl font-black text-gray-900">{stats?.totalPatients || 0}</p>
                     </div>
+                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">IPD Admitted</span>
+                            <div className="p-1.5 bg-blue-50 rounded-lg"><Bed className="h-3.5 w-3.5 text-blue-500" /></div>
+                        </div>
+                        <p className="text-2xl font-black text-gray-900">{totalAdmitted}</p>
+                    </div>
                 </div>
 
                 {/* TAB SWITCHER */}
                 <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+                    <button
+                        onClick={() => setActiveTab('opd')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'opd' ? 'bg-white text-orange-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <Stethoscope className="h-3.5 w-3.5" />
+                        OPD Patients
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('ipd')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'ipd' ? 'bg-white text-orange-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <Bed className="h-3.5 w-3.5" />
+                        IPD Patients
+                        {totalAdmitted > 0 && (
+                            <span className="bg-blue-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">
+                                {totalAdmitted}
+                            </span>
+                        )}
+                    </button>
                     <button
                         onClick={() => setActiveTab('arrivals')}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'arrivals' ? 'bg-white text-orange-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
@@ -217,16 +322,341 @@ export default function ReceptionDashboard() {
                             </span>
                         )}
                     </button>
-                    <button
-                        onClick={() => setActiveTab('patients')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'patients' ? 'bg-white text-orange-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                    >
-                        <Users className="h-3.5 w-3.5" />
-                        All Patients
-                    </button>
                 </div>
 
-                {/* EXPECTED ARRIVALS PANEL */}
+                {/* ═══════════════════════════════════════════════════════════
+                    TAB: OPD PATIENTS
+                   ═══════════════════════════════════════════════════════════ */}
+                {activeTab === 'opd' && <>
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="relative flex-1 min-w-[240px]">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                            type="text"
+                            value={searchInput}
+                            onChange={e => setSearchInput(e.target.value)}
+                            placeholder="Search by name, patient ID, or phone..."
+                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Filter className="h-4 w-4 text-gray-400" />
+                        <select
+                            value={department}
+                            onChange={e => { setDepartment(e.target.value); setPage(1); }}
+                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
+                        >
+                            <option value="">All Departments</option>
+                            <option value="General Medicine">General Medicine</option>
+                            <option value="Cardiology">Cardiology</option>
+                            <option value="Orthopedics">Orthopedics</option>
+                            <option value="Pediatrics">Pediatrics</option>
+                            <option value="Neurology">Neurology</option>
+                            <option value="ENT">ENT</option>
+                            <option value="Dermatology">Dermatology</option>
+                            <option value="Pulmonology">Pulmonology</option>
+                        </select>
+                        <select
+                            value={dateRange}
+                            onChange={e => { setDateRange(e.target.value as any); setPage(1); }}
+                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
+                        >
+                            <option value="all">All Time</option>
+                            <option value="today">Today</option>
+                            <option value="week">This Week</option>
+                            <option value="month">This Month</option>
+                        </select>
+                    </div>
+                </div>
+
+                {/* OPD PATIENT TABLE */}
+                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-gray-200">
+                                    {['Patient ID', 'Name', 'Age / Gender', 'Phone', 'Department', 'Registered', 'Status', 'Balance', 'Actions'].map(h => (
+                                        <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {loading && patients.length === 0 ? (
+                                    <>
+                                        {Array.from({ length: 6 }).map((_, i) => (
+                                            <tr key={`skel-${i}`}>
+                                                {Array.from({ length: 9 }).map((_, c) => (
+                                                    <td key={c} className="px-4 py-3.5">
+                                                        <Skeleton height="0.625rem" width={c === 1 ? '70%' : c === 8 ? '2rem' : '60%'} />
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </>
+                                ) : patients.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={9} className="text-center py-16">
+                                            <Users className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                                            <p className="text-gray-400 text-sm font-medium">No patients found</p>
+                                            <p className="text-gray-300 text-xs mt-1">Try adjusting your search or filters</p>
+                                        </td>
+                                    </tr>
+                                ) : patients.map((patient: any) => (
+                                    <tr key={patient.patient_id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-4 py-3">
+                                            <span className="text-xs font-mono font-bold text-orange-600">{patient.patient_id}</span>
+                                        </td>
+                                        <td className="px-4 py-3 font-medium text-gray-900">{patient.full_name}</td>
+                                        <td className="px-4 py-3 text-gray-500">
+                                            {patient.age || '-'} / {patient.gender || '-'}
+                                        </td>
+                                        <td className="px-4 py-3 text-gray-500">
+                                            {patient.phone ? (
+                                                <span className="flex items-center gap-1">
+                                                    <Phone className="h-3 w-3" />
+                                                    {patient.phone}
+                                                </span>
+                                            ) : '-'}
+                                        </td>
+                                        <td className="px-4 py-3 text-gray-500">{patient.department || '-'}</td>
+                                        <td className="px-4 py-3 text-gray-400 text-xs">
+                                            {new Date(patient.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {patient.lastAppointmentStatus ? (
+                                                <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full ${getStatusColor(patient.lastAppointmentStatus)}`}>
+                                                    {patient.lastAppointmentStatus}
+                                                </span>
+                                            ) : (
+                                                <span className="text-gray-300 text-xs">-</span>
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {patient.totalBalance > 0 ? (
+                                                <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">₹ {Number(patient.totalBalance).toFixed(2)}</span>
+                                            ) : (
+                                                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">₹ 0</span>
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <Link
+                                                href={`/reception/patient/${patient.patient_id}`}
+                                                className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-orange-600 transition-colors inline-flex"
+                                                title="View Full Profile"
+                                            >
+                                                <Eye className="h-4 w-4" />
+                                            </Link>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* PAGINATION */}
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
+                            <span className="text-xs text-gray-400">
+                                Showing {((page - 1) * 25) + 1} - {Math.min(page * 25, total)} of {total}
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                                    disabled={page <= 1}
+                                    className="p-1.5 hover:bg-gray-100 rounded-lg disabled:opacity-30"
+                                >
+                                    <ChevronLeft className="h-4 w-4 text-gray-400" />
+                                </button>
+                                <span className="text-xs font-medium text-gray-500">Page {page} of {totalPages}</span>
+                                <button
+                                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={page >= totalPages}
+                                    className="p-1.5 hover:bg-gray-100 rounded-lg disabled:opacity-30"
+                                >
+                                    <ChevronRight className="h-4 w-4 text-gray-400" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+                </>}
+
+                {/* ═══════════════════════════════════════════════════════════
+                    TAB: IPD PATIENTS
+                   ═══════════════════════════════════════════════════════════ */}
+                {activeTab === 'ipd' && <>
+                {/* IPD Filter Bar */}
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
+                        {IPD_STATUS_FILTERS.map(s => (
+                            <button
+                                key={s}
+                                onClick={() => setIpdStatusFilter(s)}
+                                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                                    ipdStatusFilter === s
+                                        ? 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                                }`}
+                            >
+                                {s}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="relative flex-1 min-w-[200px] max-w-xs">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                        <input
+                            type="text"
+                            value={ipdSearch}
+                            onChange={e => setIpdSearch(e.target.value)}
+                            placeholder="Search name, UHID, phone..."
+                            className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-emerald-400 placeholder-gray-400"
+                        />
+                    </div>
+
+                    <select
+                        value={ipdWardFilter}
+                        onChange={e => setIpdWardFilter(e.target.value)}
+                        className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-emerald-400"
+                    >
+                        <option value="">All Wards</option>
+                        {ipdWards.map((w: any) => (
+                            <option key={w.id} value={w.ward_name}>{w.ward_name}</option>
+                        ))}
+                    </select>
+
+                    <span className="text-xs text-gray-400 ml-auto">
+                        {ipdFiltered.length} record{ipdFiltered.length !== 1 ? 's' : ''}
+                    </span>
+                </div>
+
+                {/* IPD Table */}
+                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-gray-100 bg-gray-50">
+                                    {['Admission ID', 'Patient Name', 'UHID', 'Doctor', 'Ward / Bed', 'Diagnosis', 'Days', 'Balance', 'Status', 'Actions'].map(h => (
+                                        <th
+                                            key={h}
+                                            className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                                        >
+                                            {h}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {ipdLoading ? (
+                                    <tr>
+                                        <td colSpan={10} className="text-center py-16">
+                                            <Loader2 className="h-6 w-6 animate-spin text-emerald-500 mx-auto" />
+                                            <p className="text-xs text-gray-400 mt-2">Loading admissions...</p>
+                                        </td>
+                                    </tr>
+                                ) : ipdFiltered.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={10} className="text-center py-16">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <Bed className="h-8 w-8 text-gray-200" />
+                                                <p className="text-sm font-medium text-gray-400">No admissions found</p>
+                                                <p className="text-xs text-gray-300">
+                                                    {ipdSearch || ipdWardFilter || ipdStatusFilter !== 'All'
+                                                        ? 'Try adjusting your filters'
+                                                        : 'No patients have been admitted yet'}
+                                                </p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ) : ipdFiltered.map((admission: any) => {
+                                    const wardName = admission.wardName
+                                        || admission.ward?.ward_name
+                                        || admission.bed?.wards?.ward_name
+                                        || '—';
+                                    const bedId = admission.bed?.bed_id || '—';
+
+                                    return (
+                                        <tr key={admission.admission_id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <span className="text-xs font-mono font-bold text-emerald-600">
+                                                    {admission.admission_id}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <p className="font-semibold text-gray-900 text-xs whitespace-nowrap">
+                                                    {admission.patient?.full_name || '—'}
+                                                </p>
+                                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                                    {admission.patient?.age ? `${admission.patient.age}y` : ''}{' '}
+                                                    {admission.patient?.gender || ''}
+                                                </p>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="text-xs font-mono text-gray-500">
+                                                    {admission.patient?.patient_id || '—'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="text-xs text-gray-700 whitespace-nowrap">
+                                                    {admission.doctor_name || '—'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <p className="text-xs font-medium text-gray-800 whitespace-nowrap">{wardName}</p>
+                                                <p className="text-[10px] text-gray-400 mt-0.5">Bed: {bedId}</p>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="text-xs text-gray-600 max-w-[120px] truncate block">
+                                                    {admission.diagnosis || '—'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <div>
+                                                    <span className="text-xs font-bold text-gray-900">
+                                                        {admission.daysAdmitted ?? '—'}
+                                                    </span>
+                                                    {admission.daysAdmitted != null && (
+                                                        <span className="text-[10px] text-gray-400 ml-1">day{admission.daysAdmitted !== 1 ? 's' : ''}</span>
+                                                    )}
+                                                </div>
+                                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                                    {formatDate(admission.admission_date)}
+                                                </p>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <span className={`text-xs font-bold ${
+                                                    (admission.totalBalance ?? 0) > 0
+                                                        ? 'text-red-600'
+                                                        : 'text-emerald-600'
+                                                }`}>
+                                                    {formatMoney(admission.totalBalance)}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full border ${getIPDStatusBadge(admission.status)}`}>
+                                                    {admission.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <Link
+                                                    href={`/reception/ipd/${admission.admission_id}`}
+                                                    className="inline-flex items-center px-3 py-1.5 text-[10px] font-bold text-white bg-gradient-to-r from-teal-500 to-emerald-600 rounded-lg hover:shadow-md transition-shadow"
+                                                >
+                                                    View
+                                                </Link>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                </>}
+
+                {/* ═══════════════════════════════════════════════════════════
+                    TAB: EXPECTED TODAY
+                   ═══════════════════════════════════════════════════════════ */}
                 {activeTab === 'arrivals' && (
                     <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
                         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
@@ -307,312 +737,6 @@ export default function ReceptionDashboard() {
                         )}
                     </div>
                 )}
-
-                {/* SEARCH & FILTERS — only shown in patients tab */}
-                {activeTab === 'patients' && <>
-                <div className="flex flex-wrap items-center gap-3">
-                    <div className="relative flex-1 min-w-[240px]">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <input
-                            type="text"
-                            value={searchInput}
-                            onChange={e => setSearchInput(e.target.value)}
-                            placeholder="Search by name, patient ID, or phone..."
-                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                        />
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Filter className="h-4 w-4 text-gray-400" />
-                        <select
-                            value={department}
-                            onChange={e => { setDepartment(e.target.value); setPage(1); }}
-                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
-                        >
-                            <option value="">All Departments</option>
-                            <option value="General Medicine">General Medicine</option>
-                            <option value="Cardiology">Cardiology</option>
-                            <option value="Orthopedics">Orthopedics</option>
-                            <option value="Pediatrics">Pediatrics</option>
-                            <option value="Neurology">Neurology</option>
-                            <option value="ENT">ENT</option>
-                            <option value="Dermatology">Dermatology</option>
-                            <option value="Pulmonology">Pulmonology</option>
-                        </select>
-                        <select
-                            value={dateRange}
-                            onChange={e => { setDateRange(e.target.value as any); setPage(1); }}
-                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
-                        >
-                            <option value="all">All Time</option>
-                            <option value="today">Today</option>
-                            <option value="week">This Week</option>
-                            <option value="month">This Month</option>
-                        </select>
-                    </div>
-                </div>
-
-                {/* PATIENT TABLE */}
-                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="border-b border-gray-200">
-                                    {['Patient ID', 'Name', 'Age / Gender', 'Phone', 'Department', 'Registered', 'Status', 'Balance', 'Actions'].map(h => (
-                                        <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {loading && patients.length === 0 ? (
-                                    <>
-                                        {Array.from({ length: 6 }).map((_, i) => (
-                                            <tr key={`skel-${i}`}>
-                                                {Array.from({ length: 9 }).map((_, c) => (
-                                                    <td key={c} className="px-4 py-3.5">
-                                                        <Skeleton height="0.625rem" width={c === 1 ? '70%' : c === 8 ? '2rem' : '60%'} />
-                                                    </td>
-                                                ))}
-                                            </tr>
-                                        ))}
-                                    </>
-                                ) : patients.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={9} className="text-center py-16">
-                                            <Users className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                                            <p className="text-gray-400 text-sm font-medium">No patients found</p>
-                                            <p className="text-gray-300 text-xs mt-1">Try adjusting your search or filters</p>
-                                        </td>
-                                    </tr>
-                                ) : patients.map((patient: any) => (
-                                    <tr key={patient.patient_id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-4 py-3">
-                                            <span className="text-xs font-mono font-bold text-orange-600">{patient.patient_id}</span>
-                                        </td>
-                                        <td className="px-4 py-3 font-medium text-gray-900">{patient.full_name}</td>
-                                        <td className="px-4 py-3 text-gray-500">
-                                            {patient.age || '-'} / {patient.gender || '-'}
-                                        </td>
-                                        <td className="px-4 py-3 text-gray-500">
-                                            {patient.phone ? (
-                                                <span className="flex items-center gap-1">
-                                                    <Phone className="h-3 w-3" />
-                                                    {patient.phone}
-                                                </span>
-                                            ) : '-'}
-                                        </td>
-                                        <td className="px-4 py-3 text-gray-500">{patient.department || '-'}</td>
-                                        <td className="px-4 py-3 text-gray-400 text-xs">
-                                            {new Date(patient.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            {patient.lastAppointmentStatus ? (
-                                                <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full ${getStatusColor(patient.lastAppointmentStatus)}`}>
-                                                    {patient.lastAppointmentStatus}
-                                                </span>
-                                            ) : (
-                                                <span className="text-gray-300 text-xs">-</span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            {patient.totalBalance > 0 ? (
-                                                <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">₹ {Number(patient.totalBalance).toFixed(2)}</span>
-                                            ) : (
-                                                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">₹ 0</span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <button
-                                                onClick={() => openPatientDetail(patient.patient_id)}
-                                                className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-orange-600 transition-colors"
-                                                title="View Details"
-                                            >
-                                                <Eye className="h-4 w-4" />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* PAGINATION */}
-                    {totalPages > 1 && (
-                        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
-                            <span className="text-xs text-gray-400">
-                                Showing {((page - 1) * 25) + 1} - {Math.min(page * 25, total)} of {total}
-                            </span>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                                    disabled={page <= 1}
-                                    className="p-1.5 hover:bg-gray-100 rounded-lg disabled:opacity-30"
-                                >
-                                    <ChevronLeft className="h-4 w-4 text-gray-400" />
-                                </button>
-                                <span className="text-xs font-medium text-gray-500">Page {page} of {totalPages}</span>
-                                <button
-                                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                                    disabled={page >= totalPages}
-                                    className="p-1.5 hover:bg-gray-100 rounded-lg disabled:opacity-30"
-                                >
-                                    <ChevronRight className="h-4 w-4 text-gray-400" />
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </>}
-
-            {/* PATIENT DETAIL MODAL */}
-            {selectedPatient && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeDetail} />
-                    <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
-                            <h2 className="text-base font-bold text-gray-900">Patient Details</h2>
-                            <button onClick={closeDetail} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
-                                <X className="h-4 w-4" />
-                            </button>
-                        </div>
-
-                        {detailLoading ? (
-                            <div className="flex items-center justify-center py-16">
-                                <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
-                            </div>
-                        ) : patientDetail ? (
-                            <div className="p-6 space-y-6">
-                                {/* Patient Info Card */}
-                                <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <h3 className="text-lg font-bold text-gray-900">{patientDetail.patient.full_name}</h3>
-                                        <span className="text-xs font-mono font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-lg">
-                                            {patientDetail.patient.patient_id}
-                                        </span>
-                                    </div>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                                        <div>
-                                            <span className="text-[10px] font-semibold text-gray-400 uppercase">Age</span>
-                                            <p className="text-gray-700">{patientDetail.patient.age || '-'}</p>
-                                        </div>
-                                        <div>
-                                            <span className="text-[10px] font-semibold text-gray-400 uppercase">Gender</span>
-                                            <p className="text-gray-700">{patientDetail.patient.gender || '-'}</p>
-                                        </div>
-                                        <div>
-                                            <span className="text-[10px] font-semibold text-gray-400 uppercase">Phone</span>
-                                            <p className="text-gray-700">{patientDetail.patient.phone || '-'}</p>
-                                        </div>
-                                        <div>
-                                            <span className="text-[10px] font-semibold text-gray-400 uppercase">Department</span>
-                                            <p className="text-gray-700">{patientDetail.patient.department || '-'}</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Appointment History */}
-                                <div>
-                                    <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-3">
-                                        <Calendar className="h-4 w-4 text-orange-500" /> Appointment History
-                                    </h4>
-                                    {patientDetail.appointments?.length > 0 ? (
-                                        <div className="space-y-2">
-                                            {patientDetail.appointments.map((appt: any) => (
-                                                <div key={appt.appointment_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                                                    <div>
-                                                        <span className="text-xs font-mono text-gray-500">{appt.appointment_id}</span>
-                                                        <p className="text-sm text-gray-700">{appt.department || 'General'} — {appt.reason_for_visit || 'Consultation'}</p>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full ${getStatusColor(appt.status)}`}>
-                                                            {appt.status}
-                                                        </span>
-                                                        <p className="text-[10px] text-gray-400 mt-1">
-                                                            {new Date(appt.appointment_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <p className="text-sm text-gray-400 py-4 text-center">No appointments found</p>
-                                    )}
-                                </div>
-
-                                {/* Triage History */}
-                                {patientDetail.triageHistory?.length > 0 && (
-                                    <div>
-                                        <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-3">
-                                            <Zap className="h-4 w-4 text-violet-500" /> Triage History
-                                        </h4>
-                                        <div className="space-y-2">
-                                            {patientDetail.triageHistory.map((t: any) => (
-                                                <div key={t.id} className="p-3 bg-gray-50 rounded-xl">
-                                                    <div className="flex items-center justify-between mb-1">
-                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${t.triage_level === 'Emergency' ? 'bg-rose-50 text-rose-700' :
-                                                            t.triage_level === 'Urgent' ? 'bg-amber-50 text-amber-700' :
-                                                                'bg-blue-50 text-blue-700'
-                                                            }`}>{t.triage_level}</span>
-                                                        <span className="text-[10px] text-gray-400">
-                                                            {new Date(t.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-xs text-gray-600">{t.symptoms}</p>
-                                                    {t.recommended_department && (
-                                                        <p className="text-[10px] text-gray-400 mt-1">Recommended: {t.recommended_department}</p>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Latest Vitals */}
-                                {patientDetail.vitals?.length > 0 && (
-                                    <div>
-                                        <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-3">
-                                            <Thermometer className="h-4 w-4 text-rose-500" /> Latest Vitals
-                                        </h4>
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                            {patientDetail.vitals[0].blood_pressure && (
-                                                <div className="bg-gray-50 rounded-xl p-3 text-center">
-                                                    <span className="text-[10px] font-semibold text-gray-400 uppercase">BP</span>
-                                                    <p className="text-sm font-bold text-gray-900">{patientDetail.vitals[0].blood_pressure}</p>
-                                                </div>
-                                            )}
-                                            {patientDetail.vitals[0].heart_rate && (
-                                                <div className="bg-gray-50 rounded-xl p-3 text-center">
-                                                    <span className="text-[10px] font-semibold text-gray-400 uppercase">HR</span>
-                                                    <p className="text-sm font-bold text-gray-900">{patientDetail.vitals[0].heart_rate} bpm</p>
-                                                </div>
-                                            )}
-                                            {patientDetail.vitals[0].temperature && (
-                                                <div className="bg-gray-50 rounded-xl p-3 text-center">
-                                                    <span className="text-[10px] font-semibold text-gray-400 uppercase">Temp</span>
-                                                    <p className="text-sm font-bold text-gray-900">{patientDetail.vitals[0].temperature}°F</p>
-                                                </div>
-                                            )}
-                                            {patientDetail.vitals[0].oxygen_sat && (
-                                                <div className="bg-gray-50 rounded-xl p-3 text-center">
-                                                    <span className="text-[10px] font-semibold text-gray-400 uppercase">SpO2</span>
-                                                    <p className="text-sm font-bold text-gray-900">{patientDetail.vitals[0].oxygen_sat}%</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div className="pt-6 mt-6 border-t border-gray-100 flex justify-end">
-                                    <Link href={`/reception/patient/${patientDetail.patient.patient_id}`}
-                                        className="flex items-center gap-2 px-6 py-2.5 bg-orange-600 text-white font-bold rounded-xl hover:bg-teal-700 transition-colors shadow-sm hover:shadow">
-                                        Open Full Profile <ArrowRight className="h-4 w-4" />
-                                    </Link>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="py-16 text-center text-gray-400 text-sm">Failed to load patient details</div>
-                        )}
-                    </div>
-                </div>
-            )}
             </div>
         </AppShell>
     );

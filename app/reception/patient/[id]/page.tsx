@@ -6,12 +6,17 @@ import {
     User, Calendar, Phone, Mail, MapPin, Activity, Loader2,
     FileText, Thermometer, Zap, ArrowLeft, Clock, Shield,
     Pencil, Check, X, CalendarPlus, FlaskConical, History, CreditCard, DollarSign,
-    Upload, Plus, Trash2, ExternalLink
+    Upload, Plus, Trash2, ExternalLink, ChevronRight, AlertTriangle, CheckCircle2
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { getPatientDetail, updatePatientField, addPatientDues, processPatientPayment, getPatientExternalRecords, savePatientExternalRecord, deletePatientExternalRecord, archivePatient } from '@/app/actions/reception-actions';
+import { getPatientDetail, updatePatientField, addPatientDues, getPatientExternalRecords, savePatientExternalRecord, deletePatientExternalRecord, archivePatient } from '@/app/actions/reception-actions';
+import { getPatientFinancialProfile } from '@/app/actions/master-billing-actions';
+import { recordPayment } from '@/app/actions/finance-actions';
+import { getCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
+import { CASH_COMPLIANCE_DEFAULTS, isValidPan } from '@/app/lib/cash-compliance';
 import { useToast } from '@/app/components/ui/Toast';
+import { EditInvoiceModal } from '@/app/components/finance/EditInvoiceModal';
 
 /** Inline editable field */
 function EditableField({
@@ -114,9 +119,13 @@ export default function PatientProfilePage() {
     
     // Billing Modals State
     const [showDuesModal, setShowDuesModal] = useState(false);
-    const [showPaymentModal, setShowPaymentModal] = useState<number | null>(null);
     const [dueForm, setDueForm] = useState({ amount: '', description: '', department: 'General' });
-    const [paymentForm, setPaymentForm] = useState({ amount: '', method: 'Cash' });
+    // Master billing integration state
+    const [financialProfile, setFinancialProfile] = useState<any>(null);
+    const [financialLoading, setFinancialLoading] = useState(false);
+    const [expandedInvoice, setExpandedInvoice] = useState<number | null>(null);
+    const [payingInvoice, setPayingInvoice] = useState<any>(null);
+    const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
 
     const [archiving, setArchiving] = useState(false);
 
@@ -163,33 +172,24 @@ export default function PatientProfilePage() {
             setShowDuesModal(false);
             setDueForm({ amount: '', description: '', department: 'General' });
             loadData();
+            loadFinancialProfile();
         } else {
             toast.error('Failed: ' + (res.error || 'Could not add dues'));
         }
     };
 
-    const handlePayment = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!showPaymentModal) return;
-        setProcessLoading(true);
-        const res = await processPatientPayment({
-            patient_id: patientId,
-            invoice_id: showPaymentModal,
-            amount: Number(paymentForm.amount),
-            payment_method: paymentForm.method
-        });
-        setProcessLoading(false);
-        if (res.success) {
-            toast.success('Payment Recorded: Amount collected successfully');
-            setShowPaymentModal(null);
-            setPaymentForm({ amount: '', method: 'Cash' });
-            loadData();
-        } else {
-            toast.error('Payment Failed: ' + (res.error || 'Could not record payment'));
-        }
-    };
-
     useEffect(() => { loadData(); }, [loadData]);
+
+    const loadFinancialProfile = useCallback(async () => {
+        setFinancialLoading(true);
+        const res = await getPatientFinancialProfile(patientId);
+        if (res.success) setFinancialProfile(res.data);
+        setFinancialLoading(false);
+    }, [patientId]);
+
+    useEffect(() => {
+        if (activeTab === 'billing') loadFinancialProfile();
+    }, [activeTab, loadFinancialProfile]);
 
     const getStatusColor = (status: string) => {
         const map: Record<string, string> = {
@@ -553,60 +553,242 @@ export default function PatientProfilePage() {
                 )}
                 {activeTab === 'billing' && (
                     <div className="space-y-4">
-                        <div className="flex justify-between items-center bg-gray-50 p-4 border border-gray-200 rounded-2xl">
-                            <div>
-                                <p className="text-xs font-bold text-gray-500 uppercase">Outstanding Balance</p>
-                                <p className={`text-2xl font-black ${patient.totalBalance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                    ₹{patient.totalBalance > 0 ? Number(patient.totalBalance).toFixed(2) : '0'}
-                                </p>
+                        {financialLoading && !financialProfile ? (
+                            <div className="flex justify-center py-12">
+                                <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
                             </div>
-                            <button onClick={() => setShowDuesModal(true)} disabled={processLoading}
-                                className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white text-sm font-bold rounded-xl hover:bg-gray-800">
-                                <DollarSign className="h-4 w-4" /> Add Dues
-                            </button>
-                        </div>
-
-                        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="border-b border-gray-200">
-                                        {['Invoice No', 'Type', 'Date', 'Net Amount', 'Paid', 'Balance', 'Status', ''].map(h => (
-                                            <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase border-r border-gray-200/50 last:border-r-0">{h}</th>
+                        ) : (
+                            <>
+                                {/* Financial Summary Cards */}
+                                {financialProfile?.totals && (
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                        {[
+                                            { label: 'Total Billed', value: financialProfile.totals.total_billed, color: 'border-l-blue-500' },
+                                            { label: 'Total Paid', value: financialProfile.totals.total_paid, color: 'border-l-emerald-500' },
+                                            { label: 'Outstanding', value: financialProfile.totals.total_outstanding, color: 'border-l-rose-500' },
+                                            { label: 'Deposits Held', value: financialProfile.totals.deposits_held, color: 'border-l-amber-500' },
+                                        ].map(card => (
+                                            <div key={card.label} className={`bg-white border border-gray-200 border-l-4 ${card.color} rounded-xl px-4 py-3`}>
+                                                <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">{card.label}</div>
+                                                <div className="mt-1 text-xl font-black text-gray-800">₹{Number(card.value ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                                            </div>
                                         ))}
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {(data.invoices || []).map((inv: any) => (
-                                        <tr key={inv.id} className="hover:bg-gray-50">
-                                            <td className="px-4 py-3 text-xs font-mono font-bold text-orange-600">{inv.invoice_number}</td>
-                                            <td className="px-4 py-3 text-xs text-gray-500">{inv.invoice_type}</td>
-                                            <td className="px-4 py-3 text-xs text-gray-500">{formatDate(inv.created_at)}</td>
-                                            <td className="px-4 py-3 text-gray-900">₹{Number(inv.net_amount).toFixed(2)}</td>
-                                            <td className="px-4 py-3 text-emerald-600">₹{Number(inv.paid_amount).toFixed(2)}</td>
-                                            <td className="px-4 py-3 font-bold text-rose-600">₹{Number(inv.balance_due).toFixed(2)}</td>
-                                            <td className="px-4 py-3">
-                                                <span className={`inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full border ${getStatusColor(inv.status)}`}>
-                                                    {inv.status}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                {inv.balance_due > 0 && (
-                                                    <button onClick={() => setShowPaymentModal(inv.id)} disabled={processLoading}
-                                                        className="px-3 py-1.5 bg-orange-50 text-orange-700 text-xs font-bold rounded-lg hover:bg-orange-100 transition-colors shadow-sm">
-                                                        Pay
-                                                    </button>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {(!data.invoices || data.invoices.length === 0) && (
-                                        <tr>
-                                            <td colSpan={8} className="text-center py-8 text-gray-400 text-sm">No invoices found</td>
-                                        </tr>
+                                    </div>
+                                )}
+
+                                {/* Action Bar */}
+                                <div className="flex items-center justify-between">
+                                    <button onClick={() => setShowDuesModal(true)} disabled={processLoading}
+                                        className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white text-sm font-bold rounded-xl hover:bg-gray-800">
+                                        <DollarSign className="h-4 w-4" /> Add Dues
+                                    </button>
+                                    <Link href={`/billing/patient/${patientId}`}
+                                        className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50">
+                                        <ExternalLink className="h-3.5 w-3.5" /> Full Financial Profile
+                                    </Link>
+                                </div>
+
+                                {/* Expandable Invoices */}
+                                <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                                    {(financialProfile?.invoices ?? []).length === 0 ? (
+                                        <div className="text-center py-12 text-gray-400 text-sm">No invoices found</div>
+                                    ) : (
+                                        <div className="divide-y divide-gray-100">
+                                            {(financialProfile?.invoices ?? []).map((inv: any) => {
+                                                const expanded = expandedInvoice === inv.id;
+                                                return (
+                                                    <div key={inv.id}>
+                                                        <button onClick={() => setExpandedInvoice(expanded ? null : inv.id)}
+                                                            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 text-left">
+                                                            <div className="flex items-center gap-3 min-w-0 flex-wrap">
+                                                                <span className="font-mono text-xs font-bold text-orange-600">{inv.invoice_number}</span>
+                                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                                                    inv.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' :
+                                                                    inv.status === 'Cancelled' ? 'bg-gray-100 text-gray-500' :
+                                                                    'bg-blue-100 text-blue-700'
+                                                                }`}>{inv.status}</span>
+                                                                <span className="text-[10px] text-gray-400">{inv.invoice_type} · {formatDate(inv.created_at)}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-4 text-xs shrink-0">
+                                                                <div className="text-right hidden md:block">
+                                                                    <div className="text-[10px] text-gray-400">Net</div>
+                                                                    <div className="font-bold">₹{Number(inv.net_amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <div className="text-[10px] text-gray-400">Paid</div>
+                                                                    <div className="font-bold text-emerald-600">₹{Number(inv.paid_amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <div className="text-[10px] text-gray-400">Balance</div>
+                                                                    <div className={`font-bold ${Number(inv.balance_due) > 0 ? 'text-rose-600' : 'text-gray-400'}`}>
+                                                                        ₹{Number(inv.balance_due).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                                                                    </div>
+                                                                </div>
+                                                                <ChevronRight className={`h-4 w-4 text-gray-400 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+                                                            </div>
+                                                        </button>
+
+                                                        {expanded && (
+                                                            <div className="border-t border-gray-100 px-4 py-3 bg-gray-50/40 space-y-3">
+                                                                {/* Cancelled banner */}
+                                                                {inv.status === 'Cancelled' && (
+                                                                    <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 flex items-start gap-2">
+                                                                        <AlertTriangle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                                                                        <div className="text-xs text-rose-700">
+                                                                            <p className="font-bold">This invoice has been cancelled.</p>
+                                                                            {inv.cancellation_reason && <p>Reason: {inv.cancellation_reason}</p>}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Line Items */}
+                                                                {inv.items?.length > 0 && (
+                                                                    <div>
+                                                                        <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2">
+                                                                            Line Items ({inv.items.length})
+                                                                        </div>
+                                                                        <table className="w-full text-xs">
+                                                                            <thead className="text-[10px] uppercase text-gray-500 font-bold">
+                                                                                <tr>
+                                                                                    <th className="text-left py-1">Service</th>
+                                                                                    <th className="text-left py-1">Dept</th>
+                                                                                    <th className="text-right py-1">Qty</th>
+                                                                                    <th className="text-right py-1">Unit</th>
+                                                                                    <th className="text-right py-1">Disc</th>
+                                                                                    <th className="text-right py-1">Tax</th>
+                                                                                    <th className="text-right py-1">Net</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {inv.items.map((it: any) => (
+                                                                                    <tr key={it.id} className="border-t border-gray-100">
+                                                                                        <td className="py-1">{it.description}</td>
+                                                                                        <td className="py-1 text-gray-500">{it.department}</td>
+                                                                                        <td className="py-1 text-right">{it.quantity}</td>
+                                                                                        <td className="py-1 text-right">₹{Number(it.unit_price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                                                                                        <td className="py-1 text-right">₹{Number(it.discount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                                                                                        <td className="py-1 text-right">₹{Number(it.tax_amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                                                                                        <td className="py-1 text-right font-bold">₹{Number(it.net_price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Payments for this invoice */}
+                                                                {inv.payments?.length > 0 && (
+                                                                    <div>
+                                                                        <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2">
+                                                                            Payments ({inv.payments.length})
+                                                                        </div>
+                                                                        <table className="w-full text-xs">
+                                                                            <thead className="text-[10px] uppercase text-gray-500 font-bold">
+                                                                                <tr>
+                                                                                    <th className="text-left py-1">Receipt</th>
+                                                                                    <th className="text-left py-1">Method</th>
+                                                                                    <th className="text-left py-1">Date</th>
+                                                                                    <th className="text-right py-1">Amount</th>
+                                                                                    <th className="text-right py-1">Status</th>
+                                                                                    <th className="text-right py-1"></th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {inv.payments.map((p: any) => (
+                                                                                    <tr key={p.id} className="border-t border-gray-100">
+                                                                                        <td className="py-1 font-mono">{p.receipt_number}</td>
+                                                                                        <td className="py-1">{p.payment_method}</td>
+                                                                                        <td className="py-1 text-gray-500">{new Date(p.created_at).toLocaleString()}</td>
+                                                                                        <td className="py-1 text-right font-bold text-emerald-600">₹{Number(p.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                                                                                        <td className="py-1 text-right">
+                                                                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                                                                                p.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' :
+                                                                                                p.status === 'Reversed' ? 'bg-rose-100 text-rose-700' :
+                                                                                                'bg-gray-100 text-gray-600'
+                                                                                            }`}>{p.status}</span>
+                                                                                        </td>
+                                                                                        <td className="py-1 text-right">
+                                                                                            <button onClick={() => window.open(`/api/payment/${p.id}/receipt`, '_blank')}
+                                                                                                className="text-[10px] font-bold text-blue-600 hover:underline">Receipt</button>
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Invoice Actions */}
+                                                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                                                    {inv.status !== 'Cancelled' && Number(inv.paid_amount) === 0 && (
+                                                                        <button onClick={(e) => { e.stopPropagation(); setEditingInvoiceId(Number(inv.id)); }}
+                                                                            className="px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold rounded-lg hover:bg-indigo-100 flex items-center gap-1">
+                                                                            <Pencil className="h-3 w-3" /> Edit Invoice
+                                                                        </button>
+                                                                    )}
+                                                                    {Number(inv.balance_due) > 0 && inv.status !== 'Cancelled' && (
+                                                                        <button onClick={(e) => { e.stopPropagation(); setPayingInvoice(inv); }}
+                                                                            className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-100">
+                                                                            Collect Payment
+                                                                        </button>
+                                                                    )}
+                                                                    <button onClick={(e) => { e.stopPropagation(); window.open(`/api/invoice/${inv.id}/summary-bill`, '_blank'); }}
+                                                                        className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-lg hover:bg-blue-50">
+                                                                        Print Bill
+                                                                    </button>
+                                                                    {inv.admission_id && (
+                                                                        <button onClick={(e) => { e.stopPropagation(); window.open(`/api/discharge/${inv.admission_id}/bill`, '_blank'); }}
+                                                                            className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-lg hover:bg-blue-50">
+                                                                            Detailed Bill
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                     )}
-                                </tbody>
-                            </table>
-                        </div>
+                                </div>
+
+                                {/* Deposits Summary */}
+                                {financialProfile?.deposits?.length > 0 && (
+                                    <div className="bg-white border border-gray-200 rounded-2xl p-4">
+                                        <h4 className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-3">Deposits ({financialProfile.deposits.length})</h4>
+                                        <table className="w-full text-xs">
+                                            <thead className="text-[10px] uppercase text-gray-500 font-bold border-b border-gray-100">
+                                                <tr>
+                                                    <th className="text-left py-2">Deposit #</th>
+                                                    <th className="text-left py-2">Method</th>
+                                                    <th className="text-left py-2">Status</th>
+                                                    <th className="text-right py-2">Amount</th>
+                                                    <th className="text-right py-2">Balance</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {financialProfile.deposits.map((d: any) => {
+                                                    const bal = Number(d.amount) - Number(d.applied_amount) - Number(d.refunded_amount);
+                                                    return (
+                                                        <tr key={d.id} className="border-b border-gray-50">
+                                                            <td className="py-2 font-mono">{d.deposit_number}</td>
+                                                            <td className="py-2">{d.payment_method}</td>
+                                                            <td className="py-2">
+                                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                                                    d.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                                                                }`}>{d.status}</span>
+                                                            </td>
+                                                            <td className="py-2 text-right font-bold">₹{Number(d.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                                                            <td className={`py-2 text-right font-bold ${bal > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>₹{bal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </>
+                        )}
                     </div>
                 )}
             </div>
@@ -732,35 +914,304 @@ export default function PatientProfilePage() {
                 </div>
             )}
 
-            {showPaymentModal !== null && (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-xl">
-                        <h3 className="text-lg font-black text-gray-900 mb-4">Record Payment</h3>
-                        <form onSubmit={handlePayment} className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Amount to Collect (₹)</label>
-                                <input type="number" required min="1" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-50 font-mono text-lg text-emerald-600" placeholder="Amount" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Payment Method</label>
-                                <select value={paymentForm.method} onChange={e => setPaymentForm({...paymentForm, method: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-50 font-medium">
-                                    <option>Cash</option>
-                                    <option>Card</option>
-                                    <option>UPI</option>
-                                    <option>Bank Transfer</option>
-                                </select>
-                            </div>
-                            <div className="flex gap-3 mt-6">
-                                <button type="button" onClick={() => setShowPaymentModal(null)} className="flex-1 py-2 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
-                                <button type="submit" disabled={processLoading} className="flex-1 py-2 flex justify-center items-center gap-2 bg-orange-600 text-white font-bold rounded-xl hover:bg-teal-700 disabled:opacity-50 transition-colors">
-                                    {processLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                                    Collect
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+            {payingInvoice && (
+                <CollectPaymentModal
+                    invoice={payingInvoice}
+                    onClose={() => setPayingInvoice(null)}
+                    onSuccess={() => {
+                        setPayingInvoice(null);
+                        loadData();
+                        loadFinancialProfile();
+                    }}
+                />
+            )}
+
+            {editingInvoiceId !== null && (
+                <EditInvoiceModal
+                    invoiceId={editingInvoiceId}
+                    isOpen
+                    onClose={() => setEditingInvoiceId(null)}
+                    onSaved={() => {
+                        setEditingInvoiceId(null);
+                        loadFinancialProfile();
+                    }}
+                />
             )}
         </AppShell>
+    );
+}
+
+// ── Collect Payment Modal (mirrors master billing) ──────────────────────
+function CollectPaymentModal({ invoice, onClose, onSuccess }: {
+    invoice: any; onClose: () => void; onSuccess: () => void;
+}) {
+    const balanceDue = Number(invoice.balance_due);
+    const [amount, setAmount] = useState(balanceDue.toString());
+    const [method, setMethod] = useState('Cash');
+    const [reference, setReference] = useState('');
+    const [notes, setNotes] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState(false);
+    const [panNumber, setPanNumber] = useState('');
+    const [panName, setPanName] = useState('');
+    const [thresholds, setThresholds] = useState<{ pan_threshold: number; cash_limit: number }>(CASH_COMPLIANCE_DEFAULTS);
+
+    useEffect(() => {
+        getCashComplianceConfig().then((res) => {
+            if (res.success && res.data) {
+                setThresholds({ pan_threshold: res.data.pan_threshold, cash_limit: res.data.cash_limit });
+            }
+        });
+    }, []);
+
+    const numAmount = Number(amount) || 0;
+    const isValid = numAmount > 0 && numAmount <= balanceDue;
+    const isCash = method === 'Cash';
+    const cashBlocked = isCash && numAmount > thresholds.cash_limit;
+    const panRequired = isCash && numAmount >= thresholds.pan_threshold && !cashBlocked;
+    const panProvidedValid = isValidPan(panNumber) && panName.trim().length > 0;
+    const canSubmit = isValid && !cashBlocked && (!panRequired || panProvidedValid);
+
+    const fmtMoney = (n: number) => Number(n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+
+    const handleRazorpay = async () => {
+        setError(null);
+        setSaving(true);
+        try {
+            const res = await fetch('/api/razorpay/create-order', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ invoice_id: invoice.id }),
+            });
+            if (!res.ok) throw new Error(`Order creation failed (${res.status})`);
+            const data = await res.json();
+            const orderId = data?.data?.order_id || data?.orderId;
+            const keyId = data?.data?.key_id || data?.keyId;
+            const orderAmount = data?.data?.amount;
+            const hospitalName = data?.data?.hospital_name || 'Hospital';
+
+            if (!orderId || !keyId || !orderAmount) {
+                throw new Error(data.error || 'Failed to create payment order.');
+            }
+
+            if (!(window as any).Razorpay) {
+                const script = document.createElement('script');
+                script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+                script.async = true;
+                document.body.appendChild(script);
+                await new Promise((resolve, reject) => { script.onload = resolve; script.onerror = () => reject(new Error('Failed to load Razorpay')); });
+            }
+
+            const options = {
+                key: keyId, amount: orderAmount, currency: 'INR', name: hospitalName,
+                description: `Invoice Payment (${invoice.invoice_number})`, order_id: orderId,
+                handler: async (response: any) => {
+                    try {
+                        const verifyRes = await fetch('/api/razorpay/verify-payment', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_signature: response.razorpay_signature,
+                                invoice_id: invoice.id,
+                            }),
+                        });
+                        const verifyData = await verifyRes.json();
+                        if (verifyData.success) { setSuccess(true); setTimeout(onSuccess, 1200); }
+                        else setError(verifyData.error || 'Payment verification failed.');
+                    } catch (err: any) { setError(err.message || 'Payment verification error.'); }
+                },
+                modal: { ondismiss: () => setSaving(false) },
+                theme: { color: '#10b981' },
+            };
+
+            const rzp = new (window as any).Razorpay(options);
+            rzp.on('payment.failed', (response: any) => {
+                setError(response?.error?.description || 'Payment could not be completed.');
+                setSaving(false);
+            });
+            rzp.open();
+        } catch (err: any) {
+            setError(err.message || 'Failed to initiate online payment.');
+            setSaving(false);
+        }
+    };
+
+    const handleSubmit = async () => {
+        if (!isValid) return;
+        if (method === 'Online') return handleRazorpay();
+        if (cashBlocked || (panRequired && !panProvidedValid)) return;
+
+        setError(null);
+        setSaving(true);
+        try {
+            const res = await recordPayment({
+                invoice_id: invoice.id,
+                amount: numAmount,
+                payment_method: method,
+                payment_type: 'Settlement',
+                payer_pan_number: isCash ? panNumber.trim().toUpperCase() : undefined,
+                payer_pan_name: isCash ? panName.trim() : undefined,
+                notes: [notes, reference ? `Ref: ${reference}` : ''].filter(Boolean).join(' | ') || undefined,
+            });
+            if (res.success) { setSuccess(true); setTimeout(onSuccess, 1200); }
+            else setError(res.error || 'Payment failed.');
+        } catch (err: any) { setError(err.message || 'Unexpected error'); }
+        finally { setSaving(false); }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4"
+            style={{ backgroundColor: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(4px)' }} onClick={onClose}>
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden"
+                onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/60">
+                    <div>
+                        <h3 className="text-sm font-bold text-gray-900">Collect Payment</h3>
+                        <p className="text-[11px] text-gray-500 font-mono mt-0.5">{invoice.invoice_number}</p>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-500">
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+
+                {success ? (
+                    <div className="px-5 py-10 text-center">
+                        <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-3" />
+                        <p className="text-lg font-bold text-gray-800">Payment Recorded!</p>
+                        <p className="text-xs text-gray-500 mt-1">₹{fmtMoney(numAmount)} via {method}</p>
+                    </div>
+                ) : (
+                    <div className="px-5 py-5 space-y-4">
+                        {/* Invoice Summary */}
+                        <div className="bg-gray-50 rounded-xl p-3 grid grid-cols-3 gap-2 text-center">
+                            <div>
+                                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Net</div>
+                                <div className="text-sm font-bold text-gray-700">₹{fmtMoney(Number(invoice.net_amount))}</div>
+                            </div>
+                            <div>
+                                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Paid</div>
+                                <div className="text-sm font-bold text-emerald-600">₹{fmtMoney(Number(invoice.paid_amount))}</div>
+                            </div>
+                            <div>
+                                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Balance</div>
+                                <div className="text-sm font-bold text-rose-600">₹{fmtMoney(balanceDue)}</div>
+                            </div>
+                        </div>
+
+                        {/* Amount */}
+                        <div>
+                            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Amount *</label>
+                            <div className="relative mt-1">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-bold">₹</span>
+                                <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
+                                    min={1} max={balanceDue} step="0.01" autoFocus
+                                    className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm font-mono font-bold focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none" />
+                            </div>
+                            {numAmount > balanceDue && (
+                                <p className="text-[11px] text-rose-500 mt-1">Amount cannot exceed balance of ₹{fmtMoney(balanceDue)}</p>
+                            )}
+                            <button onClick={() => setAmount(balanceDue.toString())}
+                                className="text-[11px] text-blue-600 hover:text-blue-800 font-bold mt-1">
+                                Pay Full Balance (₹{fmtMoney(balanceDue)})
+                            </button>
+                        </div>
+
+                        {/* Payment Method */}
+                        <div>
+                            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Payment Method</label>
+                            <div className="grid grid-cols-5 gap-1.5 mt-1.5">
+                                {['Cash', 'Card', 'UPI', 'Bank', 'Online'].map(m => (
+                                    <button key={m} onClick={() => setMethod(m)}
+                                        className={`py-2 rounded-lg text-xs font-bold border transition-all ${
+                                            method === m ? 'bg-emerald-50 border-emerald-400 text-emerald-700 shadow-sm'
+                                                : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                                        }`}>{m}</button>
+                                ))}
+                            </div>
+                            {method === 'Online' && (
+                                <p className="text-[11px] text-blue-600 mt-1.5 font-medium">
+                                    Razorpay checkout will open for card, UPI, netbanking, wallets, and more.
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Cash compliance */}
+                        {cashBlocked && (
+                            <div className="flex items-start gap-2 px-3 py-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium rounded-lg">
+                                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                                <span>Cash receipts above ₹{fmtMoney(thresholds.cash_limit)} are not permitted. Use another method.</span>
+                            </div>
+                        )}
+                        {panRequired && (
+                            <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                                <div className="flex items-start gap-2 text-xs font-medium text-amber-800">
+                                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+                                    <span>PAN details mandatory for cash payments of ₹{fmtMoney(thresholds.pan_threshold)}+.</span>
+                                </div>
+                                <div>
+                                    <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">PAN Number *</label>
+                                    <input type="text" value={panNumber} onChange={e => setPanNumber(e.target.value.toUpperCase())}
+                                        placeholder="ABCDE1234F" maxLength={10}
+                                        className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm font-mono uppercase focus:border-amber-500 outline-none" />
+                                    {panNumber.length > 0 && !isValidPan(panNumber) && (
+                                        <p className="text-[11px] text-rose-500 mt-1">Invalid PAN format.</p>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">PAN Holder Name *</label>
+                                    <input type="text" value={panName} onChange={e => setPanName(e.target.value)}
+                                        placeholder="As per PAN card"
+                                        className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-amber-500 outline-none" />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Reference (non-cash, non-online) */}
+                        {method !== 'Cash' && method !== 'Online' && (
+                            <div>
+                                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Reference / Transaction ID</label>
+                                <input type="text" value={reference} onChange={e => setReference(e.target.value)}
+                                    placeholder="Enter transaction reference"
+                                    className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
+                            </div>
+                        )}
+
+                        {/* Notes */}
+                        {method !== 'Online' && (
+                            <div>
+                                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Notes (optional)</label>
+                                <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
+                                    placeholder="Optional remark"
+                                    className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:border-emerald-500 outline-none" />
+                            </div>
+                        )}
+
+                        {/* Error */}
+                        {error && (
+                            <div className="flex items-start gap-2 px-3 py-2 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium rounded-lg">
+                                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                                <span>{error}</span>
+                            </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex gap-2 pt-1">
+                            <button onClick={onClose} disabled={saving}
+                                className="flex-1 py-2.5 bg-white border border-gray-200 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-50 disabled:opacity-50">
+                                Cancel
+                            </button>
+                            <button onClick={handleSubmit} disabled={saving || !canSubmit}
+                                className="flex-[2] flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                                {saving ? 'Processing…' : method === 'Online' ? `Pay ₹${fmtMoney(numAmount)} Online` : `Record ₹${fmtMoney(numAmount)}`}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
     );
 }

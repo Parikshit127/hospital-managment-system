@@ -41,6 +41,8 @@ import {
   type MasterBillingFilter,
 } from "@/app/actions/master-billing-actions";
 import { CancelInvoiceModal } from "@/app/components/finance/CancelInvoiceModal";
+import { EditInvoiceModal } from "@/app/components/finance/EditInvoiceModal";
+import { Pencil } from "lucide-react";
 
 // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -159,6 +161,7 @@ export default function MasterBillingPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<any | null>(null);
+  const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
 
   const loadGrid = useCallback(async () => {
     setLoading(true);
@@ -338,6 +341,15 @@ export default function MasterBillingPage() {
                         >
                           Open
                         </Link>
+                        {canCancelInvoice(r) && Number(r.paid_amount ?? 0) === 0 && (
+                          <button
+                            onClick={() => setEditingInvoiceId(Number(r.invoice_id))}
+                            className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-bold rounded transition-colors flex items-center gap-0.5"
+                            title="Edit this invoice"
+                          >
+                            <Pencil className="h-3 w-3" /> Edit
+                          </button>
+                        )}
                         {canCancelInvoice(r) && (
                           <button
                             onClick={() => setCancelTarget(r)}
@@ -384,6 +396,20 @@ export default function MasterBillingPage() {
 
       {/* Global Finance Search modal */}
       {searchOpen && <FinanceSearchModal onClose={() => setSearchOpen(false)} />}
+
+      {/* Edit Invoice modal */}
+      {editingInvoiceId !== null && (
+        <EditInvoiceModal
+          invoiceId={editingInvoiceId}
+          isOpen
+          onClose={() => setEditingInvoiceId(null)}
+          onSaved={() => {
+            setEditingInvoiceId(null);
+            loadGrid();
+            loadKpis();
+          }}
+        />
+      )}
 
       {/* Cancel Invoice confirmation modal */}
       {cancelTarget && (

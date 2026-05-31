@@ -4,11 +4,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { getMasterBillingData } from '@/app/actions/finance-master-actions';
 import {
     Search, Filter, Loader2, ChevronDown, ChevronUp, Clock, FileText,
-    CreditCard, DollarSign, Activity, Settings, Zap, History, X, Check, Eye
+    CreditCard, DollarSign, Activity, Settings, Zap, History, X, Check, Eye, Pencil
 } from 'lucide-react';
 import { useToast } from '@/app/components/ui/Toast';
 import { processPatientPayment, addPatientDues } from '@/app/actions/reception-actions';
 import { reversePayment, cancelInvoice, revertInvoice } from '@/app/actions/finance-actions';
+import { EditInvoiceModal } from '@/app/components/finance/EditInvoiceModal';
 
 interface BillingMasterProps {
     role: 'admin' | 'reception' | 'opd';
@@ -28,6 +29,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
     // Modals
     const [paymentModal, setPaymentModal] = useState<any>(null); // { invoice_id, patient_id, max_amount }
     const [duesModal, setDuesModal] = useState<string | null>(null); // patient_id
+    const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
     const [processLoading, setProcessLoading] = useState(false);
 
     const [dueForm, setDueForm] = useState({ amount: '', description: '', department: 'General' });
@@ -334,13 +336,20 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                                                                     </div>
                                                                                     
                                                                                     <div className="flex gap-2 mt-1">
-                                                                                        <button 
+                                                                                        <button
                                                                                             onClick={() => setPaymentModal({ invoice_id: inv.id, patient_id: patient.patient_id, max: inv.balance_due })}
                                                                                             className="flex-1 py-1.5 bg-orange-50 text-orange-700 text-xs font-bold rounded-md hover:bg-orange-100">
                                                                                             Accept Payment
                                                                                         </button>
+                                                                                        {role === 'admin' && Number(inv.paid_amount ?? 0) === 0 && inv.status !== 'Cancelled' && (
+                                                                                            <button
+                                                                                                onClick={() => setEditingInvoiceId(Number(inv.id))}
+                                                                                                className="px-2 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-md hover:bg-indigo-100" title="Edit Invoice">
+                                                                                                <Pencil className="h-3.5 w-3.5" />
+                                                                                            </button>
+                                                                                        )}
                                                                                         {role === 'admin' && (
-                                                                                            <button 
+                                                                                            <button
                                                                                                 onClick={() => handleVoidInvoice(inv.id)}
                                                                                                 className="px-2 py-1.5 bg-rose-50 text-rose-600 text-xs font-bold rounded-md hover:bg-rose-100" title="Void Bill">
                                                                                                 <X className="h-3.5 w-3.5" />
@@ -450,6 +459,16 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* EDIT INVOICE MODAL */}
+            {editingInvoiceId !== null && (
+                <EditInvoiceModal
+                    invoiceId={editingInvoiceId}
+                    isOpen
+                    onClose={() => setEditingInvoiceId(null)}
+                    onSaved={() => { setEditingInvoiceId(null); loadData(); }}
+                />
             )}
 
             {/* ADD DUES MODAL */}

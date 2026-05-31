@@ -15,14 +15,17 @@ export async function isMfaRequiredRole(role: string): Promise<boolean> {
 // Generate TOTP secret and QR code for setup
 export async function setupMFA(userId: string) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId: orgId } = await requireTenantContext();
 
         const user = await db.user.findUnique({ where: { id: userId } });
         if (!user) return { success: false, error: 'User not found' };
 
+        const org = await db.organization.findUnique({ where: { id: orgId }, select: { name: true } });
+        const orgName = org?.name || 'Hospital';
+
         const secret = speakeasy.generateSecret({
-            name: `Axten Hospitals (${user.username})`,
-            issuer: 'Axten Hospitals',
+            name: `${orgName} (${user.username})`,
+            issuer: orgName,
         });
 
         // Generate backup codes
