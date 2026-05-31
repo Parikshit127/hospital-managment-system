@@ -141,6 +141,43 @@ function canCancelInvoice(r: any): boolean {
   return !TERMINAL_STATUSES.includes(r?.invoice_status);
 }
 
+// ── date quick-filter presets ───────────────────────────────────────────────
+// Local-time YYYY-MM-DD (matches the date inputs + server created_at range).
+function toYMD(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+const DATE_PRESETS = ["Today", "Yesterday", "Last 7 Days", "Last 30 Days", "This Month", "Last Month"];
+function presetRange(key: string): { from: string; to: string } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (key) {
+    case "Today":
+      break;
+    case "Yesterday":
+      start.setDate(start.getDate() - 1);
+      end.setDate(end.getDate() - 1);
+      break;
+    case "Last 7 Days":
+      start.setDate(start.getDate() - 6);
+      break;
+    case "Last 30 Days":
+      start.setDate(start.getDate() - 29);
+      break;
+    case "This Month":
+      start.setDate(1);
+      break;
+    case "Last Month":
+      start.setMonth(start.getMonth() - 1, 1); // 1st of previous month
+      end.setDate(0); // last day of previous month
+      break;
+  }
+  return { from: toYMD(start), to: toYMD(end) };
+}
+
 const STATUS_FILTERS = ["", "Draft", "Finalized", "Partial", "Paid", "Overdue", "Cancelled"];
 const PAYMENT_FILTERS = ["", "Paid", "Partial", "Overdue", "Draft", "Refunded"];
 const PATIENT_TYPES = ["", "cash", "corporate", "tpa_insurance"];
@@ -162,6 +199,7 @@ export default function MasterBillingPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<any | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const loadGrid = useCallback(async () => {
     setLoading(true);
@@ -196,6 +234,48 @@ export default function MasterBillingPage() {
 
   const clearFilters = () => setFilter({ page: 1, limit: 25 });
 
+  // Export the FULL filtered result set (all pages, respecting every active
+  // filter — date range, status, search, etc.) to Excel.
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const res = await getMasterBillingGrid({ ...filter, export_all: true });
+      const rows: any[] = res.success && res.data ? res.data : [];
+      if (rows.length === 0) {
+        alert("No invoices match the current filters.");
+        return;
+      }
+      const xlsxMod: any = await import("xlsx");
+      const XLSX = xlsxMod.default ?? xlsxMod;
+      const mapped = rows.map((r) => ({
+        "Invoice #": r.invoice_number,
+        Patient: r.patient_name,
+        UHID: r.patient_id,
+        "Patient Type": r.patient_type,
+        Type: r.admission_type,
+        "Invoice Status": r.invoice_status,
+        "Payment Status": r.payment_status,
+        Total: Number(r.total_amount || 0),
+        Paid: Number(r.paid_amount || 0),
+        Outstanding: Number(r.outstanding_amount || 0),
+        "Deposit Balance": Number(r.deposit_balance || 0),
+        "Aging (days)": r.aging_days,
+        "Invoice Date": r.created_at ? new Date(r.created_at).toLocaleDateString("en-IN") : "",
+        "Last Payment": r.last_payment_date ? new Date(r.last_payment_date).toLocaleDateString("en-IN") : "",
+      }));
+      const ws = XLSX.utils.json_to_sheet(mapped);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Master Billing");
+      const span = `${filter.date_from || "all"}_${filter.date_to || "all"}`;
+      XLSX.writeFile(wb, `master-billing-${span}.xlsx`);
+    } catch (e) {
+      console.error("Export failed:", e);
+      alert("Export failed. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <AppShell
       pageTitle="Master Billing"
@@ -223,6 +303,14 @@ export default function MasterBillingPage() {
             }`}
           >
             <Filter className="h-3.5 w-3.5" /> Filters
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 text-xs font-bold rounded-lg disabled:opacity-50"
+            title="Export current filtered results to Excel"
+          >
+            {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Export
           </button>
         </div>
       }
@@ -651,6 +739,44 @@ function FilterRow({
         options={RISK_LEVELS}
         onChange={(v) => setFilter({ risk_level: (v || undefined) as any })}
       />
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Date</span>
+        {DATE_PRESETS.map((key) => {
+          const r = presetRange(key);
+          const active = filter.date_from === r.from && filter.date_to === r.to;
+          return (
+            <button
+              key={key}
+              onClick={() => setFilter({ date_from: r.from, date_to: r.to })}
+              className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors ${
+                active
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              {key}
+            </button>
+          );
+        })}
+        {/* Custom range */}
+        <input
+          type="date"
+          value={filter.date_from ?? ""}
+          max={filter.date_to || undefined}
+          onChange={(e) => setFilter({ date_from: e.target.value || undefined })}
+          className="px-2 py-1 border border-gray-200 rounded text-xs"
+          title="From date (invoice created on/after)"
+        />
+        <span className="text-[10px] text-gray-400">to</span>
+        <input
+          type="date"
+          value={filter.date_to ?? ""}
+          min={filter.date_from || undefined}
+          onChange={(e) => setFilter({ date_to: e.target.value || undefined })}
+          className="px-2 py-1 border border-gray-200 rounded text-xs"
+          title="To date (invoice created on/before)"
+        />
+      </div>
       <input
         type="text"
         placeholder="Search by name / phone / invoice…"

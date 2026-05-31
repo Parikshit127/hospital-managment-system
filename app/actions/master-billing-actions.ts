@@ -140,14 +140,16 @@ export interface MasterBillingFilter {
   risk_level?: "low" | "medium" | "high";
   page?: number;
   limit?: number;
+  export_all?: boolean; // when true, return the full filtered set (capped) for export
 }
 
 export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
   try {
     const { db, organizationId } = await requireTenantContext();
     const page = Math.max(1, filter.page || 1);
-    const limit = Math.min(200, filter.limit || 25);
-    const skip = (page - 1) * limit;
+    // Export pulls the full filtered set (safety-capped); the normal grid is paginated.
+    const limit = filter.export_all ? 5000 : Math.min(200, filter.limit || 25);
+    const skip = filter.export_all ? 0 : (page - 1) * limit;
 
     const where: any = { organizationId };
 
@@ -158,7 +160,8 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
     if (filter.date_from || filter.date_to) {
       where.created_at = {};
       if (filter.date_from) where.created_at.gte = new Date(filter.date_from);
-      if (filter.date_to) where.created_at.lte = new Date(filter.date_to);
+      // Make the "to" date inclusive of the whole day (end-of-day)
+      if (filter.date_to) where.created_at.lte = new Date(filter.date_to + "T23:59:59.999");
     }
 
     if (filter.search && filter.search.trim().length >= 2) {

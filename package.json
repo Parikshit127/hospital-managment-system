@@ -11,7 +11,7 @@
     "dev:fresh": "npm run clean && npm install && npm run dev",
     "clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
     "setup": "npm install && prisma generate && npm run clean",
-    "build": "next build --webpack",
+    "build": "prisma generate && next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "lint:ci": "eslint --max-warnings=0 app/lib/env.ts app/lib/route-auth.ts app/lib/password-setup.ts app/lib/login-rate-limit.ts app/patient/setup-password",

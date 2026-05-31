@@ -151,7 +151,7 @@ export default function WriteoffsPage() {
             Approval Center
           </Link>
           <Link
-            href="/admin/billing"
+            href="/billing"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-lg"
           >
             <ChevronLeft className="h-3.5 w-3.5" /> Master Billing

@@ -42,7 +42,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
             { label: 'Pharmacy', href: '/admin/pharmacy', icon: Pill },
             { label: 'Finance', href: '/admin/finance', icon: DollarSign },
             { label: 'Finance Master', href: '/admin/finance-master', icon: Receipt },
-            { label: 'Master Billing', href: '/admin/billing', icon: FileText },
+            { label: 'Master Billing', href: '/billing', icon: FileText },
             { label: 'Approval Center', href: '/admin/billing/approvals', icon: ShieldAlert },
             { label: 'Write-offs', href: '/admin/billing/writeoffs', icon: Scale },
             { label: 'HR', href: '/admin/hr', icon: Briefcase },
