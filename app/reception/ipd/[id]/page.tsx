@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import {
     Bed, ArrowLeft, Loader2, User, Phone, Mail, MapPin,
     Droplets, Stethoscope, Building2, CalendarCheck, Calendar,
-    Clock, FileText, Receipt, CreditCard, Activity,
+    Clock, FileText, Receipt, CreditCard, Activity, Printer,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
@@ -151,12 +151,21 @@ export default function IPDAdmissionDetailPage() {
     useEffect(() => { loadData(); }, [loadData]);
 
     const headerActions = (
-        <Link
-            href="/reception/ipd"
-            className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-colors"
-        >
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to IPD
-        </Link>
+        <div className="flex items-center gap-2">
+            <button
+                onClick={() => window.open(`/api/admission/${admissionId}/admission-form`, '_blank')}
+                className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold rounded-xl hover:bg-indigo-100 transition-colors"
+                title="Print patient admission form"
+            >
+                <Printer className="h-3.5 w-3.5" /> Print Admission Form
+            </button>
+            <Link
+                href="/reception/ipd"
+                className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-colors"
+            >
+                <ArrowLeft className="h-3.5 w-3.5" /> Back to IPD
+            </Link>
+        </div>
     );
 
     if (loading) {

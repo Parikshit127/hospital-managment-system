@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-    Bed, Search, Loader2, Building2, CalendarCheck, TrendingUp,
+    Bed, Search, Loader2, Building2, CalendarCheck, TrendingUp, Printer,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
@@ -286,12 +286,21 @@ export default function IPDAdmissionsPage() {
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3 whitespace-nowrap">
-                                                <Link
-                                                    href={`/reception/ipd/${admission.admission_id}`}
-                                                    className="inline-flex items-center px-3 py-1.5 text-[10px] font-bold text-white bg-gradient-to-r from-teal-500 to-emerald-600 rounded-lg hover:shadow-md transition-shadow"
-                                                >
-                                                    View
-                                                </Link>
+                                                <div className="flex items-center gap-1.5">
+                                                    <Link
+                                                        href={`/reception/ipd/${admission.admission_id}`}
+                                                        className="inline-flex items-center px-3 py-1.5 text-[10px] font-bold text-white bg-gradient-to-r from-teal-500 to-emerald-600 rounded-lg hover:shadow-md transition-shadow"
+                                                    >
+                                                        View
+                                                    </Link>
+                                                    <button
+                                                        onClick={() => window.open(`/api/admission/${admission.admission_id}/admission-form`, '_blank')}
+                                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors"
+                                                        title="Print admission form"
+                                                    >
+                                                        <Printer className="h-3 w-3" /> Form
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     );

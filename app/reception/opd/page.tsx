@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Stethoscope, Clock, Activity, CheckCircle2, Loader2,
-    Users, Phone, Eye, Filter, Search, ChevronLeft, ChevronRight,
+    Users, Phone, Eye, Filter, Search, ChevronLeft, ChevronRight, Printer,
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
@@ -267,13 +267,22 @@ export default function OPDPatientsPage() {
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">
-                                                <Link
-                                                    href={`/reception/patient/${patient.patient_id}`}
-                                                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-emerald-600 transition-colors inline-flex"
-                                                    title="View Full Profile"
-                                                >
-                                                    <Eye className="h-4 w-4" />
-                                                </Link>
+                                                <div className="flex items-center gap-1">
+                                                    <Link
+                                                        href={`/reception/patient/${patient.patient_id}`}
+                                                        className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-emerald-600 transition-colors inline-flex"
+                                                        title="View Full Profile"
+                                                    >
+                                                        <Eye className="h-4 w-4" />
+                                                    </Link>
+                                                    <button
+                                                        onClick={() => window.open(`/api/opd/${patient.patient_id}/registration-slip`, '_blank')}
+                                                        className="p-1.5 hover:bg-indigo-50 rounded-lg text-gray-400 hover:text-indigo-600 transition-colors inline-flex"
+                                                        title="Print OPD registration slip"
+                                                    >
+                                                        <Printer className="h-4 w-4" />
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))

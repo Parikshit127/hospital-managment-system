@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { RefreshCw } from "lucide-react";
 import { NotificationBell } from "@/app/components/NotificationBell";
@@ -25,7 +26,10 @@ export function AppShell({
   refreshing,
 }: AppShellProps) {
   const isAdminPortal = useAdminPortal();
+  const pathname = usePathname();
   const [session, setSession] = useState<any>(null);
+
+  const patientBasePath = pathname?.startsWith('/billing') ? '/billing/patient' : undefined;
 
   useEffect(() => {
     fetch("/api/session")
@@ -129,7 +133,7 @@ export function AppShell({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {session?.role && <GlobalPatientSearch role={session.role} />}
+                {session?.role && <GlobalPatientSearch role={session.role} patientBasePath={patientBasePath} />}
                 {onRefresh && (
                   <button
                     onClick={onRefresh}

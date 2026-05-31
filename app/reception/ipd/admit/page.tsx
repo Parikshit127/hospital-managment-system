@@ -13,6 +13,7 @@ import {
   getWardsWithBeds,
   admitPatientIPD,
 } from '@/app/actions/ipd-actions';
+import { getActiveDoctors } from '@/app/actions/doctor-list-actions';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,9 @@ export default function AdmitPatientPage() {
   const [selectedWardId, setSelectedWardId] = useState<number | ''>('');
   const [selectedBedId, setSelectedBedId] = useState<string>('');
 
+  // Doctors list
+  const [doctors, setDoctors] = useState<{ id: string; name: string | null; specialty: string | null }[]>([]);
+
   // Admission details
   const [doctorName, setDoctorName] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
@@ -92,6 +96,11 @@ export default function AdmitPatientPage() {
         setWards(res.data as Ward[]);
       }
       setIsLoadingWards(false);
+    });
+    getActiveDoctors().then((res) => {
+      if (res.success && res.data) {
+        setDoctors(res.data as { id: string; name: string | null; specialty: string | null }[]);
+      }
     });
   }, []);
 
@@ -211,7 +220,7 @@ export default function AdmitPatientPage() {
         <form onSubmit={handleSubmit} className="space-y-5">
 
           {/* ── 1. Patient Search ─────────────────────────────────────────── */}
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm">
             <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-emerald-400 via-teal-500 to-emerald-400 rounded-t-2xl" />
             <div className="p-6">
               <div className="flex items-center gap-2 mb-5">
@@ -455,15 +464,21 @@ export default function AdmitPatientPage() {
               <div className="space-y-1.5">
                 <label className={labelClass}>Doctor Name *</label>
                 <div className="relative">
-                  <Stethoscope className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
+                  <Stethoscope className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  <select
                     value={doctorName}
                     onChange={(e) => setDoctorName(e.target.value)}
-                    placeholder="Attending physician"
-                    className={`${inputClass} pl-11`}
+                    className={`${selectClass} pl-11`}
                     required
-                  />
+                  >
+                    <option value="">Select attending physician</option>
+                    {doctors.map((d) => (
+                      <option key={d.id} value={d.name ?? ''}>
+                        {d.name}{d.specialty ? ` — ${d.specialty}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 </div>
               </div>
 

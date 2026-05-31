@@ -11,6 +11,7 @@ import {
 
 interface GlobalPatientSearchProps {
   role: string;
+  patientBasePath?: string;
 }
 
 const ALLOWED_ROLES = new Set([
@@ -36,7 +37,7 @@ function formatLastVisit(iso: string | null): string {
   return `${Math.floor(days / 365)}y ago`;
 }
 
-export function GlobalPatientSearch({ role }: GlobalPatientSearchProps) {
+export function GlobalPatientSearch({ role, patientBasePath }: GlobalPatientSearchProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -97,11 +98,13 @@ export function GlobalPatientSearch({ role }: GlobalPatientSearchProps) {
 
   const navigateTo = useCallback(
     async (patient: GlobalPatientResult) => {
-      const href = await getPatientRouteForRole(role, patient.patient_id);
+      const href = patientBasePath
+        ? `${patientBasePath}/${patient.patient_id}`
+        : await getPatientRouteForRole(role, patient.patient_id);
       setOpen(false);
       router.push(href);
     },
-    [role, router],
+    [role, router, patientBasePath],
   );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
