@@ -83,6 +83,7 @@ function generateReceiptHTML(payment: any, org: any) {
     const hospitalEmail = org?.email || '';
     const gstin = org?.registration_number || '';
     const primaryColor = org?.branding?.primary_color || '#10b981';
+    const logoUrl = org?.branding?.logo_url || org?.logo_url || '';
 
     const razorpayInfo = payment.razorpay_payment_id
         ? `<tr>
@@ -119,6 +120,7 @@ function generateReceiptHTML(payment: any, org: any) {
         <div style="border-bottom:3px solid ${primaryColor};padding-bottom:20px;margin-bottom:24px;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                 <div>
+                    ${logoUrl ? `<img src="${logoUrl}" alt="${hospitalName}" style="height:56px;max-width:200px;object-fit:contain;margin-bottom:8px;display:block;" />` : ''}
                     <h1 style="font-size:22px;font-weight:800;color:${primaryColor};margin-bottom:4px;">${hospitalName}</h1>
                     ${hospitalAddress ? `<p style="font-size:11px;color:#6b7280;max-width:280px;">${hospitalAddress}</p>` : ''}
                     <p style="font-size:11px;color:#6b7280;">

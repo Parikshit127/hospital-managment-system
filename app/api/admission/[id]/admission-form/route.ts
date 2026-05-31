@@ -28,10 +28,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
                     include: {
                         corporate: { select: { company_name: true, contact_phone: true } },
                         insurance_policies: {
-                            where: { is_active: true } as any,
                             include: { provider: { select: { provider_name: true } } },
+                            orderBy: { created_at: 'desc' },
                             take: 1,
-                        } as any,
+                        },
                     },
                 },
                 ward: { select: { ward_name: true, ward_type: true, cost_per_day: true } },
