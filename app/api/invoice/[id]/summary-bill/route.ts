@@ -49,7 +49,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const sections = await getBillSections(auth.context.organizationId, 'invoice');
 
         const deposits = invoice.patient_id
-            ? await prisma.patientDeposit.findMany({ where: { patient_id: invoice.patient_id } })
+            ? await prisma.patientDeposit.findMany({
+                where: {
+                    patient_id: invoice.patient_id,
+                    OR: [
+                        { applied_to_invoice: invoiceId },
+                        ...(invoice.admission_id ? [{ admission_id: invoice.admission_id }] : []),
+                    ],
+                },
+            })
             : [];
 
         const html = generateSummaryBillHTML(invoice, admission, org, deposits, branding, sections);
@@ -111,28 +119,43 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     const paid = Number(invoice.paid_amount || 0);
     const balance = Number(invoice.balance_due || 0);
 
-    const categoryAgg: Record<string, { qty: number; amount: number; tax: number }> = {};
+    // Group items by service_category for MEDNET-style detail rows
+    const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
+    const categoryMap: Record<string, any[]> = {};
     for (const item of items) {
         const cat = item.service_category || item.department || 'Other';
-        if (!categoryAgg[cat]) categoryAgg[cat] = { qty: 0, amount: 0, tax: 0 };
-        categoryAgg[cat].qty += Number(item.quantity || 0);
-        categoryAgg[cat].amount += Number(item.net_price || 0);
-        categoryAgg[cat].tax += Number(item.tax_amount || 0);
+        if (!categoryMap[cat]) categoryMap[cat] = [];
+        categoryMap[cat].push(item);
     }
-    const sortedCategories = Object.entries(categoryAgg).sort(
-        ([, a], [, b]) => b.amount + b.tax - (a.amount + a.tax)
-    );
 
-    let categoryRows = '';
-    for (const [cat, data] of sortedCategories) {
-        const subtotal = data.amount + data.tax;
-        categoryRows += `<tr>
-            <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;font-weight:600;">${cat}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:11px;text-align:center;color:#6b7280;">${data.qty}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:11px;text-align:right;color:#6b7280;">${data.tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;text-align:right;font-weight:700;">${subtotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td>
+    // Build MEDNET-style detail rows with category headers and individual items
+    let detailRows = '';
+    for (const [cat, catItems] of Object.entries(categoryMap)) {
+        const catTotal = catItems.reduce((s: number, i: any) => s + Number(i.net_price || 0), 0);
+        detailRows += `<tr style="background:#f0f0f0;">
+            <td colspan="5" style="padding:5px 8px;font-size:11px;font-weight:700;">${cat}</td>
+            <td style="padding:5px 8px;font-size:11px;font-weight:700;text-align:right;">Total Rs. ${catTotal.toFixed(2)}/-</td>
         </tr>`;
+        for (const item of catItems) {
+            detailRows += `<tr>
+                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;">${fmtDate(item.created_at)}</td>
+                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;">${item.description}</td>
+                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${Number(item.unit_price).toFixed(2)}</td>
+                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:center;">${item.quantity}</td>
+                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${Number(item.discount || 0).toFixed(2)}</td>
+                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${Number(item.net_price).toFixed(2)}</td>
+            </tr>`;
+        }
     }
+
+    // Payment rows MEDNET style
+    const payments = invoice.payments || [];
+    const paymentDetailRows = payments.map((p: any) => `<tr>
+        <td style="padding:4px 8px;font-size:11px;border-bottom:1px solid #ddd;">${fmtDate(p.created_at)}</td>
+        <td style="padding:4px 8px;font-size:11px;border-bottom:1px solid #ddd;">Receipt - (${p.receipt_number})</td>
+        <td style="padding:4px 8px;font-size:11px;border-bottom:1px solid #ddd;">Payment ${p.payment_method} on ${fmtDate(p.created_at)}</td>
+        <td style="padding:4px 8px;font-size:11px;text-align:right;border-bottom:1px solid #ddd;">${Number(p.amount).toFixed(2)}</td>
+    </tr>`).join('');
 
     const depositTotal = deposits.reduce((s, d) => s + Number(d.applied_amount || 0), 0);
     const creditNotes = invoice.credit_notes || [];
@@ -176,13 +199,19 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
         <thead><tr><td class="print-layout-header-spacer"></td></tr></thead>
         <tbody><tr><td>
             <div class="bill-container">
-                <div style="display:flex;justify-content:flex-end;border-bottom:2px solid ${branding.accentColor};padding-bottom:12px;margin-bottom:20px;">
+                <div style="display:flex;justify-content:space-between;border-bottom:2px solid ${branding.accentColor};padding-bottom:12px;margin-bottom:20px;">
+                    <div>
+                        <p style="font-size:11px;font-weight:700;color:${branding.accentColor};">${branding.hospitalName}${branding.tagline ? ` - ${branding.tagline}` : ''}</p>
+                        ${gstin !== 'N/A' ? `<p style="font-size:10px;color:#6b7280;">GST NO.-${gstin}</p>` : ''}
+                        <p style="font-size:10px;color:#6b7280;">${branding.hospitalAddress}</p>
+                        ${branding.hospitalPhone ? `<p style="font-size:10px;color:#6b7280;">Ph: ${branding.hospitalPhone}</p>` : ''}
+                        ${branding.hospitalEmail ? `<p style="font-size:10px;color:#6b7280;">Email: ${branding.hospitalEmail}</p>` : ''}
+                    </div>
                     <div style="text-align:right;">
                         <h2 style="font-size:16px;font-weight:800;color:${billColor};">${billType}</h2>
                         <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${invoice.invoice_number}</p>
                         <p style="font-size:10px;color:#6b7280;">Type: <strong>${invoice.invoice_type || 'OPD'}</strong></p>
                         <p style="font-size:10px;color:#6b7280;">Date: ${invoiceDate}</p>
-                        <p style="font-size:10px;color:#6b7280;">GSTIN: ${gstin}</p>
                     </div>
                 </div>
                 ${sections.showPatientInfo ? `
@@ -190,33 +219,55 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">${patientInfoHTML}</div>
                 </div>` : ''}
                 ${sections.showLineItems ? `
-                <h3 style="font-size:11px;font-weight:800;color:${branding.accentColor};text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Charges Summary</h3>
-                <table style="width:100%;border-collapse:collapse;margin-bottom:14px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;">
-                    <thead><tr style="border-bottom:2px solid ${branding.accentColor};background:#f9fafb;">
-                        <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:${branding.accentColor};">Category</th>
-                        <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:800;color:${branding.accentColor};">Items</th>
-                        <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:800;color:${branding.accentColor};">GST</th>
-                        <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:800;color:${branding.accentColor};">Amount</th>
-                    </tr></thead>
-                    <tbody>${categoryRows || '<tr><td colspan="4" style="padding:16px;text-align:center;color:#9ca3af;font-size:11px;">No charges</td></tr>'}</tbody>
+                <!-- Detailed Service Table (MEDNET format) -->
+                <table style="width:100%;border-collapse:collapse;margin-bottom:12px;border:1px solid #999;">
+                    <thead>
+                        <tr style="background:#eee;">
+                            <th style="padding:6px 8px;text-align:left;font-size:10px;border:1px solid #999;">Date</th>
+                            <th style="padding:6px 8px;text-align:left;font-size:10px;border:1px solid #999;">Service Name</th>
+                            <th style="padding:6px 8px;text-align:right;font-size:10px;border:1px solid #999;">Rate</th>
+                            <th style="padding:6px 8px;text-align:center;font-size:10px;border:1px solid #999;">Qty.</th>
+                            <th style="padding:6px 8px;text-align:right;font-size:10px;border:1px solid #999;">Disc</th>
+                            <th style="padding:6px 8px;text-align:right;font-size:10px;border:1px solid #999;">Net Amt.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${detailRows || '<tr><td colspan="6" style="padding:12px;text-align:center;color:#999;">No charges</td></tr>'}
+                        <tr style="border-top:2px solid #000;font-weight:bold;">
+                            <td colspan="3" style="padding:6px 8px;font-size:11px;">Total</td>
+                            <td style="padding:6px 8px;font-size:11px;text-align:right;">${total.toFixed(2)}</td>
+                            <td style="padding:6px 8px;font-size:11px;text-align:right;">${totalDiscount.toFixed(2)}</td>
+                            <td style="padding:6px 8px;font-size:11px;text-align:right;">${(total - totalDiscount).toFixed(2)}</td>
+                        </tr>
+                    </tbody>
                 </table>` : ''}
-                <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
-                    <table style="width:320px;border-collapse:collapse;">
-                        <tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">Subtotal</td><td style="padding:5px 12px;font-size:12px;text-align:right;">${total.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
-                        ${totalDiscount > 0 ? `<tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">Discount</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#dc2626;">-${totalDiscount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
-                        ${totalTax > 0 ? `<tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">CGST</td><td style="padding:5px 12px;font-size:12px;text-align:right;">${(totalTax / 2).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
-                        <tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">SGST</td><td style="padding:5px 12px;font-size:12px;text-align:right;">${(totalTax / 2).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
-                        <tr style="border-top:2px solid #1f2937;"><td style="padding:7px 12px;font-size:14px;font-weight:800;">Net Amount</td><td style="padding:7px 12px;font-size:14px;text-align:right;font-weight:800;">${net.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
-                        ${creditNoteTotal > 0 ? `<tr><td style="padding:5px 12px;font-size:12px;color:#0891b2;">Credit Notes Applied</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#0891b2;">-${creditNoteTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
-                        ${depositTotal > 0 ? `<tr><td style="padding:5px 12px;font-size:12px;color:#7c3aed;">Deposits Applied</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#7c3aed;">-${depositTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
-                        <tr><td style="padding:5px 12px;font-size:12px;color:#059669;">Total Paid</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#059669;">${paid.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
-                        ${balance > 0 ? `<tr style="background:#fef2f2;"><td style="padding:7px 12px;font-size:13px;font-weight:800;color:#dc2626;">Balance Due</td><td style="padding:7px 12px;font-size:13px;text-align:right;font-weight:800;color:#dc2626;">${balance.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : `<tr style="background:#f0fdf4;"><td style="padding:7px 12px;font-size:13px;font-weight:800;color:#059669;">FULLY PAID</td><td style="padding:7px 12px;font-size:13px;text-align:right;font-weight:800;color:#059669;">&#10003;</td></tr>`}
-                    </table>
-                </div>
-                ${sections.showAmountInWords ? `
-                <div style="background:#f0fdf4;border-radius:6px;padding:8px 14px;margin-bottom:14px;">
-                    <p style="font-size:10px;color:#059669;"><strong>Amount in Words:</strong> ${numberToWords(net)}</p>
-                </div>` : ''}
+
+                ${payments.length > 0 ? `
+                <!-- Payment And Refund -->
+                <table style="width:100%;border-collapse:collapse;margin-bottom:12px;border:1px solid #999;">
+                    <thead>
+                        <tr style="background:#eee;">
+                            <th colspan="4" style="padding:6px 8px;text-align:left;font-size:11px;font-weight:bold;border:1px solid #999;">Payment And Refund</th>
+                        </tr>
+                        <tr style="background:#f5f5f5;">
+                            <th style="padding:5px 8px;text-align:left;font-size:10px;border:1px solid #999;">Date</th>
+                            <th style="padding:5px 8px;text-align:left;font-size:10px;border:1px solid #999;">Receipt / Refund</th>
+                            <th style="padding:5px 8px;text-align:left;font-size:10px;border:1px solid #999;">Notes</th>
+                            <th style="padding:5px 8px;text-align:right;font-size:10px;border:1px solid #999;">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>${paymentDetailRows}</tbody>
+                </table>` : ''}
+
+                <!-- Amount Summary (MEDNET format with words) -->
+                <table style="width:100%;margin-bottom:12px;">
+                    <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;width:120px;">Bill Amount :</td><td style="font-size:11px;">${total.toFixed(2)} - ${numberToWords(total)}</td></tr>
+                    ${totalDiscount > 0 ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Discount :</td><td style="font-size:11px;">${totalDiscount.toFixed(2)}</td></tr>` : ''}
+                    <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Net Amount :</td><td style="font-size:11px;">${net.toFixed(2)} - ${numberToWords(net)}</td></tr>
+                    <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Paid Amount :</td><td style="font-size:11px;">${paid.toFixed(2)} - ${numberToWords(paid)}</td></tr>
+                    <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Balance :</td><td style="font-size:11px;">${balance.toFixed(2)} - ${numberToWords(balance)}</td></tr>
+                </table>
+                <p style="font-size:10px;text-align:right;color:#666;margin-bottom:10px;">(All figures are in Rupees (INR) only)</p>
                 ${sections.showFooter ? billFooterHtml(branding) : ''}
             </div>
         </td></tr></tbody>

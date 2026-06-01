@@ -237,9 +237,24 @@ export async function admitPatientIPD(data: {
             throw new Error("Bed is no longer available or does not exist for admission");
         }
 
-        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-        const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0");
-        const ipdId = `IPD-${dateStr}-${seq}`;
+        // Sequential admission ID: AXT/ADM/26-27/001
+        const org = await tx.organization.findUnique({ where: { id: organizationId }, select: { code: true } });
+        const orgCode = org?.code || 'HOS';
+        const now = new Date();
+        const fyStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+        const fy = `${String(fyStart).slice(-2)}-${String(fyStart + 1).slice(-2)}`;
+        const admPrefix = `${orgCode}/ADM/${fy}/`;
+        const lastAdm = await tx.admissions.findFirst({
+            where: { admission_id: { startsWith: admPrefix }, organizationId },
+            orderBy: { created_at: 'desc' },
+            select: { admission_id: true },
+        });
+        let admSeq = 1;
+        if (lastAdm) {
+            const parts = lastAdm.admission_id.split('/');
+            admSeq = (parseInt(parts[parts.length - 1]) || 0) + 1;
+        }
+        const ipdId = `${admPrefix}${String(admSeq).padStart(3, '0')}`;
 
         // Create admission
         const newAdmission = await tx.admissions.create({
