@@ -3,6 +3,7 @@
 import { requireTenantContext } from '@/backend/tenant';
 import { notifyPatient } from '@/app/lib/notify-patient';
 import OpenAI from 'openai';
+import { generateInvoiceNumber as genInvNum } from '@/app/lib/sequence-generator';
 
 export async function dischargePatient(patientId: string) {
     try {
@@ -141,11 +142,9 @@ export async function processDischarge(patientId: string, patientName: string, n
             const resolvedRoomCharge = resolvedRoomRate * daysAdmitted;
 
             if (!invoice) {
-                const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-                const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
                 invoice = await db.invoices.create({
                     data: {
-                        invoice_number: `INV-${dateStr}-${seq}`,
+                        invoice_number: await genInvNum(organizationId, 'IPD', true, db),
                         patient_id: patientId,
                         admission_id: activeAdmission.admission_id,
                         invoice_type: 'IPD',

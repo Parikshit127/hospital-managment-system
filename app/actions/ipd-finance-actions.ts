@@ -5,6 +5,7 @@ import { logAudit } from '@/app/lib/audit';
 import { createJournalEntry } from './gl-actions';
 import { accrueIPDDailyCharges } from '@/app/actions/ipd-actions';
 import { getPackageGSTRate, getRoomGSTRate } from '@/app/lib/gst';
+import { generateInvoiceNumber as genInvNum } from '@/app/lib/sequence-generator';
 
 
 function serialize<T>(data: T): T {
@@ -213,11 +214,9 @@ export async function postChargeToIpdBill(data: {
             });
             if (!admission) return { success: false, error: 'Admission not found' };
 
-            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-            const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
             invoice = await db.invoices.create({
                 data: {
-                    invoice_number: `INV-${dateStr}-${seq}`,
+                    invoice_number: await genInvNum(organizationId, 'IPD', true, db),
                     patient_id: admission.patient_id,
                     admission_id: data.admission_id,
                     invoice_type: 'IPD',

@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { getOrCreateDailySlots } from "@/app/actions/doctor-actions";
 import { logPatientAudit } from "@/app/lib/audit";
 import { notifyPatient } from "@/app/lib/notify-patient";
+import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
 
 export async function getAvailableDoctors() {
     try {
@@ -147,8 +148,8 @@ export async function bookAppointment(
 
             // Skip invoice for PAV (collected at desk) and FREE slots
             if (resolvedMode === 'ONLINE' && doctorFee > 0) {
-                const invNum = `INV-${Date.now().toString().slice(-6)}`;
-                const recNum = `REC-${Date.now().toString().slice(-6)}`;
+                const invNum = await genInvNum(session.organization_id, 'OPD', false, tx);
+                const recNum = await genRcpNum(session.organization_id, tx);
 
                 await tx.invoices.create({
                     data: {
@@ -188,7 +189,7 @@ export async function bookAppointment(
 
             // PAV: create unpaid invoice to collect at desk
             if (resolvedMode === 'PAV' && doctorFee > 0) {
-                const invNum = `INV-PAV-${Date.now().toString().slice(-6)}`;
+                const invNum = await genInvNum(session.organization_id, 'OPD', false, tx);
                 await tx.invoices.create({
                     data: {
                         invoice_number: invNum,

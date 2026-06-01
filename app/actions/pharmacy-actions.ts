@@ -8,6 +8,7 @@ import { getPatientBalances } from '@/app/actions/balance-actions';
 import { postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
 import { postInvoiceToGL } from '@/app/actions/gl-actions';
 import { syncInvoiceToGSTRegister } from '@/app/actions/gst-compliance-actions';
+import { generateSequentialNumber, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
 
 // Helper: post a GL journal entry using account codes (resolves to account IDs)
 async function postPharmacyJournal(db: any, organizationId: string, data: {
@@ -44,19 +45,7 @@ async function postPharmacyJournal(db: any, organizationId: string, data: {
     });
 }
 
-function generatePharmacyInvoiceNumber() {
-    const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
-    const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
-    return `PINV-${dateStr}-${seq}`;
-}
-
-function generatePharmacyReceiptNumber() {
-    const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
-    const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
-    return `PRCP-${dateStr}-${seq}`;
-}
+// Invoice and receipt number generation now uses sequential generator from @/app/lib/sequence-generator
 
 export async function getInventory() {
     try {
@@ -253,7 +242,7 @@ export async function generateInvoice(patientId: string, items: any[]) {
 
         const invoice = await db.invoices.create({
             data: {
-                invoice_number: generatePharmacyInvoiceNumber(),
+                invoice_number: await generateSequentialNumber(organizationId, 'PHM', db),
                 patient_id: patientId,
                 invoice_type: 'Pharmacy',
                 status: 'Final',
@@ -446,7 +435,7 @@ export async function getPharmacyQueue() {
 
 export async function markOrderAsPaid(orderId: number, paymentMethod: string = 'Cash') {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
 
         const order = await db.pharmacy_orders.findUnique({ where: { id: orderId } });
         if (!order) return { success: false, error: 'Order not found' };
@@ -458,7 +447,7 @@ export async function markOrderAsPaid(orderId: number, paymentMethod: string = '
                 const payAmount = Number(invoice.balance_due);
                 const payment = await db.payments.create({
                     data: {
-                        receipt_number: generatePharmacyReceiptNumber(),
+                        receipt_number: await genRcpNum(organizationId, db),
                         invoice_id: invoice.id,
                         amount: payAmount,
                         payment_method: paymentMethod,
@@ -811,7 +800,7 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
 
             const invoice = await db.invoices.create({
                 data: {
-                    invoice_number: generatePharmacyInvoiceNumber(),
+                    invoice_number: await generateSequentialNumber(organizationId, 'PHM', db),
                     patient_id: order!.patient_id,
                     invoice_type: 'Pharmacy',
                     status: 'Final',

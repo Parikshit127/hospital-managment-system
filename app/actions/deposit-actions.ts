@@ -1,6 +1,7 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
+import { generateDepositNumber as genDepNum } from '@/app/lib/sequence-generator';
 
 function serialize<T>(data: T): T {
     return JSON.parse(JSON.stringify(data, (_, value) =>
@@ -8,13 +9,6 @@ function serialize<T>(data: T): T {
             ? Number(value)
             : value
     ));
-}
-
-function generateDepositNumber() {
-    const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
-    const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
-    return `DEP-${dateStr}-${seq}`;
 }
 
 function generateCreditNoteNumber() {
@@ -40,7 +34,7 @@ export async function collectDeposit(data: {
         const { db, session, organizationId } = await requireTenantContext();
         const deposit = await db.patientDeposit.create({
             data: {
-                deposit_number: generateDepositNumber(),
+                deposit_number: await genDepNum(organizationId, db),
                 patient_id: data.patient_id,
                 admission_id: data.admission_id || null,
                 amount: data.amount,

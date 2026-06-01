@@ -2,6 +2,7 @@
 
 import { requireTenantContext } from "@/backend/tenant";
 import { revalidatePath } from "next/cache";
+import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
 
 export async function searchPatientsForReceipt(query: string) {
     try {
@@ -154,8 +155,8 @@ export async function saveFeeReceipt(payload: SaveFeeReceiptInput) {
             pid = walkin.patient_id;
         }
 
-        const invoiceNo = `INV-${Date.now().toString().slice(-8)}`;
-        const receiptNo = `REC-${Date.now().toString().slice(-8)}`;
+        const invoiceNo = await genInvNum(organizationId, 'OPD_FEE', false, db);
+        const receiptNo = await genRcpNum(organizationId, db);
         const createdAt = payload.receipt_date ? new Date(payload.receipt_date) : undefined;
 
         const invoice = await db.invoices.create({

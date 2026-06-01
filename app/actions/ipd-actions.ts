@@ -5,6 +5,7 @@ import { logAudit } from "@/app/lib/audit";
 import { revalidatePath } from "next/cache";
 import { getPatientBalances } from '@/app/actions/balance-actions';
 import { getRoomGSTRate } from '@/app/lib/gst';
+import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, generateDepositNumber as genDepNum } from '@/app/lib/sequence-generator';
 
 
 function serialize<T>(data: T): T {
@@ -255,12 +256,9 @@ export async function admitPatientIPD(data: {
         });
 
         // Create IPD invoice
-        // Re-use dateStr and seq or generate new ones for invoice if preferred, but generating new seq:
-        const invoiceSeq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0");
-
         const newInvoice = await tx.invoices.create({
             data: {
-                invoice_number: `INV-${dateStr}-${invoiceSeq}`,
+                invoice_number: await genInvNum(organizationId, 'IPD', true, tx),
                 patient_id: data.patient_id,
                 admission_id: newAdmission.admission_id,
                 invoice_type: "IPD",
@@ -272,11 +270,9 @@ export async function admitPatientIPD(data: {
 
         // Collect deposit if provided
         if (data.deposit_amount && data.deposit_amount > 0) {
-            const depDateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-            const depSeq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0");
             await tx.patientDeposit.create({
                 data: {
-                    deposit_number: `DEP-${depDateStr}-${depSeq}`,
+                    deposit_number: await genDepNum(organizationId, tx),
                     patient_id: data.patient_id,
                     admission_id: newAdmission.admission_id,
                     amount: data.deposit_amount,
@@ -569,7 +565,7 @@ export async function getAdmissionDetail(admissionId: string) {
 // Add daily charges (room + nursing) to an admission's invoice
 export async function accrueIPDDailyCharges(admissionId: string) {
   try {
-    const { db } = await requireTenantContext();
+    const { db, organizationId } = await requireTenantContext();
     const admission = await db.admissions.findUnique({
       where: { admission_id: admissionId },
       include: { ward: true, bed: { include: { wards: true } } },
@@ -586,11 +582,9 @@ export async function accrueIPDDailyCharges(admissionId: string) {
     });
 
     if (!invoice) {
-      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-      const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0");
       invoice = await db.invoices.create({
         data: {
-          invoice_number: `INV-${dateStr}-${seq}`,
+          invoice_number: await genInvNum(organizationId, 'IPD', true, db),
           patient_id: admission.patient_id,
           admission_id: admissionId,
           invoice_type: "IPD",

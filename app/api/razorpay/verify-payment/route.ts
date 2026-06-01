@@ -3,13 +3,7 @@ import crypto from 'crypto';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getRazorpaySigningSecret } from '@/app/lib/razorpay';
-
-function generateReceiptNumber() {
-    const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
-    const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
-    return `RCP-${dateStr}-${seq}`;
-}
+import { generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
 
 export async function POST(req: NextRequest) {
     try {
@@ -122,7 +116,7 @@ export async function POST(req: NextRequest) {
         const payment = await prisma.$transaction(async (tx) => {
             const createdPayment = await tx.payments.create({
                 data: {
-                    receipt_number: generateReceiptNumber(),
+                    receipt_number: await genRcpNum(auth.context.organizationId, tx),
                     invoice_id: invoiceId,
                     amount: orderIntent.expected_amount,
                     payment_method: 'Razorpay',

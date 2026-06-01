@@ -6,6 +6,7 @@ import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
 import { billingInvoiceMsg, paymentReceiptMsg } from '@/app/lib/whatsapp-templates';
 import { postInvoiceToGL, postPaymentToGL, reverseJournalEntry } from './gl-actions';
 import { getCashThresholds, validateCashCompliance, normalizePan, CASH_METHOD } from '@/app/lib/cash-compliance';
+import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
 
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
@@ -34,14 +35,15 @@ async function checkPeriodLock(db: any, date: Date = new Date()) {
 // INVOICE MANAGEMENT
 // ============================================
 
-function generateInvoiceNumber() {
+// Legacy fallback (only used if sequential generator fails)
+function generateInvoiceNumberLegacy() {
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
     const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
     return `INV-${dateStr}-${seq}`;
 }
 
-function generateReceiptNumber() {
+function generateReceiptNumberLegacy() {
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
     const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
@@ -92,7 +94,7 @@ export async function createInvoice(data: {
 
         const invoice = await db.invoices.create({
             data: {
-                invoice_number: generateInvoiceNumber(),
+                invoice_number: await genInvNum(organizationId, data.invoice_type, !!data.admission_id, db),
                 patient_id: data.patient_id,
                 admission_id: data.admission_id || null,
                 invoice_type: data.invoice_type,
@@ -660,7 +662,7 @@ export async function recordPayment(data: {
 
         const payment = await db.payments.create({
             data: {
-                receipt_number: generateReceiptNumber(),
+                receipt_number: await genRcpNum(organizationId, db),
                 invoice_id: data.invoice_id,
                 amount: data.amount,
                 payment_method: data.payment_method,
@@ -809,7 +811,7 @@ export async function recordSplitPayment(data: {
             const splitIsCash = split.payment_method === CASH_METHOD;
             const payment = await db.payments.create({
                 data: {
-                    receipt_number: generateReceiptNumber(),
+                    receipt_number: await genRcpNum(organizationId, db),
                     invoice_id: data.invoice_id,
                     amount: split.amount,
                     payment_method: split.payment_method,
@@ -1165,7 +1167,7 @@ export async function autoCreateBillingRecord(data: {
             } else {
                 const newInvoice = await db.invoices.create({
                     data: {
-                        invoice_number: generateInvoiceNumber(),
+                        invoice_number: await genInvNum(organizationId, 'OPD', false, db),
                         patient_id: data.patient_id,
                         invoice_type: 'OPD',
                         status: 'Draft',
