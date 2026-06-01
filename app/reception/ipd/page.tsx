@@ -288,13 +288,13 @@ export default function IPDAdmissionsPage() {
                                             <td className="px-4 py-3 whitespace-nowrap">
                                                 <div className="flex items-center gap-1.5">
                                                     <Link
-                                                        href={`/reception/ipd/${admission.admission_id}`}
+                                                        href={`/reception/ipd/${encodeURIComponent(admission.admission_id)}`}
                                                         className="inline-flex items-center px-3 py-1.5 text-[10px] font-bold text-white bg-gradient-to-r from-teal-500 to-emerald-600 rounded-lg hover:shadow-md transition-shadow"
                                                     >
                                                         View
                                                     </Link>
                                                     <button
-                                                        onClick={() => window.open(`/api/admission/${admission.admission_id}/admission-form`, '_blank')}
+                                                        onClick={() => window.open(`/api/admission/${encodeURIComponent(admission.admission_id)}/admission-form`, '_blank')}
                                                         className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors"
                                                         title="Print admission form"
                                                     >
