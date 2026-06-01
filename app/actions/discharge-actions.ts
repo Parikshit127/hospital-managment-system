@@ -4,9 +4,6 @@ import { requireTenantContext } from '@/backend/tenant';
 import { notifyPatient } from '@/app/lib/notify-patient';
 import OpenAI from 'openai';
 
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 export async function dischargePatient(patientId: string) {
     try {
         const { db, organizationId } = await requireTenantContext();
@@ -271,6 +268,7 @@ export async function processDischarge(patientId: string, patientName: string, n
 
 export async function generateAISummary(admissionId: string) {
     try {
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
         const { db, organizationId } = await requireTenantContext();
 
         const admission = await db.admissions.findUnique({
