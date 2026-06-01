@@ -95,7 +95,17 @@ export function letterheadCss(b: BillBranding): string {
 
 export function inlineHeaderHtml(b: BillBranding, rightHtml = ''): string {
     const logoBlock = b.logoUrl
-        ? `<img src="${b.logoUrl}" alt="${escHtml(b.hospitalName)}" style="height:80px;width:auto;display:block;flex-shrink:0;" />`
+        ? `<div style="display:flex;align-items:flex-start;gap:14px;">
+            <img src="${b.logoUrl}" alt="${escHtml(b.hospitalName)}" style="height:75px;width:auto;display:block;flex-shrink:0;" />
+            <div>
+                <div style="font-size:22px;font-weight:900;color:${b.accentColor};font-family:'Arial Black',Arial,sans-serif;line-height:1.2;">${escHtml(b.hospitalName)}</div>
+                ${b.tagline ? `<div style="font-size:10px;color:${b.accentColor};opacity:0.8;margin-top:2px;">${escHtml(b.tagline)}</div>` : ''}
+                ${b.registrationNumber ? `<div style="font-size:9px;color:#6b7280;margin-top:3px;">Reg: ${escHtml(b.registrationNumber)}</div>` : ''}
+                ${b.hospitalAddress ? `<div style="font-size:9px;color:#6b7280;margin-top:1px;">${escHtml(b.hospitalAddress)}</div>` : ''}
+                ${b.hospitalPhone ? `<div style="font-size:9px;color:#6b7280;">Ph: ${escHtml(b.hospitalPhone)}${b.hospitalEmail ? ` | ${escHtml(b.hospitalEmail)}` : ''}</div>` : ''}
+                ${b.gstin && b.gstin !== 'N/A' ? `<div style="font-size:9px;color:#6b7280;font-weight:600;">GSTIN: ${escHtml(b.gstin)}</div>` : ''}
+            </div>
+          </div>`
         : `<div>
             <div style="font-size:26px;font-weight:900;color:${b.accentColor};font-family:'Arial Black',Arial,sans-serif;">${escHtml(b.hospitalName)}</div>
             ${b.tagline ? `<div style="font-size:10px;color:${b.accentColor};opacity:0.7;margin-top:2px;">${escHtml(b.tagline)}</div>` : ''}
