@@ -58,7 +58,7 @@ export async function generateSequentialNumber(
 
     const fy = getFinancialYear();
     const fyStart = getFYStartDate();
-    const prefix = `${orgCode}/${type}/${fy}/`;
+    const prefix = `${orgCode}-${type}-${fy}-`;
 
     // Count existing records with this prefix pattern
     let lastSeq = 0;
@@ -74,7 +74,7 @@ export async function generateSequentialNumber(
             select: { invoice_number: true },
         });
         if (lastInvoice) {
-            const parts = lastInvoice.invoice_number.split('/');
+            const parts = lastInvoice.invoice_number.split('-');
             lastSeq = parseInt(parts[parts.length - 1]) || 0;
         }
     } else if (type === 'RCP') {
@@ -87,7 +87,7 @@ export async function generateSequentialNumber(
             select: { receipt_number: true },
         });
         if (lastReceipt) {
-            const parts = lastReceipt.receipt_number.split('/');
+            const parts = lastReceipt.receipt_number.split('-');
             lastSeq = parseInt(parts[parts.length - 1]) || 0;
         }
     } else if (type === 'DEP') {
@@ -100,7 +100,7 @@ export async function generateSequentialNumber(
             select: { receipt_number: true },
         });
         if (lastDeposit) {
-            const parts = lastDeposit.receipt_number.split('/');
+            const parts = lastDeposit.receipt_number.split('-');
             lastSeq = parseInt(parts[parts.length - 1]) || 0;
         }
     } else if (type === 'PHM') {
@@ -113,7 +113,7 @@ export async function generateSequentialNumber(
             select: { invoice_number: true },
         });
         if (lastPharm) {
-            const parts = lastPharm.invoice_number.split('/');
+            const parts = lastPharm.invoice_number.split('-');
             lastSeq = parseInt(parts[parts.length - 1]) || 0;
         }
     } else if (type === 'CN') {
@@ -126,7 +126,7 @@ export async function generateSequentialNumber(
             select: { credit_note_number: true },
         });
         if (lastCN) {
-            const parts = lastCN.credit_note_number.split('/');
+            const parts = lastCN.credit_note_number.split('-');
             lastSeq = parseInt(parts[parts.length - 1]) || 0;
         }
     } else {
@@ -140,7 +140,7 @@ export async function generateSequentialNumber(
             select: { invoice_number: true },
         });
         if (last) {
-            const parts = last.invoice_number.split('/');
+            const parts = last.invoice_number.split('-');
             lastSeq = parseInt(parts[parts.length - 1]) || 0;
         }
     }

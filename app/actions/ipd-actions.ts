@@ -243,7 +243,7 @@ export async function admitPatientIPD(data: {
         const now = new Date();
         const fyStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
         const fy = `${String(fyStart).slice(-2)}-${String(fyStart + 1).slice(-2)}`;
-        const admPrefix = `${orgCode}/ADM/${fy}/`;
+        const admPrefix = `${orgCode}-ADM-${fy}-`;
         const lastAdm = await tx.admissions.findFirst({
             where: { admission_id: { startsWith: admPrefix }, organizationId },
             orderBy: { created_at: 'desc' },
@@ -251,7 +251,7 @@ export async function admitPatientIPD(data: {
         });
         let admSeq = 1;
         if (lastAdm) {
-            const parts = lastAdm.admission_id.split('/');
+            const parts = lastAdm.admission_id.split('-');
             admSeq = (parseInt(parts[parts.length - 1]) || 0) + 1;
         }
         const ipdId = `${admPrefix}${String(admSeq).padStart(3, '0')}`;
