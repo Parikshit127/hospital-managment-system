@@ -348,10 +348,18 @@ export default function InvoiceDetailPage() {
                         </>
                     )}
                     {!invoice.admission_id && (
-                        <button onClick={() => window.print()}
-                            className="px-4 py-3 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
-                            Print
-                        </button>
+                        <>
+                            <button
+                                onClick={() => window.open(`/api/invoice/${invoiceId}/pdf`, '_blank')}
+                                className="px-4 py-3 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
+                                Print Detailed Bill
+                            </button>
+                            <button
+                                onClick={() => window.open(`/api/invoice/${invoiceId}/summary-bill`, '_blank')}
+                                className="px-4 py-3 border border-emerald-300 bg-emerald-50 text-emerald-700 rounded-lg text-sm hover:bg-emerald-100">
+                                Print Summary Bill
+                            </button>
+                        </>
                     )}
                     <button onClick={() => router.back()}
                         className="px-4 py-3 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
