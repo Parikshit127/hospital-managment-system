@@ -68,8 +68,11 @@ export async function getBillBranding(organizationId: string): Promise<BillBrand
 // ─── Pattern A: Full-page letterhead background ──────────────────────────────
 
 export function letterheadBackgroundHtml(b: BillBranding): string {
-    const src = b.letterheadUrl || '/letter head.png';
-    return `<div class="letterhead-bg"><img src="${src}" alt="" aria-hidden="true" /></div>`;
+    if (!b.letterheadUrl) {
+        // No letterhead configured — return empty (header info handled by inlineHeaderHtml)
+        return '';
+    }
+    return `<div class="letterhead-bg"><img src="${b.letterheadUrl}" alt="" aria-hidden="true" /></div>`;
 }
 
 export function letterheadCss(b: BillBranding): string {
@@ -77,8 +80,8 @@ export function letterheadCss(b: BillBranding): string {
         .letterhead-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
         .letterhead-bg img { width: 100%; height: 100%; object-fit: fill; }
         .print-layout-table { width: 100%; border-collapse: collapse; }
-        .print-layout-header-spacer { height: ${b.headerHeight}px; }
-        .print-layout-footer-spacer { height: ${b.footerHeight}px; }
+        .print-layout-header-spacer { height: ${b.letterheadUrl ? b.headerHeight : 0}px; }
+        .print-layout-footer-spacer { height: ${b.letterheadUrl ? b.footerHeight : 0}px; }
         .bill-container { max-width: 800px; margin: 0 auto; padding: 0 60px; position: relative; z-index: 1; }
         .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 80px; font-weight: 900; opacity: 0.04; pointer-events: none; z-index: 0; }
         @media print {
