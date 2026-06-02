@@ -36,11 +36,11 @@ export async function getBillBranding(organizationId: string): Promise<BillBrand
     let logoUrl = b?.logo_url || org?.logo_url || null;
     let letterheadUrl = b?.letterhead_url || null;
 
-    // Resolve S3 keys to signed URLs (keys don't start with http)
-    if (logoUrl && !logoUrl.startsWith('http')) {
+    // Resolve S3 keys to signed URLs (skip local paths starting with / and http URLs)
+    if (logoUrl && !logoUrl.startsWith('http') && !logoUrl.startsWith('/')) {
         try { logoUrl = await getSignedDownloadUrl(logoUrl, 86400); } catch { /* keep raw */ }
     }
-    if (letterheadUrl && !letterheadUrl.startsWith('http')) {
+    if (letterheadUrl && !letterheadUrl.startsWith('http') && !letterheadUrl.startsWith('/')) {
         try { letterheadUrl = await getSignedDownloadUrl(letterheadUrl, 86400); } catch { /* keep raw */ }
     }
 
