@@ -246,7 +246,7 @@ export async function admitPatientIPD(data: {
         const admPrefix = `${orgCode}-ADM-${fy}-`;
         const lastAdm = await tx.admissions.findFirst({
             where: { admission_id: { startsWith: admPrefix }, organizationId },
-            orderBy: { created_at: 'desc' },
+            orderBy: { admission_date: 'desc' },
             select: { admission_id: true },
         });
         let admSeq = 1;
