@@ -94,13 +94,13 @@ export async function generateSequentialNumber(
         const lastDeposit = await database.patientDeposit.findFirst({
             where: {
                 organizationId,
-                receipt_number: { startsWith: prefix },
+                deposit_number: { startsWith: prefix },
             },
             orderBy: { created_at: 'desc' },
-            select: { receipt_number: true },
+            select: { deposit_number: true },
         });
         if (lastDeposit) {
-            const parts = lastDeposit.receipt_number.split('-');
+            const parts = lastDeposit.deposit_number.split('-');
             lastSeq = parseInt(parts[parts.length - 1]) || 0;
         }
     } else if (type === 'PHM') {

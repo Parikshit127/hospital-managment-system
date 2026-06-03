@@ -78,7 +78,7 @@ export default function InsuranceDashboard() {
     useEffect(() => { loadData(); }, [claimFilter]);
 
     const handleAddProvider = async () => {
-        if (!providerForm.provider_name || !providerForm.provider_code) return;
+        if (!providerForm.provider_name) return;
         await addInsuranceProvider(providerForm);
         setProviderModal(false);
         setProviderForm({ provider_name: '', provider_code: '', contact_email: '', contact_phone: '' });
@@ -698,9 +698,9 @@ export default function InsuranceDashboard() {
                                     className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-blue-500/50 focus:outline-none" placeholder="e.g., Star Health" />
                             </div>
                             <div>
-                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Provider Code</label>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Provider Code <span className="text-gray-400 font-normal normal-case">(optional)</span></label>
                                 <input type="text" value={providerForm.provider_code} onChange={e => setProviderForm({ ...providerForm, provider_code: e.target.value })}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-blue-500/50 focus:outline-none" placeholder="e.g., STAR" />
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-blue-500/50 focus:outline-none" placeholder="Auto-generated if blank" />
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
@@ -715,7 +715,7 @@ export default function InsuranceDashboard() {
                                 </div>
                             </div>
                         </div>
-                        <button onClick={handleAddProvider} disabled={!providerForm.provider_name || !providerForm.provider_code}
+                        <button onClick={handleAddProvider} disabled={!providerForm.provider_name}
                             className="w-full py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-sm font-black rounded-xl hover:shadow-lg hover:shadow-blue-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                             <Plus className="h-4 w-4" /> Add Provider
                         </button>

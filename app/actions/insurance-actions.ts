@@ -52,7 +52,7 @@ export async function getInsuranceProviders() {
 
 export async function addInsuranceProvider(data: {
     provider_name: string;
-    provider_code: string;
+    provider_code?: string;
     contact_email?: string;
     contact_phone?: string;
     address?: string;
@@ -62,7 +62,9 @@ export async function addInsuranceProvider(data: {
         const provider = await db.insurance_providers.create({
             data: {
                 provider_name: data.provider_name,
-                provider_code: data.provider_code,
+                provider_code: (data.provider_code?.trim()
+                    ? data.provider_code.trim().toUpperCase()
+                    : data.provider_name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) + Date.now().toString().slice(-4)),
                 contact_email: data.contact_email || null,
                 contact_phone: data.contact_phone || null,
                 address: data.address || null,
