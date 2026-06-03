@@ -9,7 +9,7 @@
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-const ORG = 'org-avani-default';
+const ORG = process.env.ORGANIZATION_ID || 'org-avani-default';
 
 const CATEGORY_PREFIXES = ['ENT', 'GSURG', 'OBG', 'ORTHO', 'URO', 'VASC', 'COSM', 'ONCO'];
 const EXPECTED_DAY_CARE = ['OBG-013', 'OBG-014', 'URO-021', 'URO-023', 'URO-024', 'VASC-026', 'ONCO-032'];
