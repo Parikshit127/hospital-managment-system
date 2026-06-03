@@ -56,7 +56,7 @@ export default function ReceptionGenerateBillPage() {
 
     useEffect(() => {
         getAllBillableServices().then(res => {
-            if (res.success) setServices(res.data);
+            if (res.success && res.data) setServices(res.data);
         });
     }, []);
 
