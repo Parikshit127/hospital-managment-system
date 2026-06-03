@@ -32,6 +32,59 @@ export async function getIpdServices(category?: string) {
     }
 }
 
+/**
+ * Get ALL billable services — IPD services + charge catalog + lab tests
+ * Unified format: { id, service_name, service_code, default_rate, tax_rate, service_category, source }
+ */
+export async function getAllBillableServices() {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const [ipdServices, chargeCatalog, labTests] = await Promise.all([
+            db.ipdServiceMaster.findMany({ where: { is_active: true }, orderBy: { service_name: 'asc' } }),
+            db.charge_catalog.findMany({ where: { is_active: true }, orderBy: { item_name: 'asc' } }),
+            db.lab_test_inventory.findMany({ where: { is_available: true }, orderBy: { test_name: 'asc' } }),
+        ]);
+
+        const all = [
+            ...ipdServices.map((s: any) => ({
+                id: `ipd-${s.id}`,
+                service_name: s.service_name,
+                service_code: s.service_code || '',
+                default_rate: Number(s.default_rate),
+                tax_rate: Number(s.tax_rate || 0),
+                service_category: s.service_category || 'IPD Services',
+                hsn_sac_code: s.hsn_sac_code || '9993',
+                source: 'ipd',
+            })),
+            ...chargeCatalog.map((s: any) => ({
+                id: `cat-${s.id}`,
+                service_name: s.item_name,
+                service_code: s.item_code || '',
+                default_rate: Number(s.default_price),
+                tax_rate: Number(s.tax_rate || 0),
+                service_category: s.service_category || s.category || 'Services',
+                hsn_sac_code: s.hsn_sac_code || '9993',
+                source: 'catalog',
+            })),
+            ...labTests.map((s: any) => ({
+                id: `lab-${s.id}`,
+                service_name: s.test_name,
+                service_code: s.test_code || '',
+                default_rate: Number(s.price),
+                tax_rate: Number(s.tax_rate || 0),
+                service_category: s.category || 'Laboratory',
+                hsn_sac_code: s.hsn_sac_code || '9993',
+                source: 'lab',
+            })),
+        ];
+
+        return { success: true, data: serialize(all) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
 export async function addIpdService(data: {
     service_code: string;
     service_name: string;
