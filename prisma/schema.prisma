@@ -690,7 +690,7 @@ model lab_orders {
 model lab_test_inventory {
   id               Int     @id @default(autoincrement())
   // Section 6.1 — Mandatory fields
-  test_name        String  @unique
+  test_name        String
   test_code        String?              // Short code e.g. CBC-001
   price            Float                // Patient charge (INR)
   category         String?              // Hematology | Biochemistry | Microbiology | Serology | Urine | Histopathology | Cytology
@@ -711,6 +711,7 @@ model lab_test_inventory {
   organization Organization  @relation(fields: [organizationId], references: [id])
   panel_tests  LabPanelTest[]
 
+  @@unique([test_name, organizationId])
   @@index([organizationId])
   @@map("lab_test_inventory")
 }

@@ -865,23 +865,38 @@ export default function IpdBillingPage() {
                                 </select>
                             </div>
 
-                            {/* Read-only rate display once service is selected */}
+                            {/* Category + GST stay locked (tax compliance); Rate editable per bill */}
                             {chargeServiceId && (
-                                <div className="grid grid-cols-3 gap-2 text-sm text-gray-600 bg-gray-50 p-2 rounded">
-                                    <div><span className="font-medium">Rate:</span> ₹{chargeRate}</div>
+                                <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 bg-gray-50 p-2 rounded">
                                     <div><span className="font-medium">Category:</span> {chargeCategory}</div>
                                     <div><span className="font-medium">GST:</span> {chargeTaxRate}%</div>
                                 </div>
                             )}
 
-                            <div>
-                                <label className="text-sm text-gray-600">Qty</label>
-                                <input
-                                    type="number"
-                                    value={chargeQty}
-                                    onChange={(e) => setChargeQty(parseInt(e.target.value) || 1)}
-                                    className="w-full px-3 py-2 border rounded-md"
-                                />
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label className="text-sm text-gray-600">Rate (₹)</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        inputMode="decimal"
+                                        value={chargeRate}
+                                        onFocus={e => e.target.select()}
+                                        onChange={e => setChargeRate(e.target.value)}
+                                        className="w-full px-3 py-2 border rounded-md"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-sm text-gray-600">Qty</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={chargeQty}
+                                        onChange={(e) => setChargeQty(parseInt(e.target.value) || 1)}
+                                        className="w-full px-3 py-2 border rounded-md"
+                                    />
+                                </div>
                             </div>
 
                             <div className="flex gap-2">

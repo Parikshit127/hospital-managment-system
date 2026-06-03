@@ -5,7 +5,7 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { Search, Loader2, Plus, ArrowLeft, Receipt, CheckCircle } from 'lucide-react';
 import { searchPatientsForBilling, createInvoice, addInvoiceItem } from '@/app/actions/finance-actions';
 import { calculateBillSplit, createPaymentSplits, type BillSplit } from '@/app/actions/billing-engine';
-import { getIpdServices } from '@/app/actions/ipd-master-actions';
+import { getAllBillableServices } from '@/app/actions/ipd-master-actions';
 import { useToast } from '@/app/components/ui/Toast';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -34,7 +34,7 @@ export default function ReceptionGenerateBillPage() {
     const [selectedPatient, setSelectedPatient] = useState<any>(null);
 
     const [services, setServices] = useState<any[]>([]);
-    const [selectedServiceId, setSelectedServiceId] = useState<number | null>(null);
+    const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
     const [serviceSearch, setServiceSearch] = useState('');
     const [showServiceDropdown, setShowServiceDropdown] = useState(false);
 
@@ -55,8 +55,8 @@ export default function ReceptionGenerateBillPage() {
     const [concessionReason, setConcessionReason] = useState('');
 
     useEffect(() => {
-        getIpdServices().then(res => {
-            if (res.success) setServices(res.data);
+        getAllBillableServices().then(res => {
+            if (res.success && res.data) setServices(res.data);
         });
     }, []);
 
