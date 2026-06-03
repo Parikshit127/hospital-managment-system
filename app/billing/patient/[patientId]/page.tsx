@@ -549,7 +549,7 @@ function InvoicesTab({
                   {inv.status === "Draft" && (
                     <ActionLink href="/billing">Finalize</ActionLink>
                   )}
-                  {inv.status !== "Cancelled" && Number(inv.paid_amount) === 0 && (
+                  {(inv.status === "Draft" || inv.status === "Partial") && inv.status !== "Cancelled" && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
