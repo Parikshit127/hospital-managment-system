@@ -20,6 +20,9 @@ export default function InvoiceDetailPage() {
     // Master Services for Editing
     const [services, setServices] = useState<any[]>([]);
     const [selectedServiceId, setSelectedServiceId] = useState<number | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [draftPrice, setDraftPrice] = useState<number>(0);
+    const [isOpen, setIsOpen] = useState(false);
     const [draftQty, setDraftQty] = useState(1);
     const [draftDiscount, setDraftDiscount] = useState(0);
     const [actionLoading, setActionLoading] = useState(false);
@@ -53,26 +56,40 @@ export default function InvoiceDetailPage() {
     }, [invoiceId]);
 
     const handleAddItem = async () => {
-        if (!selectedServiceId) return;
-        const svc = services.find(s => s.id === selectedServiceId);
-        if (!svc) return;
+        if (!searchQuery.trim()) return;
+
+        let category = 'General';
+        let description = searchQuery.trim();
+        let price = draftPrice;
+        let taxRate = 0;
+
+        if (selectedServiceId) {
+            const svc = services.find(s => s.id === selectedServiceId);
+            if (svc) {
+                category = svc.service_category || 'General';
+                description = svc.service_name;
+                taxRate = Number(svc.tax_rate) || 0;
+            }
+        }
 
         setActionLoading(true);
         const res = await addInvoiceItem({
             invoice_id: invoiceId,
-            department: svc.service_category || 'General',
-            description: svc.service_name,
+            department: category,
+            description: description,
             quantity: draftQty,
-            unit_price: Number(svc.default_rate),
+            unit_price: price,
             discount: draftDiscount,
-            tax_rate: Number(svc.tax_rate) || 0,
-            service_category: svc.service_category
+            tax_rate: taxRate,
+            service_category: category
         });
 
         setActionLoading(false);
         if (res.success) {
             toast.success('Item added');
             setSelectedServiceId(null);
+            setSearchQuery('');
+            setDraftPrice(0);
             setDraftQty(1);
             setDraftDiscount(0);
             await loadInvoice();
@@ -195,35 +212,104 @@ export default function InvoiceDetailPage() {
 
                 {/* Add Item (Edit Mode) */}
                 {isEditMode && invoice.status === 'Draft' && (
-                    <div className="bg-white rounded-lg shadow p-4">
+                    <div className="bg-white rounded-lg shadow p-4 animate-fadeIn">
                         <h2 className="font-semibold text-sm mb-3">Add Service to Bill</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                            <div className="md:col-span-2">
+                        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                            <div className="md:col-span-2 relative">
                                 <label className="text-xs text-gray-500">Service</label>
-                                <select
-                                    value={selectedServiceId || ''}
-                                    onChange={e => setSelectedServiceId(Number(e.target.value))}
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={e => {
+                                        const query = e.target.value;
+                                        setSearchQuery(query);
+                                        const exactMatch = services.find(s => s.service_name.toLowerCase() === query.toLowerCase());
+                                        if (exactMatch) {
+                                            setSelectedServiceId(exactMatch.id);
+                                            setDraftPrice(Number(exactMatch.default_rate));
+                                        } else {
+                                            setSelectedServiceId(null);
+                                        }
+                                        setIsOpen(true);
+                                    }}
+                                    onFocus={() => setIsOpen(true)}
+                                    onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+                                    placeholder="Search or enter manual service..."
+                                    className="w-full px-2 py-1.5 border rounded text-sm bg-white"
+                                />
+                                {isOpen && (
+                                    <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg">
+                                        {services
+                                            .filter(s => s.service_name.toLowerCase().includes(searchQuery.toLowerCase()))
+                                            .map(s => (
+                                                <button
+                                                    key={s.id}
+                                                    type="button"
+                                                    onMouseDown={() => {
+                                                        setSearchQuery(s.service_name);
+                                                        setSelectedServiceId(s.id);
+                                                        setDraftPrice(Number(s.default_rate));
+                                                        setIsOpen(false);
+                                                    }}
+                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex justify-between items-center border-b border-gray-100 last:border-0"
+                                                >
+                                                    <span className="font-medium text-gray-800">{s.service_name}</span>
+                                                    <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{fmt(Number(s.default_rate))}</span>
+                                                </button>
+                                            ))
+                                        }
+                                        {searchQuery.trim() && !services.some(s => s.service_name.toLowerCase() === searchQuery.toLowerCase()) && (
+                                            <button
+                                                type="button"
+                                                onMouseDown={() => {
+                                                    setSelectedServiceId(null);
+                                                    setIsOpen(false);
+                                                }}
+                                                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 text-blue-600 flex items-center gap-1 font-medium"
+                                            >
+                                                <span>Use custom:</span>
+                                                <span className="italic font-normal truncate">"{searchQuery}"</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-500">Rate (INR)</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={draftPrice}
+                                    onChange={e => setDraftPrice(Number(e.target.value))}
                                     className="w-full px-2 py-1.5 border rounded text-sm"
-                                >
-                                    <option value="">Select service</option>
-                                    {services.map(s => (
-                                        <option key={s.id} value={s.id}>{s.service_name} ({fmt(Number(s.default_rate))})</option>
-                                    ))}
-                                </select>
+                                />
                             </div>
                             <div>
                                 <label className="text-xs text-gray-500">Qty</label>
-                                <input type="number" min="1" value={draftQty} onChange={e => setDraftQty(Number(e.target.value))}
-                                    className="w-full px-2 py-1.5 border rounded text-sm" />
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={draftQty}
+                                    onChange={e => setDraftQty(Number(e.target.value))}
+                                    className="w-full px-2 py-1.5 border rounded text-sm"
+                                />
                             </div>
                             <div>
                                 <label className="text-xs text-gray-500">Discount</label>
-                                <input type="number" min="0" value={draftDiscount} onChange={e => setDraftDiscount(Number(e.target.value))}
-                                    className="w-full px-2 py-1.5 border rounded text-sm" />
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={draftDiscount}
+                                    onChange={e => setDraftDiscount(Number(e.target.value))}
+                                    className="w-full px-2 py-1.5 border rounded text-sm"
+                                />
                             </div>
                             <div className="flex items-end">
-                                <button onClick={handleAddItem} disabled={!selectedServiceId || actionLoading}
-                                    className="w-full px-2 py-1.5 bg-blue-600 text-white rounded text-sm font-medium disabled:opacity-50 hover:bg-blue-700">
+                                <button
+                                    onClick={handleAddItem}
+                                    disabled={!searchQuery.trim() || actionLoading}
+                                    className="w-full px-2 py-1.5 bg-blue-600 text-white rounded text-sm font-medium disabled:opacity-50 hover:bg-blue-700"
+                                >
                                     {actionLoading ? 'Adding...' : 'Add Item'}
                                 </button>
                             </div>
