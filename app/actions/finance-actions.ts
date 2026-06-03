@@ -645,21 +645,6 @@ export async function recordPayment(data: {
             }
         }
 
-        // Phase 4: Duplicate Payment Detection
-        const duplicateWindow = new Date(Date.now() - 30 * 60 * 1000); // 30 minutes
-        const existingPayment = await db.payments.findFirst({
-            where: {
-                invoice_id: data.invoice_id,
-                amount: data.amount,
-                payment_method: data.payment_method,
-                created_at: { gte: duplicateWindow },
-                organizationId
-            }
-        });
-        if (existingPayment) {
-            return { success: false, error: 'Duplicate payment detected. An identical payment was recorded recently.' };
-        }
-
         const payment = await db.payments.create({
             data: {
                 receipt_number: await genRcpNum(organizationId, db),
