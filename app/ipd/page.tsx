@@ -378,6 +378,9 @@ export default function IPDDashboard() {
       refreshing={loading}
       headerActions={
         <div className="flex items-center gap-2">
+            <Link href="/reception/dashboard" className="px-4 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                ← Reception
+            </Link>
             {stats?.role !== 'admin' && (
                 <Link href="/ipd/admissions-hub" className="px-4 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl text-xs font-bold transition-all shadow-sm hidden sm:flex items-center gap-1.5">
                     Admissions Hub

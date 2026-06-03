@@ -127,6 +127,21 @@ export default function ReceptionDashboard() {
                     </Link>
                 </div>
 
+                {/* IPD Portal Entry */}
+                <Link href="/ipd"
+                    className="group flex items-center justify-between bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-2xl px-6 py-4 shadow-lg shadow-violet-500/20 transition-all">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white/20 rounded-xl">
+                            <ClipboardList className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-bold">Enter IPD Portal</p>
+                            <p className="text-xs text-violet-200">Full access — admissions, beds, billing & more</p>
+                        </div>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-white/70 group-hover:text-white transition-colors" />
+                </Link>
+
                 {/* Doctor Queues */}
                 {(queues.length > 0 || loading) && (
                     <div>

@@ -280,7 +280,15 @@ export default function IpdBillingPage() {
                 }
             `}</style>
             <div className="max-w-7xl mx-auto">
-                <h1 className="text-2xl font-bold text-gray-900 mb-4">IPD Billing Counter</h1>
+                <div className="flex items-center gap-3 mb-4">
+                    <a
+                        href="/reception/dashboard"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 text-xs font-bold rounded-lg transition"
+                    >
+                        ← Reception
+                    </a>
+                    <h1 className="text-2xl font-bold text-gray-900">IPD Billing Counter</h1>
+                </div>
 
                 <div className="grid grid-cols-12 gap-4">
                     {/* Left: Patient List */}
