@@ -77,8 +77,8 @@ export default function TpaInsurancePage() {
     }
 
     async function handleSave() {
-        if (!form.provider_name || !form.provider_code) {
-            setError('Provider name and code are required');
+        if (!form.provider_name) {
+            setError('Provider name is required');
             return;
         }
         setIsSaving(true);
@@ -201,8 +201,8 @@ export default function TpaInsurancePage() {
                                     <input className={inputClass} value={form.provider_name} onChange={e => setForm(f => ({ ...f, provider_name: e.target.value }))} placeholder="Star Health Insurance" />
                                 </div>
                                 <div className="space-y-1">
-                                    <label className={labelClass}>Provider Code *</label>
-                                    <input className={inputClass} value={form.provider_code} onChange={e => setForm(f => ({ ...f, provider_code: e.target.value.toUpperCase() }))} placeholder="STAR" />
+                                    <label className={labelClass}>Provider Code <span className="text-gray-400 font-normal normal-case">(optional)</span></label>
+                                    <input className={inputClass} value={form.provider_code} onChange={e => setForm(f => ({ ...f, provider_code: e.target.value.toUpperCase() }))} placeholder="Auto-generated if blank" />
                                 </div>
                                 <div className="space-y-1">
                                     <label className={labelClass}>Type</label>

@@ -159,6 +159,15 @@ export default function IPDAdmissionDetailPage() {
             >
                 <Printer className="h-3.5 w-3.5" /> Print Admission Form
             </button>
+            {data?.patient?.patient_id && (
+                <button
+                    onClick={() => window.open(`/api/patient/${encodeURIComponent(data.patient.patient_id)}/stickers?count=8`, '_blank')}
+                    className="flex items-center gap-2 px-3 py-2 bg-orange-50 border border-orange-200 text-orange-700 text-xs font-bold rounded-xl hover:bg-orange-100 transition-colors"
+                    title="Print patient stickers"
+                >
+                    <Printer className="h-3.5 w-3.5" /> Print Stickers
+                </button>
+            )}
             <Link
                 href="/reception/ipd"
                 className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-colors"

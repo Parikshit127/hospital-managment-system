@@ -222,44 +222,7 @@ function renderAdmissionFormHtml(admission: any, b: BillBranding): string {
                     ${checkRow('Police Report Filed', !!admission.case_is_police_report)}
                 </div>
 
-                ${sectionHeader('6. Clinical Snapshot', accent)}
-                <div class="grid-2">
-                    ${field('Provisional / Working Diagnosis', admission.diagnosis, 2)}
-                </div>
-                <div class="grid-3" style="margin-top:4px;">
-                    ${field('Primary ICD-10', admission.primary_diagnosis_icd)}
-                    ${field('Line of Treatment', admission.line_of_treatment)}
-                    ${field('Planned Surgery', admission.surgery_requested)}
-                </div>
-                <div class="grid-2" style="margin-top:4px;">
-                    ${field('Past Ailments', admission.past_ailments)}
-                    ${field('Duration', admission.past_ailment_duration)}
-                </div>
-                <div class="grid-2" style="margin-top:4px;">
-                    ${field('Known Allergies', p.allergies)}
-                    ${field('Chronic Conditions', p.chronic_conditions)}
-                </div>
-                <div class="grid-3" style="margin-top:4px;">
-                    ${field('Isolation Type', admission.isolation_type)}
-                    ${field('Fall Risk Score', admission.fall_risk_score)}
-                    ${field('Pressure Ulcer Risk', admission.pressure_ulcer_risk)}
-                </div>
-
-                ${sectionHeader('7. Vitals on Admission', accent)}
-                <div class="grid-4">
-                    ${field('BP (mmHg)', '')}
-                    ${field('Pulse (bpm)', '')}
-                    ${field('Temp (°F)', '')}
-                    ${field('SpO₂ (%)', '')}
-                </div>
-                <div class="grid-4" style="margin-top:4px;">
-                    ${field('Resp. Rate', '')}
-                    ${field('Weight (kg)', '')}
-                    ${field('Height (cm)', '')}
-                    ${field('GCS / NEWS', admission.news_score_latest)}
-                </div>
-
-                ${sectionHeader('8. Attending Doctor', accent)}
+                ${sectionHeader('6. Attending Doctor', accent)}
                 <div class="grid-3">
                     ${field('Admitting Doctor', admission.doctor_name, 2)}
                     ${field('Reg. No.', '')}
@@ -270,7 +233,7 @@ function renderAdmissionFormHtml(admission: any, b: BillBranding): string {
                     ${field('Expected Discharge', ymd(admission.expected_discharge_date))}
                 </div>
 
-                ${sectionHeader('9. Payer & Financial Category', accent)}
+                ${sectionHeader('7. Payer & Financial Category', accent)}
                 <div class="grid-4">
                     ${field('Payment Mode', p.patient_type)}
                     ${field('Corporate Sponsor', corp?.company_name)}
@@ -293,20 +256,20 @@ function renderAdmissionFormHtml(admission: any, b: BillBranding): string {
                     ${field('Counselled By', '')}
                 </div>
 
-                ${sectionHeader('10. ID Proof / KYC', accent)}
+                ${sectionHeader('8. ID Proof / KYC', accent)}
                 <div class="grid-3">
                     ${field('ID Type (Aadhaar/PAN/Voter/DL/Passport)', '')}
                     ${field('ID Number', p.aadhar_card || p.pan_number)}
                     ${field('Copy Attached (Y/N)', '')}
                 </div>
 
-                ${sectionHeader('11. Belongings & Valuables', accent)}
+                ${sectionHeader('9. Belongings & Valuables', accent)}
                 <div style="border:1px solid #d1d5db;padding:8px;border-radius:4px;font-size:10px;color:#6b7280;min-height:36px;">
                     Items handed over: ____________________________________________________________ <br/>
                     Custodian (Name & Sign): _________________________________________________ &nbsp; Date/Time: _________________
                 </div>
 
-                ${sectionHeader('12. Consent & Acknowledgements', accent)}
+                ${sectionHeader('10. Consent & Acknowledgements', accent)}
                 <div class="consent-box">
                     <p style="font-weight:700;font-size:10px;margin-bottom:4px;">General Consent for Admission & Treatment</p>
                     <p style="font-size:10px;line-height:1.5;color:#374151;">
@@ -336,7 +299,7 @@ function renderAdmissionFormHtml(admission: any, b: BillBranding): string {
                     Preferred Language of Communication: <strong>${esc(p.preferred_language || 'English')}</strong>
                 </div>
 
-                ${sectionHeader('13. Signatures', accent)}
+                ${sectionHeader('11. Signatures', accent)}
                 <div class="grid-3" style="margin-top:30px;">
                     <div class="sig-block">Patient / Guardian<br/>(Name, Relation &amp; Signature)</div>
                     <div class="sig-block">Admitting Officer<br/>(Name &amp; Signature)</div>
