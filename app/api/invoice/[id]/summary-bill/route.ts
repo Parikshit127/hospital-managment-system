@@ -22,7 +22,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             where: { id: invoiceId, organizationId: auth.context.organizationId },
             include: {
                 items: true,
-                patient: { select: { full_name: true, patient_id: true, phone: true, age: true, gender: true } },
+                patient: { select: { full_name: true, patient_id: true, phone: true, age: true, gender: true, department: true } },
                 payments: { where: { status: { not: 'Reversed' } } },
                 credit_notes: { where: { status: 'Approved' }, orderBy: { created_at: 'desc' } },
             },
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                 orderBy: { appointment_date: 'desc' },
                 select: { doctor_name: true },
             });
-            opdDoctor = apt?.doctor_name || '';
+            opdDoctor = apt?.doctor_name || invoice.patient?.department || '';
         }
 
         const branding = await getBillBranding(auth.context.organizationId);

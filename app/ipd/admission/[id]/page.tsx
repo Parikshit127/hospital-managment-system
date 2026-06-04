@@ -183,13 +183,8 @@ export default function AdmissionDetailPage() {
             await ensureIPDDemoMasterData().catch(() => null);
             setDemoSeeded(true);
         }
-        const accrual = await ensureIPDRoomChargesAccrued(params.id as string);
-        if (accrual.success && accrual.data && 'added' in accrual.data && accrual.data.added > 0) {
-            toast.success(`Auto-accrued ${accrual.data.added} room/nursing line(s)`);
-        } else if (!accrual.success && accrual.error) {
-            // Non-fatal — show a soft warning so finance staff know why bed charges may be missing
-            toast.error(accrual.error);
-        }
+        // Auto-accrual disabled — room/nursing charges are added manually
+        // const accrual = await ensureIPDRoomChargesAccrued(params.id as string);
         const res = await generateInterimBill(params.id as string);
         if (res.success) setBill(res.data);
         else toast.error('Failed to load bill');

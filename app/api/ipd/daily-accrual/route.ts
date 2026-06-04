@@ -10,27 +10,14 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-        const admissionsRes = await getIPDAdmissions('Admitted');
-        if (!admissionsRes.success) {
-            return NextResponse.json({ ok: false, error: 'Failed to fetch admissions' }, { status: 500 });
-        }
-
-        const admissions = admissionsRes.data ?? [];
-        let processed = 0, succeeded = 0, failed = 0;
-
-        for (const admission of admissions) {
-            processed++;
-            const result = await accrueIPDDailyCharges(admission.admission_id);
-            if (result.success) succeeded++;
-            else failed++;
-        }
-
+        // Auto-accrual disabled — room/nursing charges are added manually
         return NextResponse.json({
             ok: true,
             timestamp: new Date().toISOString(),
-            processed,
-            succeeded,
-            failed,
+            message: 'Auto-accrual disabled. Room/nursing charges are added manually.',
+            processed: 0,
+            succeeded: 0,
+            failed: 0,
         });
     } catch (error: any) {
         console.error('[CRON] IPD daily accrual error:', error);

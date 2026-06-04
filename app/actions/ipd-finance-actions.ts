@@ -450,10 +450,10 @@ export async function generateInterimBill(admissionId: string) {
         });
         if (!admission) return { success: false, error: 'Admission not found' };
 
-        // Ensure daily charges (room/nursing) are up to date before fetching invoice
-        if (admission.status === 'Admitted') {
-            await accrueIPDDailyCharges(admissionId);
-        }
+        // Auto-accrual disabled — room/nursing charges are added manually
+        // if (admission.status === 'Admitted') {
+        //     await accrueIPDDailyCharges(admissionId);
+        // }
 
         // Find the IPD invoice
         const invoice = await db.invoices.findFirst({

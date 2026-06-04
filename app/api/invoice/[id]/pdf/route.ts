@@ -48,7 +48,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             },
             include: {
                 items: { orderBy: { created_at: 'asc' } },
-                patient: { select: { full_name: true, patient_id: true, phone: true, age: true, gender: true } },
+                patient: { select: { full_name: true, patient_id: true, phone: true, age: true, gender: true, department: true } },
                 admission: { select: { admission_id: true, doctor_name: true, admission_date: true, discharge_date: true, ward: { select: { ward_name: true } }, bed: { select: { bed_id: true } } } },
                 payments: {
                     where: { status: { not: 'Reversed' } },
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             }
         }
 
-        // Get doctor name for OPD (from latest appointment)
+        // Get doctor name for OPD (from latest appointment, or fall back to patient department)
         let opdDoctor = '';
         if (!invoice.admission_id && invoice.patient_id) {
             const apt = await prisma.appointments.findFirst({
@@ -81,7 +81,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                 orderBy: { appointment_date: 'desc' },
                 select: { doctor_name: true, department: true },
             });
-            opdDoctor = apt?.doctor_name || '';
+            opdDoctor = apt?.doctor_name || invoice.patient?.department || '';
         }
 
         const branding = await getBillBranding(organizationId!);

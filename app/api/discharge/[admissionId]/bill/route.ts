@@ -17,8 +17,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 
         const { admissionId } = await params;
 
-        // Accrue any missing per-day room/nursing charges before rendering the bill
-        await ensureIPDRoomChargesAccrued(admissionId).catch(() => null);
+        // Auto-accrual disabled — room/nursing charges are added manually
+        // await ensureIPDRoomChargesAccrued(admissionId).catch(() => null);
 
         const admission = await prisma.admissions.findFirst({
             where: { admission_id: admissionId, organizationId: auth.context.organizationId },
