@@ -1,6 +1,7 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
+import { prisma } from '@/backend/db';
 import { logAudit } from '@/app/lib/audit';
 import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
 import { billingInvoiceMsg, paymentReceiptMsg } from '@/app/lib/whatsapp-templates';
@@ -1139,7 +1140,7 @@ export async function getFinanceDashboardStats(params?: {
             .map((r: any) => r.ref_id)
             .filter(Boolean) as string[];
         const doctors = doctorIds.length > 0
-            ? await db.users.findMany({
+            ? await prisma.user.findMany({
                 where: { id: { in: doctorIds } },
                 select: { id: true, name: true, specialty: true },
             })

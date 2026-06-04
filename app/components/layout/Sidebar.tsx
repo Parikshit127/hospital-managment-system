@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logout } from "@/app/login/actions";
+import { getPortalBranding, type PortalBranding } from "@/app/lib/get-portal-branding";
 import {
   LayoutDashboard,
   Users,
@@ -557,6 +558,11 @@ export function Sidebar({ session }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [branding, setBranding] = useState<PortalBranding | null>(null);
+
+  useEffect(() => {
+    getPortalBranding().then(setBranding).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const savedState = window.localStorage.getItem("sidebar-collapsed");
@@ -584,45 +590,86 @@ export function Sidebar({ session }: SidebarProps) {
     return false;
   };
 
+  // Build CSS variable overrides so all existing var() references
+  // (nav highlights, specialty text, etc.) pick up org-specific colors.
+  // Only emitted when the branding differs from the globals.css defaults,
+  // so Axten's appearance is pixel-identical to before.
+  const AXTEN_PRIMARY = '#f97316';
+  const AXTEN_SIDEBAR_BG = '#0b1527';
+  const brandingCssOverride = (() => {
+    if (!branding) return '';
+    const isDefault =
+      branding.primaryColor.toLowerCase() === AXTEN_PRIMARY &&
+      branding.sidebarBg.toLowerCase() === AXTEN_SIDEBAR_BG;
+    if (isDefault) return '';
+    const hex = branding.primaryColor.replace('#', '');
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    // Compute a very light tint for --admin-primary-light (active-item text on dark sidebar)
+    const lightR = Math.round(r + (255 - r) * 0.88);
+    const lightG = Math.round(g + (255 - g) * 0.88);
+    const lightB = Math.round(b + (255 - b) * 0.88);
+    const toHex2 = (n: number) => n.toString(16).padStart(2, '0');
+    return `:root {
+      --admin-sidebar-bg: ${branding.sidebarBg};
+      --admin-primary: ${branding.primaryColor};
+      --admin-primary-light: #${toHex2(lightR)}${toHex2(lightG)}${toHex2(lightB)};
+      --admin-primary-20: rgba(${r},${g},${b},0.18);
+      --admin-primary-10: rgba(${r},${g},${b},0.08);
+      --admin-primary-15: rgba(${r},${g},${b},0.12);
+    }`;
+  })();
+
   const sidebarContent = (
     <aside
       className={`${collapsed ? "w-[68px]" : "w-[260px]"} flex flex-col transition-all duration-300 ease-out h-screen sticky top-0 shrink-0`}
       style={{
-        backgroundColor: "var(--admin-sidebar-bg)",
+        backgroundColor: branding?.sidebarBg || "var(--admin-sidebar-bg)",
         borderRight: "1px solid var(--admin-sidebar-border)",
       }}
     >
+      {brandingCssOverride && (
+        <style dangerouslySetInnerHTML={{ __html: brandingCssOverride }} />
+      )}
       {/* Brand Header */}
       <div
         className="flex items-center gap-3 px-4 h-[68px] shrink-0"
         style={{ borderBottom: "1px solid var(--admin-sidebar-border)" }}
       >
-        {/* Axten logo — collapsed shows just the circle emblem */}
+        {/* Organization logo — dynamic per org, falls back to Axten SVG */}
         {collapsed ? (
           <div className="shrink-0 flex items-center justify-center w-9 h-9">
-            {/* Circular emblem: outer ring + AXTEN HOSPITALS text + cross icon */}
-            <svg width="36" height="36" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="50" cy="50" r="47" stroke="#ffffff" strokeWidth="4"/>
-              <circle cx="50" cy="50" r="38" stroke="#f97316" strokeWidth="1.5"/>
-              {/* Cross / plus shape */}
-              <rect x="42" y="28" width="16" height="44" rx="5" fill="#1e3a6e" stroke="#ffffff" strokeWidth="2"/>
-              <rect x="28" y="42" width="44" height="16" rx="5" fill="#1e3a6e" stroke="#ffffff" strokeWidth="2"/>
-              {/* Orange dots */}
-              <circle cx="20" cy="50" r="3" fill="#f97316"/>
-              <circle cx="80" cy="50" r="3" fill="#f97316"/>
-            </svg>
+            {branding?.logoUrl ? (
+              <img
+                src={branding.logoUrl}
+                alt={branding.orgName}
+                style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: '50%' }}
+              />
+            ) : (
+              /* Axten circular emblem fallback */
+              <svg width="36" height="36" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="47" stroke="#ffffff" strokeWidth="4"/>
+                <circle cx="50" cy="50" r="38" stroke="#f97316" strokeWidth="1.5"/>
+                <rect x="42" y="28" width="16" height="44" rx="5" fill="#1e3a6e" stroke="#ffffff" strokeWidth="2"/>
+                <rect x="28" y="42" width="44" height="16" rx="5" fill="#1e3a6e" stroke="#ffffff" strokeWidth="2"/>
+                <circle cx="20" cy="50" r="3" fill="#f97316"/>
+                <circle cx="80" cy="50" r="3" fill="#f97316"/>
+              </svg>
+            )}
           </div>
+        ) : branding?.logoUrl ? (
+          <img
+            src={branding.logoUrl}
+            alt={branding.orgName}
+            style={{ height: 44, width: 'auto', flexShrink: 0 }}
+          />
         ) : (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 80" style={{ height: '44px', width: 'auto', flexShrink: 0 }} aria-label="Axten Hospitals">
-            {/* "Axten" bold navy-style text in white */}
             <text x="0" y="52" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="56" fill="#ffffff" letterSpacing="-1">Axten</text>
-            {/* Orange bar left of HOSPITALS */}
             <rect x="0" y="62" width="52" height="7" fill="#f97316" rx="2"/>
-            {/* HOSPITALS text */}
             <text x="58" y="72" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="13" fill="#ffffff" letterSpacing="5">HOSPITALS</text>
-            {/* Orange bar right of HOSPITALS */}
             <rect x="192" y="62" width="52" height="7" fill="#f97316" rx="2"/>
-            {/* Subtitle */}
             <text x="0" y="82" fontFamily="Arial, sans-serif" fontWeight="400" fontSize="9" fill="#94a3b8" letterSpacing="0.3">A Unit of TAH Global Healthcare Pvt. Ltd.</text>
           </svg>
         )}
