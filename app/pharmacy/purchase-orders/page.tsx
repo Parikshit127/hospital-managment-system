@@ -71,7 +71,7 @@ export default function PurchaseOrdersPage() {
         const res = await createPurchaseOrder(
             Number(poForm.supplier_id),
             poItems.map(i => ({ medicine_id: i.medicine_id, quantity: i.quantity, unit_price: i.unit_price, gst_rate: i.gst_rate })),
-            poForm.notes || undefined
+            { notes: poForm.notes || undefined }
         );
         setCreating(false);
         if (res.success) {
