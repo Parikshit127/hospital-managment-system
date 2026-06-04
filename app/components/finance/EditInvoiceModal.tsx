@@ -111,11 +111,11 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
             }
             const inv: any = res.data;
 
-            // Pre-flight editable check — only Cancelled invoices are hard-locked.
-            // Final invoices with collected payments are still editable (payment data
-            // may have been fetched from an external source; editing adjusts the outstanding balance).
+            // Pre-flight editable check — Cancelled or fully paid invoices are hard-locked.
             if (inv.status === 'Cancelled') {
                 setError('Cancelled invoices cannot be edited. Revert it first if needed.');
+            } else if (Number(inv.balance_due ?? 0) <= 0 && Number(inv.paid_amount ?? 0) > 0) {
+                setError('Cannot edit: This invoice is fully paid.');
             }
 
             setInvoiceMeta({

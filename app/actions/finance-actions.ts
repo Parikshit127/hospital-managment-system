@@ -1713,9 +1713,13 @@ function evaluateInvoiceEditable(invoice: any, expectedVersion?: number): Invoic
     if (invoice.status === 'Cancelled') {
         return { editable: false, reason: 'Cancelled invoices cannot be edited. Revert first if needed.' };
     }
-    // NOTE: Final invoices with collected payments are intentionally editable.
-    // Payment data may be fetched from an external source; edits adjust the outstanding balance
-    // while preserving the payment record. GL reversal/repost is applied on save.
+    // Fully paid check: block edits if there is no outstanding balance and a payment has been collected
+    if (Number(invoice.balance_due ?? 0) <= 0 && Number(invoice.paid_amount ?? 0) > 0) {
+        return {
+            editable: false,
+            reason: 'Cannot edit: This invoice is fully paid.',
+        };
+    }
     if (expectedVersion !== undefined && Number(invoice.version) !== Number(expectedVersion)) {
         return {
             editable: false,
@@ -1731,7 +1735,7 @@ export async function checkInvoiceEditable(invoiceId: number) {
         const { db } = await requireTenantContext();
         const invoice = await db.invoices.findUnique({
             where: { id: invoiceId },
-            select: { id: true, status: true, paid_amount: true, version: true, created_at: true },
+            select: { id: true, status: true, paid_amount: true, balance_due: true, version: true, created_at: true },
         });
         const check = evaluateInvoiceEditable(invoice);
         if (!check.editable) return { success: true, editable: false, reason: check.reason };

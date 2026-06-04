@@ -429,7 +429,7 @@ export default function MasterBillingPage() {
                         >
                           Open
                         </Link>
-                        {canCancelInvoice(r) && (
+                        {canCancelInvoice(r) && r.payment_status !== 'Paid' && (
                           <button
                             onClick={() => setEditingInvoiceId(Number(r.invoice_id))}
                             className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-bold rounded transition-colors flex items-center gap-0.5"
