@@ -105,20 +105,67 @@ export async function getIPDServiceCatalog(
     try {
         const { db } = await requireTenantContext();
         const q = (query || '').trim();
-        const where: any = { is_active: true };
-        if (category) where.category = category;
+
+        // Search charge_catalog
+        const catWhere: any = { is_active: true };
+        if (category) catWhere.category = category;
         if (q) {
-            where.OR = [
+            catWhere.OR = [
                 { item_name: { contains: q, mode: 'insensitive' } },
                 { item_code: { contains: q, mode: 'insensitive' } },
             ];
         }
-        const items = await db.charge_catalog.findMany({
-            where,
-            orderBy: { item_name: 'asc' },
-            take: limit,
+        const catalogItems = await db.charge_catalog.findMany({
+            where: catWhere, orderBy: { item_name: 'asc' }, take: limit,
         });
-        return { success: true as const, data: serialize(items) };
+
+        // Search lab_test_inventory
+        const labWhere: any = { is_available: true };
+        if (q) {
+            labWhere.OR = [
+                { test_name: { contains: q, mode: 'insensitive' } },
+                { test_code: { contains: q, mode: 'insensitive' } },
+            ];
+        }
+        const labItems = await db.lab_test_inventory.findMany({
+            where: labWhere, orderBy: { test_name: 'asc' }, take: limit,
+        });
+
+        // Search IPD service master
+        const ipdWhere: any = { is_active: true };
+        if (q) {
+            ipdWhere.OR = [
+                { service_name: { contains: q, mode: 'insensitive' } },
+                { service_code: { contains: q, mode: 'insensitive' } },
+            ];
+        }
+        const ipdItems = await db.ipdServiceMaster.findMany({
+            where: ipdWhere, orderBy: { service_name: 'asc' }, take: limit,
+        });
+
+        // Merge into unified format
+        const all = [
+            ...catalogItems.map((s: any) => ({
+                id: s.id, item_name: s.item_name, item_code: s.item_code || '',
+                default_price: Number(s.default_price),
+                service_category: s.service_category || s.category || 'Services',
+                category: s.category, source: 'catalog',
+            })),
+            ...labItems.map((s: any) => ({
+                id: `lab-${s.id}`, item_name: s.test_name, item_code: s.test_code || '',
+                default_price: Number(s.price),
+                service_category: s.category || 'Laboratory',
+                category: 'Laboratory', source: 'lab',
+            })),
+            ...ipdItems.map((s: any) => ({
+                id: `ipd-${s.id}`, item_name: s.service_name, item_code: s.service_code || '',
+                default_price: Number(s.default_rate),
+                service_category: s.service_category || 'IPD Services',
+                category: s.service_category, source: 'ipd',
+            })),
+        ].slice(0, limit);
+
+        return { success: true as const, data: serialize(all) };
     } catch (error: any) {
         return { success: false as const, error: error.message };
     }
