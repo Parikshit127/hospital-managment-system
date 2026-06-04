@@ -111,11 +111,11 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
             }
             const inv: any = res.data;
 
-            // Pre-flight editable check (mirrors server gate so we can show the reason early)
+            // Pre-flight editable check — only Cancelled invoices are hard-locked.
+            // Final invoices with collected payments are still editable (payment data
+            // may have been fetched from an external source; editing adjusts the outstanding balance).
             if (inv.status === 'Cancelled') {
                 setError('Cancelled invoices cannot be edited. Revert it first if needed.');
-            } else if (inv.status === 'Final' && Number(inv.paid_amount ?? 0) > 0) {
-                setError(`Cannot edit: ${fmtINR(Number(inv.paid_amount))} already collected. Refund or issue a Credit Note first.`);
             }
 
             setInvoiceMeta({
@@ -341,9 +341,12 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                         <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-3">
                             <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                             <p className="text-xs text-amber-800 leading-relaxed">
-                                This invoice is <span className="font-bold">Final</span> and has no payments collected.
+                                This invoice is <span className="font-bold">Final</span>.
                                 Saving edits will reverse the existing GL journal entry and post a fresh one with the new totals.
-                                A full audit trail is preserved.
+                                {invoiceMeta && invoiceMeta.paid_amount > 0 && (
+                                    <> The outstanding balance will be recalculated against the already-collected amount of <span className="font-bold">{fmtINR(invoiceMeta.paid_amount)}</span>.</>
+                                )}
+                                {' '}A full audit trail is preserved.
                             </p>
                         </div>
                     )}

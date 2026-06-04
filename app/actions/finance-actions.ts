@@ -1654,12 +1654,9 @@ function evaluateInvoiceEditable(invoice: any, expectedVersion?: number): Invoic
     if (invoice.status === 'Cancelled') {
         return { editable: false, reason: 'Cancelled invoices cannot be edited. Revert first if needed.' };
     }
-    if (invoice.status === 'Final' && Number(invoice.paid_amount ?? 0) > 0) {
-        return {
-            editable: false,
-            reason: `Cannot edit: ₹${Number(invoice.paid_amount).toLocaleString('en-IN')} already collected. Reverse the payment via Refund or issue a Credit Note first.`,
-        };
-    }
+    // NOTE: Final invoices with collected payments are intentionally editable.
+    // Payment data may be fetched from an external source; edits adjust the outstanding balance
+    // while preserving the payment record. GL reversal/repost is applied on save.
     if (expectedVersion !== undefined && Number(invoice.version) !== Number(expectedVersion)) {
         return {
             editable: false,
