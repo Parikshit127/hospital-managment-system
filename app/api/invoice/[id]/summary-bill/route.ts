@@ -45,6 +45,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             include: { branding: true },
         });
 
+        // Get doctor name for OPD
+        let opdDoctor = '';
+        if (!invoice.admission_id && invoice.patient_id) {
+            const apt = await prisma.appointments.findFirst({
+                where: { patient_id: invoice.patient_id, organizationId: auth.context.organizationId },
+                orderBy: { appointment_date: 'desc' },
+                select: { doctor_name: true },
+            });
+            opdDoctor = apt?.doctor_name || '';
+        }
+
         const branding = await getBillBranding(auth.context.organizationId);
         const sections = await getBillSections(auth.context.organizationId, 'invoice');
 
@@ -60,7 +71,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             })
             : [];
 
-        const html = generateSummaryBillHTML(invoice, admission, org, deposits, branding, sections);
+        const html = generateSummaryBillHTML(invoice, admission, org, deposits, branding, sections, opdDoctor);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -87,7 +98,7 @@ function numberToWords(n: number): string {
     return 'Rupees ' + convert(Math.floor(n)) + ' Only';
 }
 
-function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[], branding: BillBranding, sections: any) {
+function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[], branding: BillBranding, sections: any, opdDoctor: string = '') {
     const patient = invoice.patient || {};
     const items = invoice.items || [];
 
@@ -166,11 +177,12 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
         <p style="font-size:11px;"><strong>UHID:</strong> ${patient.patient_id || '-'}</p>
         <p style="font-size:11px;"><strong>Age/Gender:</strong> ${patient.age || '-'} / ${patient.gender || '-'}</p>
         <p style="font-size:11px;"><strong>Phone:</strong> ${patient.phone || '-'}</p>
+        ${!isIPD && opdDoctor ? `<p style="font-size:11px;"><strong>Doctor:</strong> Dr. ${opdDoctor}</p>` : ''}
     `;
     if (isIPD) {
         patientInfoHTML += `
             <p style="font-size:11px;"><strong>Admission ID:</strong> ${admission.admission_id}</p>
-            <p style="font-size:11px;"><strong>Doctor:</strong> ${admission.doctor_name || '-'}</p>
+            <p style="font-size:11px;"><strong>Doctor:</strong> Dr. ${admission.doctor_name || '-'}</p>
             <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_id || '-'}</p>
             <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
             <p style="font-size:11px;"><strong>Discharged:</strong> ${isFinal ? dischargeDate : 'N/A'}</p>

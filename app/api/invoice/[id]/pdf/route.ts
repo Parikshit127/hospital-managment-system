@@ -73,9 +73,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             }
         }
 
+        // Get doctor name for OPD (from latest appointment)
+        let opdDoctor = '';
+        if (!invoice.admission_id && invoice.patient_id) {
+            const apt = await prisma.appointments.findFirst({
+                where: { patient_id: invoice.patient_id, organizationId: organizationId! },
+                orderBy: { appointment_date: 'desc' },
+                select: { doctor_name: true, department: true },
+            });
+            opdDoctor = apt?.doctor_name || '';
+        }
+
         const branding = await getBillBranding(organizationId!);
         const sections = await getBillSections(organizationId!, 'invoice');
-        const html = generateInvoiceHTML(invoice, branding, sections)
+        const html = generateInvoiceHTML(invoice, branding, sections, opdDoctor)
 
         // Return HTML for browser viewing (works for both API key and regular auth)
         return new NextResponse(html, {
@@ -109,7 +120,7 @@ function numberToWords(n: number): string {
     return result + ' Only';
 }
 
-function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any) {
+function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any, opdDoctor: string = '') {
     const items = invoice.items || []
     const payments = invoice.payments || []
     const creditNotes = (invoice as any).credit_notes || []
@@ -224,7 +235,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any
                     </div>
                     <div style="text-align:right;">
                         <p style="font-size:11px;"><strong>Bill Date:</strong> ${invoiceDate}</p>
-                        ${admission ? `<p style="font-size:11px;"><strong>Doctor:</strong> Dr. ${admission.doctor_name || '-'}</p>` : ''}
+                        <p style="font-size:11px;"><strong>Doctor:</strong> ${admission ? `Dr. ${admission.doctor_name || '-'}` : (opdDoctor ? `Dr. ${opdDoctor}` : '-')}</p>
                         ${isIPD ? `<p style="font-size:11px;"><strong>Adm. Date:</strong> ${fmtDate(admission.admission_date)} ${fmtTime(admission.admission_date)}</p>` : ''}
                     </div>
                 </div>

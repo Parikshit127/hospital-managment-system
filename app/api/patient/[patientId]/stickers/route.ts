@@ -24,13 +24,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ pati
             include: { ward: true, bed: true },
         });
 
+        // Get latest appointment to find the doctor (for OPD)
+        const latestAppointment = await prisma.appointments.findFirst({
+            where: { patient_id: patientId, organizationId },
+            orderBy: { appointment_date: 'desc' },
+            select: { doctor_name: true, department: true },
+        });
+
         const branding = await getBillBranding(organizationId);
 
-        // Get sticker count from query param (default 8)
-        const url = new URL(req.url);
-        const count = Math.min(Math.max(parseInt(url.searchParams.get('count') || '8'), 1), 16);
-
-        const html = generateStickerHTML(patient, admission, branding, count);
+        const html = generateStickerHTML(patient, admission, latestAppointment, branding);
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
         });
@@ -40,7 +43,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ pati
     }
 }
 
-function generateStickerHTML(patient: any, admission: any, branding: any, count: number) {
+function generateStickerHTML(patient: any, admission: any, appointment: any, branding: any) {
     const name = (patient.title ? patient.title + ' ' : '') + (patient.full_name || '-');
     const uhid = patient.patient_id || '-';
     const age = patient.age || '-';
@@ -55,67 +58,58 @@ function generateStickerHTML(patient: any, admission: any, branding: any, count:
         : new Date(patient.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
     const ipdNo = isIPD ? admission.admission_id : '';
-    const doctorName = isIPD ? (admission.doctor_name || '-') : '';
-    const dateLabel = isIPD ? 'DOA' : 'Reg. Date';
+    const doctorName = isIPD
+        ? (admission.doctor_name || '-')
+        : (appointment?.doctor_name || patient.department || '-');
+    const dateLabel = isIPD ? 'DOA' : 'Date';
 
-    // Build barcode using Code 128 pattern via CSS/SVG
-    // We'll use a simple barcode font approach with the UHID
     const barcodeValue = uhid;
 
+    // ST-24 format: 64mm x 34mm, 3 columns x 8 rows = 24 stickers per A4
     const stickerHtml = `
         <div class="sticker">
-            <div class="sticker-content">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-                    <div style="font-size:13px;font-weight:900;line-height:1.2;">${name}</div>
-                    <div style="font-size:11px;font-weight:700;white-space:nowrap;margin-left:8px;">${age} Y /${gender}</div>
-                </div>
-                <div style="font-size:10px;margin-top:3px;">MRN : ${uhid}</div>
-                <div style="font-size:10px;">${dateLabel}: ${admDate}</div>
-                ${isIPD ? `<div style="font-size:10px;">IP No.: ${ipdNo}</div>` : ''}
-                ${doctorName ? `<div style="font-size:10px;">Doctor: ${doctorName}</div>` : ''}
-                <div style="font-size:10px;">Category: ${category}</div>
-                <div style="font-size:10px;">P.No:${phone}</div>
-                <div class="barcode-container">
-                    <svg class="barcode-svg" id="barcode-template"></svg>
-                </div>
+            <div style="font-size:8px;font-weight:900;line-height:1.1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${name}</div>
+            <div style="font-size:7px;margin-top:1px;">MRN : ${uhid} <span style="float:right;">${age} Y /${gender}</span></div>
+            <div style="font-size:7px;">${dateLabel}: ${admDate}</div>
+            ${isIPD ? `<div style="font-size:7px;">IP No.: ${ipdNo}</div>` : ''}
+            <div style="font-size:7px;">Doctor: ${doctorName}</div>
+            <div style="font-size:7px;">Category: ${category} <span style="float:right;">P.No:${phone}</span></div>
+            <div class="barcode-container">
+                <svg></svg>
             </div>
         </div>`;
 
-    const stickers = Array(count).fill(stickerHtml).join('');
+    const stickers = Array(24).fill(stickerHtml).join('');
 
     return `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Patient Stickers - ${uhid}</title>
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+    <title>Stickers - ${uhid}</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; color: #000; background: #fff; }
 
-        .no-print { padding: 12px; text-align: center; background: #f3f4f6; }
-        .no-print button { padding: 8px 24px; background: #333; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; margin: 0 4px; }
+        .no-print { padding: 10px; text-align: center; background: #f3f4f6; }
+        .no-print button { padding: 8px 24px; background: #333; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
 
         .sticker-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(3, 64mm);
+            grid-template-rows: repeat(8, 34mm);
             gap: 0;
-            max-width: 210mm;
+            width: 210mm;
+            height: 297mm;
             margin: 0 auto;
-            padding: 5mm;
+            padding: 4.5mm 7mm;
         }
 
         .sticker {
-            width: 95mm;
-            height: 55mm;
-            border: 0.5px dashed #ccc;
-            padding: 4mm;
+            width: 64mm;
+            height: 34mm;
+            padding: 2mm 3mm;
             overflow: hidden;
-            page-break-inside: avoid;
-        }
-
-        .sticker-content {
-            height: 100%;
             display: flex;
             flex-direction: column;
             justify-content: flex-start;
@@ -124,58 +118,54 @@ function generateStickerHTML(patient: any, admission: any, branding: any, count:
         .barcode-container {
             margin-top: auto;
             text-align: center;
-            padding-top: 2px;
         }
 
         .barcode-container svg {
-            height: 28px;
-            width: 100%;
+            height: 16px;
+            width: 90%;
+        }
+
+        @media screen {
+            .sticker { border: 0.5px dashed #ddd; }
         }
 
         @media print {
             .no-print { display: none !important; }
             body { margin: 0; }
-            .sticker { border: none; }
-            .sticker-grid { padding: 2mm; }
-            @page { margin: 5mm; size: A4; }
+            @page { margin: 0; size: A4; }
         }
     </style>
 </head>
 <body>
     <div class="no-print">
-        <button onclick="window.print()">Print Stickers</button>
-        <span style="margin:0 8px;font-size:12px;color:#666;">Sticker count: ${count} | UHID: ${uhid}</span>
-        <a href="?count=8" style="font-size:12px;margin:0 4px;">8 stickers</a>
-        <a href="?count=10" style="font-size:12px;margin:0 4px;">10 stickers</a>
-        <a href="?count=12" style="font-size:12px;margin:0 4px;">12 stickers</a>
+        <button onclick="window.print()">Print 24 Stickers (ST-24 A4)</button>
+        <span style="margin-left:12px;font-size:12px;color:#666;">UHID: ${uhid} | 64mm x 34mm x 24</span>
     </div>
     <div class="sticker-grid">
         ${stickers}
     </div>
     <script>
-        // Generate barcodes after page loads
         document.addEventListener('DOMContentLoaded', function() {
-            const stickers = document.querySelectorAll('.sticker');
-            stickers.forEach(function(sticker, index) {
-                const container = sticker.querySelector('.barcode-container');
+            document.querySelectorAll('.sticker').forEach(function(sticker, i) {
+                var container = sticker.querySelector('.barcode-container');
                 if (container) {
-                    const svgId = 'barcode-' + index;
+                    var svgId = 'bc-' + i;
                     container.innerHTML = '<svg id="' + svgId + '"></svg>';
                     try {
                         JsBarcode('#' + svgId, '${barcodeValue}', {
                             format: 'CODE128',
-                            width: 1.5,
-                            height: 28,
+                            width: 1,
+                            height: 16,
                             displayValue: false,
                             margin: 0,
                         });
                     } catch(e) {
-                        container.innerHTML = '<div style="font-family:monospace;font-size:10px;letter-spacing:2px;">${barcodeValue}</div>';
+                        container.innerHTML = '<div style="font-size:7px;font-family:monospace;">${barcodeValue}</div>';
                     }
                 }
             });
         });
-    </script>
+    <\/script>
 </body>
 </html>`;
 }

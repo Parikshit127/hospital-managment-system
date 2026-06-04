@@ -340,13 +340,9 @@ export default function PatientProfilePage() {
                             <EditableField label="Emergency Phone" value={patient.emergency_contact_phone || ''} field="emergency_contact_phone" patientId={patientId} onSave={loadData} type="tel" />
                         </div>
                         <div className="flex gap-2 mt-3 md:mt-0">
-                            <button onClick={() => window.open(`/api/patient/${patientId}/stickers?count=8`, '_blank')}
+                            <button onClick={() => window.open(`/api/patient/${patientId}/stickers`, '_blank')}
                                 className="px-3 py-1.5 bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-200 transition-colors">
-                                Print Stickers (8)
-                            </button>
-                            <button onClick={() => window.open(`/api/patient/${patientId}/stickers?count=12`, '_blank')}
-                                className="px-3 py-1.5 bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-200 transition-colors">
-                                Print Stickers (12)
+                                Print Stickers (24)
                             </button>
                         </div>
                     </div>
