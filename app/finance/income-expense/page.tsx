@@ -18,7 +18,7 @@ export default function IncomeExpensePage() {
     async function loadData() {
         setLoading(true);
         const [revRes, expRes, catRes] = await Promise.all([
-            getFinanceDashboardStats(viewPeriod),
+            getFinanceDashboardStats({ period: viewPeriod }),
             getExpenseDashboardStats(viewPeriod),
             getExpenseCategories(),
         ]);

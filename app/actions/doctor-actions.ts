@@ -157,14 +157,34 @@ export async function admitPatient(
   try {
     const { db, organizationId } = await requireTenantContext();
 
-    // 1. Create Admission Record
+    // 1. Generate sequential admission ID
+    const org = await db.organization.findUnique({ where: { id: organizationId }, select: { code: true } });
+    const orgCode = org?.code || 'HOS';
+    const now = new Date();
+    const fyStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    const fy = `${String(fyStart).slice(-2)}-${String(fyStart + 1).slice(-2)}`;
+    const docPrefix = `${orgCode}-ADM-${fy}-`;
+    const lastAdm = await db.admissions.findFirst({
+        where: { admission_id: { startsWith: docPrefix }, organizationId },
+        orderBy: { admission_date: 'desc' },
+        select: { admission_id: true },
+    });
+    let docSeq = 1;
+    if (lastAdm) {
+        const parts = lastAdm.admission_id.split('-');
+        docSeq = (parseInt(parts[parts.length - 1]) || 0) + 1;
+    }
+    const docAdmId = `${docPrefix}${String(docSeq).padStart(3, '0')}`;
+
+    // Create Admission Record
     const admission = await db.admissions.create({
       data: {
+        admission_id: docAdmId,
         patient_id: patientId,
         doctor_name: doctorName,
         diagnosis: diagnosis,
         status: "Admitted",
-        admission_date: new Date(),
+        admission_date: now,
         organizationId,
       },
     });

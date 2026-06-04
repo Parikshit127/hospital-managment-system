@@ -5,7 +5,7 @@ import {
     DollarSign, FileText, CreditCard, TrendingUp, Clock,
     AlertTriangle, Loader2, Search,
     Eye, CheckCircle, XCircle, ArrowUpRight, Receipt, Wallet,
-    BarChart3, Download, TrendingDown
+    BarChart3, Download, TrendingDown, Stethoscope, CalendarDays
 } from 'lucide-react';
 import {
     getFinanceDashboardStats, getInvoices, recordPayment, finalizeInvoice,
@@ -17,6 +17,8 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { InvoiceDetailModal } from '@/app/components/finance/InvoiceDetailModal';
 import { PaymentRecordModal } from '@/app/components/finance/PaymentRecordModal';
 import { useToast } from '@/app/components/ui/Toast';
+
+const INR = '₹';
 
 export default function FinanceDashboard() {
     const toast = useToast();
@@ -30,6 +32,9 @@ export default function FinanceDashboard() {
     const [statusFilter, setStatusFilter] = useState('');
     const [typeFilter, setTypeFilter] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
+    const [datePreset, setDatePreset] = useState('monthly');
+    const [customStart, setCustomStart] = useState('');
+    const [customEnd, setCustomEnd] = useState('');
 
     const [paymentModal, setPaymentModal] = useState<any>(null);
     const [paymentForm, setPaymentForm] = useState({ amount: '', method: 'Cash', type: 'Settlement', notes: '' });
@@ -39,8 +44,12 @@ export default function FinanceDashboard() {
     const loadData = async () => {
         setLoading(true);
         try {
+            const statsParams = datePreset === 'custom'
+                ? (customStart && customEnd ? { startDate: customStart, endDate: customEnd } : {})
+                : { period: datePreset as 'today' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' };
+
             const [s, inv, cat, expStats, depStats] = await Promise.all([
-                getFinanceDashboardStats(),
+                getFinanceDashboardStats(statsParams),
                 getInvoices({ status: statusFilter || undefined, invoice_type: typeFilter || undefined }),
                 getChargeCatalog(),
                 getExpenseDashboardStats(),
@@ -55,7 +64,7 @@ export default function FinanceDashboard() {
         setLoading(false);
     };
 
-    useEffect(() => { loadData(); }, [statusFilter, typeFilter]);
+    useEffect(() => { loadData(); }, [statusFilter, typeFilter, datePreset, customStart, customEnd]);
 
     const handleRecordPayment = async () => {
         if (!paymentModal || !paymentForm.amount) return;
@@ -123,13 +132,16 @@ export default function FinanceDashboard() {
     });
 
     const kpiCards = [
-        { label: "Today's Revenue", value: `\u20B9${((stats?.todayRevenue || 0) / 1000).toFixed(1)}K`, sub: `${stats?.totalPaymentsToday || 0} transactions`, icon: <DollarSign className="h-3.5 w-3.5 text-emerald-400" />, color: 'emerald', subIcon: <ArrowUpRight className="h-3 w-3" /> },
-        { label: 'Total Revenue', value: `\u20B9${((stats?.totalRevenue || 0) / 1000).toFixed(1)}K`, sub: `${stats?.totalInvoices || 0} invoices`, icon: <Wallet className="h-3.5 w-3.5 text-teal-400" />, color: 'teal', subIcon: <TrendingUp className="h-3 w-3" /> },
-        { label: 'Expenses (Month)', value: `\u20B9${((expenseStats?.thisMonthTotal || 0) / 1000).toFixed(1)}K`, sub: `${expenseStats?.pendingApproval || 0} pending approval`, icon: <TrendingDown className="h-3.5 w-3.5 text-red-400" />, color: 'red', subIcon: <Clock className="h-3 w-3" /> },
-        { label: 'Outstanding', value: `\u20B9${((stats?.pendingBalance || 0) / 1000).toFixed(1)}K`, sub: `${stats?.outstandingInvoices || 0} pending`, icon: <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />, color: 'amber', subIcon: <Clock className="h-3 w-3" /> },
+        { label: "Today's Revenue", value: `${INR}${((stats?.todayRevenue || 0) / 1000).toFixed(1)}K`, sub: `${stats?.totalPaymentsToday || 0} transactions`, icon: <DollarSign className="h-3.5 w-3.5 text-emerald-400" />, color: 'emerald', subIcon: <ArrowUpRight className="h-3 w-3" /> },
+        { label: 'Total Revenue', value: `${INR}${((stats?.totalRevenue || 0) / 1000).toFixed(1)}K`, sub: `${stats?.totalInvoices || 0} invoices`, icon: <Wallet className="h-3.5 w-3.5 text-teal-400" />, color: 'teal', subIcon: <TrendingUp className="h-3 w-3" /> },
+        { label: 'Expenses (Month)', value: `${INR}${((expenseStats?.thisMonthTotal || 0) / 1000).toFixed(1)}K`, sub: `${expenseStats?.pendingApproval || 0} pending approval`, icon: <TrendingDown className="h-3.5 w-3.5 text-red-400" />, color: 'red', subIcon: <Clock className="h-3 w-3" /> },
+        { label: 'Outstanding', value: `${INR}${((stats?.pendingBalance || 0) / 1000).toFixed(1)}K`, sub: `${stats?.outstandingInvoices || 0} pending`, icon: <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />, color: 'amber', subIcon: <Clock className="h-3 w-3" /> },
         { label: 'Draft Bills', value: String(stats?.draftInvoices || 0), sub: 'Awaiting finalization', icon: <FileText className="h-3.5 w-3.5 text-violet-400" />, color: 'violet', subIcon: <FileText className="h-3 w-3" /> },
-        { label: 'Active Deposits', value: `\u20B9${((depositStats?.activeBalance || 0) / 1000).toFixed(1)}K`, sub: `${depositStats?.activeDeposits || 0} active`, icon: <Wallet className="h-3.5 w-3.5 text-cyan-400" />, color: 'cyan', subIcon: <Receipt className="h-3 w-3" /> },
+        { label: 'Active Deposits', value: `${INR}${((depositStats?.activeBalance || 0) / 1000).toFixed(1)}K`, sub: `${depositStats?.activeDeposits || 0} active`, icon: <Wallet className="h-3.5 w-3.5 text-cyan-400" />, color: 'cyan', subIcon: <Receipt className="h-3 w-3" /> },
     ];
+
+    const CHART_COLORS = ['from-emerald-500 to-teal-500', 'from-violet-500 to-indigo-500', 'from-amber-500 to-orange-500', 'from-rose-500 to-pink-500', 'from-blue-500 to-cyan-500', 'from-fuchsia-500 to-purple-500'];
+    const DOCTOR_COLORS = ['from-violet-500 to-indigo-500', 'from-emerald-500 to-teal-500', 'from-rose-500 to-pink-500', 'from-amber-500 to-orange-500', 'from-blue-500 to-cyan-500', 'from-fuchsia-500 to-purple-500'];
 
     return (
         <AppShell pageTitle="Finance Dashboard" pageIcon={<DollarSign className="h-5 w-5" />} onRefresh={loadData} refreshing={loading}>
@@ -174,51 +186,130 @@ export default function FinanceDashboard() {
                         </div>
 
                         {activeTab === 'overview' && (
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                {/* Revenue by Department */}
-                                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
-                                    <div className="p-5 border-b border-gray-200"><h3 className="font-black text-gray-700 flex items-center gap-2 text-sm"><BarChart3 className="h-4 w-4 text-emerald-400" /> Revenue by Department</h3></div>
-                                    <div className="p-5">
-                                        {stats?.revenueByDepartment?.length > 0 ? (
-                                            <div className="space-y-3">
-                                                {stats.revenueByDepartment.map((dept: any, i: number) => {
-                                                    const maxAmt = Math.max(...stats.revenueByDepartment.map((d: any) => d.amount), 1);
-                                                    const colors = ['from-emerald-500 to-teal-500', 'from-violet-500 to-indigo-500', 'from-amber-500 to-orange-500', 'from-rose-500 to-pink-500', 'from-blue-500 to-cyan-500', 'from-fuchsia-500 to-purple-500'];
-                                                    return (
-                                                        <div key={i} className="flex items-center gap-3">
-                                                            <span className="text-xs font-bold text-gray-500 w-28 truncate">{dept.department}</span>
-                                                            <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
-                                                                <div className={`h-full bg-gradient-to-r ${colors[i % colors.length]} rounded-full transition-all duration-700`} style={{ width: `${(dept.amount / maxAmt) * 100}%` }} />
+                            <div className="space-y-6">
+                                {/* Date Filter Bar */}
+                                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4 flex flex-wrap items-center gap-3">
+                                    <div className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest">
+                                        <CalendarDays className="h-3.5 w-3.5" /> Period
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {[
+                                            { key: 'today', label: 'Today' },
+                                            { key: 'weekly', label: 'This Week' },
+                                            { key: 'monthly', label: 'This Month' },
+                                            { key: 'quarterly', label: 'Quarter' },
+                                            { key: 'yearly', label: 'This Year' },
+                                            { key: 'custom', label: 'Custom' },
+                                        ].map(p => (
+                                            <button key={p.key} onClick={() => setDatePreset(p.key)}
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${datePreset === p.key ? 'bg-emerald-500/20 text-emerald-600 border border-emerald-500/30' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:text-gray-800'}`}>
+                                                {p.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {datePreset === 'custom' && (
+                                        <div className="flex items-center gap-2 ml-2">
+                                            <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
+                                                className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs text-gray-700 focus:border-emerald-500/50 focus:outline-none" />
+                                            <span className="text-xs text-gray-400 font-bold">to</span>
+                                            <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
+                                                className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs text-gray-700 focus:border-emerald-500/50 focus:outline-none" />
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Revenue Charts Row */}
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    {/* Revenue by Department */}
+                                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                                        <div className="p-5 border-b border-gray-200">
+                                            <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
+                                                <BarChart3 className="h-4 w-4 text-emerald-400" /> Revenue by Department
+                                            </h3>
+                                        </div>
+                                        <div className="p-5">
+                                            {stats?.revenueByDepartment?.length > 0 ? (
+                                                <div className="space-y-3">
+                                                    {stats.revenueByDepartment.map((dept: any, i: number) => {
+                                                        const maxAmt = Math.max(...stats.revenueByDepartment.map((d: any) => d.amount), 1);
+                                                        return (
+                                                            <div key={i} className="flex items-center gap-3">
+                                                                <span className="text-xs font-bold text-gray-500 w-28 truncate">{dept.department}</span>
+                                                                <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                                                                    <div className={`h-full bg-gradient-to-r ${CHART_COLORS[i % CHART_COLORS.length]} rounded-full transition-all duration-700`} style={{ width: `${(dept.amount / maxAmt) * 100}%` }} />
+                                                                </div>
+                                                                <span className="text-xs font-black text-gray-500 w-20 text-right">{INR}{dept.amount.toLocaleString()}</span>
                                                             </div>
-                                                            <span className="text-xs font-black text-gray-500 w-20 text-right">{'\u20B9'}{dept.amount.toLocaleString()}</span>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        ) : (
-                                            <div className="py-8 flex flex-col items-center text-gray-300"><BarChart3 className="h-8 w-8 mb-2" /><span className="text-xs font-bold">No revenue data yet</span></div>
-                                        )}
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : (
+                                                <div className="py-8 flex flex-col items-center text-gray-300">
+                                                    <BarChart3 className="h-8 w-8 mb-2" />
+                                                    <span className="text-xs font-bold">No revenue data for this period</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Revenue by Doctor */}
+                                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                                        <div className="p-5 border-b border-gray-200">
+                                            <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
+                                                <Stethoscope className="h-4 w-4 text-violet-400" /> Revenue by Doctor
+                                            </h3>
+                                        </div>
+                                        <div className="p-5">
+                                            {stats?.revenueByDoctor?.length > 0 ? (
+                                                <div className="space-y-3">
+                                                    {stats.revenueByDoctor.map((doc: any, i: number) => {
+                                                        const maxAmt = Math.max(...stats.revenueByDoctor.map((d: any) => d.amount), 1);
+                                                        return (
+                                                            <div key={i} className="flex items-center gap-3">
+                                                                <div className="w-28 min-w-0">
+                                                                    <p className="text-xs font-bold text-gray-600 truncate">{doc.doctorName}</p>
+                                                                    {doc.specialty && <p className="text-[10px] text-gray-400 truncate">{doc.specialty}</p>}
+                                                                </div>
+                                                                <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                                                                    <div className={`h-full bg-gradient-to-r ${DOCTOR_COLORS[i % DOCTOR_COLORS.length]} rounded-full transition-all duration-700`} style={{ width: `${(doc.amount / maxAmt) * 100}%` }} />
+                                                                </div>
+                                                                <span className="text-xs font-black text-gray-500 w-20 text-right">{INR}{doc.amount.toLocaleString()}</span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : (
+                                                <div className="py-8 flex flex-col items-center text-gray-300">
+                                                    <Stethoscope className="h-8 w-8 mb-2" />
+                                                    <span className="text-xs font-bold">No consultation revenue for this period</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
-                                {/* Outstanding Aging */}
+                                {/* Outstanding Aging — full width below */}
                                 <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
-                                    <div className="p-5 border-b border-gray-200"><h3 className="font-black text-gray-700 flex items-center gap-2 text-sm"><Clock className="h-4 w-4 text-amber-400" /> Outstanding Aging Report</h3></div>
-                                    <div className="p-5 space-y-4">
+                                    <div className="p-5 border-b border-gray-200">
+                                        <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
+                                            <Clock className="h-4 w-4 text-amber-400" /> Outstanding Aging Report
+                                        </h3>
+                                    </div>
+                                    <div className="p-5 grid grid-cols-1 sm:grid-cols-4 gap-4">
                                         {[
-                                            { label: '0-30 Days', amount: stats?.aging?.days0to30 || 0, bg: 'bg-emerald-500/5 border-emerald-500/10', dot: 'bg-emerald-500', text: 'text-emerald-400' },
-                                            { label: '30-60 Days', amount: stats?.aging?.days30to60 || 0, bg: 'bg-amber-500/5 border-amber-500/10', dot: 'bg-amber-500', text: 'text-amber-400' },
-                                            { label: '60+ Days', amount: stats?.aging?.days60plus || 0, bg: 'bg-rose-500/5 border-rose-500/10', dot: 'bg-rose-500', text: 'text-rose-400' },
+                                            { label: '0–30 Days', amount: stats?.aging?.days0to30 || 0, bg: 'bg-emerald-500/5 border-emerald-500/10', dot: 'bg-emerald-500', text: 'text-emerald-600' },
+                                            { label: '30–60 Days', amount: stats?.aging?.days30to60 || 0, bg: 'bg-amber-500/5 border-amber-500/10', dot: 'bg-amber-500', text: 'text-amber-600' },
+                                            { label: '60+ Days', amount: stats?.aging?.days60plus || 0, bg: 'bg-rose-500/5 border-rose-500/10', dot: 'bg-rose-500', text: 'text-rose-600' },
+                                            { label: 'Total Outstanding', amount: (stats?.aging?.days0to30 || 0) + (stats?.aging?.days30to60 || 0) + (stats?.aging?.days60plus || 0), bg: 'bg-gray-100 border-gray-200', dot: 'bg-gray-400', text: 'text-gray-700' },
                                         ].map((b, i) => (
-                                            <div key={i} className={`flex items-center justify-between p-4 ${b.bg} border rounded-xl`}>
-                                                <div className="flex items-center gap-3"><div className={`h-3 w-3 rounded-full ${b.dot}`} /><span className="text-sm font-bold text-gray-700">{b.label}</span></div>
-                                                <span className={`text-lg font-black ${b.text}`}>{'\u20B9'}{b.amount.toLocaleString()}</span>
+                                            <div key={i} className={`flex flex-col gap-2 p-4 ${b.bg} border rounded-xl`}>
+                                                <div className="flex items-center gap-2">
+                                                    <div className={`h-2.5 w-2.5 rounded-full ${b.dot}`} />
+                                                    <span className="text-xs font-bold text-gray-600">{b.label}</span>
+                                                </div>
+                                                <span className={`text-2xl font-black ${b.text}`}>{INR}{b.amount.toLocaleString()}</span>
                                             </div>
                                         ))}
-                                        <div className="flex items-center justify-between p-4 bg-gray-100 border border-gray-200 rounded-xl">
-                                            <span className="text-sm font-black text-gray-500">Total Outstanding</span>
-                                            <span className="text-lg font-black text-gray-900">{'\u20B9'}{((stats?.aging?.days0to30 || 0) + (stats?.aging?.days30to60 || 0) + (stats?.aging?.days60plus || 0)).toLocaleString()}</span>
-                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -259,9 +350,9 @@ export default function FinanceDashboard() {
                                                         <td className="px-5 py-3.5 text-xs font-bold text-gray-700 font-mono">{inv.invoice_number}</td>
                                                         <td className="px-5 py-3.5"><p className="text-xs font-bold text-gray-700">{inv.patient?.full_name || inv.patient_id}</p><p className="text-[10px] text-gray-400">{inv.patient_id}</p></td>
                                                         <td className="px-5 py-3.5"><span className={`text-[10px] font-black px-2 py-0.5 rounded ${inv.invoice_type === 'IPD' ? 'bg-violet-500/10 text-violet-400' : 'bg-orange-500/10 text-teal-400'}`}>{inv.invoice_type}</span></td>
-                                                        <td className="px-5 py-3.5 text-right text-xs font-black text-gray-700">{'\u20B9'}{Number(inv.net_amount).toLocaleString()}</td>
-                                                        <td className="px-5 py-3.5 text-right text-xs font-bold text-emerald-400">{'\u20B9'}{Number(inv.paid_amount).toLocaleString()}</td>
-                                                        <td className="px-5 py-3.5 text-right text-xs font-bold text-amber-400">{'\u20B9'}{Number(inv.balance_due).toLocaleString()}</td>
+                                                        <td className="px-5 py-3.5 text-right text-xs font-black text-gray-700">{INR}{Number(inv.net_amount).toLocaleString()}</td>
+                                                        <td className="px-5 py-3.5 text-right text-xs font-bold text-emerald-400">{INR}{Number(inv.paid_amount).toLocaleString()}</td>
+                                                        <td className="px-5 py-3.5 text-right text-xs font-bold text-amber-400">{INR}{Number(inv.balance_due).toLocaleString()}</td>
                                                         <td className="px-5 py-3.5 text-center"><span className={`text-[10px] font-black px-2.5 py-1 rounded-lg ${getStatusColor(inv.status)}`}>{inv.status}</span></td>
                                                         <td className="px-5 py-3.5 text-center">
                                                             <div className="flex items-center justify-center gap-1.5">
@@ -303,7 +394,7 @@ export default function FinanceDashboard() {
                                                     <td className="px-5 py-3 text-xs font-bold text-gray-700">{item.item_name}</td>
                                                     <td className="px-5 py-3 text-[10px] font-bold text-gray-500">{item.category}</td>
                                                     <td className="px-5 py-3 text-[10px] font-bold text-gray-500">{item.department || '-'}</td>
-                                                    <td className="px-5 py-3 text-right text-xs font-black text-emerald-400">{'\u20B9'}{Number(item.default_price).toLocaleString()}</td>
+                                                    <td className="px-5 py-3 text-right text-xs font-black text-emerald-400">{INR}{Number(item.default_price).toLocaleString()}</td>
                                                 </tr>
                                             ))}
                                         </tbody>

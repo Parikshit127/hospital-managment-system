@@ -1403,9 +1403,29 @@ export async function admitEmergency(data: {
     }
 
     const result = await db.$transaction(async (tx: any) => {
-      // 3. Create admission
+      // 3. Generate sequential admission ID
+      const org = await tx.organization.findUnique({ where: { id: organizationId }, select: { code: true } });
+      const orgCode = org?.code || 'HOS';
+      const now = new Date();
+      const fyStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+      const fy = `${String(fyStart).slice(-2)}-${String(fyStart + 1).slice(-2)}`;
+      const emgPrefix = `${orgCode}-ADM-${fy}-`;
+      const lastAdm = await tx.admissions.findFirst({
+          where: { admission_id: { startsWith: emgPrefix }, organizationId },
+          orderBy: { admission_date: 'desc' },
+          select: { admission_id: true },
+      });
+      let emgSeq = 1;
+      if (lastAdm) {
+          const parts = lastAdm.admission_id.split('-');
+          emgSeq = (parseInt(parts[parts.length - 1]) || 0) + 1;
+      }
+      const emgAdmId = `${emgPrefix}${String(emgSeq).padStart(3, '0')}`;
+
+      // Create admission
       const admission = await tx.admissions.create({
         data: {
+          admission_id: emgAdmId,
           patient_id: resolvedPatientId,
           bed_id: data.bed_id,
           ward_id: data.ward_id,

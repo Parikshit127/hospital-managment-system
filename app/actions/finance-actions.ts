@@ -1000,24 +1000,50 @@ export async function updateCatalogItem(id: number, data: {
 // FINANCE ANALYTICS
 // ============================================
 
-export async function getFinanceDashboardStats(period?: 'monthly' | 'quarterly' | 'yearly') {
+export async function getFinanceDashboardStats(params?: {
+    period?: 'today' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+    startDate?: string;
+    endDate?: string;
+}) {
     try {
         const { db } = await requireTenantContext();
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        const periodStart = new Date();
-        periodStart.setHours(0, 0, 0, 0);
-        if (period === 'yearly') {
-            periodStart.setMonth(0, 1);
-        } else if (period === 'quarterly') {
-            const currentMonth = periodStart.getMonth();
-            const quarterStartMonth = Math.floor(currentMonth / 3) * 3;
-            periodStart.setMonth(quarterStartMonth, 1);
-        } else if (period === 'monthly') {
-            periodStart.setDate(1);
+        // Resolve filter range from custom dates or period preset
+        let filterStart: Date | undefined;
+        let filterEnd: Date | undefined;
+
+        if (params?.startDate && params?.endDate) {
+            filterStart = new Date(params.startDate);
+            filterStart.setHours(0, 0, 0, 0);
+            filterEnd = new Date(params.endDate);
+            filterEnd.setHours(23, 59, 59, 999);
+        } else if (params?.period) {
+            const ps = new Date();
+            ps.setHours(0, 0, 0, 0);
+            if (params.period === 'today') {
+                filterStart = ps;
+            } else if (params.period === 'weekly') {
+                ps.setDate(ps.getDate() - ps.getDay());
+                filterStart = ps;
+            } else if (params.period === 'monthly') {
+                ps.setDate(1);
+                filterStart = ps;
+            } else if (params.period === 'quarterly') {
+                const qm = Math.floor(ps.getMonth() / 3) * 3;
+                ps.setMonth(qm, 1);
+                filterStart = ps;
+            } else if (params.period === 'yearly') {
+                ps.setMonth(0, 1);
+                filterStart = ps;
+            }
         }
+
+        const dateFilter = filterStart
+            ? { gte: filterStart, ...(filterEnd ? { lte: filterEnd } : {}) }
+            : undefined;
 
         // Outstanding aging dates
         const thirtyDaysAgo = new Date();
@@ -1036,6 +1062,7 @@ export async function getFinanceDashboardStats(period?: 'monthly' | 'quarterly' 
             totalPaymentsToday,
             outstandingInvoices,
             revenueByDept,
+            revenueByDoctorRaw,
             aging0to30,
             aging30to60,
             aging60plus,
@@ -1056,7 +1083,10 @@ export async function getFinanceDashboardStats(period?: 'monthly' | 'quarterly' 
             }),
             db.payments.aggregate({
                 _sum: { amount: true },
-                where: { status: 'Completed', created_at: { gte: period ? periodStart : new Date(0) } },
+                where: {
+                    status: 'Completed',
+                    ...(dateFilter ? { created_at: dateFilter } : {}),
+                },
             }),
             db.payments.count({
                 where: { status: 'Completed', created_at: { gte: today } },
@@ -1067,7 +1097,16 @@ export async function getFinanceDashboardStats(period?: 'monthly' | 'quarterly' 
             db.invoice_items.groupBy({
                 by: ['department'],
                 _sum: { net_price: true },
-                where: period ? { created_at: { gte: periodStart } } : undefined,
+                where: dateFilter ? { created_at: dateFilter } : undefined,
+            }),
+            db.invoice_items.groupBy({
+                by: ['ref_id'],
+                _sum: { net_price: true },
+                where: {
+                    service_category: 'Consultation',
+                    ref_id: { not: null },
+                    ...(dateFilter ? { created_at: dateFilter } : {}),
+                },
             }),
             db.invoices.aggregate({
                 _sum: { balance_due: true },
@@ -1095,6 +1134,18 @@ export async function getFinanceDashboardStats(period?: 'monthly' | 'quarterly' 
             }),
         ]);
 
+        // Resolve doctor names for revenue-by-doctor
+        const doctorIds = revenueByDoctorRaw
+            .map((r: any) => r.ref_id)
+            .filter(Boolean) as string[];
+        const doctors = doctorIds.length > 0
+            ? await db.users.findMany({
+                where: { id: { in: doctorIds } },
+                select: { id: true, name: true, specialty: true },
+            })
+            : [];
+        const doctorMap = Object.fromEntries(doctors.map((d: any) => [d.id, d]));
+
         return {
             success: true,
             data: {
@@ -1110,6 +1161,14 @@ export async function getFinanceDashboardStats(period?: 'monthly' | 'quarterly' 
                     department: d.department,
                     amount: Number(d._sum.net_price || 0),
                 })),
+                revenueByDoctor: revenueByDoctorRaw
+                    .map((r: any) => ({
+                        doctorId: r.ref_id,
+                        doctorName: doctorMap[r.ref_id]?.name || 'Unknown Doctor',
+                        specialty: doctorMap[r.ref_id]?.specialty || '',
+                        amount: Number(r._sum.net_price || 0),
+                    }))
+                    .sort((a: any, b: any) => b.amount - a.amount),
                 aging: {
                     days0to30: Number(aging0to30._sum.balance_due || 0),
                     days30to60: Number(aging30to60._sum.balance_due || 0),
