@@ -78,6 +78,36 @@ export async function addInsuranceProvider(data: {
     }
 }
 
+export async function updateInsuranceProvider(id: number, data: {
+    provider_name?: string;
+    contact_email?: string;
+    contact_phone?: string;
+    address?: string;
+    pre_auth_required?: boolean;
+    default_discount_percentage?: number;
+    is_active?: boolean;
+}) {
+    try {
+        const { db, session } = await requireTenantContext();
+        if (session.role !== 'admin') return { success: false, error: 'Admin only' };
+        const provider = await db.insurance_providers.update({
+            where: { id },
+            data: {
+                ...(data.provider_name && { provider_name: data.provider_name }),
+                ...(data.contact_email !== undefined && { contact_email: data.contact_email }),
+                ...(data.contact_phone !== undefined && { contact_phone: data.contact_phone }),
+                ...(data.address !== undefined && { address: data.address }),
+                ...(data.pre_auth_required !== undefined && { pre_auth_required: data.pre_auth_required }),
+                ...(data.default_discount_percentage !== undefined && { default_discount_percentage: data.default_discount_percentage }),
+                ...(data.is_active !== undefined && { is_active: data.is_active }),
+            },
+        });
+        return { success: true, data: serialize(provider) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
 // ============================================
 // INSURANCE POLICIES
 // ============================================

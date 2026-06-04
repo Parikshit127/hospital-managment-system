@@ -4,12 +4,12 @@ import { useState, useEffect } from 'react';
 import {
     Shield, FileText, Clock, Loader2, ChevronRight,
     Plus, Eye, CheckCircle, AlertTriangle, ArrowUpRight,
-    Building2, Wallet,
+    Building2, Wallet, Edit2,
     ShieldCheck, ShieldAlert, ShieldX, ClipboardCheck
 } from 'lucide-react';
 import {
     getInsuranceProviders, getInsuranceClaims, getInsuranceStats,
-    getAllPolicies, addInsuranceProvider,
+    getAllPolicies, addInsuranceProvider, updateInsuranceProvider,
     submitInsuranceClaim, updateClaimStatus, getRevenueLeakage, getClaimableInvoices,
     getProviderPerformance, autoSubmitClaim, getAllPreAuths, disputeClaim
 } from '@/app/actions/insurance-actions';
@@ -29,6 +29,8 @@ export default function InsuranceDashboard() {
     // Provider modal
     const [providerModal, setProviderModal] = useState(false);
     const [providerForm, setProviderForm] = useState({ provider_name: '', provider_code: '', contact_email: '', contact_phone: '' });
+    const [editProvider, setEditProvider] = useState<any>(null);
+    const [editProviderForm, setEditProviderForm] = useState({ provider_name: '', contact_email: '', contact_phone: '', address: '', pre_auth_required: false, default_discount_percentage: 0, is_active: true });
 
     // Claim update modal
     const [claimModal, setClaimModal] = useState<any>(null);
@@ -83,6 +85,30 @@ export default function InsuranceDashboard() {
         setProviderModal(false);
         setProviderForm({ provider_name: '', provider_code: '', contact_email: '', contact_phone: '' });
         loadData();
+    };
+
+    const openEditProvider = (p: any) => {
+        setEditProvider(p);
+        setEditProviderForm({
+            provider_name: p.provider_name || '',
+            contact_email: p.contact_email || '',
+            contact_phone: p.contact_phone || '',
+            address: p.address || '',
+            pre_auth_required: p.pre_auth_required || false,
+            default_discount_percentage: Number(p.default_discount_percentage || 0),
+            is_active: p.is_active ?? true,
+        });
+    };
+
+    const handleUpdateProvider = async () => {
+        if (!editProvider) return;
+        const res = await updateInsuranceProvider(editProvider.id, editProviderForm);
+        if (res.success) {
+            setEditProvider(null);
+            loadData();
+        } else {
+            toast.error(res.error || 'Failed to update provider');
+        }
     };
 
     const handleOpenNewClaim = () => {
