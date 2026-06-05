@@ -77,6 +77,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
             { label: 'Templates', href: '/admin/templates', icon: FileText },
             { label: 'Notifications', href: '/admin/notifications', icon: Bell },
             { label: 'Integrations', href: '/admin/integrations', icon: Plug },
+            { label: 'Tally Integration', href: '/admin/integrations/tally', icon: Plug },
             { label: 'Audit Trail', href: '/admin/audit', icon: Clock },
             { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
             { label: 'Workflows', href: '/admin/workflows', icon: Workflow },

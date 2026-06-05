@@ -11,6 +11,7 @@ const SECRET_FIELDS = [
     'whatsapp_app_secret',
     'openai_key',
     'sms_api_key',
+    'tally_password',
 ] as const;
 
 export type SecretField = (typeof SECRET_FIELDS)[number];

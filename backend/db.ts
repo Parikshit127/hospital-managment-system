@@ -84,6 +84,7 @@ const TENANT_SCOPED_MODELS = new Set([
     // GST & Finance
     'GST_Invoice_Register', 'GST_Return_Filing', 'HSN_SAC_Master',
     'GL_Account', 'GL_JournalEntry', 'GL_JournalLine', 'TallyExport',
+    'TallyLedgerMapping', 'TallyVoucherMapping', 'TallySyncLog',
     'AssetCategory', 'FixedAsset', 'DepreciationEntry',
     'AssetTransfer', 'AssetMaintenance',
     'BudgetMaster', 'BudgetLine', 'BudgetRevision', 'BudgetAlert',

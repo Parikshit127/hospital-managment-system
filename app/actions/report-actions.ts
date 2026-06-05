@@ -1,6 +1,7 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
+import { resolveIncomeHeadCode, incomeHeadName } from '@/app/lib/gl-income-head-map';
 
 function serialize<T>(data: T): T {
     return JSON.parse(JSON.stringify(data, (_, value) =>
@@ -296,12 +297,11 @@ export async function getInvoiceVoucher(invoiceId: number) {
                 ? { label: 'TPA / Insurance Ledger A/c', code: '1150' }
                 : { label: 'Patient Ledger A/c', code: '1130' };
 
-        // Derive income-head credits from line items (GL stores revenue aggregated).
+        // Derive income-head credits from line items, grouped by the SAME income
+        // head the GL posts to (so this view matches the posted voucher exactly).
         const headMap = new Map<string, number>();
         for (const it of invoice.items as any[]) {
-            const head =
-                (it.service_category || it.department || 'Other Income').toString().trim() ||
-                'Other Income';
+            const head = incomeHeadName(resolveIncomeHeadCode(it, invoice.invoice_type));
             headMap.set(head, (headMap.get(head) || 0) + Number(it.net_price || 0));
         }
         const credits = Array.from(headMap.entries())

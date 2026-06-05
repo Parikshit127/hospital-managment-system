@@ -1,6 +1,6 @@
 'use server';
 
-import { requireTenantContext } from '@/backend/tenant';
+import { requireTenantContext, requireRoleAndTenant } from '@/backend/tenant';
 import { prisma } from '@/backend/db';
 import { logAudit } from '@/app/lib/audit';
 import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
@@ -1927,6 +1927,69 @@ async function handleGLRepost(invoiceId: number, status: string) {
         await postInvoiceToGL(invoiceId).catch(err => console.error('GL repost failed:', err));
     } catch (err) {
         console.error('handleGLRepost error:', err);
+    }
+}
+
+/**
+ * Opt-in: re-post existing Final invoices to the GL so historical vouchers adopt
+ * the new (receivable-by-type + departmental-revenue + GST-split + bill-wise)
+ * structure. SAFE: reuses handleGLRepost (reverse + re-post, full audit trail, no
+ * deletes, idempotency guarded). Skips locked financial periods and (by default)
+ * invoices whose GL voucher is already synced to Tally. dryRun reports eligibility
+ * only. Admin / finance only. NEVER run as an automatic migration.
+ */
+export async function repostInvoicesGL(opts: { from?: string; to?: string; dryRun?: boolean; skipSynced?: boolean } = {}) {
+    try {
+        const { db, organizationId } = await requireRoleAndTenant(['admin', 'finance']);
+
+        const where: any = { status: 'Final' };
+        if (opts.from || opts.to) {
+            where.created_at = {};
+            if (opts.from) where.created_at.gte = new Date(opts.from);
+            if (opts.to) where.created_at.lte = new Date(opts.to + 'T23:59:59.999');
+        }
+        const invoices = await db.invoices.findMany({ where, select: { id: true, invoice_number: true, created_at: true } });
+
+        // Live (non-reversed) Invoice GL entries for these invoices.
+        const refIds = invoices.map((i: any) => String(i.id));
+        const liveEntries = refIds.length
+            ? await db.gL_JournalEntry.findMany({ where: { reference_type: 'Invoice', reference_id: { in: refIds }, status: { not: 'Reversed' } }, select: { id: true, reference_id: true } })
+            : [];
+        const liveRefs = new Set(liveEntries.map((e: any) => e.reference_id));
+
+        // Invoices whose voucher is already synced to Tally (skip by default).
+        const skipSynced = opts.skipSynced !== false;
+        const syncedRefs = new Set<string>();
+        if (skipSynced && liveEntries.length) {
+            const refByJournal = new Map<string, string>(liveEntries.map((e: any) => [e.id, e.reference_id]));
+            const synced = await db.tallyVoucherMapping.findMany({ where: { gl_journal_entry_id: { in: liveEntries.map((e: any) => e.id) }, sync_status: 'synced' }, select: { gl_journal_entry_id: true } });
+            for (const m of synced) { const r = refByJournal.get(m.gl_journal_entry_id); if (r) syncedRefs.add(r); }
+        }
+
+        const eligible: any[] = [];
+        let skippedNoEntry = 0, skippedLocked = 0, skippedSynced = 0;
+        for (const inv of invoices) {
+            const ref = String(inv.id);
+            if (!liveRefs.has(ref)) { skippedNoEntry++; continue; }
+            if (skipSynced && syncedRefs.has(ref)) { skippedSynced++; continue; }
+            try { await checkPeriodLock(db, new Date(inv.created_at)); } catch { skippedLocked++; continue; }
+            eligible.push(inv);
+        }
+
+        if (opts.dryRun) {
+            return { success: true, dryRun: true, eligible: eligible.length, total: invoices.length, skippedNoEntry, skippedLocked, skippedSynced, sample: eligible.slice(0, 10).map((i: any) => i.invoice_number) };
+        }
+
+        let reposted = 0, failed = 0;
+        const warnings: string[] = [];
+        for (const inv of eligible) {
+            try { await handleGLRepost(inv.id, 'Final'); reposted++; }
+            catch (e: any) { failed++; if (warnings.length < 5) warnings.push(`${inv.invoice_number}: ${e?.message || 'repost failed'}`); }
+        }
+        await logAudit({ action: 'REPOST_INVOICES_GL', module: 'finance', entity_type: 'gl', entity_id: organizationId, details: JSON.stringify({ reposted, failed, from: opts.from, to: opts.to }) });
+        return { success: failed === 0, reposted, failed, eligible: eligible.length, skippedNoEntry, skippedLocked, skippedSynced, warnings: warnings.length ? warnings : undefined };
+    } catch (e: any) {
+        return { success: false, error: e?.name === 'ForbiddenError' ? 'Only finance/admin can re-post the GL.' : e.message };
     }
 }
 

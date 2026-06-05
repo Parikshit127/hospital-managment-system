@@ -280,6 +280,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Expenses", href: "/finance/expenses", icon: Banknote },
         { label: "Income & Expense", href: "/finance/income-expense", icon: TrendingUp },
         { label: "Tally Export", href: "/finance/tally-export", icon: FileCode2 },
+        { label: "Tally Integration", href: "/finance/integrations/tally", icon: FileCode2 },
       ],
     },
     {

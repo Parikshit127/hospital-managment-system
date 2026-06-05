@@ -4,6 +4,11 @@
 import { prisma } from '@/backend/db';
 import { revalidatePath } from 'next/cache';
 import { Decimal } from '@prisma/client/runtime/library';
+import {
+  receivableCode, RECEIVABLE_FALLBACK,
+  resolveIncomeHeadCode, REVENUE_FALLBACK,
+  GST_CODE, GST_FALLBACK, round2,
+} from '@/app/lib/gl-income-head-map';
 
 // ========================================
 // Types & Interfaces
@@ -15,6 +20,8 @@ interface JournalLineInput {
   credit_amount: number;
   description?: string;
   cost_center?: string;
+  bill_reference?: string;   // Tally bill-wise (receivable lines)
+  bill_alloc_type?: string;  // New Ref | Agst Ref
 }
 
 interface CreateJournalEntryInput {
@@ -238,6 +245,8 @@ export async function createJournalEntry(data: CreateJournalEntryInput) {
             credit_amount: line.credit_amount,
             description: line.description,
             cost_center: line.cost_center,
+            bill_reference: line.bill_reference,
+            bill_alloc_type: line.bill_alloc_type,
           },
         });
 
@@ -393,8 +402,7 @@ export async function postInvoiceToGL(invoiceId: number) {
   try {
     const invoice = await prisma.invoices.findUnique({
       where: { id: invoiceId },
-      include: {
-      },
+      include: { items: true },
     });
 
     if (!invoice) {
@@ -414,57 +422,91 @@ export async function postInvoiceToGL(invoiceId: number) {
       return { success: true, message: 'Invoice already posted to GL', journal: existingEntry };
     }
 
-    // Get accounts
-    const [receivableAccount, revenueAccount, gstPayableAccount] = await Promise.all([
-      getAccountByCode(invoice.organizationId, '1130'), // Patient Receivables
-      getAccountByCode(invoice.organizationId, '6000'), // Revenue (default)
-      getAccountByCode(invoice.organizationId, '3120'), // GST Payable
-    ]);
+    const orgId = invoice.organizationId;
+    const warnings: string[] = [];
 
-    if (!receivableAccount || !revenueAccount) {
-      return { success: false, error: 'Required GL accounts not found' };
+    // Resolve an account by code, falling back to a default code (so a post never
+    // fails just because an org is missing a specific sub-ledger).
+    const resolveAccount = async (code: string, fallback: string, label: string) => {
+      let acc = await getAccountByCode(orgId, code);
+      if (!acc && code !== fallback) {
+        acc = await getAccountByCode(orgId, fallback);
+        if (acc) warnings.push(`${label} ledger ${code} not found — used ${fallback}.`);
+      }
+      return acc;
+    };
+
+    // 1) Debit: receivable by payer type (cash 1130 / corporate 1140 / tpa_insurance 1150).
+    const payerType = invoice.billing_patient_type || 'cash';
+    const receivableAccount = await resolveAccount(receivableCode(payerType), RECEIVABLE_FALLBACK, 'Receivable');
+    if (!receivableAccount) {
+      return { success: false, error: 'Required receivable GL account not found' };
     }
 
-    const lines: JournalLineInput[] = [];
+    const total = invoice.total_amount.toNumber();
+    const cgst = invoice.cgst_amount?.toNumber() || 0;
+    const sgst = invoice.sgst_amount?.toNumber() || 0;
+    const igst = invoice.igst_amount?.toNumber() || 0;
 
-    // Debit: Patient Receivables (Total amount including GST)
+    const lines: JournalLineInput[] = [];
     lines.push({
       account_id: receivableAccount.id,
-      debit_amount: invoice.total_amount.toNumber(),
+      debit_amount: total,
       credit_amount: 0,
-      description: `Patient Receivable - ${invoice.invoice_number}`,
+      description: `${payerType} receivable - ${invoice.invoice_number}`,
+      bill_reference: invoice.invoice_number,
+      bill_alloc_type: 'New Ref',
     });
 
-    // Credit: Revenue (Taxable amount)
-    const taxableAmount = invoice.total_amount.toNumber() -
-      (invoice.cgst_amount?.toNumber() || 0) -
-      (invoice.sgst_amount?.toNumber() || 0) -
-      (invoice.igst_amount?.toNumber() || 0);
+    // 2) Credit: revenue split into department income heads (from invoice items).
+    const items: any[] = (invoice as any).items || [];
+    const headTotals = new Map<string, number>();
+    for (const it of items) {
+      const code = resolveIncomeHeadCode(it, invoice.invoice_type);
+      headTotals.set(code, round2((headTotals.get(code) || 0) + Number(it.net_price || 0)));
+    }
+    const revenueByAccount = new Map<string, number>();
+    for (const [code, amt] of headTotals.entries()) {
+      if (amt <= 0) continue;
+      const acc = await resolveAccount(code, REVENUE_FALLBACK, 'Income head');
+      if (!acc) { warnings.push(`Income head ${code} and fallback ${REVENUE_FALLBACK} missing.`); continue; }
+      revenueByAccount.set(acc.id, round2((revenueByAccount.get(acc.id) || 0) + amt));
+    }
+    // Fallback: no itemised revenue resolved -> one revenue line for the taxable amount.
+    if (revenueByAccount.size === 0) {
+      const rev = await resolveAccount(REVENUE_FALLBACK, REVENUE_FALLBACK, 'Revenue');
+      if (!rev) return { success: false, error: 'Revenue GL account not found' };
+      revenueByAccount.set(rev.id, round2(total - cgst - sgst - igst));
+    }
+    for (const [account_id, amount] of revenueByAccount.entries()) {
+      if (amount === 0) continue;
+      lines.push({ account_id, debit_amount: 0, credit_amount: amount, description: `Revenue - ${invoice.invoice_number}` });
+    }
 
-    lines.push({
-      account_id: revenueAccount.id,
-      debit_amount: 0,
-      credit_amount: taxableAmount,
-      description: `Revenue - ${invoice.invoice_number}`,
-    });
+    // 3) Credit: GST split (CGST 3120 / SGST 3121 / IGST 3122).
+    for (const [code, amt, label] of [
+      [GST_CODE.cgst, cgst, 'CGST'],
+      [GST_CODE.sgst, sgst, 'SGST'],
+      [GST_CODE.igst, igst, 'IGST'],
+    ] as Array<[string, number, string]>) {
+      if (amt <= 0) continue;
+      const acc = await resolveAccount(code, GST_FALLBACK, label);
+      if (acc) lines.push({ account_id: acc.id, debit_amount: 0, credit_amount: amt, description: `${label} Payable - ${invoice.invoice_number}` });
+      else warnings.push(`${label} ledger ${code} and fallback ${GST_FALLBACK} missing — folded into revenue.`);
+    }
 
-    // Credit: GST Payable (if applicable)
-    const totalGST =
-      (invoice.cgst_amount?.toNumber() || 0) +
-      (invoice.sgst_amount?.toNumber() || 0) +
-      (invoice.igst_amount?.toNumber() || 0);
-
-    if (totalGST > 0 && gstPayableAccount) {
-      lines.push({
-        account_id: gstPayableAccount.id,
-        debit_amount: 0,
-        credit_amount: totalGST,
-        description: `GST Payable - ${invoice.invoice_number}`,
-      });
+    // 4) Reconcile: guarantee total credits == debit (handles header discounts,
+    //    rounding, and any unpostable GST) by adjusting the largest credit line.
+    const creditSum = round2(lines.reduce((s, l) => s + l.credit_amount, 0));
+    const residual = round2(total - creditSum);
+    if (Math.abs(residual) >= 0.01) {
+      const creditLines = lines.filter((l) => l.credit_amount > 0);
+      const target = creditLines.reduce((a, b) => (b.credit_amount > a.credit_amount ? b : a), creditLines[0]);
+      if (target) target.credit_amount = round2(target.credit_amount + residual);
     }
 
     const result = await createJournalEntry({
-      organizationId: invoice.organizationId,
+      organizationId: orgId,
       entry_date: invoice.created_at,
       entry_type: 'Invoice',
       narration: `Patient Invoice - ${invoice.invoice_number}`,
@@ -474,7 +516,7 @@ export async function postInvoiceToGL(invoiceId: number) {
       reference_number: invoice.invoice_number,
     });
 
-    return result;
+    return warnings.length ? { ...result, warnings } : result;
   } catch (error) {
     console.error('Error posting invoice to GL:', error);
     return { success: false, error: 'Failed to post invoice to GL' };
@@ -509,7 +551,21 @@ export async function postPaymentToGL(paymentId: number) {
       ? await getAccountByCode(payment.organizationId, '1110') // Cash in Hand
       : await getAccountByCode(payment.organizationId, '1120'); // Bank Accounts
 
-    const receivableAccount = await getAccountByCode(payment.organizationId, '1130'); // Patient Receivables
+    // Credit the receivable ledger that matches the LINKED invoice's payer type
+    // (cash 1130 / corporate 1140 / tpa_insurance 1150), with a 1130 fallback.
+    let receivableCodeStr = '1130';
+    let billRef: string | undefined;
+    if (payment.invoice_id) {
+      const inv = await prisma.invoices.findUnique({
+        where: { id: payment.invoice_id },
+        select: { billing_patient_type: true, invoice_number: true },
+      });
+      if (inv) { receivableCodeStr = receivableCode(inv.billing_patient_type); billRef = inv.invoice_number; }
+    }
+    let receivableAccount = await getAccountByCode(payment.organizationId, receivableCodeStr);
+    if (!receivableAccount && receivableCodeStr !== '1130') {
+      receivableAccount = await getAccountByCode(payment.organizationId, '1130');
+    }
 
     if (!bankOrCashAccount || !receivableAccount) {
       return { success: false, error: 'Required GL accounts not found' };
@@ -523,12 +579,14 @@ export async function postPaymentToGL(paymentId: number) {
         credit_amount: 0,
         description: `Payment received - ${payment.payment_method}`,
       },
-      // Credit: Patient Receivables
+      // Credit: Patient/Corporate/Insurance Receivables (bill-wise allocation)
       {
         account_id: receivableAccount.id,
         debit_amount: 0,
         credit_amount: payment.amount.toNumber(),
-        description: `Payment against receivables`,
+        description: billRef ? `Payment against ${billRef}` : `Payment against receivables`,
+        bill_reference: billRef,
+        bill_alloc_type: billRef ? 'Agst Ref' : undefined,
       },
     ];
 

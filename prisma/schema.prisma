@@ -299,6 +299,15 @@ model OrganizationConfig {
   sms_api_key                   String?
   sms_sender_id                 String?
   sender_phone_number           String?
+  // Tally integration — per-hospital connection (password stored encrypted)
+  tally_enabled                 Boolean   @default(false)
+  tally_url                     String?
+  tally_company                 String?
+  tally_username                String?
+  tally_password                String?
+  tally_auto_sync               Boolean   @default(false)
+  tally_last_sync_at            DateTime?
+  tally_voucher_type_map        String?   // JSON: default Tally voucher-type names -> company's custom names
 
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -3329,6 +3338,9 @@ model GL_JournalLine {
   credit_amount  Decimal  @default(0) @db.Decimal(15, 2)
   description    String?
   cost_center    String?
+  // Tally bill-wise allocation (receivable lines): invoice number + alloc type
+  bill_reference  String?
+  bill_alloc_type String? // New Ref | Agst Ref
   created_at     DateTime @default(now())
 
   organization           Organization    @relation(fields: [organizationId], references: [id])
@@ -3369,6 +3381,71 @@ model TallyExport {
   @@index([status])
   @@index([created_at])
   @@map("tally_exports")
+}
+
+// ── Tally sync state (per-hospital) ─────────────────────────────────────────
+// HIS GL_Account <-> Tally ledger sync state.
+model TallyLedgerMapping {
+  id                String    @id @default(uuid())
+  organizationId    String
+  gl_account_id     String // HIS ledger id (GL_Account.id)
+  his_ledger_name   String
+  tally_ledger_name String?
+  tally_group       String?
+  tally_guid        String?
+  sync_status       String    @default("pending") // pending | synced | failed
+  error_message     String?
+  last_synced_at    DateTime?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  @@unique([organizationId, gl_account_id])
+  @@index([organizationId])
+  @@index([sync_status])
+  @@map("tally_ledger_mapping")
+}
+
+// HIS GL_JournalEntry (voucher) <-> Tally voucher sync state.
+model TallyVoucherMapping {
+  id                   String    @id @default(uuid())
+  organizationId       String
+  gl_journal_entry_id  String // HIS voucher id (GL_JournalEntry.id)
+  voucher_type         String // Sales | Receipt | Payment | Journal | Contra
+  his_voucher_number   String
+  tally_voucher_number String?
+  tally_guid           String?
+  sync_status          String    @default("pending") // pending | synced | failed
+  error_message        String?
+  last_synced_at       DateTime?
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
+
+  @@unique([organizationId, gl_journal_entry_id])
+  @@index([organizationId])
+  @@index([sync_status])
+  @@map("tally_voucher_mapping")
+}
+
+// Per-sync request/response log for diagnostics.
+model TallySyncLog {
+  id               String   @id @default(uuid())
+  organizationId   String
+  entity_type      String // ledger | voucher | connection | bulk
+  entity_id        String?
+  action           String // test_connection | sync_ledger | sync_voucher | bulk_sync
+  status           String // success | failed
+  request_payload  String?
+  response_payload String?
+  error_message    String?
+  records_count    Int      @default(0)
+  created_by       String?
+  created_at       DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([entity_type])
+  @@index([status])
+  @@index([created_at])
+  @@map("tally_sync_logs")
 }
 
 // ========================================
