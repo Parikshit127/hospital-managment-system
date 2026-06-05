@@ -43,6 +43,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 
         if (!invoice) return NextResponse.json({ error: 'No invoice found' }, { status: 404 });
 
+        // Fetch TPA provider name if applicable
+        let tpaProviderName = '';
+        if (invoice.tpa_provider_id) {
+            const tpa = await prisma.insurance_providers.findUnique({ where: { id: invoice.tpa_provider_id } });
+            tpaProviderName = tpa?.provider_name || '';
+        }
+        if (!tpaProviderName && invoice.billing_patient_type === 'tpa_insurance') {
+            const policy = await prisma.insurance_policies.findFirst({
+                where: { patient_id: admission.patient_id },
+                include: { provider: { select: { provider_name: true } } },
+            });
+            tpaProviderName = (policy as any)?.provider?.provider_name || '';
+        }
+
         const org = await prisma.organization.findUnique({
             where: { id: auth.context.organizationId },
             include: { branding: { select: { logo_url: true, primary_color: true } } },
@@ -56,7 +70,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         });
 
         const isFinal = admission.status === 'Discharged';
-        const html = generateDischargeBillHTML(admission, invoice, org, deposits, isFinal, branding, sections);
+        const html = generateDischargeBillHTML(admission, invoice, org, deposits, isFinal, branding, sections, tpaProviderName);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -87,7 +101,7 @@ function numberToWords(n: number): string {
     return result + ' Only';
 }
 
-function generateDischargeBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any) {
+function generateDischargeBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any, tpaProviderName: string = '') {
     const patient = admission.patient || {};
     const items = invoice.items || [];
     const payments = invoice.payments || [];
@@ -256,6 +270,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 <p style="font-size:11px;"><strong>Discharged:</strong> ${isFinal ? dischargeDate : 'N/A'}</p>
                                 <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
                                 <p style="font-size:11px;"><strong>Category:</strong> ${invoice.billing_patient_type === 'tpa_insurance' ? 'TPA / Insurance' : invoice.billing_patient_type === 'corporate' ? 'Corporate' : 'Cash / Self-Pay'}</p>
+                                ${tpaProviderName ? `<p style="font-size:11px;"><strong>TPA/Insurer:</strong> ${tpaProviderName}</p>` : ''}
                                 <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
                             </div>
                         </div>` : ''}
