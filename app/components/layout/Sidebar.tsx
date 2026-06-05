@@ -558,10 +558,21 @@ export function Sidebar({ session }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [branding, setBranding] = useState<PortalBranding | null>(null);
+  const [branding, setBranding] = useState<PortalBranding | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = window.localStorage.getItem('portal-branding');
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
+  });
 
   useEffect(() => {
-    getPortalBranding().then(setBranding).catch(() => {});
+    getPortalBranding().then(b => {
+      setBranding(b);
+      try { window.localStorage.setItem('portal-branding', JSON.stringify(b)); } catch {}
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {

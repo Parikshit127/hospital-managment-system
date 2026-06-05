@@ -196,3 +196,45 @@ export async function updatePackage(id: number, input: unknown) {
     return { success: true, data: serialize(row) };
   } catch (e: any) { return { success: false, error: e.message }; }
 }
+
+export async function deleteService(id: number) {
+  try {
+    const { db, organizationId, session } = await requireTenantContext();
+    if (session.role !== 'admin') return { success: false, error: 'Admin only' };
+    await db.ipdServiceMaster.delete({ where: { id } });
+    await db.system_audit_logs.create({ data: {
+      action: 'DELETE_SERVICE', module: 'master-data',
+      details: `Deleted service ${id}`, organizationId,
+      user_id: session.id, username: session.username, role: session.role,
+    }});
+    return { success: true };
+  } catch (e: any) { return { success: false, error: e.message }; }
+}
+
+export async function deleteLabTest(id: number) {
+  try {
+    const { db, organizationId, session } = await requireTenantContext();
+    if (session.role !== 'admin') return { success: false, error: 'Admin only' };
+    await db.lab_test_inventory.delete({ where: { id } });
+    await db.system_audit_logs.create({ data: {
+      action: 'DELETE_LAB_TEST', module: 'master-data',
+      details: `Deleted lab test ${id}`, organizationId,
+      user_id: session.id, username: session.username, role: session.role,
+    }});
+    return { success: true };
+  } catch (e: any) { return { success: false, error: e.message }; }
+}
+
+export async function deletePackage(id: number) {
+  try {
+    const { db, organizationId, session } = await requireTenantContext();
+    if (session.role !== 'admin') return { success: false, error: 'Admin only' };
+    await db.ipdPackage.delete({ where: { id } });
+    await db.system_audit_logs.create({ data: {
+      action: 'DELETE_PACKAGE', module: 'master-data',
+      details: `Deleted package ${id}`, organizationId,
+      user_id: session.id, username: session.username, role: session.role,
+    }});
+    return { success: true };
+  } catch (e: any) { return { success: false, error: e.message }; }
+}

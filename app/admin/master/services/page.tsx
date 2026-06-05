@@ -4,9 +4,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Plus, Loader2, Pencil, PowerOff, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
-  listServices, createService, updateService, deactivateService,
-  listLabTests, createLabTest, updateLabTest,
-  listPackages, createPackage, updatePackage,
+  listServices, createService, updateService, deactivateService, deleteService,
+  listLabTests, createLabTest, updateLabTest, deleteLabTest,
+  listPackages, createPackage, updatePackage, deletePackage,
 } from '@/app/actions/service-master-actions';
 import { ensureIPDDemoMasterData } from '@/app/actions/ipd-billing-helpers';
 import MasterImportButton from '@/app/components/master/MasterImportButton';
@@ -198,6 +198,13 @@ export default function ServiceMasterPage() {
     else toast.error(res.error || 'Failed');
   };
 
+  const deleteSvc = async (id: number) => {
+    if (!confirm('Permanently delete this service? This cannot be undone.')) return;
+    const res = await deleteService(id);
+    if (res.success) { toast.success('Service deleted'); loadServices(); }
+    else toast.error(res.error || 'Failed to delete');
+  };
+
   // ---- Lab Test handlers ----
   const openCreateLab = () => { setLabForm(EMPTY_LAB_TEST); setLabMode('create'); };
   const openEditLab = (row: any) => {
@@ -212,6 +219,13 @@ export default function ServiceMasterPage() {
     setLabMode('edit');
   };
   const closeLab = () => { setLabMode('idle'); setLabEditingId(null); };
+
+  const deleteLabTestHandler = async (id: number) => {
+    if (!confirm('Permanently delete this lab test? This cannot be undone.')) return;
+    const res = await deleteLabTest(id);
+    if (res.success) { toast.success('Lab test deleted'); loadLabTests(); }
+    else toast.error(res.error || 'Failed to delete');
+  };
 
   const submitLab = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -254,6 +268,13 @@ export default function ServiceMasterPage() {
     setPkgMode('edit');
   };
   const closePkg = () => { setPkgMode('idle'); setPkgEditingId(null); };
+
+  const deletePkgHandler = async (id: number) => {
+    if (!confirm('Permanently delete this package? This cannot be undone.')) return;
+    const res = await deletePackage(id);
+    if (res.success) { toast.success('Package deleted'); loadPackages(); }
+    else toast.error(res.error || 'Failed to delete');
+  };
 
   const submitPkg = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -355,6 +376,7 @@ export default function ServiceMasterPage() {
                       {r.is_active && (
                         <button onClick={() => deactivateSvc(r.id)} className="p-1.5 hover:bg-gray-100 rounded-lg"><PowerOff className="h-4 w-4 text-red-600" /></button>
                       )}
+                      <button onClick={() => deleteSvc(r.id)} className="p-1.5 hover:bg-red-50 rounded-lg" title="Delete permanently"><Trash2 className="h-4 w-4 text-red-500" /></button>
                     </td>
                   </tr>
                 ))}
@@ -490,8 +512,9 @@ export default function ServiceMasterPage() {
                         {r.is_available ? 'Yes' : 'No'}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 flex gap-2">
                       <button onClick={() => openEditLab(r)} className="p-1.5 hover:bg-gray-100 rounded-lg"><Pencil className="h-4 w-4 text-blue-600" /></button>
+                      <button onClick={() => deleteLabTestHandler(r.id)} className="p-1.5 hover:bg-red-50 rounded-lg" title="Delete permanently"><Trash2 className="h-4 w-4 text-red-500" /></button>
                     </td>
                   </tr>
                 ))}
@@ -640,8 +663,9 @@ export default function ServiceMasterPage() {
                         {r.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 flex gap-2">
                       <button onClick={() => openEditPkg(r)} className="p-1.5 hover:bg-gray-100 rounded-lg"><Pencil className="h-4 w-4 text-blue-600" /></button>
+                      <button onClick={() => deletePkgHandler(r.id)} className="p-1.5 hover:bg-red-50 rounded-lg" title="Delete permanently"><Trash2 className="h-4 w-4 text-red-500" /></button>
                     </td>
                   </tr>
                 ))}

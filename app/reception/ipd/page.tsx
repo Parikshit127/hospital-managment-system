@@ -46,6 +46,8 @@ export default function IPDAdmissionsPage() {
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
     const [wardFilter, setWardFilter] = useState('');
     const [search, setSearch] = useState('');
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -69,7 +71,10 @@ export default function IPDAdmissionsPage() {
             || a.patient?.phone?.toLowerCase().includes(q);
         const matchesWard = !wardFilter
             || (a.wardName || a.ward?.ward_name || a.bed?.wards?.ward_name || '') === wardFilter;
-        return matchesSearch && matchesWard;
+        const admDate = a.admission_date ? new Date(a.admission_date) : null;
+        const matchesFrom = !dateFrom || (admDate && admDate >= new Date(dateFrom));
+        const matchesTo = !dateTo || (admDate && admDate <= new Date(dateTo + 'T23:59:59'));
+        return matchesSearch && matchesWard && matchesFrom && matchesTo;
     });
 
     // KPI calculations
@@ -172,6 +177,29 @@ export default function IPDAdmissionsPage() {
                             <option key={w.id} value={w.ward_name}>{w.ward_name}</option>
                         ))}
                     </select>
+
+                    {/* Date filters */}
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="date"
+                            value={dateFrom}
+                            onChange={e => setDateFrom(e.target.value)}
+                            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-emerald-400"
+                        />
+                        <span className="text-xs text-gray-400">to</span>
+                        <input
+                            type="date"
+                            value={dateTo}
+                            onChange={e => setDateTo(e.target.value)}
+                            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-emerald-400"
+                        />
+                        {(dateFrom || dateTo) && (
+                            <button
+                                onClick={() => { setDateFrom(''); setDateTo(''); }}
+                                className="text-xs text-gray-400 hover:text-gray-700 font-bold"
+                            >✕</button>
+                        )}
+                    </div>
 
                     <span className="text-xs text-gray-400 ml-auto">
                         {filtered.length} record{filtered.length !== 1 ? 's' : ''}
