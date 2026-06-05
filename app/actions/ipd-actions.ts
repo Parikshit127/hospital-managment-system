@@ -1515,6 +1515,29 @@ export async function updateAdmissionDiagnosis(data: {
   }
 }
 
+export async function updateAdmissionBasicDetails(data: {
+  admission_id: string;
+  diagnosis?: string;
+  admission_type?: string;
+  line_of_treatment?: string;
+}) {
+  try {
+    const { db } = await requireTenantContext();
+    await db.admissions.update({
+      where: { admission_id: data.admission_id },
+      data: {
+        ...(data.diagnosis !== undefined && { diagnosis: data.diagnosis || null }),
+        ...(data.admission_type !== undefined && { admission_type: data.admission_type || null }),
+        ...(data.line_of_treatment !== undefined && { line_of_treatment: data.line_of_treatment || null }),
+      },
+    });
+    revalidatePath(`/ipd/admission/${data.admission_id}`);
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
 export async function allocateBedByRules(data: {
   patient_id: string;
   patient_class?: string;    // General | SemiPrivate | Private | Suite | ICU

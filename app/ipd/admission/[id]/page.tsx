@@ -14,7 +14,7 @@ import {
 import {
     getAdmissionFullDetails, createNursingTask, changeAdmissionDoctor,
     recordWardRound, assignDietPlan, addMedicalNote, getWardsWithBeds, transferPatient,
-    updateAdmissionDiagnosis
+    updateAdmissionDiagnosis, updateAdmissionBasicDetails
 } from '@/app/actions/ipd-actions';
 import { generateInterimBill, postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
 import {
@@ -75,6 +75,13 @@ export default function AdmissionDetailPage() {
     const [taskDesc, setTaskDesc] = useState('');
     const [taskTime, setTaskTime] = useState('');
     const [savingTask, setSavingTask] = useState(false);
+
+    // Admission basic details edit
+    const [showAdmissionEdit, setShowAdmissionEdit] = useState(false);
+    const [editDiagnosis, setEditDiagnosis] = useState('');
+    const [editAdmissionType, setEditAdmissionType] = useState('');
+    const [editLineOfTreatment, setEditLineOfTreatment] = useState('');
+    const [savingAdmissionEdit, setSavingAdmissionEdit] = useState(false);
 
     // Clinical classification
     const [showDiagnosisForm, setShowDiagnosisForm] = useState(false);
@@ -287,6 +294,24 @@ export default function AdmissionDetailPage() {
         setShowConsultForm(false);
         setConsultName(''); setConsultSpecialty(''); setConsultNotes('');
         getAdmissionConsultants(data.admission_id).then(res => { if (res.success) setConsultants(res.data as any[]); });
+    };
+
+    const handleSaveAdmissionEdit = async () => {
+        setSavingAdmissionEdit(true);
+        const res = await updateAdmissionBasicDetails({
+            admission_id: data.admission_id,
+            diagnosis: editDiagnosis,
+            admission_type: editAdmissionType || undefined,
+            line_of_treatment: editLineOfTreatment || undefined,
+        });
+        setSavingAdmissionEdit(false);
+        if (res.success) {
+            toast.success('Admission details updated');
+            setShowAdmissionEdit(false);
+            loadData();
+        } else {
+            toast.error(res.error || 'Failed to save');
+        }
     };
 
     const handleSaveDiagnosis = async () => {
@@ -704,13 +729,73 @@ export default function AdmissionDetailPage() {
                                 {/* Admission Details */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div className="bg-gray-50 rounded-xl border border-gray-200 p-5 space-y-3">
-                                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Admission Details</h4>
-                                        <DetailRow label="Admitted" value={new Date(data.admission_date).toLocaleString()} />
-                                        <DetailRow label="Diagnosis" value={data.diagnosis} />
-                                        <DetailRow label="Type" value={data.admission_type || '—'} />
-                                        <DetailRow label="Treatment" value={data.line_of_treatment || '—'} />
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Admission Details</h4>
+                                            {data.status === 'Admitted' && !showAdmissionEdit && (
+                                                <button
+                                                    onClick={() => {
+                                                        setEditDiagnosis(data.diagnosis || '');
+                                                        setEditAdmissionType(data.admission_type || '');
+                                                        setEditLineOfTreatment(data.line_of_treatment || '');
+                                                        setShowAdmissionEdit(true);
+                                                    }}
+                                                    className="text-[10px] font-bold text-orange-600 hover:text-orange-800 px-2 py-1 rounded-lg hover:bg-orange-50 flex items-center gap-1">
+                                                    <Pencil className="h-3 w-3" /> Edit
+                                                </button>
+                                            )}
+                                        </div>
+                                        <DetailRow label="Admitted" value={new Date(data.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} />
+                                        {showAdmissionEdit ? (
+                                            <div className="space-y-3 pt-1">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Diagnosis</label>
+                                                    <textarea
+                                                        value={editDiagnosis}
+                                                        onChange={e => setEditDiagnosis(e.target.value)}
+                                                        placeholder="Primary diagnosis / chief complaint (optional)"
+                                                        rows={2}
+                                                        className="w-full mt-1 text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Admission Type</label>
+                                                    <select
+                                                        value={editAdmissionType}
+                                                        onChange={e => setEditAdmissionType(e.target.value)}
+                                                        className="w-full mt-1 text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400">
+                                                        <option value="">— Select —</option>
+                                                        {['Emergency', 'Elective', 'Maternity', 'Daycare', 'Trauma'].map(t => <option key={t}>{t}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Line of Treatment</label>
+                                                    <input
+                                                        value={editLineOfTreatment}
+                                                        onChange={e => setEditLineOfTreatment(e.target.value)}
+                                                        placeholder="e.g. Medical management, Surgical, Conservative"
+                                                        className="w-full mt-1 text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                                    />
+                                                </div>
+                                                <div className="flex gap-2 pt-1">
+                                                    <button onClick={handleSaveAdmissionEdit} disabled={savingAdmissionEdit}
+                                                        className="flex-1 py-2 bg-orange-600 text-white text-xs font-bold rounded-lg disabled:opacity-50 hover:bg-orange-700 transition-colors">
+                                                        {savingAdmissionEdit ? 'Saving…' : 'Save Changes'}
+                                                    </button>
+                                                    <button onClick={() => setShowAdmissionEdit(false)}
+                                                        className="px-4 py-2 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-200 transition-colors">
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <DetailRow label="Diagnosis" value={data.diagnosis || <span className="text-gray-300 italic text-xs">Not recorded</span>} />
+                                                <DetailRow label="Type" value={data.admission_type || '—'} />
+                                                <DetailRow label="Treatment" value={data.line_of_treatment || '—'} />
+                                            </>
+                                        )}
                                         {data.surgery_requested && <DetailRow label="Surgery" value={data.surgery_requested} />}
-                                        {data.discharge_date && <DetailRow label="Discharged" value={new Date(data.discharge_date).toLocaleString()} />}
+                                        {data.discharge_date && <DetailRow label="Discharged" value={new Date(data.discharge_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} />}
                                     </div>
                                     <div className="bg-gray-50 rounded-xl border border-gray-200 p-5 space-y-3">
                                         <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Patient Details</h4>
