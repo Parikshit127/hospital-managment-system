@@ -36,7 +36,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         const logoKey = org?.branding?.logo_url || org?.logo_url || '';
         let logoSignedUrl = '';
         if (logoKey) {
-            try { logoSignedUrl = await getSignedDownloadUrl(logoKey, 3600); } catch {}
+            if (logoKey.startsWith('/') || logoKey.startsWith('http')) {
+                logoSignedUrl = logoKey;
+            } else {
+                try { logoSignedUrl = await getSignedDownloadUrl(logoKey, 3600); } catch {}
+            }
         }
 
         const html = generateDepositReceiptHTML(deposit, patient, org, logoSignedUrl);
