@@ -217,14 +217,28 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
             <tr>
                 <td>
                     <div class="bill-container">
-                        <!-- Header details matching pharmacy layout (no logo since it is on the letterhead) -->
-                        <div style="display:flex;justify-content:flex-end;border-bottom:2px solid ${branding.accentColor};padding-bottom:12px;margin-bottom:20px;">
+                        <!-- Hospital Header (shown when no letterhead) -->
+                        ${!branding.letterheadUrl ? `
+                        <div style="text-align:center;margin-bottom:8px;">
+                            ${branding.logoUrl ? `<img src="${branding.logoUrl}" alt="" style="height:50px;margin-bottom:4px;" />` : ''}
+                            <h1 style="font-size:15px;font-weight:bold;margin:0;">${branding.hospitalName}${branding.tagline ? ` - ${branding.tagline}` : ''}</h1>
+                            ${gstin !== 'N/A' ? `<p style="font-size:10px;">GST NO.-${gstin}</p>` : ''}
+                            <p style="font-size:10px;">${branding.hospitalAddress}</p>
+                            ${branding.hospitalPhone ? `<p style="font-size:10px;">Ph: ${branding.hospitalPhone}${branding.hospitalEmail ? ` | Email: ${branding.hospitalEmail}` : ''}</p>` : ''}
+                        </div>
+                        <hr style="border:none;border-top:2px solid #000;margin:6px 0 10px 0;" />
+                        ` : ''}
+
+                        <div style="display:flex;justify-content:space-between;border-bottom:2px solid ${branding.accentColor};padding-bottom:12px;margin-bottom:20px;">
+                            <div>
+                                <p style="font-size:11px;font-weight:700;color:${branding.accentColor};">${branding.hospitalName}</p>
+                                ${gstin !== 'N/A' ? `<p style="font-size:10px;color:#6b7280;">GSTIN: ${gstin}</p>` : ''}
+                            </div>
                             <div style="text-align:right;">
                                 <h2 style="font-size:16px;font-weight:800;color:${billColor};">${isFinal ? 'FINAL BILL' : 'INTERIM BILL'}</h2>
                                 <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${invoice.invoice_number}</p>
                                 <p style="font-size:10px;color:#6b7280;">Type: <strong>${invoice.invoice_type || 'IPD'}</strong></p>
                                 <p style="font-size:10px;color:#6b7280;">Date: ${new Date().toLocaleDateString('en-IN')}</p>
-                                <p style="font-size:10px;color:#6b7280;">GSTIN: ${gstin}</p>
                             </div>
                         </div>
 
@@ -241,6 +255,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
                                 <p style="font-size:11px;"><strong>Discharged:</strong> ${isFinal ? dischargeDate : 'N/A'}</p>
                                 <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
+                                <p style="font-size:11px;"><strong>Category:</strong> ${invoice.billing_patient_type === 'tpa_insurance' ? 'TPA / Insurance' : invoice.billing_patient_type === 'corporate' ? 'Corporate' : 'Cash / Self-Pay'}</p>
                                 <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
                             </div>
                         </div>` : ''}
