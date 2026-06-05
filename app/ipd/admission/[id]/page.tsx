@@ -23,6 +23,7 @@ import {
     ensureIPDRoomChargesAccrued,
     ensureIPDDemoMasterData,
 } from '@/app/actions/ipd-billing-helpers';
+import { listPackages } from '@/app/actions/service-master-actions';
 import { useToast } from '@/app/components/ui/Toast';
 import {
     setExpectedDischargeDate, markFitForDischarge,
@@ -120,6 +121,10 @@ export default function AdmissionDetailPage() {
     const [chargeRate, setChargeRate] = useState('');
     const [chargeCategory, setChargeCategory] = useState('Miscellaneous');
     const [postingCharge, setPostingCharge] = useState(false);
+    const [chargeMode, setChargeMode] = useState<'service' | 'package'>('service');
+    const [packages, setPackages] = useState<any[]>([]);
+    const [pkgSearch, setPkgSearch] = useState('');
+    const [showPkgDropdown, setShowPkgDropdown] = useState(false);
 
     // Transfer
     const [showTransfer, setShowTransfer] = useState(false);
@@ -173,6 +178,9 @@ export default function AdmissionDetailPage() {
     useEffect(() => {
         if (activeTab === 'discharge') loadChecklist();
     }, [activeTab, loadChecklist]);
+    useEffect(() => {
+        listPackages({ limit: 200 }).then(res => { if (res.success) setPackages(res.data.rows || []); });
+    }, []);
 
     const loadBill = useCallback(async () => {
         if (bill) return;
@@ -1562,12 +1570,71 @@ export default function AdmissionDetailPage() {
                                 {data.status === 'Admitted' && (
                                     <div className="border-t border-gray-200 pt-6">
                                         <form onSubmit={handlePostCharge} className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-3">
-                                            <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-2">
-                                                <Plus className="h-3.5 w-3.5" /> Post Manual Charge
-                                            </h4>
+                                            <div className="flex items-center justify-between">
+                                                <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                                                    <Plus className="h-3.5 w-3.5" /> Post Manual Charge
+                                                </h4>
+                                                <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
+                                                    <button type="button" onClick={() => { setChargeMode('service'); setChargeDesc(''); setChargeRate(''); setCatalogQuery(''); }}
+                                                        className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${chargeMode === 'service' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-800'}`}>
+                                                        Service
+                                                    </button>
+                                                    <button type="button" onClick={() => { setChargeMode('package'); setChargeDesc(''); setChargeRate(''); setPkgSearch(''); }}
+                                                        className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${chargeMode === 'package' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-800'}`}>
+                                                        Package
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Package picker */}
+                                            {chargeMode === 'package' && (
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        value={pkgSearch}
+                                                        onChange={e => { setPkgSearch(e.target.value); setShowPkgDropdown(true); }}
+                                                        onFocus={() => setShowPkgDropdown(true)}
+                                                        onBlur={() => setTimeout(() => setShowPkgDropdown(false), 150)}
+                                                        placeholder="Search packages..."
+                                                        className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                                    />
+                                                    {showPkgDropdown && (
+                                                        <div className="absolute top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-40">
+                                                            {packages
+                                                                .filter(p => !pkgSearch || p.package_name?.toLowerCase().includes(pkgSearch.toLowerCase()) || p.package_code?.toLowerCase().includes(pkgSearch.toLowerCase()))
+                                                                .map((pkg: any) => (
+                                                                    <button
+                                                                        key={pkg.id}
+                                                                        type="button"
+                                                                        onMouseDown={e => e.preventDefault()}
+                                                                        onClick={() => {
+                                                                            setChargeDesc(pkg.package_name);
+                                                                            setChargeRate(String(Number(pkg.total_amount ?? 0)));
+                                                                            setChargeCategory('Package');
+                                                                            setPkgSearch(pkg.package_name);
+                                                                            setShowPkgDropdown(false);
+                                                                        }}
+                                                                        className="w-full text-left px-3 py-2 hover:bg-orange-50 border-b border-gray-100 last:border-b-0"
+                                                                    >
+                                                                        <div className="flex items-center justify-between gap-2">
+                                                                            <div className="min-w-0">
+                                                                                <p className="text-xs font-bold text-gray-800 truncate">{pkg.package_name}</p>
+                                                                                <p className="text-[10px] text-gray-500 font-mono">{pkg.package_code} · {pkg.validity_days}d validity</p>
+                                                                            </div>
+                                                                            <p className="text-xs font-black text-orange-700 whitespace-nowrap">₹{Number(pkg.total_amount).toLocaleString()}</p>
+                                                                        </div>
+                                                                    </button>
+                                                                ))}
+                                                            {packages.filter(p => !pkgSearch || p.package_name?.toLowerCase().includes(pkgSearch.toLowerCase())).length === 0 && (
+                                                                <div className="px-3 py-2 text-xs text-gray-400">No packages found</div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
 
                                             {/* Catalog picker */}
-                                            <div className="relative">
+                                            {chargeMode === 'service' && <div className="relative">
                                                 <input
                                                     type="text"
                                                     value={catalogQuery}
@@ -1612,7 +1679,7 @@ export default function AdmissionDetailPage() {
                                                         ))}
                                                     </div>
                                                 )}
-                                            </div>
+                                            </div>}
 
                                             <div className="grid grid-cols-2 gap-3">
                                                 <input
@@ -1645,7 +1712,7 @@ export default function AdmissionDetailPage() {
                                                     onChange={e => setChargeCategory(e.target.value)}
                                                     className="col-span-2 text-xs p-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
                                                 >
-                                                    {['Miscellaneous', 'Pharmacy', 'Lab', 'Radiology', 'Procedure', 'DoctorVisit', 'Consultation', 'Room', 'Nursing'].map(c => (
+                                                    {['Miscellaneous', 'Package', 'Pharmacy', 'Lab', 'Radiology', 'Procedure', 'DoctorVisit', 'Consultation', 'Room', 'Nursing'].map(c => (
                                                         <option key={c}>{c}</option>
                                                     ))}
                                                 </select>
