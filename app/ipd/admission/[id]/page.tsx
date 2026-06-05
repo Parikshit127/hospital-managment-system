@@ -739,7 +739,10 @@ export default function AdmissionDetailPage() {
                                                         setEditDiagnosis(data.diagnosis || '');
                                                         setEditAdmissionType(data.admission_type || '');
                                                         setEditLineOfTreatment(data.line_of_treatment || '');
-                                                        setEditAdmissionDate(new Date(data.admission_date).toISOString().slice(0, 16));
+                                                        // Convert UTC → IST for datetime-local input (no TZ info in the input)
+                                                        const admUtc = new Date(data.admission_date);
+                                                        const admIst = new Date(admUtc.getTime() + 5.5 * 60 * 60 * 1000);
+                                                        setEditAdmissionDate(admIst.toISOString().slice(0, 16));
                                                         setShowAdmissionEdit(true);
                                                     }}
                                                     className="text-[10px] font-bold text-orange-600 hover:text-orange-800 px-2 py-1 rounded-lg hover:bg-orange-50 flex items-center gap-1">
