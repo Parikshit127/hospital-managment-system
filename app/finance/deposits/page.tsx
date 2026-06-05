@@ -9,7 +9,7 @@ import { getInvoices } from '@/app/actions/finance-actions';
 import {
     Loader2, Search, Plus, Wallet, ArrowUpRight, ArrowDownRight,
     CheckCircle, XCircle, IndianRupee, Receipt, CreditCard, RefreshCw,
-    ChevronDown, X,
+    ChevronDown, X, Printer,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useToast } from '@/app/components/ui/Toast';
@@ -69,6 +69,9 @@ export default function DepositsPage() {
             setShowCollect(false);
             setCollectForm({ patient_id: '', amount: '', payment_method: 'Cash', payment_ref: '', notes: '', admission_id: '' });
             loadData();
+            if (res.data?.id) {
+                window.open(`/api/deposit/${res.data.id}/receipt`, '_blank');
+            }
         } else {
             toast.error(res.error || 'Failed to collect deposit');
         }
@@ -240,18 +243,27 @@ export default function DepositsPage() {
                                                 </td>
                                                 <td className="px-5 py-3 text-sm text-gray-500">{new Date(d.created_at).toLocaleDateString('en-IN')}</td>
                                                 <td className="px-5 py-3 text-center">
-                                                    {d.status === 'Active' && available > 0 && (
-                                                        <div className="flex items-center justify-center gap-1">
-                                                            <button onClick={() => openApplyModal(d)}
-                                                                className="px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition">
-                                                                Apply
-                                                            </button>
-                                                            <button onClick={() => { setRefundModal(d); setRefundAmount(''); }}
-                                                                className="px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 transition">
-                                                                Refund
-                                                            </button>
-                                                        </div>
-                                                    )}
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <button
+                                                            onClick={() => window.open(`/api/deposit/${d.id}/receipt`, '_blank')}
+                                                            className="px-2.5 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition flex items-center gap-1"
+                                                            title="Print deposit receipt"
+                                                        >
+                                                            <Printer className="h-3 w-3" /> Receipt
+                                                        </button>
+                                                        {d.status === 'Active' && available > 0 && (
+                                                            <>
+                                                                <button onClick={() => openApplyModal(d)}
+                                                                    className="px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition">
+                                                                    Apply
+                                                                </button>
+                                                                <button onClick={() => { setRefundModal(d); setRefundAmount(''); }}
+                                                                    className="px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 transition">
+                                                                    Refund
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );
