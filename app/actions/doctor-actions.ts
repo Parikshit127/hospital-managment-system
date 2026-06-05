@@ -166,7 +166,7 @@ export async function admitPatient(
     const docPrefix = `${orgCode}-ADM-${fy}-`;
     const lastAdm = await db.admissions.findFirst({
         where: { admission_id: { startsWith: docPrefix }, organizationId },
-        orderBy: { admission_date: 'desc' },
+        orderBy: { admission_id: 'desc' },
         select: { admission_id: true },
     });
     let docSeq = 1;

@@ -1412,7 +1412,7 @@ export async function admitEmergency(data: {
       const emgPrefix = `${orgCode}-ADM-${fy}-`;
       const lastAdm = await tx.admissions.findFirst({
           where: { admission_id: { startsWith: emgPrefix }, organizationId },
-          orderBy: { admission_date: 'desc' },
+          orderBy: { admission_id: 'desc' },
           select: { admission_id: true },
       });
       let emgSeq = 1;
