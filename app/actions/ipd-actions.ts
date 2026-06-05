@@ -1520,6 +1520,7 @@ export async function updateAdmissionBasicDetails(data: {
   diagnosis?: string;
   admission_type?: string;
   line_of_treatment?: string;
+  admission_date?: string;
 }) {
   try {
     const { db } = await requireTenantContext();
@@ -1529,6 +1530,7 @@ export async function updateAdmissionBasicDetails(data: {
         ...(data.diagnosis !== undefined && { diagnosis: data.diagnosis || null }),
         ...(data.admission_type !== undefined && { admission_type: data.admission_type || null }),
         ...(data.line_of_treatment !== undefined && { line_of_treatment: data.line_of_treatment || null }),
+        ...(data.admission_date && { admission_date: new Date(data.admission_date) }),
       },
     });
     revalidatePath(`/ipd/admission/${data.admission_id}`);

@@ -81,6 +81,7 @@ export default function AdmissionDetailPage() {
     const [editDiagnosis, setEditDiagnosis] = useState('');
     const [editAdmissionType, setEditAdmissionType] = useState('');
     const [editLineOfTreatment, setEditLineOfTreatment] = useState('');
+    const [editAdmissionDate, setEditAdmissionDate] = useState('');
     const [savingAdmissionEdit, setSavingAdmissionEdit] = useState(false);
 
     // Clinical classification
@@ -303,6 +304,7 @@ export default function AdmissionDetailPage() {
             diagnosis: editDiagnosis,
             admission_type: editAdmissionType || undefined,
             line_of_treatment: editLineOfTreatment || undefined,
+            admission_date: editAdmissionDate || undefined,
         });
         setSavingAdmissionEdit(false);
         if (res.success) {
@@ -737,6 +739,7 @@ export default function AdmissionDetailPage() {
                                                         setEditDiagnosis(data.diagnosis || '');
                                                         setEditAdmissionType(data.admission_type || '');
                                                         setEditLineOfTreatment(data.line_of_treatment || '');
+                                                        setEditAdmissionDate(new Date(data.admission_date).toISOString().slice(0, 16));
                                                         setShowAdmissionEdit(true);
                                                     }}
                                                     className="text-[10px] font-bold text-orange-600 hover:text-orange-800 px-2 py-1 rounded-lg hover:bg-orange-50 flex items-center gap-1">
@@ -747,6 +750,15 @@ export default function AdmissionDetailPage() {
                                         <DetailRow label="Admitted" value={new Date(data.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} />
                                         {showAdmissionEdit ? (
                                             <div className="space-y-3 pt-1">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Admission Date & Time</label>
+                                                    <input
+                                                        type="datetime-local"
+                                                        value={editAdmissionDate}
+                                                        onChange={e => setEditAdmissionDate(e.target.value)}
+                                                        className="w-full mt-1 text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                                    />
+                                                </div>
                                                 <div>
                                                     <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Diagnosis</label>
                                                     <textarea
