@@ -17,6 +17,8 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { InvoiceDetailModal } from '@/app/components/finance/InvoiceDetailModal';
 import { PaymentRecordModal } from '@/app/components/finance/PaymentRecordModal';
 import { useToast } from '@/app/components/ui/Toast';
+import { DrillDownModal } from '@/app/components/finance/DrillDownModal';
+import type { DrillDownType } from '@/app/actions/finance-actions';
 
 const INR = '₹';
 
@@ -40,6 +42,7 @@ export default function FinanceDashboard() {
     const [paymentForm, setPaymentForm] = useState({ amount: '', method: 'Cash', type: 'Settlement', notes: '' });
     const [paymentLoading, setPaymentLoading] = useState(false);
     const [detailModal, setDetailModal] = useState<any>(null);
+    const [drillDown, setDrillDown] = useState<{ type: DrillDownType; filters: Record<string, any> } | null>(null);
 
     const loadData = async () => {
         setLoading(true);
@@ -132,12 +135,14 @@ export default function FinanceDashboard() {
     });
 
     const kpiCards = [
-        { label: "Today's Revenue", value: `${INR}${((stats?.todayRevenue || 0) / 1000).toFixed(1)}K`, sub: `${stats?.totalPaymentsToday || 0} transactions`, icon: <DollarSign className="h-3.5 w-3.5 text-emerald-400" />, color: 'emerald', subIcon: <ArrowUpRight className="h-3 w-3" /> },
-        { label: 'Total Revenue', value: `${INR}${((stats?.totalRevenue || 0) / 1000).toFixed(1)}K`, sub: `${stats?.totalInvoices || 0} invoices`, icon: <Wallet className="h-3.5 w-3.5 text-teal-400" />, color: 'teal', subIcon: <TrendingUp className="h-3 w-3" /> },
-        { label: 'Expenses (Month)', value: `${INR}${((expenseStats?.thisMonthTotal || 0) / 1000).toFixed(1)}K`, sub: `${expenseStats?.pendingApproval || 0} pending approval`, icon: <TrendingDown className="h-3.5 w-3.5 text-red-400" />, color: 'red', subIcon: <Clock className="h-3 w-3" /> },
-        { label: 'Outstanding', value: `${INR}${((stats?.pendingBalance || 0) / 1000).toFixed(1)}K`, sub: `${stats?.outstandingInvoices || 0} pending`, icon: <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />, color: 'amber', subIcon: <Clock className="h-3 w-3" /> },
-        { label: 'Draft Bills', value: String(stats?.draftInvoices || 0), sub: 'Awaiting finalization', icon: <FileText className="h-3.5 w-3.5 text-violet-400" />, color: 'violet', subIcon: <FileText className="h-3 w-3" /> },
-        { label: 'Active Deposits', value: `${INR}${((depositStats?.activeBalance || 0) / 1000).toFixed(1)}K`, sub: `${depositStats?.activeDeposits || 0} active`, icon: <Wallet className="h-3.5 w-3.5 text-cyan-400" />, color: 'cyan', subIcon: <Receipt className="h-3 w-3" /> },
+        { label: "Today's Revenue", value: `${INR}${((stats?.todayRevenue || 0) / 1000).toFixed(1)}K`, sub: `${stats?.totalPaymentsToday || 0} transactions`, icon: <DollarSign className="h-3.5 w-3.5 text-emerald-400" />, color: 'emerald', subIcon: <ArrowUpRight className="h-3 w-3" />, drillType: 'today-revenue' as DrillDownType },
+        { label: 'Total Revenue', value: `${INR}${((stats?.totalRevenue || 0) / 1000).toFixed(1)}K`, sub: `${stats?.totalInvoices || 0} invoices`, icon: <Wallet className="h-3.5 w-3.5 text-teal-400" />, color: 'teal', subIcon: <TrendingUp className="h-3 w-3" />, drillType: 'total-revenue' as DrillDownType },
+        { label: 'Expenses (Month)', value: `${INR}${((expenseStats?.thisMonthTotal || 0) / 1000).toFixed(1)}K`, sub: `${expenseStats?.pendingApproval || 0} pending approval`, icon: <TrendingDown className="h-3.5 w-3.5 text-red-400" />, color: 'red', subIcon: <Clock className="h-3 w-3" />, drillType: 'expenses' as DrillDownType },
+        { label: 'Outstanding', value: `${INR}${((stats?.pendingBalance || 0) / 1000).toFixed(1)}K`, sub: `${stats?.outstandingInvoices || 0} pending`, icon: <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />, color: 'amber', subIcon: <Clock className="h-3 w-3" />, drillType: 'outstanding' as DrillDownType },
+        { label: 'Draft Bills', value: String(stats?.draftInvoices || 0), sub: 'Awaiting finalization', icon: <FileText className="h-3.5 w-3.5 text-violet-400" />, color: 'violet', subIcon: <FileText className="h-3 w-3" />, drillType: 'drafts' as DrillDownType },
+        { label: 'Active Deposits', value: `${INR}${((depositStats?.activeBalance || 0) / 1000).toFixed(1)}K`, sub: `${depositStats?.activeDeposits || 0} active`, icon: <Wallet className="h-3.5 w-3.5 text-cyan-400" />, color: 'cyan', subIcon: <Receipt className="h-3 w-3" />, drillType: 'deposits' as DrillDownType },
+        { label: 'IPD Revenue', value: `${INR}${((stats?.ipdRevenue || 0) / 1000).toFixed(1)}K`, sub: `${stats?.ipdCount || 0} admissions billed`, icon: <Wallet className="h-3.5 w-3.5 text-blue-400" />, color: 'blue', subIcon: <TrendingUp className="h-3 w-3" />, drillType: 'ipd' as DrillDownType },
+        { label: 'OPD Revenue', value: `${INR}${((stats?.opdRevenue || 0) / 1000).toFixed(1)}K`, sub: `${stats?.opdCount || 0} visits billed`, icon: <Wallet className="h-3.5 w-3.5 text-indigo-400" />, color: 'indigo', subIcon: <TrendingUp className="h-3 w-3" />, drillType: 'opd' as DrillDownType },
     ];
 
     const CHART_COLORS = ['from-emerald-500 to-teal-500', 'from-violet-500 to-indigo-500', 'from-amber-500 to-orange-500', 'from-rose-500 to-pink-500', 'from-blue-500 to-cyan-500', 'from-fuchsia-500 to-purple-500'];
@@ -171,9 +176,14 @@ export default function FinanceDashboard() {
                 ) : (
                     <>
                         {/* KPI Cards */}
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             {kpiCards.map((c, i) => (
-                                <div key={i} className={`group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-${c.color}-500/30 transition-all overflow-hidden`}>
+                                <div key={i}
+                                    role={c.drillType ? 'button' : undefined}
+                                    tabIndex={c.drillType ? 0 : undefined}
+                                    onClick={() => c.drillType && setDrillDown({ type: c.drillType, filters: {} })}
+                                    onKeyDown={(e) => { if (c.drillType && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setDrillDown({ type: c.drillType, filters: {} }); } }}
+                                    className={`group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-${c.color}-500/30 transition-all overflow-hidden ${c.drillType ? 'cursor-pointer hover:shadow-md' : ''}`}>
                                     <div className={`absolute top-0 right-0 w-24 h-24 bg-${c.color}-500/5 rounded-full blur-2xl`} />
                                     <div className="flex items-center justify-between mb-3">
                                         <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">{c.label}</span>
@@ -233,7 +243,12 @@ export default function FinanceDashboard() {
                                                     {stats.revenueByDepartment.map((dept: any, i: number) => {
                                                         const maxAmt = Math.max(...stats.revenueByDepartment.map((d: any) => d.amount), 1);
                                                         return (
-                                                            <div key={i} className="flex items-center gap-3">
+                                                            <div key={i}
+                                                                role="button"
+                                                                tabIndex={0}
+                                                                className="flex items-center gap-3 cursor-pointer rounded-lg hover:bg-emerald-50/50 px-1 -mx-1 py-0.5 transition-colors"
+                                                                onClick={() => setDrillDown({ type: 'department', filters: { department: dept.department } })}
+                                                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDrillDown({ type: 'department', filters: { department: dept.department } }); } }}>
                                                                 <span className="text-xs font-bold text-gray-500 w-28 truncate">{dept.department}</span>
                                                                 <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
                                                                     <div className={`h-full bg-gradient-to-r ${CHART_COLORS[i % CHART_COLORS.length]} rounded-full transition-all duration-700`} style={{ width: `${(dept.amount / maxAmt) * 100}%` }} />
@@ -265,7 +280,12 @@ export default function FinanceDashboard() {
                                                     {stats.revenueByDoctor.map((doc: any, i: number) => {
                                                         const maxAmt = Math.max(...stats.revenueByDoctor.map((d: any) => d.amount), 1);
                                                         return (
-                                                            <div key={i} className="flex items-center gap-3">
+                                                            <div key={i}
+                                                                role="button"
+                                                                tabIndex={0}
+                                                                className="flex items-center gap-3 cursor-pointer rounded-lg hover:bg-violet-50/50 px-1 -mx-1 py-0.5 transition-colors"
+                                                                onClick={() => setDrillDown({ type: 'doctor', filters: { doctorId: doc.doctorId, doctorName: doc.doctorName } })}
+                                                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDrillDown({ type: 'doctor', filters: { doctorId: doc.doctorId, doctorName: doc.doctorName } }); } }}>
                                                                 <div className="w-28 min-w-0">
                                                                     <p className="text-xs font-bold text-gray-600 truncate">{doc.doctorName}</p>
                                                                     {doc.specialty && <p className="text-[10px] text-gray-400 truncate">{doc.specialty}</p>}
@@ -287,6 +307,58 @@ export default function FinanceDashboard() {
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* IPD vs OPD Revenue Split */}
+                                {(stats?.ipdRevenue || stats?.opdRevenue) ? (
+                                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                                        <div className="p-5 border-b border-gray-200">
+                                            <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
+                                                <BarChart3 className="h-4 w-4 text-blue-400" /> IPD vs OPD Revenue
+                                            </h3>
+                                        </div>
+                                        <div className="p-5">
+                                            {(() => {
+                                                const total = (stats?.ipdRevenue || 0) + (stats?.opdRevenue || 0);
+                                                const ipdPct = total > 0 ? Math.round(((stats?.ipdRevenue || 0) / total) * 100) : 0;
+                                                const opdPct = total > 0 ? 100 - ipdPct : 0;
+                                                return (
+                                                    <div className="space-y-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-xs font-bold text-gray-500 w-12">IPD</span>
+                                                            <div className="flex-1 h-5 bg-gray-100 rounded-full overflow-hidden">
+                                                                <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-700 flex items-center justify-end pr-2"
+                                                                    style={{ width: `${ipdPct}%` }}>
+                                                                    {ipdPct > 8 && <span className="text-[10px] font-black text-white">{ipdPct}%</span>}
+                                                                </div>
+                                                            </div>
+                                                            <span className="text-xs font-black text-gray-700 w-24 text-right">{INR}{((stats?.ipdRevenue || 0) / 1000).toFixed(1)}K</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-xs font-bold text-gray-500 w-12">OPD</span>
+                                                            <div className="flex-1 h-5 bg-gray-100 rounded-full overflow-hidden">
+                                                                <div className="h-full bg-gradient-to-r from-teal-500 to-emerald-500 rounded-full transition-all duration-700 flex items-center justify-end pr-2"
+                                                                    style={{ width: `${opdPct}%` }}>
+                                                                    {opdPct > 8 && <span className="text-[10px] font-black text-white">{opdPct}%</span>}
+                                                                </div>
+                                                            </div>
+                                                            <span className="text-xs font-black text-gray-700 w-24 text-right">{INR}{((stats?.opdRevenue || 0) / 1000).toFixed(1)}K</span>
+                                                        </div>
+                                                        <div className="flex gap-4 pt-2 border-t border-gray-100">
+                                                            <button onClick={() => setDrillDown({ type: 'ipd', filters: {} })}
+                                                                className="text-[10px] font-bold text-blue-500 hover:text-blue-700 hover:underline">
+                                                                View IPD invoices →
+                                                            </button>
+                                                            <button onClick={() => setDrillDown({ type: 'opd', filters: {} })}
+                                                                className="text-[10px] font-bold text-teal-500 hover:text-teal-700 hover:underline">
+                                                                View OPD invoices →
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    </div>
+                                ) : null}
 
                                 {/* Outstanding Aging — full width below */}
                                 <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
@@ -414,6 +486,13 @@ export default function FinanceDashboard() {
                 />
             )}
             {detailModal && <InvoiceDetailModal invoice={detailModal} onClose={() => setDetailModal(null)} />}
+            {drillDown && (
+                <DrillDownModal
+                    type={drillDown.type}
+                    filters={drillDown.filters}
+                    onClose={() => setDrillDown(null)}
+                />
+            )}
         </AppShell>
     );
 }

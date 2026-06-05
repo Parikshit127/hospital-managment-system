@@ -17,7 +17,11 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
             status: 'Completed',
             created_at: { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') },
         };
-        if (filters.method) where.payment_method = filters.method;
+        if (filters.method && filters.method !== 'others') {
+            where.payment_method = filters.method;
+        } else if (filters.method === 'others') {
+            where.payment_method = { notIn: ['Cash', 'UPI'] };
+        }
 
         const payments = await db.payments.findMany({
             where,

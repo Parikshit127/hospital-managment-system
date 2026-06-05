@@ -1067,6 +1067,8 @@ export async function getFinanceDashboardStats(params?: {
             aging0to30,
             aging30to60,
             aging60plus,
+            ipdRevenue,
+            opdRevenue,
         ] = await Promise.all([
             db.invoices.count({ where: { status: { not: 'Cancelled' } } }),
             db.invoices.count({ where: { status: 'Draft' } }),
@@ -1133,6 +1135,16 @@ export async function getFinanceDashboardStats(params?: {
                     created_at: { lt: sixtyDaysAgo },
                 },
             }),
+            db.invoices.aggregate({
+                _sum: { net_amount: true },
+                _count: { _all: true },
+                where: { invoice_type: 'IPD', status: { not: 'Cancelled' }, ...(dateFilter ? { created_at: dateFilter } : {}) },
+            }),
+            db.invoices.aggregate({
+                _sum: { net_amount: true },
+                _count: { _all: true },
+                where: { invoice_type: 'OPD', status: { not: 'Cancelled' }, ...(dateFilter ? { created_at: dateFilter } : {}) },
+            }),
         ]);
 
         // Resolve doctor names for revenue-by-doctor
@@ -1175,6 +1187,10 @@ export async function getFinanceDashboardStats(params?: {
                     days30to60: Number(aging30to60._sum.balance_due || 0),
                     days60plus: Number(aging60plus._sum.balance_due || 0),
                 },
+                ipdRevenue: Number(ipdRevenue._sum.net_amount || 0),
+                ipdCount: ipdRevenue._count._all,
+                opdRevenue: Number(opdRevenue._sum.net_amount || 0),
+                opdCount: opdRevenue._count._all,
             },
         };
     } catch (error: any) {
@@ -2128,4 +2144,254 @@ export async function createAddendumInvoice(parentInvoiceId: string, reason: str
     }
 }
 
+export type DrillDownType =
+    | 'today-revenue' | 'total-revenue' | 'expenses' | 'outstanding' | 'drafts' | 'deposits'
+    | 'department' | 'doctor' | 'ipd' | 'opd';
+
+export async function getDrillDownData(type: DrillDownType, filters: Record<string, any>) {
+    try {
+        const { db } = await requireTenantContext();
+        const INR = '₹';
+        const fmt = (n: number) => `${INR}${Number(n).toLocaleString('en-IN')}`;
+
+        if (type === 'today-revenue') {
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const payments = await db.payments.findMany({
+                where: { status: 'Completed', created_at: { gte: today } },
+                include: { invoice: { select: { invoice_number: true, patient: { select: { full_name: true } } } } },
+                orderBy: { created_at: 'desc' },
+                take: 200,
+            });
+            return {
+                success: true, data: {
+                    title: "Today's Payments",
+                    columns: ['Receipt #', 'Patient', 'Method', 'Amount', 'Time'],
+                    rows: serialize(payments).map((p: any) => ({
+                        receipt: p.receipt_number,
+                        patient: p.invoice?.patient?.full_name || '-',
+                        method: p.payment_method,
+                        amount: fmt(Number(p.amount)),
+                        time: new Date(p.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+                    })),
+                },
+            };
+        }
+
+        if (type === 'total-revenue') {
+            const invoices = await db.invoices.findMany({
+                where: { status: { not: 'Cancelled' } },
+                include: { patient: { select: { full_name: true } } },
+                orderBy: { created_at: 'desc' },
+                take: 100,
+            });
+            return {
+                success: true, data: {
+                    title: 'All Revenue — Invoices',
+                    columns: ['Invoice #', 'Patient', 'Type', 'Net Amount', 'Status'],
+                    rows: serialize(invoices).map((inv: any) => ({
+                        invoice: inv.invoice_number,
+                        patient: inv.patient?.full_name || inv.patient_id,
+                        type: inv.invoice_type,
+                        amount: fmt(Number(inv.net_amount)),
+                        status: inv.status,
+                        invoiceId: inv.id,
+                    })),
+                },
+            };
+        }
+
+        if (type === 'expenses') {
+            const firstOfMonth = new Date(); firstOfMonth.setDate(1); firstOfMonth.setHours(0, 0, 0, 0);
+            const expenses = await db.expense.findMany({
+                where: { created_at: { gte: firstOfMonth } },
+                include: { category: { select: { name: true } }, vendor: { select: { vendor_name: true } } },
+                orderBy: { created_at: 'desc' },
+                take: 200,
+            });
+            return {
+                success: true, data: {
+                    title: "This Month's Expenses",
+                    columns: ['Expense #', 'Category', 'Description', 'Amount', 'Status', 'Date'],
+                    rows: serialize(expenses).map((e: any) => ({
+                        expense: e.expense_number,
+                        category: e.category?.name || '-',
+                        description: e.description,
+                        amount: fmt(Number(e.total_amount)),
+                        status: e.status,
+                        date: new Date(e.created_at).toLocaleDateString('en-IN'),
+                    })),
+                },
+            };
+        }
+
+        if (type === 'outstanding') {
+            const now = new Date();
+            const invoices = await db.invoices.findMany({
+                where: { status: { in: ['Final', 'Partial'] }, balance_due: { gt: 0 } },
+                include: { patient: { select: { full_name: true } } },
+                orderBy: { created_at: 'asc' },
+                take: 200,
+            });
+            return {
+                success: true, data: {
+                    title: 'Pending / Outstanding Invoices',
+                    columns: ['Invoice #', 'Patient', 'Net Amount', 'Balance Due', 'Age (days)'],
+                    rows: serialize(invoices).map((inv: any) => ({
+                        invoice: inv.invoice_number,
+                        patient: inv.patient?.full_name || inv.patient_id,
+                        amount: fmt(Number(inv.net_amount)),
+                        balance: fmt(Number(inv.balance_due)),
+                        age: Math.floor((now.getTime() - new Date(inv.created_at).getTime()) / (1000 * 60 * 60 * 24)) + 'd',
+                        invoiceId: inv.id,
+                    })),
+                },
+            };
+        }
+
+        if (type === 'drafts') {
+            const invoices = await db.invoices.findMany({
+                where: { status: 'Draft' },
+                include: { patient: { select: { full_name: true } } },
+                orderBy: { created_at: 'desc' },
+                take: 200,
+            });
+            return {
+                success: true, data: {
+                    title: 'Draft Bills — Awaiting Finalization',
+                    columns: ['Invoice #', 'Patient', 'Type', 'Amount', 'Created'],
+                    rows: serialize(invoices).map((inv: any) => ({
+                        invoice: inv.invoice_number,
+                        patient: inv.patient?.full_name || inv.patient_id,
+                        type: inv.invoice_type,
+                        amount: fmt(Number(inv.net_amount)),
+                        created: new Date(inv.created_at).toLocaleDateString('en-IN'),
+                        invoiceId: inv.id,
+                    })),
+                },
+            };
+        }
+
+        if (type === 'deposits') {
+            const deposits = await db.patientDeposit.findMany({
+                where: { status: 'Active' },
+                include: { patient: { select: { full_name: true } } },
+                orderBy: { created_at: 'desc' },
+                take: 200,
+            });
+            return {
+                success: true, data: {
+                    title: 'Active Patient Deposits',
+                    columns: ['Patient', 'Collected', 'Applied', 'Balance', 'Date'],
+                    rows: serialize(deposits).map((d: any) => ({
+                        patient: d.patient?.full_name || d.patient_id,
+                        collected: fmt(Number(d.amount)),
+                        applied: fmt(Number(d.applied_amount || 0)),
+                        balance: fmt(Number(d.amount) - Number(d.applied_amount || 0)),
+                        date: new Date(d.created_at).toLocaleDateString('en-IN'),
+                    })),
+                },
+            };
+        }
+
+        if (type === 'department') {
+            const dept = filters.department;
+            if (typeof dept !== 'string' || !dept.trim()) {
+                return { success: false, error: 'Department filter is required' };
+            }
+            const invoices = await db.invoices.findMany({
+                where: {
+                    status: { not: 'Cancelled' },
+                    items: { some: { department: dept } },
+                },
+                include: {
+                    patient: { select: { full_name: true } },
+                    items: { where: { department: dept }, select: { net_price: true, description: true } },
+                },
+                orderBy: { created_at: 'desc' },
+                take: 100,
+            });
+            return {
+                success: true, data: {
+                    title: `Revenue — ${dept}`,
+                    columns: ['Invoice #', 'Patient', 'Type', 'Dept Revenue', 'Status', 'Date'],
+                    rows: serialize(invoices).map((inv: any) => ({
+                        invoice: inv.invoice_number,
+                        patient: inv.patient?.full_name || inv.patient_id,
+                        type: inv.invoice_type,
+                        amount: fmt(inv.items.reduce((s: number, it: any) => s + Number(it.net_price), 0)),
+                        status: inv.status,
+                        date: new Date(inv.created_at).toLocaleDateString('en-IN'),
+                        invoiceId: inv.id,
+                    })),
+                },
+            };
+        }
+
+        if (type === 'doctor') {
+            const doctorId = filters.doctorId;
+            const doctorName = filters.doctorName || 'Unknown Doctor';
+            if (typeof doctorId !== 'string' || !doctorId.trim()) {
+                return { success: false, error: 'Doctor ID filter is required' };
+            }
+            const invoices = await db.invoices.findMany({
+                where: {
+                    status: { not: 'Cancelled' },
+                    items: { some: { ref_id: doctorId, service_category: 'Consultation' } },
+                },
+                include: {
+                    patient: { select: { full_name: true } },
+                    items: { where: { ref_id: doctorId, service_category: 'Consultation' }, select: { net_price: true } },
+                },
+                orderBy: { created_at: 'desc' },
+                take: 100,
+            });
+            return {
+                success: true, data: {
+                    title: `Consultation Revenue — ${doctorName}`,
+                    columns: ['Invoice #', 'Patient', 'Type', 'Consultation Fee', 'Status', 'Date'],
+                    rows: serialize(invoices).map((inv: any) => ({
+                        invoice: inv.invoice_number,
+                        patient: inv.patient?.full_name || inv.patient_id,
+                        type: inv.invoice_type,
+                        amount: fmt(inv.items.reduce((s: number, it: any) => s + Number(it.net_price), 0)),
+                        status: inv.status,
+                        date: new Date(inv.created_at).toLocaleDateString('en-IN'),
+                        invoiceId: inv.id,
+                    })),
+                },
+            };
+        }
+
+        if (type === 'ipd' || type === 'opd') {
+            const invoiceType = type.toUpperCase();
+            const invoices = await db.invoices.findMany({
+                where: { invoice_type: invoiceType, status: { not: 'Cancelled' } },
+                include: { patient: { select: { full_name: true } } },
+                orderBy: { created_at: 'desc' },
+                take: 100,
+            });
+            return {
+                success: true, data: {
+                    title: `${invoiceType} Invoices`,
+                    columns: ['Invoice #', 'Patient', 'Net Amount', 'Paid', 'Balance', 'Status', 'Date'],
+                    rows: serialize(invoices).map((inv: any) => ({
+                        invoice: inv.invoice_number,
+                        patient: inv.patient?.full_name || inv.patient_id,
+                        amount: fmt(Number(inv.net_amount)),
+                        paid: fmt(Number(inv.paid_amount)),
+                        balance: fmt(Number(inv.balance_due)),
+                        status: inv.status,
+                        date: new Date(inv.created_at).toLocaleDateString('en-IN'),
+                        invoiceId: inv.id,
+                    })),
+                },
+            };
+        }
+
+        return { success: false, error: 'Unknown drill-down type' };
+    } catch (error: any) {
+        console.error('getDrillDownData error:', error);
+        return { success: false, error: error.message };
+    }
+}
 

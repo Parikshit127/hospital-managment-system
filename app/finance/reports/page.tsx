@@ -37,15 +37,22 @@ export default function FinancialReportsPage() {
     const [to, setTo] = useState(today);
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(false);
+    const [quickFilter, setQuickFilter] = useState<'all' | 'cash' | 'upi' | 'others'>('all');
+    const [methodFilter, setMethodFilter] = useState<string>('all');
 
-    useEffect(() => { loadReport(); }, [activeReport, from, to]);
+    useEffect(() => { loadReport(); }, [activeReport, from, to, quickFilter, methodFilter]);
 
     async function loadReport() {
         setLoading(true);
         setData(null); // always clear stale data before loading new report
         let res;
         switch (activeReport) {
-            case 'collections': res = await getCollectionsReport({ from, to }); break;
+            case 'collections': {
+                    const quickFilterMap: Record<string, string> = { cash: 'Cash', upi: 'UPI', others: 'others' };
+                    const activeMethod = methodFilter !== 'all' ? methodFilter : quickFilter !== 'all' ? quickFilterMap[quickFilter] : undefined;
+                    res = await getCollectionsReport({ from, to, method: activeMethod });
+                    break;
+                }
             case 'aging': res = await getARAgingReport(); break;
             case 'cashflow': res = await getCashFlowReport({ from, to }); break;
             case 'pnl': res = await getProfitLossReport({ from, to }); break;
@@ -68,7 +75,7 @@ export default function FinancialReportsPage() {
             {/* Report Tabs */}
             <div className="flex gap-1 overflow-x-auto pb-2 mb-4">
                 {REPORT_TABS.map(tab => (
-                    <button key={tab.key} onClick={() => setActiveReport(tab.key)}
+                    <button key={tab.key} onClick={() => { setActiveReport(tab.key); setQuickFilter('all'); setMethodFilter('all'); }}
                         className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg whitespace-nowrap transition ${
                             activeReport === tab.key ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'text-gray-500 hover:bg-gray-100 border border-transparent'
                         }`}>
@@ -97,7 +104,13 @@ export default function FinancialReportsPage() {
                 </div>
             ) : (
                 <div className="space-y-6">
-                    {activeReport === 'collections' && <CollectionsReport data={data} fmt={fmt} from={from} to={to} />}
+                    {activeReport === 'collections' && (
+                        <CollectionsReport
+                            data={data} fmt={fmt} from={from} to={to}
+                            quickFilter={quickFilter} setQuickFilter={setQuickFilter}
+                            methodFilter={methodFilter} setMethodFilter={setMethodFilter}
+                        />
+                    )}
                     {activeReport === 'aging' && <AgingReport data={data} fmt={fmt} />}
                     {activeReport === 'cashflow' && <CashFlowReport data={data} fmt={fmt} from={from} to={to} />}
                     {activeReport === 'pnl' && <ProfitLossReport data={data} fmt={fmt} from={from} to={to} />}
@@ -110,11 +123,44 @@ export default function FinancialReportsPage() {
     );
 }
 
-function CollectionsReport({ data, fmt, from, to }: { data: any; fmt: (n: number) => string; from: string; to: string }) {
+function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, methodFilter, setMethodFilter }: {
+    data: any; fmt: (n: number) => string; from: string; to: string;
+    quickFilter: 'all' | 'cash' | 'upi' | 'others'; setQuickFilter: (v: 'all' | 'cash' | 'upi' | 'others') => void;
+    methodFilter: string; setMethodFilter: (v: string) => void;
+}) {
     const methods = Object.entries(data?.totals || {}).filter(([k]) => k !== 'total');
     const payments = data?.payments || [];
     return (
         <>
+            {/* Payment Method Filter Bar */}
+            <div className="flex flex-wrap items-center gap-3 bg-white rounded-xl border border-gray-200 px-4 py-3">
+                <span className="text-xs font-black text-gray-400 uppercase tracking-wider">Filter by method</span>
+                <div className="flex gap-1.5">
+                    {(['all', 'cash', 'upi', 'others'] as const).map(f => (
+                        <button key={f}
+                            onClick={() => { setQuickFilter(f); setMethodFilter('all'); }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all capitalize ${
+                                quickFilter === f && methodFilter === 'all'
+                                    ? 'bg-emerald-500/20 text-emerald-700 border border-emerald-500/30'
+                                    : 'bg-gray-100 text-gray-500 border border-gray-200 hover:text-gray-800'
+                            }`}>
+                            {f === 'all' ? 'All' : f === 'others' ? 'All Others' : f.toUpperCase()}
+                        </button>
+                    ))}
+                </div>
+                <select
+                    value={methodFilter}
+                    onChange={e => { setMethodFilter(e.target.value); setQuickFilter('all'); }}
+                    className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-500 focus:outline-none focus:border-emerald-500/50 ml-1">
+                    <option value="all">Any Method</option>
+                    <option value="Cash">Cash</option>
+                    <option value="UPI">UPI</option>
+                    <option value="Card">Card</option>
+                    <option value="BankTransfer">Bank Transfer</option>
+                    <option value="Razorpay">Razorpay</option>
+                </select>
+            </div>
+
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <SummaryCard label="Total Collections" value={fmt(data?.totals?.total || 0)} color="emerald" />
                 {methods.map(([method, amount]) => (
