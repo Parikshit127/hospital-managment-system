@@ -142,6 +142,7 @@ export async function processDischarge(patientId: string, patientName: string, n
             const resolvedRoomCharge = resolvedRoomRate * daysAdmitted;
 
             if (!invoice) {
+                // Auto room charges disabled — create empty invoice, charges added manually
                 invoice = await db.invoices.create({
                     data: {
                         invoice_number: await genInvNum(organizationId, 'IPD', true, db),
@@ -149,55 +150,15 @@ export async function processDischarge(patientId: string, patientName: string, n
                         admission_id: activeAdmission.admission_id,
                         invoice_type: 'IPD',
                         status: 'Final',
-                        total_amount: resolvedRoomCharge,
-                        net_amount: resolvedRoomCharge,
-                        balance_due: resolvedRoomCharge,
+                        total_amount: 0,
+                        net_amount: 0,
+                        balance_due: 0,
                         finalized_at: new Date(),
                         organizationId,
                     }
                 });
-
-                await db.invoice_items.create({
-                    data: {
-                        invoice_id: invoice.id,
-                        department: 'IPD',
-                        description: `Room charges - ${resolvedWard?.ward_name || 'General Ward'} (${daysAdmitted} day${daysAdmitted > 1 ? 's' : ''} × ₹${resolvedRoomRate}/day)`,
-                        quantity: daysAdmitted,
-                        unit_price: resolvedRoomRate,
-                        total_price: resolvedRoomCharge,
-                        net_price: resolvedRoomCharge,
-                        organizationId,
-                    }
-                });
             } else {
-                // Invoice already exists — check if room/nursing charges were already
-                // posted by ensureIPDRoomChargesAccrued() to avoid duplicates
-                const existingRoomItems = await db.invoice_items.count({
-                    where: {
-                        invoice_id: invoice.id,
-                        service_category: { in: ['Room', 'Nursing'] },
-                    },
-                });
-
-                if (existingRoomItems === 0) {
-                    // No accrued charges yet — add a single consolidated room charge row
-                    const resolvedRoomCharge2 = resolvedRoomRate * daysAdmitted;
-                    if (resolvedRoomCharge2 > 0) {
-                        await db.invoice_items.create({
-                            data: {
-                                invoice_id: invoice.id,
-                                department: 'IPD',
-                                description: `Room charges - ${resolvedWard?.ward_name || 'General Ward'} (${daysAdmitted} day${daysAdmitted > 1 ? 's' : ''} × ₹${resolvedRoomRate}/day)`,
-                                quantity: daysAdmitted,
-                                unit_price: resolvedRoomRate,
-                                total_price: resolvedRoomCharge2,
-                                net_price: resolvedRoomCharge2,
-                                organizationId,
-                            }
-                        });
-                    }
-                }
-                // Room/Nursing already accrued per-day — skip adding duplicate rows
+                // Auto room charges disabled — no automatic room/nursing charge additions
 
                 // Recalculate totals from all existing items
                 const allItems = await db.invoice_items.findMany({
