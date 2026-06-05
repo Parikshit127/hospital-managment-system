@@ -113,8 +113,12 @@ export default function ReceptionPage() {
         getDepartmentList().then(result => {
             if (result.success && result.data && result.data.length > 0) {
                 setDepartments(result.data.map((d: { id: string; name: string }) => ({ id: d.id, name: d.name })));
-            } else {
+            } else if ((result as any).useFallback) {
+                // No departments configured at all — show fallback list
                 setDepartments(FALLBACK_DEPARTMENTS.map(name => ({ id: name, name })));
+            } else {
+                // Departments exist but all are deactivated — show empty
+                setDepartments([]);
             }
         });
         getCorporateMasters().then(r => {

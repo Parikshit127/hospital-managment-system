@@ -600,14 +600,21 @@ export async function getWaitingRoomDisplay() {
 export async function getDepartmentList() {
     try {
         const { db } = await requireTenantContext();
+        // Check if org has ANY department records (active or not)
+        const totalCount = await db.department.count();
+        if (totalCount === 0) {
+            // No departments configured at all — use fallback
+            return { success: true, data: [], useFallback: true };
+        }
+        // Org has departments — return only active ones (no fallback)
         const departments = await db.department.findMany({
             where: { is_active: true },
             orderBy: { name: 'asc' },
         });
-        return { success: true, data: departments };
+        return { success: true, data: departments, useFallback: false };
     } catch (error) {
         console.error('Get Departments Error:', error);
-        return { success: false, data: [] };
+        return { success: false, data: [], useFallback: true };
     }
 }
 
