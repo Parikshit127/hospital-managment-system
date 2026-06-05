@@ -202,7 +202,19 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any
         <tbody><tr><td>
             <div class="bill-container">
 
-                <!-- Bill Title + Invoice Info -->
+                <!-- Hospital Header (shown when no letterhead) -->
+                ${!branding.letterheadUrl ? `
+                <div style="text-align:center;margin-bottom:8px;">
+                    ${branding.logoUrl ? `<img src="${branding.logoUrl}" alt="" style="height:50px;margin-bottom:4px;" />` : ''}
+                    <h1 style="font-size:15px;font-weight:bold;margin:0;">${branding.hospitalName}${branding.tagline ? ` - ${branding.tagline}` : ''}</h1>
+                    ${gstin !== 'N/A' ? `<p style="font-size:10px;">GST NO.-${gstin}</p>` : ''}
+                    <p style="font-size:10px;">${branding.hospitalAddress}</p>
+                    ${branding.hospitalPhone ? `<p style="font-size:10px;">Ph: ${branding.hospitalPhone}${branding.hospitalEmail ? ` | Email: ${branding.hospitalEmail}` : ''}</p>` : ''}
+                </div>
+                <hr style="border:none;border-top:2px solid #000;margin:6px 0 10px 0;" />
+                ` : ''}
+
+                <!-- Bill Title -->
                 <div style="text-align:center;margin-bottom:12px;">
                     <h2 style="font-size:14px;font-weight:bold;border-bottom:1px solid #999;display:inline-block;padding-bottom:2px;">${billType}</h2>
                 </div>
