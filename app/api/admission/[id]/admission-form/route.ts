@@ -63,14 +63,14 @@ function ymd(d: Date | string | null | undefined): string {
     if (!d) return '';
     const dt = new Date(d);
     if (isNaN(dt.getTime())) return '';
-    return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
 }
 
 function ymdt(d: Date | string | null | undefined): string {
     if (!d) return '';
     const dt = new Date(d);
     if (isNaN(dt.getTime())) return '';
-    return dt.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return dt.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
 }
 
 // Field with optional pre-filled value. Empty fields render as an underline so

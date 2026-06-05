@@ -201,7 +201,7 @@ export async function admitPatientIPD(data: {
   patient_id: string;
   bed_id: string;
   ward_id: number;
-  diagnosis: string;
+  diagnosis?: string;
   doctor_name: string;
   deposit_amount?: number;
   deposit_payment_method?: string;

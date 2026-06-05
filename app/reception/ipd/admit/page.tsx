@@ -153,7 +153,6 @@ export default function AdmitPatientPage() {
     !!selectedPatient &&
     !!selectedBedId &&
     doctorName.trim().length > 0 &&
-    diagnosis.trim().length > 0 &&
     !isSubmitting;
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -502,7 +501,7 @@ export default function AdmitPatientPage() {
 
               {/* Diagnosis */}
               <div className="sm:col-span-2 space-y-1.5">
-                <label className={labelClass}>Diagnosis *</label>
+                <label className={labelClass}>Diagnosis <span className="text-gray-400 font-normal">(optional)</span></label>
                 <div className="relative">
                   <FileText className="absolute left-4 top-4 h-4 w-4 text-gray-400" />
                   <textarea
@@ -511,7 +510,6 @@ export default function AdmitPatientPage() {
                     placeholder="Primary diagnosis / chief complaint"
                     rows={3}
                     className="w-full bg-white border border-gray-200 rounded-xl pl-11 pr-4 py-3 text-sm text-gray-900 font-medium placeholder:text-gray-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/10 outline-none transition-all resize-none"
-                    required
                   />
                 </div>
               </div>
