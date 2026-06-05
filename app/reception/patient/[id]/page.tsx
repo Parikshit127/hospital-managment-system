@@ -17,6 +17,7 @@ import { getCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan } from '@/app/lib/cash-compliance';
 import { useToast } from '@/app/components/ui/Toast';
 import { EditInvoiceModal } from '@/app/components/finance/EditInvoiceModal';
+import { getInsuranceProviders, addPatientPolicy, getPatientPolicies } from '@/app/actions/insurance-actions';
 
 /** Inline editable field */
 function EditableField({
@@ -128,6 +129,55 @@ export default function PatientProfilePage() {
     const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
 
     const [archiving, setArchiving] = useState(false);
+
+    // Insurance state
+    const [showInsuranceModal, setShowInsuranceModal] = useState(false);
+    const [insuranceProviders, setInsuranceProviders] = useState<any[]>([]);
+    const [patientPolicies, setPatientPolicies] = useState<any[]>([]);
+    const [insuranceForm, setInsuranceForm] = useState({
+        provider_id: '', policy_number: '', policy_holder: '',
+        plan_name: '', coverage_limit: '', valid_from: '', valid_until: ''
+    });
+    const [savingInsurance, setSavingInsurance] = useState(false);
+
+    const openInsuranceModal = async () => {
+        setShowInsuranceModal(true);
+        setInsuranceForm({ provider_id: '', policy_number: '', policy_holder: '', plan_name: '', coverage_limit: '', valid_from: '', valid_until: '' });
+        const [pRes, polRes] = await Promise.all([
+            getInsuranceProviders(),
+            getPatientPolicies(patientId),
+        ]);
+        if (pRes.success) setInsuranceProviders(pRes.data || []);
+        if (polRes.success) setPatientPolicies(polRes.data || []);
+    };
+
+    const handleSaveInsurance = async () => {
+        if (!insuranceForm.provider_id || !insuranceForm.policy_number || !insuranceForm.coverage_limit) {
+            toast.error('Provider, policy number and coverage limit are required');
+            return;
+        }
+        setSavingInsurance(true);
+        const res = await addPatientPolicy({
+            patient_id: patientId,
+            provider_id: Number(insuranceForm.provider_id),
+            policy_number: insuranceForm.policy_number,
+            policy_holder: insuranceForm.policy_holder || undefined,
+            plan_name: insuranceForm.plan_name || undefined,
+            coverage_limit: Number(insuranceForm.coverage_limit),
+            valid_from: insuranceForm.valid_from,
+            valid_until: insuranceForm.valid_until,
+        });
+        setSavingInsurance(false);
+        if (res.success) {
+            toast.success('Insurance policy added');
+            setShowInsuranceModal(false);
+            // Also update patient type to tpa_insurance
+            await updatePatientField(patientId, 'patient_type', 'tpa_insurance');
+            loadData();
+        } else {
+            toast.error(res.error || 'Failed to add policy');
+        }
+    };
 
     const handleArchive = async () => {
         if (!window.confirm('Archive this patient? They will be hidden from the patient list but all records are preserved.')) return;

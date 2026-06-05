@@ -291,26 +291,21 @@ export async function getInvoices(filters?: {
             });
         }
 
-        // 3. Fetch Pharmacy Orders
+        // 3. Fetch Pharmacy Invoices (from invoices table, not pharmacy_orders)
         let pharmacyOrders: any[] = [];
         if (fetchPharm) {
-            const where: any = {};
-            if (filters?.status) {
-                if (filters.status === 'Draft') where.status = 'Pending';
-                else if (filters.status === 'Paid') where.status = 'Completed';
-                else where.status = filters.status;
-            }
+            const where: any = { invoice_type: 'Pharmacy' };
+            if (filters?.status) where.status = filters.status;
             if (filters?.patient_id) where.patient_id = filters.patient_id;
             if (filters?.mobile_number) {
-                const patients = await db.oPD_REG.findMany({
-                    where: { phone: { contains: filters.mobile_number } },
-                    select: { patient_id: true }
-                });
-                where.patient_id = { in: patients.map((p: any) => p.patient_id) };
+                where.patient = { phone: { contains: filters.mobile_number } };
             }
 
-            pharmacyOrders = await db.pharmacy_orders.findMany({
+            pharmacyOrders = await db.invoices.findMany({
                 where,
+                include: {
+                    patient: { select: { full_name: true, phone: true } },
+                },
                 orderBy: { created_at: 'desc' },
                 take: limit,
             });
@@ -368,24 +363,18 @@ export async function getInvoices(filters?: {
                     source: 'LAB'
                 };
             }),
-            ...pharmacyOrders.map((pharm: any) => {
-                const p = patientMap.get(pharm.patient_id);
-                return {
-                    id: pharm.id,
-                    invoice_number: `PHARM-${pharm.id}`,
-                    patient_id: pharm.patient_id,
-                    patient: {
-                        full_name: p?.full_name || 'Unknown',
-                        phone: p?.phone || 'N/A'
-                    },
-                    invoice_type: 'PHARMACY',
-                    net_amount: pharm.total_amount,
-                    balance_due: pharm.status === 'Completed' ? 0 : pharm.total_amount,
-                    status: pharm.status === 'Pending' ? 'Draft' : pharm.status === 'Completed' ? 'Paid' : pharm.status,
-                    created_at: pharm.created_at,
-                    source: 'PHARMACY'
-                };
-            })
+            ...pharmacyOrders.map((pharm: any) => ({
+                id: pharm.id,
+                invoice_number: pharm.invoice_number,
+                patient_id: pharm.patient_id,
+                patient: pharm.patient,
+                invoice_type: 'PHARMACY',
+                net_amount: pharm.net_amount,
+                balance_due: pharm.balance_due,
+                status: pharm.status,
+                created_at: pharm.created_at,
+                source: 'PHARMACY'
+            }))
         ];
 
         // Sort by date DESC

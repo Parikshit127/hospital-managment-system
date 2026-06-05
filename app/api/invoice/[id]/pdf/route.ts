@@ -219,6 +219,15 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any
                     <h2 style="font-size:14px;font-weight:bold;border-bottom:1px solid #999;display:inline-block;padding-bottom:2px;">${billType}</h2>
                 </div>
 
+                ${invoice.invoice_type === 'PHARMACY' ? `
+                <!-- Third Party Pharmacy Details -->
+                <div style="background:#f9f9f9;border:1px solid #ddd;border-radius:4px;padding:8px 12px;margin-bottom:10px;">
+                    <p style="font-size:11px;font-weight:bold;margin-bottom:2px;">Dispensed by: Garnet Pharmaceuticals</p>
+                    <p style="font-size:10px;color:#444;">B-162, East of Kailash Road, New Delhi, Delhi 110065</p>
+                    <p style="font-size:10px;color:#444;">GST No.: 07AKIPA3324R1Z0</p>
+                </div>
+                ` : ''}
+
                 <!-- Patient Row -->
                 <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                     <div>

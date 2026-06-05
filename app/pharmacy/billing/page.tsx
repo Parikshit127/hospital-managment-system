@@ -765,6 +765,13 @@ export default function PharmacyPage() {
                                 <p className="text-xs text-gray-500">{new Date().toLocaleDateString('en-IN')}</p>
                             </div>
                         </div>
+
+                        {/* Third Party Pharmacy Details */}
+                        <div style={{ background: '#f9f9f9', border: '1px solid #e5e7eb', borderRadius: '4px', padding: '8px 12px', marginBottom: '8px' }}>
+                            <p className="text-xs font-black text-gray-800">Dispensed by: Garnet Pharmaceuticals</p>
+                            <p className="text-[10px] text-gray-500 mt-0.5">B-162, East of Kailash Road, New Delhi, Delhi 110065</p>
+                            <p className="text-[10px] text-gray-500">GST No.: 07AKIPA3324R1Z0</p>
+                        </div>
                         <div className="grid grid-cols-2 gap-4 text-sm">
                             <div><span className="text-gray-500">Patient:</span> <span className="font-bold">{patientId}</span></div>
                             <div className="text-right"><span className="text-gray-500">Date:</span> <span className="font-bold">{new Date().toLocaleDateString('en-IN')}</span></div>
