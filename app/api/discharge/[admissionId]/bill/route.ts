@@ -49,7 +49,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             const tpa = await prisma.insurance_providers.findUnique({ where: { id: invoice.tpa_provider_id } });
             tpaProviderName = tpa?.provider_name || '';
         }
-        if (!tpaProviderName && invoice.billing_patient_type === 'tpa_insurance') {
+        if (!tpaProviderName && ['tpa_insurance', 'insurance', 'tpa'].includes(String(invoice.billing_patient_type || '').toLowerCase())) {
             const policy = await prisma.insurance_policies.findFirst({
                 where: { patient_id: admission.patient_id },
                 include: { provider: { select: { provider_name: true } } },
@@ -269,7 +269,12 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
                                 <p style="font-size:11px;"><strong>Discharged:</strong> ${isFinal ? dischargeDate : 'N/A'}</p>
                                 <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
-                                <p style="font-size:11px;"><strong>Category:</strong> ${invoice.billing_patient_type === 'tpa_insurance' ? 'TPA / Insurance' : invoice.billing_patient_type === 'corporate' ? 'Corporate' : 'Cash / Self-Pay'}</p>
+                                <p style="font-size:11px;"><strong>Category:</strong> ${(() => {
+                                    const t = String(invoice.billing_patient_type || '').toLowerCase();
+                                    if (t === 'tpa_insurance' || t === 'insurance' || t === 'tpa') return 'TPA / Insurance';
+                                    if (t === 'corporate') return 'Corporate';
+                                    return 'Cash / Self-Pay';
+                                })()}</p>
                                 ${tpaProviderName ? `<p style="font-size:11px;"><strong>TPA/Insurer:</strong> ${tpaProviderName}</p>` : ''}
                                 <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
                             </div>

@@ -522,10 +522,9 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                         className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs"
                                         disabled={saving}
                                     >
-                                        <option value="Self">Self</option>
-                                        <option value="Corporate">Corporate</option>
-                                        <option value="Insurance">Insurance</option>
-                                        <option value="TPA">TPA</option>
+                                        <option value="cash">Self / Cash</option>
+                                        <option value="corporate">Corporate</option>
+                                        <option value="tpa_insurance">Insurance / TPA</option>
                                     </select>
                                 </div>
                                 <div className="flex items-center gap-2 pt-5">
