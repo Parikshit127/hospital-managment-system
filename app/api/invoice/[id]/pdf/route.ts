@@ -48,7 +48,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             },
             include: {
                 items: { orderBy: { created_at: 'asc' } },
-                patient: { select: { full_name: true, patient_id: true, phone: true, age: true, gender: true, department: true } },
+                patient: {
+                    select: {
+                        full_name: true, patient_id: true, phone: true, age: true, gender: true, department: true,
+                        patient_type: true,
+                        corporate: { select: { company_name: true, company_code: true } },
+                        insurance_policies: {
+                            where: { status: 'Active' },
+                            orderBy: { created_at: 'desc' },
+                            take: 1,
+                            select: {
+                                policy_number: true,
+                                plan_name: true,
+                                provider: { select: { provider_name: true } },
+                            },
+                        },
+                    },
+                },
                 admission: { select: { admission_id: true, doctor_name: true, admission_date: true, discharge_date: true, ward: { select: { ward_name: true } }, bed: { select: { bed_id: true } } } },
                 payments: {
                     where: { status: { not: 'Reversed' } },
@@ -228,6 +244,22 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any
                 </div>
                 ` : ''}
 
+                ${(() => {
+                    const corp = (patient as any).corporate;
+                    const pol = (patient as any).insurance_policies?.[0];
+                    const billingType = (invoice as any).billing_patient_type || patient.patient_type || 'cash';
+                    if (corp || pol) {
+                        return `
+                <!-- Payer Row (Corporate / Insurance) -->
+                <div style="background:#eef6ff;border:1px solid #cfe2ff;border-radius:4px;padding:6px 10px;margin-bottom:6px;">
+                    ${corp ? `<p style="font-size:11px;font-weight:bold;color:#0b4ea2;margin:0;">Corporate: ${corp.company_name}${corp.company_code ? ` (${corp.company_code})` : ''}</p>` : ''}
+                    ${pol ? `<p style="font-size:11px;font-weight:bold;color:#0b4ea2;margin:0;">Insurance: ${pol.provider?.provider_name || '-'}${pol.policy_number ? ` &nbsp;|&nbsp; Policy: ${pol.policy_number}` : ''}${pol.plan_name ? ` &nbsp;|&nbsp; Plan: ${pol.plan_name}` : ''}</p>` : ''}
+                    <p style="font-size:9px;color:#555;margin:1px 0 0 0;">Billing Type: ${String(billingType).toUpperCase()}</p>
+                </div>`;
+                    }
+                    return '';
+                })()}
+
                 <!-- Patient Row -->
                 <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                     <div>
@@ -248,7 +280,12 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any
                         ${isIPD ? `<p style="font-size:11px;"><strong>Regn No.:</strong> ${admission.admission_id}</p>` : ''}
                         ${isIPD ? `<p style="font-size:11px;"><strong>Bed No.:</strong> ${admission.bed?.bed_id || '-'}/${admission.ward?.ward_name || '-'}</p>` : ''}
                         <p style="font-size:11px;"><strong>Rate Category:</strong> ${invoice.invoice_type || 'OPD'}</p>
-                        <p style="font-size:11px;"><strong>Category:</strong> PAYING</p>
+                        <p style="font-size:11px;"><strong>Category:</strong> ${(() => {
+                            const t = String((invoice as any).billing_patient_type || (patient as any).patient_type || 'cash').toLowerCase();
+                            if (t === 'corporate') return 'CORPORATE';
+                            if (t === 'tpa_insurance' || t === 'insurance' || t === 'tpa') return 'INSURANCE / TPA';
+                            return 'PAYING';
+                        })()}</p>
                     </div>
                     <div style="text-align:center;">
                         ${isIPD && admission.doctor_name ? `<p style="font-size:11px;"><strong>Department:</strong> -</p>` : ''}
