@@ -1,7 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { FlaskConical, Loader2, RefreshCw } from 'lucide-react';
+import { getTestCatalog } from '@/app/actions/lab-actions';
 
 const inputCls = "w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400";
 
@@ -16,21 +17,30 @@ interface LabTabProps {
 }
 
 export function LabTab({ labOrders, selectedTest, setSelectedTest, loadingLabs, isSubmitting, onOrderLab, onRefresh }: LabTabProps) {
+    const [catalog, setCatalog] = useState<any[]>([]);
+    const [loadingCatalog, setLoadingCatalog] = useState(true);
+
+    useEffect(() => {
+        getTestCatalog().then(r => {
+            if (r.success) setCatalog((r.data as any[]).filter(t => t.is_available !== false));
+            setLoadingCatalog(false);
+        });
+    }, []);
+
     return (
         <div className="max-w-3xl space-y-8">
             <div className="bg-violet-500/5 p-6 rounded-2xl border border-violet-500/10">
                 <h3 className="font-black text-violet-300 mb-4 flex items-center gap-2"><FlaskConical className="h-5 w-5 text-violet-400" /> Order New Test</h3>
                 <div className="flex gap-4">
-                    <select value={selectedTest} onChange={e => setSelectedTest(e.target.value)} className={`flex-1 ${inputCls}`}>
-                        <option value="" className="bg-white text-gray-900">Select Test Type...</option>
-                        <option value="Complete Blood Count (CBC)" className="bg-white text-gray-900">Complete Blood Count (CBC)</option>
-                        <option value="Lipid Profile" className="bg-white text-gray-900">Lipid Profile</option>
-                        <option value="Dengue NS1 Antigen" className="bg-white text-gray-900">Dengue NS1 Antigen</option>
-                        <option value="Liver Function Test" className="bg-white text-gray-900">Liver Function Test</option>
-                        <option value="Kidney Function Test" className="bg-white text-gray-900">Kidney Function Test</option>
-                        <option value="Thyroid Profile (T3/T4/TSH)" className="bg-white text-gray-900">Thyroid Profile</option>
-                        <option value="HbA1c" className="bg-white text-gray-900">HbA1c</option>
-                        <option value="Chest X-Ray" className="bg-white text-gray-900">Chest X-Ray</option>
+                    <select value={selectedTest} onChange={e => setSelectedTest(e.target.value)} className={`flex-1 ${inputCls}`} disabled={loadingCatalog}>
+                        <option value="" className="bg-white text-gray-900">
+                            {loadingCatalog ? 'Loading tests...' : catalog.length === 0 ? 'No tests in catalog — add via /lab/tests' : 'Select Test Type...'}
+                        </option>
+                        {catalog.map(t => (
+                            <option key={t.id} value={t.test_name} className="bg-white text-gray-900">
+                                {t.test_name}{t.price ? ` — ₹${Number(t.price).toLocaleString('en-IN')}` : ''}
+                            </option>
+                        ))}
                     </select>
                     <button onClick={onOrderLab} disabled={!selectedTest || isSubmitting} className="px-6 py-2 bg-gradient-to-r from-violet-500 to-indigo-600 text-white font-bold rounded-xl hover:from-violet-400 hover:to-indigo-500 disabled:opacity-50 shadow-lg shadow-violet-500/20 flex items-center gap-2">
                         {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Order Test'}
