@@ -49,7 +49,7 @@ async function main() {
                 }
             }
             // Delete journal lines then journal
-            await tx.gL_JournalLine.deleteMany({ where: { journal_entry_id: journal.id } });
+            await tx.gL_JournalLine.deleteMany({ where: { journal_id: journal.id } });
             await tx.gL_JournalEntry.delete({ where: { id: journal.id } });
             console.log(`  Deleted journal ${journal.journal_number}`);
         } else {
