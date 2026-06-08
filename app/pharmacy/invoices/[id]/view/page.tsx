@@ -25,15 +25,24 @@ export default async function PharmacyInvoiceViewPage({ params }: { params: Prom
 
     if (!invoice) notFound();
 
-    const items = invoice.items as any[];
+    const isIpd = invoice.invoice_type === 'IPD';
+    // For IPD invoices, only show pharmacy items; for pharmacy invoices, show all
+    const allItems = invoice.items as any[];
+    const items = isIpd ? allItems.filter((i: any) => i.service_category === 'Pharmacy') : allItems;
+
+    if (isIpd && items.length === 0) {
+        return <div style={{ padding: 40, fontFamily: 'Arial', color: '#6b7280' }}>No pharmacy items found on this IPD invoice.</div>;
+    }
+
     const subtotal = items.reduce((s, i) => s + Number(i.net_price || 0), 0);
     const totalDiscount = items.reduce((s, i) => s + Number(i.discount || 0), 0);
     const tax     = items.reduce((s, i) => s + Number(i.tax_amount || 0), 0);
     const cgst    = tax / 2;
     const sgst    = tax / 2;
     const total   = subtotal + tax;
-    const paid    = Number((invoice as any).paid_amount || 0);
-    const balance = total - paid;
+    // For IPD invoices, paid/balance are for the whole bill — show pharmacy total as the amount
+    const paid    = isIpd ? 0 : Number((invoice as any).paid_amount || 0);
+    const balance = isIpd ? total : (total - paid);
     const date    = new Date(invoice.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const time    = new Date(invoice.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
@@ -214,7 +223,7 @@ export default async function PharmacyInvoiceViewPage({ params }: { params: Prom
                             </div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                            <span className="inv-badge">Tax Invoice</span>
+                            <span className="inv-badge">{isIpd ? 'IPD Pharmacy Bill' : 'Tax Invoice'}</span>
                             <div className="inv-meta">
                                 Invoice: <strong>{invoice.invoice_number}</strong><br />
                                 Date: <strong>{date}</strong><br />

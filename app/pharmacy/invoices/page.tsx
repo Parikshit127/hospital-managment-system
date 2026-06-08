@@ -122,7 +122,7 @@ export default function PharmacyInvoicesPage() {
                                             {new Date(inv.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                                         </td>
                                         <td className="px-5 py-3 text-center">
-                                            <Link href={inv.source === 'IPD-PHARMACY' ? `/finance/invoices/${inv.id}` : `/pharmacy/invoices/${inv.id}/view`} target="_blank"
+                                            <Link href={`/pharmacy/invoices/${inv.id}/view`} target="_blank"
                                                 className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-50 text-orange-700 border border-orange-200 text-xs font-bold rounded-lg hover:bg-orange-100 transition-colors">
                                                 <Eye className="h-3 w-3" /> View
                                             </Link>
