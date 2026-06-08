@@ -51,6 +51,7 @@ export async function getInventory() {
     try {
         const { db } = await requireTenantContext();
 
+        // 1. Batch inventory (items with physical stock)
         const inventory = await db.pharmacy_batch_inventory.findMany({
             where: { current_stock: { gt: 0 } },
             include: {
@@ -65,7 +66,45 @@ export async function getInventory() {
             orderBy: { expiry_date: 'asc' },
             take: 500,
         });
-        return { success: true, data: inventory };
+
+        // 2. Medicine catalog — all medicines that have NO batches with stock.
+        //    These appear in the billing search so pharmacists can bill without
+        //    requiring physical stock (price set manually during billing).
+        const batchMedicineIds = [...new Set(inventory.map((b: any) => b.medicine_id))] as number[];
+        const catalogMedicines = await db.pharmacy_medicine_master.findMany({
+            where: {
+                ...(batchMedicineIds.length > 0 ? { id: { notIn: batchMedicineIds } } : {}),
+            },
+            select: {
+                id: true, brand_name: true, generic_name: true,
+                selling_price: true, price_per_unit: true, mrp: true,
+                gst_percent: true, tax_rate: true, hsn_sac_code: true, is_active: true,
+            },
+            orderBy: { brand_name: 'asc' },
+        });
+
+        // Convert catalog medicines to batch-like shape for UI compatibility
+        const catalogItems = catalogMedicines.map((med: any) => ({
+            id: null,
+            batch_no: `CATALOG-${med.id}`,
+            medicine_id: med.id,
+            current_stock: 999999, // no stock limit for catalog items
+            expiry_date: null,
+            medicine: {
+                brand_name: med.brand_name,
+                generic_name: med.generic_name,
+                selling_price: med.selling_price,
+                price_per_unit: med.price_per_unit,
+                mrp: med.mrp,
+                gst_percent: med.gst_percent,
+                tax_rate: med.tax_rate,
+                hsn_sac_code: med.hsn_sac_code,
+                is_active: med.is_active,
+            },
+            _catalog: true,
+        }));
+
+        return { success: true, data: [...inventory, ...catalogItems] };
     } catch (error) {
         console.error('Inventory Fetch Error:', error);
         return { success: false, data: [] };
@@ -175,6 +214,38 @@ export async function generateInvoice(patientId: string, items: any[]) {
                         }
                     });
                 }
+            } else {
+                // Catalog-only sale — no batch/stock exists.
+                // Pharmacist sets price at billing time; no stock deduction needed.
+                const medicine = await db.pharmacy_medicine_master.findUnique({
+                    where: { id: item.medicine_id }
+                });
+                if (!medicine) continue; // skip unknown medicine
+
+                const unitPrice = (item.unit_price !== undefined && Number(item.unit_price) > 0)
+                    ? Number(item.unit_price)
+                    : (Number(medicine.selling_price) || Number(medicine.price_per_unit) || 0);
+                const netPrice = unitPrice * item.quantity;
+                const taxRate = Number(medicine.gst_percent) || Number(medicine.tax_rate) || 0;
+                const taxAmount = netPrice * taxRate / 100;
+
+                totalAmount += netPrice;
+                totalTax += taxAmount;
+
+                invoiceItems.push({
+                    medicine_name: medicine.brand_name,
+                    medicine_id: medicine.id,
+                    qty: item.quantity,
+                    unit_price: unitPrice,
+                    net_price: netPrice,
+                    tax_rate: taxRate,
+                    tax_amount: taxAmount,
+                    hsn_sac_code: medicine.hsn_sac_code || '3004',
+                    mrp: Number(medicine.mrp) || unitPrice,
+                    batch_no: 'N/A',
+                    batch_id: null,
+                    batch_cost: 0,
+                });
             }
         }
 

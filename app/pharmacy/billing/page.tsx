@@ -16,12 +16,13 @@ type InventoryItem = {
     batch_id: string;
     medicine_name: string;
     medicine_id?: number;
-    expiry_date: Date;
+    expiry_date: Date | null;
     stock_count: number;
     unit_price: number;
     mrp: number;
     gst_percent: number;
     hsn_sac_code: string;
+    is_catalog?: boolean;
 };
 
 type CartItem = InventoryItem & { quantity: number };
@@ -32,7 +33,8 @@ const PAYMENT_METHODS = [
     { id: 'UPI', label: 'UPI', icon: Smartphone },
 ];
 
-function getExpiryStatus(expiry: Date) {
+function getExpiryStatus(expiry: Date | null) {
+    if (!expiry) return { label: 'Catalog', color: 'bg-indigo-50 text-indigo-600 border border-indigo-200', urgent: false };
     const now = new Date();
     const exp = new Date(expiry);
     const daysLeft = Math.floor((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
@@ -86,12 +88,13 @@ export default function PharmacyPage() {
                 batch_id: item.batch_no,
                 medicine_name: item.medicine?.brand_name || 'Unknown Medicine',
                 medicine_id: item.medicine_id,
-                expiry_date: item.expiry_date,
+                expiry_date: item.expiry_date || null,
                 stock_count: item.current_stock,
                 unit_price: Number(item.medicine?.selling_price) || Number(item.medicine?.price_per_unit) || 0,
                 mrp: Number(item.medicine?.mrp) || Number(item.medicine?.price_per_unit) || 0,
                 gst_percent: Number(item.medicine?.gst_percent) || Number(item.medicine?.tax_rate) || 0,
                 hsn_sac_code: item.medicine?.hsn_sac_code || '3004',
+                is_catalog: item._catalog === true,
             }));
             setInventory(mappedData);
         }
@@ -398,14 +401,18 @@ export default function PharmacyPage() {
                                         <tr><td colSpan={7} className="text-center py-16 text-gray-400 font-medium">No medicines found</td></tr>
                                     ) : filteredInventory.map(item => {
                                         const expStatus = getExpiryStatus(item.expiry_date);
-                                        const isExpired = new Date(item.expiry_date) < new Date();
+                                        const isExpired = !item.is_catalog && item.expiry_date ? new Date(item.expiry_date) < new Date() : false;
                                         return (
                                             <tr key={item.batch_id} className={`hover:bg-gray-50/50 transition-colors ${isExpired ? 'opacity-50' : ''}`}>
                                                 <td className="px-5 py-4">
                                                     <span className="font-bold text-gray-700">{item.medicine_name}</span>
                                                 </td>
                                                 <td className="px-5 py-4">
-                                                    <span className="font-mono text-gray-500 text-xs bg-gray-50 px-2 py-0.5 rounded border border-gray-200">{item.batch_id}</span>
+                                                    {item.is_catalog ? (
+                                                        <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded border border-indigo-200 font-bold">Catalog</span>
+                                                    ) : (
+                                                        <span className="font-mono text-gray-500 text-xs bg-gray-50 px-2 py-0.5 rounded border border-gray-200">{item.batch_id}</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-5 py-4">
                                                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${expStatus.color}`}>
@@ -414,9 +421,13 @@ export default function PharmacyPage() {
                                                     </span>
                                                 </td>
                                                 <td className="px-5 py-4">
-                                                    <span className={`px-2 py-0.5 rounded-lg text-xs font-bold border ${item.stock_count <= 0 ? 'bg-red-50 text-red-500 border-red-200' : item.stock_count < 10 ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                                                        {item.stock_count}
-                                                    </span>
+                                                    {item.is_catalog ? (
+                                                        <span className="px-2 py-0.5 rounded-lg text-xs font-bold border bg-indigo-50 text-indigo-600 border-indigo-200">No Stock</span>
+                                                    ) : (
+                                                        <span className={`px-2 py-0.5 rounded-lg text-xs font-bold border ${item.stock_count <= 0 ? 'bg-red-50 text-red-500 border-red-200' : item.stock_count < 10 ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                                                            {item.stock_count}
+                                                        </span>
+                                                    )}
                                                 </td>
                                                 <td className="px-5 py-4">
                                                     <span className="font-bold text-gray-700">₹{item.unit_price.toFixed(2)}</span>
@@ -430,7 +441,7 @@ export default function PharmacyPage() {
                                                 <td className="px-5 py-4">
                                                     <button
                                                         onClick={() => addToCart(item)}
-                                                        disabled={item.stock_count <= 0 || isExpired}
+                                                        disabled={!item.is_catalog && (item.stock_count <= 0 || isExpired)}
                                                         className="bg-orange-50 border border-orange-200 hover:bg-orange-100 text-orange-600 p-1.5 rounded-lg transition-all disabled:opacity-20 disabled:cursor-not-allowed"
                                                     >
                                                         <Plus className="h-3.5 w-3.5" />
@@ -529,7 +540,7 @@ export default function PharmacyPage() {
                                         <div className="flex-1 min-w-0">
                                             <h4 className="text-sm font-bold text-gray-700 truncate">{item.medicine_name}</h4>
                                             <div className="flex items-center gap-2 mt-0.5">
-                                                <span className="text-[10px] text-gray-400 font-mono">{item.batch_id}</span>
+                                                <span className="text-[10px] text-gray-400 font-mono">{item.is_catalog ? 'Catalog' : item.batch_id}</span>
                                                 {item.gst_percent > 0 && (
                                                     <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold border border-blue-100">GST {item.gst_percent}%</span>
                                                 )}
