@@ -53,8 +53,17 @@ export async function getInventory() {
 
         const inventory = await db.pharmacy_batch_inventory.findMany({
             where: { current_stock: { gt: 0 } },
-            include: { medicine: true }, // Include Master Data
+            include: {
+                medicine: {
+                    select: {
+                        brand_name: true, generic_name: true, selling_price: true,
+                        price_per_unit: true, mrp: true, gst_percent: true,
+                        tax_rate: true, hsn_sac_code: true, is_active: true,
+                    }
+                }
+            },
             orderBy: { expiry_date: 'asc' },
+            take: 500,
         });
         return { success: true, data: inventory };
     } catch (error) {
@@ -401,10 +410,9 @@ export async function getPharmacyQueue() {
         // Manual Join for Patient Details (since relation is missing in schema)
         const patientIds = Array.from(new Set(orders.map((o: any) => o.patient_id))) as string[];
         const patients = await db.oPD_REG.findMany({
-            where: { patient_id: { in: patientIds } }
+            where: { patient_id: { in: patientIds } },
+            select: { patient_id: true, full_name: true, phone: true },
         });
-        
-        const balances = await getPatientBalances(patientIds);
 
         // Collect all medicine names from order items to check stock
         const allMedicineNames = Array.from(new Set(
@@ -414,7 +422,11 @@ export async function getPharmacyQueue() {
         // Fetch stock info for all medicines in these orders
         const medicines = await db.pharmacy_medicine_master.findMany({
             where: { brand_name: { in: allMedicineNames as string[] } },
-            include: { batches: { where: { current_stock: { gt: 0 } } } },
+            select: {
+                brand_name: true,
+                min_threshold: true,
+                batches: { where: { current_stock: { gt: 0 } }, select: { current_stock: true } }
+            },
         });
 
         const stockMap = new Map<string, { totalStock: number; status: 'In Stock' | 'Low Stock' | 'Out of Stock' }>();
@@ -438,7 +450,7 @@ export async function getPharmacyQueue() {
                 items: itemsWithStock,
                 patient: patients.find((p: any) => p.patient_id === order.patient_id) || null,
                 stockWarning: hasOutOfStock ? 'Out of Stock' : hasLowStock ? 'Low Stock' : null,
-                pharmacyBalance: balances[order.patient_id]?.pharmacyBalance || 0,
+                pharmacyBalance: 0,
             };
         });
 

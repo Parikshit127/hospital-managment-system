@@ -110,9 +110,10 @@ export default function PharmacyPage() {
 
     useEffect(() => {
         loadInventory();
-        const interval = setInterval(loadQueue, 5000);
         loadQueue();
         fetchBillBranding().then(r => r.success && r.data && setBranding(r.data));
+        // Poll queue every 15s instead of 5s
+        const interval = setInterval(loadQueue, 15000);
         return () => clearInterval(interval);
     }, [loadInventory, loadQueue]);
 
