@@ -99,7 +99,11 @@ export async function generateInvoice(patientId: string, items: any[]) {
                     data: { current_stock: { decrement: item.quantity } }
                 });
 
-                const unitPrice = Number(batch.medicine.selling_price) || Number(batch.medicine.price_per_unit) || 0;
+                // Use the price edited by the pharmacist in the cart (item.unit_price),
+                // falling back to the DB selling price if not provided.
+                const unitPrice = (item.unit_price !== undefined && Number(item.unit_price) > 0)
+                    ? Number(item.unit_price)
+                    : (Number(batch.medicine.selling_price) || Number(batch.medicine.price_per_unit) || 0);
                 const netPrice = unitPrice * item.quantity;
                 const taxRate = Number(batch.medicine.gst_percent) || Number(batch.medicine.tax_rate) || 0;
                 const taxAmount = netPrice * taxRate / 100;
@@ -330,8 +334,20 @@ export async function processDoctorOrder(orderId: number, paymentMethod: string 
         // 2. Map items to best available batches (FEFO)
         const dispenseItems = [];
         for (const item of order.items) {
+            // If medicine_id is missing, try to find it by name
+            let medicineId = item.medicine_id;
+            if (!medicineId) {
+                const med = await db.pharmacy_medicine_master.findFirst({
+                    where: { brand_name: { equals: item.medicine_name, mode: 'insensitive' } }
+                });
+                if (!med) {
+                    return { success: false, error: `Medicine "${item.medicine_name}" not found in inventory. Please add it first.` };
+                }
+                medicineId = med.id;
+            }
+
             const batches = await db.pharmacy_batch_inventory.findMany({
-                where: { medicine_id: item.medicine_id, current_stock: { gt: 0 } },
+                where: { medicine_id: medicineId, current_stock: { gt: 0 } },
                 orderBy: { expiry_date: 'asc' }
             });
 
@@ -348,7 +364,7 @@ export async function processDoctorOrder(orderId: number, paymentMethod: string 
 
             dispenseItems.push({
                 order_item_id: item.id,
-                medicine_id: item.medicine_id,
+                medicine_id: medicineId,
                 batch_no: batch.batch_no,
                 quantity: item.quantity_requested
             });
@@ -465,9 +481,9 @@ export async function markOrderAsPaid(orderId: number, paymentMethod: string = '
                     }
                 });
 
-                // Post payment to GL
+                // Post payment to GL (non-blocking)
                 const { postPaymentToGL } = await import('@/app/actions/gl-actions');
-                await postPaymentToGL(payment.id).catch(err =>
+                postPaymentToGL(payment.id).catch(err =>
                     console.error('GL payment posting failed:', payment.id, err)
                 );
             }
@@ -846,11 +862,11 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
 
             invoiceId = invoice.id;
 
-            // Post to GL and GST register
-            await postInvoiceToGL(invoice.id).catch(err =>
+            // Post to GL and GST register (non-blocking — don't await)
+            postInvoiceToGL(invoice.id).catch(err =>
                 console.error('GL posting failed for pharmacy invoice:', invoice.id, err)
             );
-            await syncInvoiceToGSTRegister(invoice.id).catch(err =>
+            syncInvoiceToGSTRegister(invoice.id).catch(err =>
                 console.error('GST sync failed for pharmacy invoice:', invoice.id, err)
             );
         }

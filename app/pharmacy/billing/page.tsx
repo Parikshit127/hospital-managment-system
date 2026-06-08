@@ -165,6 +165,15 @@ export default function PharmacyPage() {
         }).filter(Boolean) as CartItem[]);
     };
 
+    const updatePrice = (batchId: string, price: string) => {
+        const parsed = parseFloat(price);
+        setCart(prev => prev.map(item =>
+            item.batch_id === batchId
+                ? { ...item, unit_price: isNaN(parsed) || parsed < 0 ? 0 : parsed }
+                : item
+        ));
+    };
+
     const removeFromCart = (batchId: string) => {
         setCart(prev => prev.filter(i => i.batch_id !== batchId));
     };
@@ -528,6 +537,18 @@ export default function PharmacyPage() {
                                         <button onClick={() => removeFromCart(item.batch_id)} className="text-gray-300 hover:text-rose-400 p-1 hover:bg-rose-50 rounded transition-colors ml-2">
                                             <Trash2 className="h-3.5 w-3.5" />
                                         </button>
+                                    </div>
+                                    {/* Editable price per unit */}
+                                    <div className="flex items-center gap-1.5 mt-2">
+                                        <span className="text-[10px] text-gray-400 shrink-0">₹/unit</span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={item.unit_price}
+                                            onChange={e => updatePrice(item.batch_id, e.target.value)}
+                                            className="w-24 px-2 py-1 text-xs font-bold text-gray-700 bg-white border border-orange-200 rounded-lg focus:ring-1 focus:ring-orange-400 focus:border-orange-400 outline-none"
+                                        />
                                     </div>
                                     <div className="flex justify-between items-center mt-2">
                                         <div className="flex items-center bg-white rounded-lg border border-gray-200 p-0.5">
