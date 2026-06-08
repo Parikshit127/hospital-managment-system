@@ -7,13 +7,33 @@ function serialize<T>(d: T): T {
     typeof v === 'object' && v !== null && v?.constructor?.name === 'Decimal' ? Number(v) : v));
 }
 
+// Optional text/number fields map to nullable DB columns. Forms may submit '',
+// null, or undefined when a field is left blank — normalize them so validation
+// never rejects an empty optional value (e.g. clearing Sample Type / Unit / HSN).
+const optionalText = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
+  z.string().nullable().optional(),
+);
+const optionalNumber = z.preprocess(
+  (v) => (v === '' || v === null || v === undefined ? null : v),
+  z.number().nullable().optional(),
+);
+
+// Translate common DB errors into user-friendly messages (e.g. renaming a lab
+// test to a name that already exists hits the unique constraint).
+function toMessage(e: any, duplicateLabel = 'name'): string {
+  if (e?.code === 'P2002') return `A record with this ${duplicateLabel} already exists.`;
+  if (e?.code === 'P2025') return 'Record not found.';
+  return e?.message || 'Operation failed';
+}
+
 // ---- Generic services (IpdServiceMaster) ----
 const serviceSchema = z.object({
   service_code: z.string().min(1),
   service_name: z.string().min(1),
   service_category: z.enum(['OPD Consultation','ICU','Procedure','Room','Nursing','Diet','Consumable','Misc']),
   default_rate: z.number().nonnegative(),
-  hsn_sac_code: z.string().optional(),
+  hsn_sac_code: optionalText,
   tax_rate: z.number().nonnegative().default(0),
   is_active: z.boolean().default(true),
 });
@@ -86,12 +106,12 @@ const labTestSchema = z.object({
   test_name: z.string().min(1),
   price: z.number().nonnegative(),
   is_available: z.boolean().default(true),
-  category: z.string().optional(),
-  sample_type: z.string().optional(),
-  unit: z.string().optional(),
-  normal_range_min: z.number().optional(),
-  normal_range_max: z.number().optional(),
-  hsn_sac_code: z.string().optional(),
+  category: optionalText,
+  sample_type: optionalText,
+  unit: optionalText,
+  normal_range_min: optionalNumber,
+  normal_range_max: optionalNumber,
+  hsn_sac_code: optionalText,
   tax_rate: z.number().nonnegative().default(0),
 });
 
@@ -115,14 +135,14 @@ export async function createLabTest(input: unknown) {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
     const data = labTestSchema.parse(input);
-    const row = await db.lab_test_inventory.create({ data });
+    const row = await db.lab_test_inventory.create({ data: { ...data, organizationId } });
     await db.system_audit_logs.create({ data: {
       action: 'CREATE_LAB_TEST', module: 'master-data',
       details: `Created lab test ${data.test_name}`, organizationId,
       user_id: session.id, username: session.username, role: session.role,
     }});
     return { success: true, data: row };
-  } catch (e: any) { return { success: false, error: e.message }; }
+  } catch (e: any) { return { success: false, error: toMessage(e, 'test name') }; }
 }
 
 export async function updateLabTest(id: number, input: unknown) {
@@ -137,7 +157,7 @@ export async function updateLabTest(id: number, input: unknown) {
       user_id: session.id, username: session.username, role: session.role,
     }});
     return { success: true, data: row };
-  } catch (e: any) { return { success: false, error: e.message }; }
+  } catch (e: any) { return { success: false, error: toMessage(e, 'test name') }; }
 }
 
 // ---- Packages (IpdPackage) ----
