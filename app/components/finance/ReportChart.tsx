@@ -9,10 +9,19 @@ import { Bar, Line, Pie, Doughnut } from 'react-chartjs-2';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement, Tooltip, Legend, Filler);
 
+// Distinct hues so adjacent slices (e.g. Cash / UPI / Deposit) never blend together.
+// All kept at 0.8 alpha so the line-chart fill replace below still works.
 const PALETTE = [
-    'rgba(26, 171, 116, 0.8)', 'rgba(15, 143, 94, 0.8)', 'rgba(52, 196, 138, 0.8)',
-    'rgba(139, 92, 246, 0.7)', 'rgba(251, 146, 60, 0.7)', 'rgba(236, 72, 153, 0.7)',
-    'rgba(59, 130, 246, 0.7)', 'rgba(234, 179, 8, 0.7)',
+    'rgba(16, 185, 129, 0.8)',  // emerald
+    'rgba(59, 130, 246, 0.8)',  // blue
+    'rgba(245, 158, 11, 0.8)',  // amber
+    'rgba(139, 92, 246, 0.8)',  // violet
+    'rgba(236, 72, 153, 0.8)',  // pink
+    'rgba(20, 184, 166, 0.8)',  // teal
+    'rgba(239, 68, 68, 0.8)',   // red
+    'rgba(99, 102, 241, 0.8)',  // indigo
+    'rgba(234, 179, 8, 0.8)',   // yellow
+    'rgba(249, 115, 22, 0.8)',  // orange
 ];
 
 interface ReportChartProps {
@@ -29,8 +38,8 @@ export function ReportChart({ type, labels, datasets, height = 300 }: ReportChar
             label: ds.label,
             data: ds.data,
             backgroundColor: ds.color || (type === 'pie' || type === 'doughnut' ? PALETTE : PALETTE[i % PALETTE.length]),
-            borderColor: ds.color || PALETTE[i % PALETTE.length],
-            borderWidth: type === 'line' ? 2 : 0,
+            borderColor: type === 'pie' || type === 'doughnut' ? '#ffffff' : (ds.color || PALETTE[i % PALETTE.length]),
+            borderWidth: type === 'line' ? 2 : (type === 'pie' || type === 'doughnut' ? 2 : 0),
             borderRadius: type === 'bar' ? 6 : 0,
             tension: 0.3,
             fill: type === 'line' ? { target: 'origin', above: `${PALETTE[i % PALETTE.length].replace('0.8', '0.1')}` } : false,
