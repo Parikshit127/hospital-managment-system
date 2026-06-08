@@ -787,7 +787,8 @@ export default function PharmacyPage() {
                         {/* Third Party Pharmacy Header — bill is issued by the dispensing pharmacy, not the hospital */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #111', paddingBottom: '14px', marginBottom: '10px' }}>
                             <div>
-                                <p style={{ fontSize: '18px', fontWeight: 900, color: '#111', margin: 0 }}>Garnet Pharmaceuticals</p>
+                                <p style={{ fontSize: '20px', fontWeight: 900, color: '#111', margin: 0, letterSpacing: '0.5px' }}>Garnet Medicare</p>
+                                <p style={{ fontSize: '9px', color: '#666', marginTop: '2px', fontStyle: 'italic' }}>(Division of Garnet Pharmaceutical)</p>
                                 <p style={{ fontSize: '10px', color: '#555', marginTop: '3px' }}>B-162, East of Kailash Road, New Delhi, Delhi 110065</p>
                                 <p style={{ fontSize: '10px', color: '#555' }}>GST No.: 07AKIPA3324R1Z0</p>
                             </div>

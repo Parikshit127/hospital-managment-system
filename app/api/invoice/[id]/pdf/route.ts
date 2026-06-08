@@ -224,7 +224,8 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any
     const pharmacyHeader = [
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:14px;margin-bottom:16px;">',
         '  <div>',
-        '    <h1 style="font-size:18px;font-weight:900;margin:0;color:#111;">Garnet Pharmaceuticals</h1>',
+        '    <h1 style="font-size:20px;font-weight:900;margin:0;color:#111;letter-spacing:0.5px;">Garnet Medicare</h1>',
+        '    <p style="font-size:9px;color:#666;margin-top:2px;font-style:italic;">(Division of Garnet Pharmaceutical)</p>',
         '    <p style="font-size:10px;color:#555;margin-top:3px;">B-162, East of Kailash Road, New Delhi, Delhi 110065</p>',
         '    <p style="font-size:10px;color:#555;">GST No.: 07AKIPA3324R1Z0</p>',
         '  </div>',
