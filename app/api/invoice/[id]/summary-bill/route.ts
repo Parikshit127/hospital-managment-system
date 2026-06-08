@@ -56,6 +56,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             opdDoctor = apt?.doctor_name || invoice.patient?.department || '';
         }
 
+        // Fetch TPA/Insurance provider name if applicable
+        let tpaProviderName = '';
+        if (invoice.tpa_provider_id) {
+            const tpa = await prisma.insurance_providers.findUnique({ where: { id: invoice.tpa_provider_id } });
+            tpaProviderName = tpa?.provider_name || '';
+        }
+        if (!tpaProviderName && invoice.billing_patient_type === 'tpa_insurance') {
+            const policy = await prisma.insurance_policies.findFirst({
+                where: { patient_id: invoice.patient_id },
+                include: { provider: { select: { provider_name: true } } },
+            });
+            tpaProviderName = (policy as any)?.provider?.provider_name || '';
+        }
+
         const branding = await getBillBranding(auth.context.organizationId);
         const sections = await getBillSections(auth.context.organizationId, 'invoice');
 
@@ -71,7 +85,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             })
             : [];
 
-        const html = generateSummaryBillHTML(invoice, admission, org, deposits, branding, sections, opdDoctor);
+        const html = generateSummaryBillHTML(invoice, admission, org, deposits, branding, sections, opdDoctor, tpaProviderName);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -98,7 +112,7 @@ function numberToWords(n: number): string {
     return 'Rupees ' + convert(Math.floor(n)) + ' Only';
 }
 
-function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[], branding: BillBranding, sections: any, opdDoctor: string = '') {
+function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[], branding: BillBranding, sections: any, opdDoctor: string = '', tpaProviderName: string = '') {
     const patient = invoice.patient || {};
     const items = invoice.items || [];
 
@@ -122,6 +136,12 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
                 new Date(admission.admission_date).getTime()) / (1000 * 60 * 60 * 24)
         ));
     }
+
+    // Determine patient category from billing_patient_type
+    const billingType = invoice.billing_patient_type || 'cash';
+    let patientCategory = 'Cash / Self-Pay';
+    if (billingType === 'tpa_insurance') patientCategory = 'TPA / Insurance';
+    else if (billingType === 'corporate') patientCategory = 'Corporate';
 
     const total = Number(invoice.total_amount || 0);
     const totalDiscount = Number(invoice.total_discount || 0);
@@ -177,6 +197,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
         <p style="font-size:11px;"><strong>UHID:</strong> ${patient.patient_id || '-'}</p>
         <p style="font-size:11px;"><strong>Age/Gender:</strong> ${patient.age || '-'} / ${patient.gender || '-'}</p>
         <p style="font-size:11px;"><strong>Phone:</strong> ${patient.phone || '-'}</p>
+        <p style="font-size:11px;"><strong>Category:</strong> ${patientCategory}${tpaProviderName ? ` (${tpaProviderName})` : ''}</p>
         ${!isIPD && opdDoctor ? `<p style="font-size:11px;"><strong>Doctor:</strong> Dr. ${opdDoctor}</p>` : ''}
     `;
     if (isIPD) {

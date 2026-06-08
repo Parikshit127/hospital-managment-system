@@ -100,9 +100,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             opdDoctor = apt?.doctor_name || invoice.patient?.department || '';
         }
 
+        // Fetch TPA/Insurance provider name if applicable
+        let tpaProviderName = '';
+        if (invoice.tpa_provider_id) {
+            const tpa = await prisma.insurance_providers.findUnique({ where: { id: invoice.tpa_provider_id } });
+            tpaProviderName = tpa?.provider_name || '';
+        }
+        if (!tpaProviderName && invoice.billing_patient_type === 'tpa_insurance') {
+            const policy = await prisma.insurance_policies.findFirst({
+                where: { patient_id: invoice.patient_id },
+                include: { provider: { select: { provider_name: true } } },
+            });
+            tpaProviderName = (policy as any)?.provider?.provider_name || '';
+        }
+
         const branding = await getBillBranding(organizationId!);
         const sections = await getBillSections(organizationId!, 'invoice');
-        const html = generateInvoiceHTML(invoice, branding, sections, opdDoctor)
+        const html = generateInvoiceHTML(invoice, branding, sections, opdDoctor, tpaProviderName)
 
         // Return HTML for browser viewing (works for both API key and regular auth)
         return new NextResponse(html, {
@@ -136,7 +150,7 @@ function numberToWords(n: number): string {
     return result + ' Only';
 }
 
-function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any, opdDoctor: string = '') {
+function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any, opdDoctor: string = '', tpaProviderName: string = '') {
     const items = invoice.items || []
     const payments = invoice.payments || []
     const creditNotes = (invoice as any).credit_notes || []
@@ -157,6 +171,12 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any
     const isIPD = !!admission
     const billType = isIPD ? 'Bill' : 'Bill'
     const gstin = branding.gstin
+
+    // Determine patient category from billing_patient_type
+    const billingType = invoice.billing_patient_type || 'cash'
+    let patientCategory = 'Cash / Self-Pay'
+    if (billingType === 'tpa_insurance') patientCategory = 'TPA / Insurance'
+    else if (billingType === 'corporate') patientCategory = 'Corporate'
 
     // Group items by service_category
     const categoryMap: Record<string, any[]> = {}
@@ -284,7 +304,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any
                             const t = String((invoice as any).billing_patient_type || (patient as any).patient_type || 'cash').toLowerCase();
                             if (t === 'corporate') return 'CORPORATE';
                             if (t === 'tpa_insurance' || t === 'insurance' || t === 'tpa') return 'INSURANCE / TPA';
-                            return 'PAYING';
+                            return '${patientCategory}${tpaProviderName ? ` (${tpaProviderName})` : ''}';
                         })()}</p>
                     </div>
                     <div style="text-align:center;">
