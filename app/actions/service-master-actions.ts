@@ -164,11 +164,11 @@ export async function updateLabTest(id: number, input: unknown) {
 const packageSchema = z.object({
   package_code: z.string().min(1),
   package_name: z.string().min(1),
-  description: z.string().optional(),
+  description: z.string().nullish(),
   total_amount: z.number().nonnegative(),
   validity_days: z.number().int().positive().default(7),
   inclusions: z.array(z.object({ service_id: z.number().optional(), name: z.string(), qty: z.number().default(1), amount: z.number().optional() })).default([]),
-  exclusions: z.string().optional(),
+  exclusions: z.string().nullish(),
   is_active: z.boolean().default(true),
 });
 
