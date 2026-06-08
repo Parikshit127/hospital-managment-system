@@ -5,7 +5,7 @@ import { validateZealthixApiKey } from '@/app/lib/zealthix/auth'
 import { getBillBranding, inlineHeaderHtml, billFooterHtml, letterheadBackgroundHtml, letterheadCss, printButtonHtml, type BillBranding } from '@/app/lib/bill-branding'
 import { getBillSections } from '@/app/lib/bill-sections'
 
-const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager'];
+const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager', 'pharmacy', 'pharmacist', 'nurse'];
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -218,6 +218,37 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any
         <td style="padding:4px 8px;font-size:11px;text-align:right;border-bottom:1px solid #eee;">${Number(p.amount).toFixed(2)}</td>
     </tr>`).join('')
 
+    const isPharmacyBill = invoice.invoice_type === 'PHARMACY';
+
+    // ── Pharmacy bills: show only the dispensing pharmacy header, no hospital branding ──
+    const pharmacyHeader = [
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:14px;margin-bottom:16px;">',
+        '  <div>',
+        '    <h1 style="font-size:18px;font-weight:900;margin:0;color:#111;">Garnet Pharmaceuticals</h1>',
+        '    <p style="font-size:10px;color:#555;margin-top:3px;">B-162, East of Kailash Road, New Delhi, Delhi 110065</p>',
+        '    <p style="font-size:10px;color:#555;">GST No.: 07AKIPA3324R1Z0</p>',
+        '  </div>',
+        '  <div style="text-align:right;">',
+        '    <p style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;">Pharmacy Invoice</p>',
+        '    <p style="font-size:10px;margin-top:3px;">' + invoice.invoice_number + '</p>',
+        '  </div>',
+        '</div>',
+    ].join('\n');
+
+    // ── Non-pharmacy bills: show hospital header ──
+    const hospitalHeaderHtml = branding.letterheadUrl ? '' : [
+        '<div style="text-align:center;margin-bottom:8px;">',
+        branding.logoUrl ? '<img src="' + branding.logoUrl + '" alt="" style="height:50px;margin-bottom:4px;" />' : '',
+        '<h1 style="font-size:15px;font-weight:bold;margin:0;">' + branding.hospitalName + (branding.tagline ? ' - ' + branding.tagline : '') + '</h1>',
+        gstin !== 'N/A' ? '<p style="font-size:10px;">GST NO.-' + gstin + '</p>' : '',
+        '<p style="font-size:10px;">' + branding.hospitalAddress + '</p>',
+        branding.hospitalPhone ? '<p style="font-size:10px;">Ph: ' + branding.hospitalPhone + (branding.hospitalEmail ? ' | Email: ' + branding.hospitalEmail : '') + '</p>' : '',
+        '</div>',
+        '<hr style="border:none;border-top:2px solid #000;margin:6px 0 10px 0;" />',
+    ].join('\n');
+
+    const hospitalBillTitle = '<div style="text-align:center;margin-bottom:12px;"><h2 style="font-size:14px;font-weight:bold;border-bottom:1px solid #999;display:inline-block;padding-bottom:2px;">' + billType + '</h2></div>';
+
     return `<!DOCTYPE html>
 <html>
 <head>
@@ -226,43 +257,17 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; color: #000; background: #fff; font-size: 11px; }
-        ${letterheadCss(branding)}
+        ${isPharmacyBill ? `.bill-container { max-width: 800px; margin: 0 auto; padding: 40px 60px; }` : letterheadCss(branding)}
     </style>
 </head>
 <body>
-    ${letterheadBackgroundHtml(branding)}
+    ${isPharmacyBill ? '' : letterheadBackgroundHtml(branding)}
     ${printButtonHtml(branding, 'Detailed bill for ' + invoice.invoice_number)}
 
-    <table class="print-layout-table">
-        <thead><tr><td class="print-layout-header-spacer"></td></tr></thead>
-        <tbody><tr><td>
+    ${isPharmacyBill ? '<div>' : '<table class="print-layout-table"><thead><tr><td class="print-layout-header-spacer"></td></tr></thead><tbody><tr><td>'}
             <div class="bill-container">
 
-                <!-- Hospital Header (shown when no letterhead) -->
-                ${!branding.letterheadUrl ? `
-                <div style="text-align:center;margin-bottom:8px;">
-                    ${branding.logoUrl ? `<img src="${branding.logoUrl}" alt="" style="height:50px;margin-bottom:4px;" />` : ''}
-                    <h1 style="font-size:15px;font-weight:bold;margin:0;">${branding.hospitalName}${branding.tagline ? ` - ${branding.tagline}` : ''}</h1>
-                    ${gstin !== 'N/A' ? `<p style="font-size:10px;">GST NO.-${gstin}</p>` : ''}
-                    <p style="font-size:10px;">${branding.hospitalAddress}</p>
-                    ${branding.hospitalPhone ? `<p style="font-size:10px;">Ph: ${branding.hospitalPhone}${branding.hospitalEmail ? ` | Email: ${branding.hospitalEmail}` : ''}</p>` : ''}
-                </div>
-                <hr style="border:none;border-top:2px solid #000;margin:6px 0 10px 0;" />
-                ` : ''}
-
-                <!-- Bill Title -->
-                <div style="text-align:center;margin-bottom:12px;">
-                    <h2 style="font-size:14px;font-weight:bold;border-bottom:1px solid #999;display:inline-block;padding-bottom:2px;">${billType}</h2>
-                </div>
-
-                ${invoice.invoice_type === 'PHARMACY' ? `
-                <!-- Third Party Pharmacy Details -->
-                <div style="background:#f9f9f9;border:1px solid #ddd;border-radius:4px;padding:8px 12px;margin-bottom:10px;">
-                    <p style="font-size:11px;font-weight:bold;margin-bottom:2px;">Dispensed by: Garnet Pharmaceuticals</p>
-                    <p style="font-size:10px;color:#444;">B-162, East of Kailash Road, New Delhi, Delhi 110065</p>
-                    <p style="font-size:10px;color:#444;">GST No.: 07AKIPA3324R1Z0</p>
-                </div>
-                ` : ''}
+                ${isPharmacyBill ? pharmacyHeader : hospitalHeaderHtml + hospitalBillTitle}
 
                 ${(() => {
                     const corp = (patient as any).corporate;
@@ -373,9 +378,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any
                 <!-- Signature Footer -->
                 ${billFooterHtml(branding)}
             </div>
-        </td></tr></tbody>
-        <tfoot><tr><td class="print-layout-footer-spacer"></td></tr></tfoot>
-    </table>
+        ${isPharmacyBill ? '</div>' : '</td></tr></tbody><tfoot><tr><td class="print-layout-footer-spacer"></td></tr></tfoot></table>'}
 </body>
 </html>`
 }

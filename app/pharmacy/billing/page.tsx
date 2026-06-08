@@ -746,31 +746,23 @@ export default function PharmacyPage() {
 
             {/* PRINT-ONLY FULL PAGE — shown only when printing pharmacy invoice */}
             {invoiceResult && (
-                <div className="pharmacy-print-view" style={{ display: 'none', position: 'relative' }}>
-                    {/* Full letterhead as background — header + watermark + footer */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={branding?.letterheadUrl || '/letter head.png'} alt="" aria-hidden="true" style={{
-                        position: 'absolute', top: 0, left: 0,
-                        width: '100%', height: '100%',
-                        objectFit: 'fill',
-                        zIndex: 0, pointerEvents: 'none',
-                    }} />
-                    {/* Content on top */}
-                    <div style={{ position: 'relative', zIndex: 1, padding: '130px 60px 80px 60px' }}>
+                <div className="pharmacy-print-view" style={{ display: 'none' }}>
+                    {/* No hospital letterhead — pharmacy bills show only the dispensing pharmacy header */}
+                    <div style={{ padding: '40px 60px 60px 60px' }}>
                     <div className="max-w-2xl mx-auto space-y-4">
-                        <div className="flex justify-end border-b border-gray-300 pb-3">
-                            <div className="text-right">
-                                <p className="text-xs font-black uppercase tracking-widest" style={{ color: branding?.accentColor || '#1e3a6e' }}>Pharmacy Invoice</p>
+
+                        {/* Third Party Pharmacy Header — bill is issued by the dispensing pharmacy, not the hospital */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #111', paddingBottom: '14px', marginBottom: '10px' }}>
+                            <div>
+                                <p style={{ fontSize: '18px', fontWeight: 900, color: '#111', margin: 0 }}>Garnet Pharmaceuticals</p>
+                                <p style={{ fontSize: '10px', color: '#555', marginTop: '3px' }}>B-162, East of Kailash Road, New Delhi, Delhi 110065</p>
+                                <p style={{ fontSize: '10px', color: '#555' }}>GST No.: 07AKIPA3324R1Z0</p>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                                <p className="text-xs font-black uppercase tracking-widest" style={{ color: '#111' }}>Pharmacy Invoice</p>
                                 <p className="text-xs font-mono text-gray-600 mt-0.5">{invoiceResult.invoice_number}</p>
                                 <p className="text-xs text-gray-500">{new Date().toLocaleDateString('en-IN')}</p>
                             </div>
-                        </div>
-
-                        {/* Third Party Pharmacy Details */}
-                        <div style={{ background: '#f9f9f9', border: '1px solid #e5e7eb', borderRadius: '4px', padding: '8px 12px', marginBottom: '8px' }}>
-                            <p className="text-xs font-black text-gray-800">Dispensed by: Garnet Pharmaceuticals</p>
-                            <p className="text-[10px] text-gray-500 mt-0.5">B-162, East of Kailash Road, New Delhi, Delhi 110065</p>
-                            <p className="text-[10px] text-gray-500">GST No.: 07AKIPA3324R1Z0</p>
                         </div>
                         <div className="grid grid-cols-2 gap-4 text-sm">
                             <div><span className="text-gray-500">Patient:</span> <span className="font-bold">{patientId}</span></div>
