@@ -14,15 +14,19 @@ import {
   Building2,
   CreditCard,
 } from 'lucide-react';
-import { getCorporateMasters } from '@/app/actions/patient-type-actions';
+import { getCorporateMasters, getTpaProviders } from '@/app/actions/patient-type-actions';
+import { addPatientPolicy, updatePatientPolicy, deletePatientPolicy } from '@/app/actions/insurance-actions';
+import { Plus, Pencil, Trash2, Check, X as XIcon } from 'lucide-react';
 
 interface OverviewTabProps {
   patient: any;
+  patientId?: string;
   insurancePolicies: any[];
   pillReminders: any[];
   isEditing?: boolean;
   draft?: Record<string, string>;
   onDraftChange?: (field: string, value: string) => void;
+  onPolicyChanged?: () => void;
 }
 
 // Reusable read-or-input cell used in edit mode.
@@ -99,7 +103,7 @@ const fmtDate = (v?: string | Date | null) => {
   });
 };
 
-export default function OverviewTab({ patient, insurancePolicies, pillReminders, isEditing = false, draft, onDraftChange }: OverviewTabProps) {
+export default function OverviewTab({ patient, patientId, insurancePolicies, pillReminders, isEditing = false, draft, onDraftChange, onPolicyChanged }: OverviewTabProps) {
   const bloodGroupColor = (bg?: string) => {
     if (!bg) return 'bg-gray-100 text-gray-600 border-gray-200';
     return 'bg-rose-50 text-rose-700 border-rose-200';
@@ -109,10 +113,90 @@ export default function OverviewTab({ patient, insurancePolicies, pillReminders,
 
   // Load corporate list on mount when editing (so it's instant when user opens edit mode)
   const [corporates, setCorporates] = useState<any[]>([]);
+  const [tpaProviders, setTpaProviders] = useState<any[]>([]);
   useEffect(() => {
     if (!isEditing) return;
     getCorporateMasters().then(r => { if (r.success) setCorporates(r.data as any[]); });
+    getTpaProviders().then(r => { if (r.success) setTpaProviders(r.data as any[]); });
   }, [isEditing]);
+
+  // Policy add/edit state
+  const blankPolicyForm = {
+    provider_id: '',
+    policy_number: '',
+    policy_holder: '',
+    plan_name: '',
+    coverage_limit: '',
+    valid_from: '',
+    valid_until: '',
+  };
+  const [editingPolicyId, setEditingPolicyId] = useState<number | null>(null);
+  const [showAddPolicy, setShowAddPolicy] = useState(false);
+  const [policyForm, setPolicyForm] = useState(blankPolicyForm);
+  const [policyBusy, setPolicyBusy] = useState(false);
+
+  function startAddPolicy() {
+    setEditingPolicyId(null);
+    setPolicyForm(blankPolicyForm);
+    setShowAddPolicy(true);
+  }
+  function startEditPolicy(p: any) {
+    setShowAddPolicy(false);
+    setEditingPolicyId(p.id);
+    setPolicyForm({
+      provider_id: String(p.provider_id ?? ''),
+      policy_number: p.policy_number ?? '',
+      policy_holder: p.policy_holder ?? '',
+      plan_name: p.plan_name ?? '',
+      coverage_limit: String(p.coverage_limit ?? ''),
+      valid_from: p.valid_from ? new Date(p.valid_from).toISOString().slice(0, 10) : '',
+      valid_until: p.valid_until ? new Date(p.valid_until).toISOString().slice(0, 10) : '',
+    });
+  }
+  function cancelPolicyEdit() {
+    setShowAddPolicy(false);
+    setEditingPolicyId(null);
+    setPolicyForm(blankPolicyForm);
+  }
+  async function savePolicy() {
+    if (!patientId) return;
+    if (!policyForm.provider_id || !policyForm.policy_number || !policyForm.coverage_limit || !policyForm.valid_from || !policyForm.valid_until) {
+      alert('Provider, policy number, coverage limit, valid from and valid until are required');
+      return;
+    }
+    setPolicyBusy(true);
+    const payload = {
+      patient_id: patientId,
+      provider_id: Number(policyForm.provider_id),
+      policy_number: policyForm.policy_number.trim(),
+      policy_holder: policyForm.policy_holder.trim() || undefined,
+      plan_name: policyForm.plan_name.trim() || undefined,
+      coverage_limit: Number(policyForm.coverage_limit),
+      valid_from: policyForm.valid_from,
+      valid_until: policyForm.valid_until,
+    };
+    const res = editingPolicyId
+      ? await updatePatientPolicy(editingPolicyId, payload)
+      : await addPatientPolicy(payload);
+    setPolicyBusy(false);
+    if (res.success) {
+      cancelPolicyEdit();
+      onPolicyChanged?.();
+    } else {
+      alert(res.error || 'Failed to save policy');
+    }
+  }
+  async function removePolicy(id: number) {
+    if (!confirm('Delete this insurance policy? If claims exist it will be deactivated, otherwise permanently removed.')) return;
+    setPolicyBusy(true);
+    const res = await deletePatientPolicy(id);
+    setPolicyBusy(false);
+    if (res.success) {
+      onPolicyChanged?.();
+    } else {
+      alert(res.error || 'Failed to delete policy');
+    }
+  }
 
   const currentPatientType = (draft?.patient_type ?? patient.patient_type ?? 'cash').toLowerCase();
   const selectedCorpId = draft?.corporate_id ?? patient.corporate_id ?? '';
@@ -404,10 +488,110 @@ export default function OverviewTab({ patient, insurancePolicies, pillReminders,
 
         {/* Insurance Policies */}
         <div className="bg-white border border-gray-200 rounded-2xl p-5">
-          <h3 className="font-black text-gray-800 text-lg mb-4 flex items-center gap-2">
-            <Shield className="h-5 w-5 text-blue-600" />
-            Insurance Policies
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-black text-gray-800 text-lg flex items-center gap-2">
+              <Shield className="h-5 w-5 text-blue-600" />
+              Insurance Policies
+            </h3>
+            {isEditing && (
+              <button
+                onClick={startAddPolicy}
+                disabled={policyBusy}
+                className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+              >
+                <Plus className="h-3 w-3" /> Add Policy
+              </button>
+            )}
+          </div>
+
+          {/* Add/Edit form */}
+          {isEditing && (showAddPolicy || editingPolicyId !== null) && (
+            <div className="bg-emerald-50/40 border border-emerald-200 rounded-xl p-3 mb-3 space-y-2">
+              <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wide">
+                {editingPolicyId ? 'Edit Policy' : 'Add New Policy'}
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="col-span-2">
+                  <label className="text-[10px] font-bold text-gray-500 block mb-0.5">TPA / Insurance Provider *</label>
+                  <select
+                    value={policyForm.provider_id}
+                    onChange={e => setPolicyForm({ ...policyForm, provider_id: e.target.value })}
+                    className="w-full text-sm bg-white border border-gray-200 rounded-md px-2 py-1"
+                  >
+                    <option value="">— Select Provider —</option>
+                    {tpaProviders.map((p: any) => (
+                      <option key={p.id} value={p.id}>{p.provider_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Policy Number *</label>
+                  <input
+                    value={policyForm.policy_number}
+                    onChange={e => setPolicyForm({ ...policyForm, policy_number: e.target.value })}
+                    placeholder="POL-12345"
+                    className="w-full text-sm bg-white border border-gray-200 rounded-md px-2 py-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Policy Holder</label>
+                  <input
+                    value={policyForm.policy_holder}
+                    onChange={e => setPolicyForm({ ...policyForm, policy_holder: e.target.value })}
+                    placeholder="Self / Spouse / …"
+                    className="w-full text-sm bg-white border border-gray-200 rounded-md px-2 py-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Plan Name</label>
+                  <input
+                    value={policyForm.plan_name}
+                    onChange={e => setPolicyForm({ ...policyForm, plan_name: e.target.value })}
+                    placeholder="Gold / Silver / …"
+                    className="w-full text-sm bg-white border border-gray-200 rounded-md px-2 py-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Coverage Limit (₹) *</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={policyForm.coverage_limit}
+                    onChange={e => setPolicyForm({ ...policyForm, coverage_limit: e.target.value })}
+                    placeholder="500000"
+                    className="w-full text-sm bg-white border border-gray-200 rounded-md px-2 py-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Valid From *</label>
+                  <input
+                    type="date"
+                    value={policyForm.valid_from}
+                    onChange={e => setPolicyForm({ ...policyForm, valid_from: e.target.value })}
+                    className="w-full text-sm bg-white border border-gray-200 rounded-md px-2 py-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Valid Until *</label>
+                  <input
+                    type="date"
+                    value={policyForm.valid_until}
+                    onChange={e => setPolicyForm({ ...policyForm, valid_until: e.target.value })}
+                    className="w-full text-sm bg-white border border-gray-200 rounded-md px-2 py-1"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button onClick={cancelPolicyEdit} disabled={policyBusy} className="px-3 py-1 text-[11px] font-bold text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 disabled:opacity-50">
+                  Cancel
+                </button>
+                <button onClick={savePolicy} disabled={policyBusy} className="px-3 py-1 text-[11px] font-bold text-white bg-emerald-600 rounded-md hover:bg-emerald-700 disabled:opacity-50">
+                  {policyBusy ? 'Saving…' : (editingPolicyId ? 'Update Policy' : 'Add Policy')}
+                </button>
+              </div>
+            </div>
+          )}
+
           {insurancePolicies.length > 0 ? (
             <div className="space-y-4">
               {insurancePolicies.map((policy: any, idx: number) => {
@@ -429,11 +613,33 @@ export default function OverviewTab({ patient, insurancePolicies, pillReminders,
                       <p className="text-sm font-bold text-gray-800">
                         {policy.provider?.provider_name || 'Unknown Provider'}
                       </p>
-                      <span
-                        className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusCls}`}
-                      >
-                        {policy.status || 'Unknown'}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusCls}`}
+                        >
+                          {policy.status || 'Unknown'}
+                        </span>
+                        {isEditing && (
+                          <>
+                            <button
+                              onClick={() => startEditPolicy(policy)}
+                              disabled={policyBusy}
+                              title="Edit policy"
+                              className="p-1 rounded hover:bg-blue-50 text-blue-600 disabled:opacity-40"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            <button
+                              onClick={() => removePolicy(policy.id)}
+                              disabled={policyBusy}
+                              title="Delete policy"
+                              className="p-1 rounded hover:bg-rose-50 text-rose-600 disabled:opacity-40"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
                       <div>

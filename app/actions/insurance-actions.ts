@@ -142,7 +142,7 @@ export async function addPatientPolicy(data: {
     valid_until: string;
 }) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
         const policy = await db.insurance_policies.create({
             data: {
                 patient_id: data.patient_id,
@@ -155,6 +155,7 @@ export async function addPatientPolicy(data: {
                 valid_from: new Date(data.valid_from),
                 valid_until: new Date(data.valid_until),
                 status: 'Active',
+                organizationId,
             },
         });
 
@@ -165,12 +166,102 @@ export async function addPatientPolicy(data: {
                 entity_type: 'policy',
                 entity_id: data.policy_number,
                 details: JSON.stringify({ patient_id: data.patient_id, provider_id: data.provider_id }),
+                organizationId,
             },
         });
 
         return { success: true, data: serialize(policy) };
     } catch (error: any) {
         console.error('addPatientPolicy error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function updatePatientPolicy(id: number, data: {
+    provider_id?: number;
+    policy_number?: string;
+    policy_holder?: string | null;
+    plan_name?: string | null;
+    coverage_limit?: number;
+    valid_from?: string;
+    valid_until?: string;
+    status?: string;
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        // Verify policy belongs to this tenant
+        const existing = await db.insurance_policies.findFirst({ where: { id, organizationId } });
+        if (!existing) return { success: false, error: 'Policy not found' };
+
+        const updateData: any = {};
+        if (data.provider_id !== undefined) updateData.provider_id = data.provider_id;
+        if (data.policy_number !== undefined) updateData.policy_number = data.policy_number;
+        if (data.policy_holder !== undefined) updateData.policy_holder = data.policy_holder || null;
+        if (data.plan_name !== undefined) updateData.plan_name = data.plan_name || null;
+        if (data.coverage_limit !== undefined) updateData.coverage_limit = data.coverage_limit;
+        if (data.valid_from !== undefined) updateData.valid_from = new Date(data.valid_from);
+        if (data.valid_until !== undefined) updateData.valid_until = new Date(data.valid_until);
+        if (data.status !== undefined) updateData.status = data.status;
+
+        const policy = await db.insurance_policies.update({ where: { id }, data: updateData });
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'UPDATE_INSURANCE_POLICY',
+                module: 'insurance',
+                entity_type: 'policy',
+                entity_id: String(id),
+                details: JSON.stringify({ fields: Object.keys(updateData) }),
+                organizationId,
+            },
+        });
+
+        return { success: true, data: serialize(policy) };
+    } catch (error: any) {
+        console.error('updatePatientPolicy error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function deletePatientPolicy(id: number) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const existing = await db.insurance_policies.findFirst({
+            where: { id, organizationId },
+            include: { claims: { take: 1 } },
+        });
+        if (!existing) return { success: false, error: 'Policy not found' };
+
+        // Refuse if claims exist — soft-deactivate instead so claim history survives
+        if (existing.claims.length > 0) {
+            await db.insurance_policies.update({ where: { id }, data: { status: 'Inactive' } });
+            await db.system_audit_logs.create({
+                data: {
+                    action: 'DEACTIVATE_INSURANCE_POLICY',
+                    module: 'insurance',
+                    entity_type: 'policy',
+                    entity_id: String(id),
+                    details: 'Soft-deactivated (claims exist)',
+                    organizationId,
+                },
+            });
+            return { success: true, deactivated: true };
+        }
+
+        await db.insurance_policies.delete({ where: { id } });
+        await db.system_audit_logs.create({
+            data: {
+                action: 'DELETE_INSURANCE_POLICY',
+                module: 'insurance',
+                entity_type: 'policy',
+                entity_id: String(id),
+                details: JSON.stringify({ policy_number: existing.policy_number }),
+                organizationId,
+            },
+        });
+        return { success: true, deactivated: false };
+    } catch (error: any) {
+        console.error('deletePatientPolicy error:', error);
         return { success: false, error: error.message };
     }
 }

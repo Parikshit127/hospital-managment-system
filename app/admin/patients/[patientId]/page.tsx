@@ -414,11 +414,13 @@ export default function AdminPatientDetailsPage() {
                 {activeTab === "overview" && (
                   <OverviewTab
                     patient={patient}
+                    patientId={patientId}
                     insurancePolicies={data.insurancePolicies || []}
                     pillReminders={data.pillReminders || []}
                     isEditing={isEditing}
                     draft={draft}
                     onDraftChange={(field, value) => setDraft(prev => ({ ...prev, [field]: value }))}
+                    onPolicyChanged={loadData}
                   />
                 )}
                 {activeTab === "opd" && (
