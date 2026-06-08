@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   User,
   Phone,
@@ -11,7 +11,10 @@ import {
   Shield,
   Pill,
   Clock,
+  Building2,
+  CreditCard,
 } from 'lucide-react';
+import { getCorporateMasters } from '@/app/actions/patient-type-actions';
 
 interface OverviewTabProps {
   patient: any;
@@ -104,6 +107,28 @@ export default function OverviewTab({ patient, insurancePolicies, pillReminders,
 
   const activeReminders = pillReminders.filter((r: any) => r.status === 'Active');
 
+  // Load corporate list on mount when editing (so it's instant when user opens edit mode)
+  const [corporates, setCorporates] = useState<any[]>([]);
+  useEffect(() => {
+    if (!isEditing) return;
+    getCorporateMasters().then(r => { if (r.success) setCorporates(r.data as any[]); });
+  }, [isEditing]);
+
+  const currentPatientType = (draft?.patient_type ?? patient.patient_type ?? 'cash').toLowerCase();
+  const selectedCorpId = draft?.corporate_id ?? patient.corporate_id ?? '';
+  const selectedCorp = corporates.find(c => c.id === selectedCorpId) || patient.corporate;
+
+  const patientTypeLabel = (t: string) => {
+    if (t === 'corporate') return 'Corporate';
+    if (t === 'tpa_insurance') return 'TPA / Insurance';
+    return 'Cash / Self-Pay';
+  };
+  const patientTypeBadgeCls = (t: string) => {
+    if (t === 'corporate') return 'bg-blue-50 text-blue-700 border-blue-200';
+    if (t === 'tpa_insurance') return 'bg-amber-50 text-amber-700 border-amber-200';
+    return 'bg-gray-100 text-gray-600 border-gray-200';
+  };
+
   // Shortcut: render an EditableField with shared props
   const F = (props: Omit<React.ComponentProps<typeof EditableField>, 'isEditing' | 'draft' | 'onChange'>) => (
     <EditableField {...props} isEditing={isEditing} draft={draft} onChange={onDraftChange} />
@@ -192,6 +217,128 @@ export default function OverviewTab({ patient, insurancePolicies, pillReminders,
             <F label="Phone" field="emergency_contact_phone" value={patient.emergency_contact_phone || 'N/A'} placeholder="10-digit mobile" />
             <F label="Relation" field="emergency_contact_relation" value={patient.emergency_contact_relation || 'N/A'} placeholder="Spouse / Parent / Sibling" />
           </div>
+        </div>
+
+        {/* Billing / Payer */}
+        <div className="bg-white border border-gray-200 rounded-2xl p-5">
+          <h3 className="font-black text-gray-800 text-lg mb-4 flex items-center gap-2">
+            <CreditCard className="h-5 w-5 text-blue-600" />
+            Billing / Payer
+          </h3>
+          {isEditing ? (
+            <div className="space-y-3">
+              <div className="bg-emerald-50/40 border border-emerald-200 rounded-xl p-3">
+                <label className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide block mb-1">Patient Type</label>
+                <select
+                  value={draft?.patient_type ?? 'cash'}
+                  onChange={e => {
+                    const v = e.target.value;
+                    onDraftChange?.('patient_type', v);
+                    // Clear corporate fields when switching away from corporate
+                    if (v !== 'corporate') {
+                      onDraftChange?.('corporate_id', '');
+                      onDraftChange?.('corporate_card_number', '');
+                      onDraftChange?.('employee_id', '');
+                    }
+                  }}
+                  className="w-full text-sm font-semibold text-gray-800 bg-white border border-gray-200 rounded-md px-2 py-1"
+                >
+                  <option value="cash">Cash / Self-Pay</option>
+                  <option value="corporate">Corporate</option>
+                  <option value="tpa_insurance">TPA / Insurance</option>
+                </select>
+              </div>
+
+              {/* Corporate fields — show when type is corporate */}
+              {currentPatientType === 'corporate' && (
+                <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-3 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-3.5 w-3.5 text-blue-500" />
+                    <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wide">Corporate Details</span>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-blue-700 uppercase tracking-wide block mb-1">Company *</label>
+                    <select
+                      value={draft?.corporate_id ?? ''}
+                      onChange={e => onDraftChange?.('corporate_id', e.target.value)}
+                      className="w-full text-sm font-semibold text-gray-800 bg-white border border-gray-200 rounded-md px-2 py-1"
+                    >
+                      <option value="">— Select Company —</option>
+                      {corporates.map(c => (
+                        <option key={c.id} value={c.id}>{c.company_name} ({c.company_code})</option>
+                      ))}
+                    </select>
+                    {selectedCorp && (
+                      <p className="text-[10px] text-blue-600 font-bold ml-1 mt-1">
+                        Discount: {Number(selectedCorp.discount_percentage || 0)}%
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-blue-700 uppercase tracking-wide block mb-1">Employee ID</label>
+                    <input
+                      value={draft?.employee_id ?? ''}
+                      onChange={e => onDraftChange?.('employee_id', e.target.value)}
+                      placeholder="EMP-001"
+                      className="w-full text-sm font-semibold text-gray-800 bg-white border border-gray-200 rounded-md px-2 py-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-blue-700 uppercase tracking-wide block mb-1">Corporate Card Number</label>
+                    <input
+                      value={draft?.corporate_card_number ?? ''}
+                      onChange={e => onDraftChange?.('corporate_card_number', e.target.value)}
+                      placeholder="Card / ID number (optional)"
+                      className="w-full text-sm font-semibold text-gray-800 bg-white border border-gray-200 rounded-md px-2 py-1"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* TPA — read-only note, edit via Insurance Policies section below */}
+              {currentPatientType === 'tpa_insurance' && (
+                <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3">
+                  <p className="text-[11px] text-amber-700 font-semibold">
+                    Patient flagged as TPA / Insurance. Manage policy details (provider, policy number, validity) via the Insurance Policies section on the right — edit individual policies there.
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Patient Type</p>
+                  <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-xs font-bold border ${patientTypeBadgeCls(currentPatientType)}`}>
+                    {patientTypeLabel(currentPatientType)}
+                  </span>
+                </div>
+              </div>
+              {patient.corporate && (
+                <>
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Corporate Company</p>
+                    <p className="text-sm font-semibold text-gray-800 mt-0.5">
+                      {patient.corporate.company_name} {patient.corporate.company_code ? `(${patient.corporate.company_code})` : ''}
+                    </p>
+                    {patient.corporate.discount_percentage != null && (
+                      <p className="text-[10px] text-blue-600 font-bold mt-0.5">Discount: {Number(patient.corporate.discount_percentage)}%</p>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Employee ID</p>
+                      <p className="text-sm font-semibold text-gray-800 mt-0.5">{patient.employee_id || 'N/A'}</p>
+                    </div>
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Card Number</p>
+                      <p className="text-sm font-semibold text-gray-800 mt-0.5">{patient.corporate_card_number || 'N/A'}</p>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

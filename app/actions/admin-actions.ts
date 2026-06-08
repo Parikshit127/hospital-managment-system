@@ -1063,7 +1063,10 @@ export async function getAdminPatientFullDetails(patientId: string) {
       followUps,
       pillReminders,
     ] = await Promise.all([
-      db.oPD_REG.findUnique({ where: { patient_id: patientId } }),
+      db.oPD_REG.findUnique({
+        where: { patient_id: patientId },
+        include: { corporate: { select: { id: true, company_name: true, company_code: true, discount_percentage: true } } },
+      }),
 
       db.appointments.findMany({
         where: { patient_id: patientId },

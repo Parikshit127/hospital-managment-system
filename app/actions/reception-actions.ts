@@ -283,6 +283,8 @@ export async function updatePatient(patientId: string, payload: Record<string, s
             'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relation',
             'aadhar_card', 'abha_number', 'pan_number',
             'allergies', 'chronic_conditions',
+            // Billing / payer
+            'patient_type', 'corporate_id', 'corporate_card_number', 'employee_id',
         ];
 
         const data: Record<string, string | null> = {};

@@ -105,6 +105,11 @@ export default function AdminPatientDetailsPage() {
       emergency_contact_relation: p.emergency_contact_relation ?? '',
       allergies: p.allergies ?? '',
       chronic_conditions: p.chronic_conditions ?? '',
+      // Billing / payer
+      patient_type: p.patient_type ?? 'cash',
+      corporate_id: p.corporate_id ?? '',
+      corporate_card_number: p.corporate_card_number ?? '',
+      employee_id: p.employee_id ?? '',
     });
     setIsEditing(true);
   };
