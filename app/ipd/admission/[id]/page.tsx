@@ -133,6 +133,7 @@ export default function AdmissionDetailPage() {
     const [packages, setPackages] = useState<any[]>([]);
     const [pkgSearch, setPkgSearch] = useState('');
     const [showPkgDropdown, setShowPkgDropdown] = useState(false);
+    const [selectedPkgId, setSelectedPkgId] = useState<number | null>(null);
 
     // Transfer
     const [showTransfer, setShowTransfer] = useState(false);
@@ -1679,7 +1680,7 @@ export default function AdmissionDetailPage() {
                                                         className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${chargeMode === 'service' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-800'}`}>
                                                         Service
                                                     </button>
-                                                    <button type="button" onClick={() => { setChargeMode('package'); setChargeDesc(''); setChargeRate(''); setPkgSearch(''); }}
+                                                    <button type="button" onClick={() => { setChargeMode('package'); setChargeDesc(''); setChargeRate(''); setPkgSearch(''); setSelectedPkgId(null); }}
                                                         className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${chargeMode === 'package' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-800'}`}>
                                                         Package
                                                     </button>
@@ -1688,6 +1689,7 @@ export default function AdmissionDetailPage() {
 
                                             {/* Package picker */}
                                             {chargeMode === 'package' && (
+                                                <>
                                                 <div className="relative">
                                                     <input
                                                         type="text"
@@ -1712,6 +1714,7 @@ export default function AdmissionDetailPage() {
                                                                             setChargeRate(String(Number(pkg.total_amount ?? 0)));
                                                                             setChargeCategory('Package');
                                                                             setPkgSearch(pkg.package_name);
+                                                                            setSelectedPkgId(pkg.id);
                                                                             setShowPkgDropdown(false);
                                                                         }}
                                                                         className="w-full text-left px-3 py-2 hover:bg-orange-50 border-b border-gray-100 last:border-b-0"
@@ -1721,7 +1724,18 @@ export default function AdmissionDetailPage() {
                                                                                 <p className="text-xs font-bold text-gray-800 truncate">{pkg.package_name}</p>
                                                                                 <p className="text-[10px] text-gray-500 font-mono">{pkg.package_code} · {pkg.validity_days}d validity</p>
                                                                             </div>
-                                                                            <p className="text-xs font-black text-orange-700 whitespace-nowrap">₹{Number(pkg.total_amount).toLocaleString()}</p>
+                                                                            <div className="flex items-center gap-2 shrink-0">
+                                                                                <span
+                                                                                    role="button"
+                                                                                    title="Print package breakup"
+                                                                                    onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
+                                                                                    onClick={e => { e.stopPropagation(); window.open(`/api/ipd/package-breakup/${pkg.id}`, '_blank'); }}
+                                                                                    className="p-1 text-teal-600 hover:text-teal-800 hover:bg-teal-50 rounded transition-colors cursor-pointer"
+                                                                                >
+                                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                                                                                </span>
+                                                                                <p className="text-xs font-black text-orange-700 whitespace-nowrap">₹{Number(pkg.total_amount).toLocaleString()}</p>
+                                                                            </div>
                                                                         </div>
                                                                     </button>
                                                                 ))}
@@ -1731,6 +1745,18 @@ export default function AdmissionDetailPage() {
                                                         </div>
                                                     )}
                                                 </div>
+                                                {/* Print Package Breakup — visible when a package is selected */}
+                                                {selectedPkgId && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => window.open(`/api/ipd/package-breakup/${selectedPkgId}`, '_blank')}
+                                                        className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                                                        Print Package Breakup
+                                                    </button>
+                                                )}
+                                                </>
                                             )}
 
                                             {/* Catalog picker */}

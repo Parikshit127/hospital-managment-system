@@ -9,8 +9,9 @@ import {
 import { getInventory, generateInvoice, getPharmacyQueue, markOrderAsPaid, addInventoryBatch, processDoctorOrder } from '@/app/actions/pharmacy-actions';
 import { searchPatientsForBilling } from '@/app/actions/finance-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { fetchBillBranding } from '@/app/actions/branding-actions';
+import { fetchBillBranding, fetchPharmacyBranding } from '@/app/actions/branding-actions';
 import type { BillBranding } from '@/app/lib/bill-branding';
+import type { PharmacyBranding } from '@/app/lib/pharmacy-branding';
 
 type InventoryItem = {
     batch_id: string;
@@ -68,6 +69,7 @@ export default function PharmacyPage() {
     const [invoiceResult, setInvoiceResult] = useState<any>(null);
     const [showInventoryModal, setShowInventoryModal] = useState(false);
     const [branding, setBranding] = useState<BillBranding | null>(null);
+    const [pharmacyBranding, setPharmacyBranding] = useState<PharmacyBranding | null>(null);
 
     const [invForm, setInvForm] = useState({
         isNewMedicine: false,
@@ -115,6 +117,7 @@ export default function PharmacyPage() {
         loadInventory();
         loadQueue();
         fetchBillBranding().then(r => r.success && r.data && setBranding(r.data));
+        fetchPharmacyBranding().then(r => r.success && r.data && setPharmacyBranding(r.data));
         // Poll queue every 15s instead of 5s
         const interval = setInterval(loadQueue, 15000);
         return () => clearInterval(interval);
@@ -787,10 +790,10 @@ export default function PharmacyPage() {
                         {/* Third Party Pharmacy Header — bill is issued by the dispensing pharmacy, not the hospital */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #111', paddingBottom: '14px', marginBottom: '10px' }}>
                             <div>
-                                <p style={{ fontSize: '20px', fontWeight: 900, color: '#111', margin: 0, letterSpacing: '0.5px' }}>Garnet Medicare</p>
-                                <p style={{ fontSize: '9px', color: '#666', marginTop: '2px', fontStyle: 'italic' }}>(Division of Garnet Pharmaceutical)</p>
-                                <p style={{ fontSize: '10px', color: '#555', marginTop: '3px' }}>B-162, East of Kailash Road, New Delhi, Delhi 110065</p>
-                                <p style={{ fontSize: '10px', color: '#555' }}>GST No.: 07AKIPA3324R1Z0</p>
+                                <p style={{ fontSize: '20px', fontWeight: 900, color: '#111', margin: 0, letterSpacing: '0.5px' }}>{pharmacyBranding?.name || 'Garnet Medicare'}</p>
+                                <p style={{ fontSize: '9px', color: '#666', marginTop: '2px', fontStyle: 'italic' }}>{pharmacyBranding?.division || '(Division of Garnet Pharmaceutical)'}</p>
+                                {pharmacyBranding?.address && <p style={{ fontSize: '10px', color: '#555', marginTop: '3px' }}>{pharmacyBranding.address}</p>}
+                                {pharmacyBranding?.gstin && <p style={{ fontSize: '10px', color: '#555' }}>GST No.: {pharmacyBranding.gstin}</p>}
                             </div>
                             <div style={{ textAlign: 'right' }}>
                                 <p className="text-xs font-black uppercase tracking-widest" style={{ color: '#111' }}>Pharmacy Invoice</p>

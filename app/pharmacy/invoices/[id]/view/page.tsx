@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/backend/db';
 import { getSession } from '@/app/lib/session';
+import { getPharmacyBranding } from '@/app/lib/pharmacy-branding';
 
 export default async function PharmacyInvoiceViewPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
@@ -11,6 +12,8 @@ export default async function PharmacyInvoiceViewPage({ params }: { params: Prom
     if (!session?.organization_id) {
         return <div style={{ padding: 40, fontFamily: 'Arial' }}>Not authorised. Please log in.</div>;
     }
+
+    const pharmacy = getPharmacyBranding(session.organization_id);
 
     const invoice = await prisma.invoices.findFirst({
         where: { id: invoiceId, organizationId: session.organization_id },
@@ -204,11 +207,10 @@ export default async function PharmacyInvoiceViewPage({ params }: { params: Prom
                     {/* ── Header ── */}
                     <div className="ph-header">
                         <div>
-                            <div className="ph-name">Garnet Medicare</div>
-                            <div className="ph-division">(Division of Garnet Pharmaceutical)</div>
+                            <div className="ph-name">{pharmacy.name}</div>
+                            <div className="ph-division">{pharmacy.division}</div>
                             <div className="ph-addr">
-                                B-162, East of Kailash Road, New Delhi, Delhi 110065<br />
-                                GST No.: 07AKIPA3324R1Z0
+                                {pharmacy.address}{pharmacy.gstin ? <><br />GST No.: {pharmacy.gstin}</> : null}
                             </div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
@@ -346,12 +348,12 @@ export default async function PharmacyInvoiceViewPage({ params }: { params: Prom
                         <div className="sig">
                             <div className="sig-line" />
                             <div className="sig-name">Authorized Signatory</div>
-                            <div className="sig-for">For Garnet Medicare</div>
+                            <div className="sig-for">For {pharmacy.name}</div>
                         </div>
                     </div>
 
                     <div className="gen-note">
-                        This is a computer-generated document and does not require a physical signature. &mdash; Garnet Medicare (Division of Garnet Pharmaceutical)
+                        This is a computer-generated document and does not require a physical signature. &mdash; {pharmacy.name} {pharmacy.division}
                     </div>
 
                 </div>

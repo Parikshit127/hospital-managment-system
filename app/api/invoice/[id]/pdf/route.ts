@@ -3,6 +3,7 @@ import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { validateZealthixApiKey } from '@/app/lib/zealthix/auth'
 import { getBillBranding, inlineHeaderHtml, billFooterHtml, letterheadBackgroundHtml, letterheadCss, printButtonHtml, type BillBranding } from '@/app/lib/bill-branding'
+import { getPharmacyBranding } from '@/app/lib/pharmacy-branding'
 import { getBillSections } from '@/app/lib/bill-sections'
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager', 'pharmacy', 'pharmacist', 'nurse'];
@@ -115,8 +116,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         }
 
         const branding = await getBillBranding(organizationId!);
+        const pharmacy = getPharmacyBranding(organizationId!);
         const sections = await getBillSections(organizationId!, 'invoice');
-        const html = generateInvoiceHTML(invoice, branding, sections, opdDoctor, tpaProviderName)
+        const html = generateInvoiceHTML(invoice, branding, pharmacy, sections, opdDoctor, tpaProviderName)
 
         // Return HTML for browser viewing (works for both API key and regular auth)
         return new NextResponse(html, {
@@ -150,7 +152,7 @@ function numberToWords(n: number): string {
     return result + ' Only';
 }
 
-function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any, opdDoctor: string = '', tpaProviderName: string = '') {
+function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { name: string; division: string; address: string; gstin: string }, sections: any, opdDoctor: string = '', tpaProviderName: string = '') {
     const items = invoice.items || []
     const payments = invoice.payments || []
     const creditNotes = (invoice as any).credit_notes || []
@@ -224,10 +226,10 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any
     const pharmacyHeader = [
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:14px;margin-bottom:16px;">',
         '  <div>',
-        '    <h1 style="font-size:20px;font-weight:900;margin:0;color:#111;letter-spacing:0.5px;">Garnet Medicare</h1>',
-        '    <p style="font-size:9px;color:#666;margin-top:2px;font-style:italic;">(Division of Garnet Pharmaceutical)</p>',
-        '    <p style="font-size:10px;color:#555;margin-top:3px;">B-162, East of Kailash Road, New Delhi, Delhi 110065</p>',
-        '    <p style="font-size:10px;color:#555;">GST No.: 07AKIPA3324R1Z0</p>',
+        '    <h1 style="font-size:20px;font-weight:900;margin:0;color:#111;letter-spacing:0.5px;">' + pharmacy.name + '</h1>',
+        '    <p style="font-size:9px;color:#666;margin-top:2px;font-style:italic;">' + pharmacy.division + '</p>',
+        pharmacy.address ? '    <p style="font-size:10px;color:#555;margin-top:3px;">' + pharmacy.address + '</p>' : '',
+        pharmacy.gstin ? '    <p style="font-size:10px;color:#555;">GST No.: ' + pharmacy.gstin + '</p>' : '',
         '  </div>',
         '  <div style="text-align:right;">',
         '    <p style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;">Pharmacy Invoice</p>',
