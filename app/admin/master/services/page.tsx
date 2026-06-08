@@ -34,7 +34,7 @@ const EMPTY_LAB_TEST = {
 const EMPTY_PACKAGE = {
   package_code: '', package_name: '', description: '',
   total_amount: 0, validity_days: 7, exclusions: '', is_active: true,
-  inclusions: [{ name: '', qty: 1 }],
+  inclusions: [{ name: '', qty: 1, amount: 0 }],
 };
 
 export default function ServiceMasterPage() {
@@ -262,8 +262,8 @@ export default function ServiceMasterPage() {
       total_amount: Number(row.total_amount ?? 0),
       validity_days: Number(row.validity_days ?? 7),
       inclusions: Array.isArray(row.inclusions) && row.inclusions.length > 0
-        ? row.inclusions
-        : [{ name: '', qty: 1 }],
+        ? row.inclusions.map((inc: any) => ({ name: inc.name || '', qty: inc.qty ?? 1, amount: inc.amount ?? 0 }))
+        : [{ name: '', qty: 1, amount: 0 }],
     });
     setPkgMode('edit');
   };
@@ -283,7 +283,7 @@ export default function ServiceMasterPage() {
       ...pkgForm,
       total_amount: Number(pkgForm.total_amount),
       validity_days: Number(pkgForm.validity_days),
-      inclusions: pkgForm.inclusions.filter((inc: any) => inc.name.trim() !== '').map((inc: any) => ({ name: inc.name, qty: Number(inc.qty) })),
+      inclusions: pkgForm.inclusions.filter((inc: any) => inc.name.trim() !== '').map((inc: any) => ({ name: inc.name, qty: Number(inc.qty), ...(Number(inc.amount) > 0 ? { amount: Number(inc.amount) } : {}) })),
     };
     const res = pkgMode === 'create'
       ? await createPackage(payload)
@@ -732,6 +732,12 @@ export default function ServiceMasterPage() {
                   <div className="col-span-2">
                     <label className="block text-xs font-bold text-gray-600 mb-2">Inclusions</label>
                     <div className="space-y-2">
+                      <div className="flex gap-2 items-center text-xs font-bold text-gray-500 uppercase tracking-wider px-1">
+                        <span className="flex-1">Service / Item</span>
+                        <span className="w-16 text-center">Qty</span>
+                        <span className="w-28 text-center">Amount (₹)</span>
+                        <span className="w-8" />
+                      </div>
                       {pkgForm.inclusions.map((inc: any, i: number) => (
                         <div key={i} className="flex gap-2 items-center">
                           <input type="text" placeholder="Service/item name"
@@ -742,13 +748,18 @@ export default function ServiceMasterPage() {
                           <input type="number" placeholder="Qty" min={1}
                             value={inc.qty}
                             onChange={e => setPkgForm((p: any) => { const incl = [...p.inclusions]; incl[i] = { ...incl[i], qty: Number(e.target.value) }; return { ...p, inclusions: incl }; })}
-                            className="w-20 p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none"
+                            className="w-16 p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-center focus:outline-none"
+                          />
+                          <input type="number" placeholder="0" min={0} step="0.01"
+                            value={inc.amount || ''}
+                            onChange={e => setPkgForm((p: any) => { const incl = [...p.inclusions]; incl[i] = { ...incl[i], amount: e.target.value }; return { ...p, inclusions: incl }; })}
+                            className="w-28 p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-right focus:outline-none"
                           />
                           <button type="button" onClick={() => setPkgForm((p: any) => ({ ...p, inclusions: p.inclusions.filter((_: any, j: number) => j !== i) }))}
                             className="p-1.5 hover:bg-red-50 rounded-lg text-red-500"><Trash2 className="h-4 w-4" /></button>
                         </div>
                       ))}
-                      <button type="button" onClick={() => setPkgForm((p: any) => ({ ...p, inclusions: [...p.inclusions, { name: '', qty: 1 }] }))}
+                      <button type="button" onClick={() => setPkgForm((p: any) => ({ ...p, inclusions: [...p.inclusions, { name: '', qty: 1, amount: 0 }] }))}
                         className="text-xs text-blue-600 hover:underline">+ Add row</button>
                     </div>
                   </div>

@@ -45,12 +45,14 @@ function packageBreakupHTML(pkg: any, branding: BillBranding): string {
     const gstin = branding.gstin || 'N/A';
     const amount = Number(pkg.total_amount || 0);
 
-    // Parse inclusions — can be array of strings or array of objects { name, qty, service_id }
+    // Parse inclusions — can be array of strings or array of objects { name, qty, amount?, service_id? }
     const rawInclusions: any[] = Array.isArray(pkg.inclusions) ? pkg.inclusions : [];
     const inclusions = rawInclusions.map((inc: any) => {
-        if (typeof inc === 'string') return { name: inc, qty: 1 };
-        return { name: inc.name || inc, qty: inc.qty ?? 1, service_id: inc.service_id };
+        if (typeof inc === 'string') return { name: inc, qty: 1, amount: 0 };
+        return { name: inc.name || inc, qty: inc.qty ?? 1, amount: Number(inc.amount || 0), service_id: inc.service_id };
     });
+    const hasAmounts = inclusions.some(inc => inc.amount > 0);
+    const inclusionsTotal = inclusions.reduce((s, inc) => s + inc.amount, 0);
 
     // Parse exclusions — can be JSON string or array
     let exclusions: string[] = [];
@@ -75,15 +77,24 @@ function packageBreakupHTML(pkg: any, branding: BillBranding): string {
         meta = {};
     }
 
+    const colCount = hasAmounts ? 5 : 4;
     const inclusionRows = inclusions.length > 0
         ? inclusions.map((inc, i) => `
             <tr>
                 <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;color:#9ca3af;font-size:11px;">${i + 1}</td>
                 <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;font-size:12px;font-weight:500;">${inc.name}</td>
                 <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;font-size:12px;font-weight:600;">${inc.qty}</td>
+                ${hasAmounts ? `<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-size:12px;font-weight:600;">${inc.amount > 0 ? '&#8377;' + inc.amount.toLocaleString('en-IN') : '—'}</td>` : ''}
                 <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;text-align:center;font-size:11px;color:#059669;">Included</td>
             </tr>`).join('')
-        : '<tr><td colspan="4" style="padding:12px;text-align:center;color:#9ca3af;font-size:12px;">No specific inclusions listed</td></tr>';
+        : `<tr><td colspan="${colCount}" style="padding:12px;text-align:center;color:#9ca3af;font-size:12px;">No specific inclusions listed</td></tr>`;
+
+    const inclusionTotalRow = hasAmounts ? `
+        <tr style="background:#f0fdf4;">
+            <td colspan="3" style="padding:10px 12px;text-align:right;font-size:12px;font-weight:800;color:#065f46;">Breakup Total</td>
+            <td style="padding:10px 12px;text-align:right;font-size:13px;font-weight:900;color:#065f46;">&#8377;${inclusionsTotal.toLocaleString('en-IN')}</td>
+            <td></td>
+        </tr>` : '';
 
     const exclusionList = exclusions.length > 0
         ? exclusions.map(e => `<li style="margin-bottom:6px;font-size:12px;color:#374151;">${e}</li>`).join('')
@@ -163,14 +174,24 @@ function packageBreakupHTML(pkg: any, branding: BillBranding): string {
                             <th style="padding:8px 12px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#fff;background:${accent};text-align:center;width:50px;border-radius:4px 0 0 0;">S.No</th>
                             <th style="padding:8px 12px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#fff;background:${accent};text-align:left;">Service / Item</th>
                             <th style="padding:8px 12px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#fff;background:${accent};text-align:center;width:70px;">Qty</th>
+                            ${hasAmounts ? `<th style="padding:8px 12px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#fff;background:${accent};text-align:right;width:110px;">Amount</th>` : ''}
                             <th style="padding:8px 12px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#fff;background:${accent};text-align:center;width:90px;border-radius:0 4px 0 0;">Status</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${inclusionRows}
+                        ${inclusionTotalRow}
                     </tbody>
                 </table>
             </div>
+
+            ${hasAmounts && inclusionsTotal < amount ? `
+            <!-- Remaining Amount Note -->
+            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 18px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:12px;color:#1e40af;font-weight:600;">Remaining (Surgeon Fees, OT, Room, Nursing, etc.)</span>
+                <span style="font-size:14px;font-weight:900;color:#1e40af;">&#8377;${(amount - inclusionsTotal).toLocaleString('en-IN')}</span>
+            </div>
+            ` : ''}
 
             <!-- Exclusions -->
             <div style="margin-bottom:24px;">

@@ -73,7 +73,12 @@ function noPackageHTML(admission: any, org: any, branding: BillBranding): string
 function packageAcceptanceHTML(admission: any, admPkg: any, org: any, branding: BillBranding): string {
     const patient = admission.patient || {};
     const pkg = admPkg.package;
-    const inclusions: string[] = Array.isArray(pkg.inclusions) ? pkg.inclusions.filter((x: any) => typeof x === 'string') : [];
+    const rawInclusions: any[] = Array.isArray(pkg.inclusions) ? pkg.inclusions : [];
+    const inclusions = rawInclusions.map((x: any) => {
+        if (typeof x === 'string') return { name: x, amount: 0 };
+        return { name: x.name || String(x), amount: Number(x.amount || 0) };
+    });
+    const hasAmounts = inclusions.some((x: any) => x.amount > 0);
     const exclusions: string[] = Array.isArray(pkg.exclusions) ? pkg.exclusions.filter((x: any) => typeof x === 'string') : [];
 
     let meta: { category?: string; is_day_care?: boolean } = {};
@@ -89,7 +94,7 @@ function packageAcceptanceHTML(admission: any, admPkg: any, org: any, branding: 
     const amount = Number(admPkg.applied_amount || pkg.total_amount || 0);
 
     const incRows = inclusions.length
-        ? inclusions.map((i) => `<li style="margin-bottom:4px;">${i}</li>`).join('')
+        ? inclusions.map((i: any) => `<li style="margin-bottom:4px;">${i.name}${hasAmounts && i.amount > 0 ? ` <span style="float:right;font-weight:700;">₹${i.amount.toLocaleString('en-IN')}</span>` : ''}</li>`).join('')
         : '<li style="color:#9ca3af;list-style:none;">—</li>';
     const excRows = exclusions.length
         ? exclusions.map((e) => `<li style="margin-bottom:4px;">${e}</li>`).join('')

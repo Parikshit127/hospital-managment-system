@@ -167,7 +167,7 @@ const packageSchema = z.object({
   description: z.string().optional(),
   total_amount: z.number().nonnegative(),
   validity_days: z.number().int().positive().default(7),
-  inclusions: z.array(z.object({ service_id: z.number().optional(), name: z.string(), qty: z.number().default(1) })).default([]),
+  inclusions: z.array(z.object({ service_id: z.number().optional(), name: z.string(), qty: z.number().default(1), amount: z.number().optional() })).default([]),
   exclusions: z.string().optional(),
   is_active: z.boolean().default(true),
 });
