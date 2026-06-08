@@ -304,7 +304,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, sections: any
                             const t = String((invoice as any).billing_patient_type || (patient as any).patient_type || 'cash').toLowerCase();
                             if (t === 'corporate') return 'CORPORATE';
                             if (t === 'tpa_insurance' || t === 'insurance' || t === 'tpa') return 'INSURANCE / TPA';
-                            return '${patientCategory}${tpaProviderName ? ` (${tpaProviderName})` : ''}';
+                            return `${patientCategory}${tpaProviderName ? ` (${tpaProviderName})` : ''}`;
                         })()}</p>
                     </div>
                     <div style="text-align:center;">
