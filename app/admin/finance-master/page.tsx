@@ -1,7 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { getChargeCatalog, addCatalogItem, updateCatalogItem } from '@/app/actions/finance-actions';
+
+function SearchBar({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+    return (
+        <div className="relative flex-1 max-w-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M10 18a8 8 0 100-16 8 8 0 000 16z" /></svg>
+            <input
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                placeholder={placeholder || 'Search…'}
+                className="w-full pl-9 pr-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-200"
+            />
+            {value && (
+                <button type="button" onClick={() => onChange('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs">✕</button>
+            )}
+        </div>
+    );
+}
 import { getIpdServices, addIpdService, getTariffRates, addTariffRate, getIpdPackages, addIpdPackage, updateIpdPackage } from '@/app/actions/ipd-master-actions';
 import { getLabTestPricing, updateLabTestPrice, getPharmacyPricing, updateMedicinePrice, getDoctorFees, updateDoctorFee, getWardPricing, updateWardPricing } from '@/app/actions/master-data-actions';
 import { getTaxConfigs, addTaxConfig, updateTaxConfig } from '@/app/actions/tax-actions';
@@ -86,7 +103,19 @@ function CatalogTab({ showToast }: { showToast: (m: string, t?: 'success' | 'err
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
     const [filterCategory, setFilterCategory] = useState('');
+    const [search, setSearch] = useState('');
     const [form, setForm] = useState({ category: 'Misc', item_code: '', item_name: '', default_price: '', department: '' });
+
+    const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return items;
+        return items.filter((x: any) =>
+            (x.item_code || '').toLowerCase().includes(q) ||
+            (x.item_name || '').toLowerCase().includes(q) ||
+            (x.category || '').toLowerCase().includes(q) ||
+            (x.department || '').toLowerCase().includes(q)
+        );
+    }, [items, search]);
 
     useEffect(() => { loadData(); }, []);
 
@@ -123,15 +152,16 @@ function CatalogTab({ showToast }: { showToast: (m: string, t?: 'success' | 'err
 
     return (
         <div>
-            <div className="flex justify-between items-center mb-4">
-                <div className="flex gap-2 items-center">
+            <div className="flex justify-between items-center mb-4 gap-3">
+                <div className="flex gap-2 items-center flex-1">
+                    <SearchBar value={search} onChange={setSearch} placeholder="Search by code, name, category, dept…" />
                     <select className="border rounded px-3 py-1.5 text-sm" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
                         <option value="">All Categories</option>
                         {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    <span className="text-sm text-gray-500">{items.length} items</span>
+                    <span className="text-sm text-gray-500 whitespace-nowrap">{filtered.length} of {items.length}</span>
                 </div>
-                <button onClick={() => setShowForm(!showForm)} className="bg-emerald-600 text-white px-4 py-1.5 rounded text-sm hover:bg-emerald-700">
+                <button onClick={() => setShowForm(!showForm)} className="bg-emerald-600 text-white px-4 py-1.5 rounded text-sm hover:bg-emerald-700 whitespace-nowrap">
                     + Add Item
                 </button>
             </div>
@@ -156,7 +186,7 @@ function CatalogTab({ showToast }: { showToast: (m: string, t?: 'success' | 'err
                         <th className="p-2 text-right">GST%</th><th className="p-2">Active</th>
                     </tr></thead>
                     <tbody>
-                        {items.map((item: any) => (
+                        {filtered.map((item: any) => (
                             <tr key={item.id} className="border-b hover:bg-gray-50">
                                 <td className="p-2 font-mono text-xs">{item.item_code}</td>
                                 <td className="p-2">{item.item_name}</td>
@@ -188,8 +218,19 @@ function IpdServicesTab({ showToast }: { showToast: (m: string, t?: 'success' | 
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
     const [selectedService, setSelectedService] = useState<number | null>(null);
+    const [search, setSearch] = useState('');
     const [form, setForm] = useState({ service_code: '', service_name: '', service_category: 'Consultation', default_rate: '', hsn_sac_code: '', tax_rate: '0' });
     const [tariffForm, setTariffForm] = useState({ tariff_category: 'General', rate: '' });
+
+    const filteredServices = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return services;
+        return services.filter((s: any) =>
+            (s.service_code || '').toLowerCase().includes(q) ||
+            (s.service_name || '').toLowerCase().includes(q) ||
+            (s.service_category || '').toLowerCase().includes(q)
+        );
+    }, [services, search]);
 
     useEffect(() => { loadServices(); }, []);
 
@@ -242,8 +283,11 @@ function IpdServicesTab({ showToast }: { showToast: (m: string, t?: 'success' | 
         <div className="grid grid-cols-2 gap-4">
             <div>
                 <div className="flex justify-between items-center mb-3">
-                    <h3 className="font-semibold text-sm">IPD Services</h3>
+                    <h3 className="font-semibold text-sm">IPD Services <span className="font-normal text-gray-400">({filteredServices.length} of {services.length})</span></h3>
                     <button onClick={() => setShowForm(!showForm)} className="bg-emerald-600 text-white px-3 py-1 rounded text-xs hover:bg-emerald-700">+ Add</button>
+                </div>
+                <div className="mb-2">
+                    <SearchBar value={search} onChange={setSearch} placeholder="Search code, name, category…" />
                 </div>
                 {showForm && (
                     <div className="border rounded p-3 mb-3 bg-gray-50 space-y-2">
@@ -258,7 +302,7 @@ function IpdServicesTab({ showToast }: { showToast: (m: string, t?: 'success' | 
                 )}
                 {loading ? <p className="text-gray-400 text-center py-4">Loading...</p> : (
                     <div className="space-y-1 max-h-[60vh] overflow-y-auto">
-                        {services.map((s: any) => (
+                        {filteredServices.map((s: any) => (
                             <div key={s.id} onClick={() => loadTariffs(s.id)} className={`p-2 rounded cursor-pointer border text-sm ${selectedService === s.id ? 'bg-emerald-50 border-emerald-400' : 'hover:bg-gray-50 border-gray-200'}`}>
                                 <div className="flex justify-between">
                                     <span className="font-medium">{s.service_name}</span>
@@ -307,7 +351,18 @@ function PackagesTab({ showToast }: { showToast: (m: string, t?: 'success' | 'er
     const [packages, setPackages] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
+    const [search, setSearch] = useState('');
     const [form, setForm] = useState({ package_code: '', package_name: '', description: '', total_amount: '', validity_days: '7' });
+
+    const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return packages;
+        return packages.filter((p: any) =>
+            (p.package_code || '').toLowerCase().includes(q) ||
+            (p.package_name || '').toLowerCase().includes(q) ||
+            (p.description || '').toLowerCase().includes(q)
+        );
+    }, [packages, search]);
 
     useEffect(() => { loadData(); }, []);
 
@@ -343,9 +398,12 @@ function PackagesTab({ showToast }: { showToast: (m: string, t?: 'success' | 'er
 
     return (
         <div>
-            <div className="flex justify-between items-center mb-4">
-                <span className="text-sm text-gray-500">{packages.length} packages</span>
-                <button onClick={() => setShowForm(!showForm)} className="bg-emerald-600 text-white px-4 py-1.5 rounded text-sm hover:bg-emerald-700">+ Add Package</button>
+            <div className="flex justify-between items-center mb-4 gap-3">
+                <div className="flex gap-2 items-center flex-1">
+                    <SearchBar value={search} onChange={setSearch} placeholder="Search code, name, description…" />
+                    <span className="text-sm text-gray-500 whitespace-nowrap">{filtered.length} of {packages.length}</span>
+                </div>
+                <button onClick={() => setShowForm(!showForm)} className="bg-emerald-600 text-white px-4 py-1.5 rounded text-sm hover:bg-emerald-700 whitespace-nowrap">+ Add Package</button>
             </div>
             {showForm && (
                 <div className="border rounded-lg p-4 mb-4 bg-gray-50 grid grid-cols-5 gap-3">
@@ -362,7 +420,7 @@ function PackagesTab({ showToast }: { showToast: (m: string, t?: 'success' | 'er
                     <th className="p-2 text-right">Amount</th><th className="p-2">Validity</th><th className="p-2">Active</th>
                 </tr></thead>
                 <tbody>
-                    {packages.map((pkg: any) => (
+                    {filtered.map((pkg: any) => (
                         <tr key={pkg.id} className="border-b hover:bg-gray-50">
                             <td className="p-2 font-mono text-xs">{pkg.package_code}</td>
                             <td className="p-2 font-medium">{pkg.package_name}</td>
@@ -389,7 +447,18 @@ function LabPricingTab({ showToast }: { showToast: (m: string, t?: 'success' | '
     const [tests, setTests] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [editId, setEditId] = useState<number | null>(null);
+    const [search, setSearch] = useState('');
     const [editForm, setEditForm] = useState({ price: '', hsn_sac_code: '', tax_rate: '' });
+
+    const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return tests;
+        return tests.filter((t: any) =>
+            (t.test_name || '').toLowerCase().includes(q) ||
+            (t.category || '').toLowerCase().includes(q) ||
+            (t.sample_type || '').toLowerCase().includes(q)
+        );
+    }, [tests, search]);
 
     useEffect(() => { loadData(); }, []);
 
@@ -421,7 +490,10 @@ function LabPricingTab({ showToast }: { showToast: (m: string, t?: 'success' | '
 
     return (
         <div>
-            <div className="mb-3 text-sm text-gray-500">{tests.length} lab tests</div>
+            <div className="flex items-center gap-3 mb-3">
+                <SearchBar value={search} onChange={setSearch} placeholder="Search test name, category, sample…" />
+                <span className="text-sm text-gray-500 whitespace-nowrap">{filtered.length} of {tests.length}</span>
+            </div>
             {loading ? <p className="text-gray-400 text-center py-8">Loading...</p> : (
                 <table className="w-full text-sm">
                     <thead><tr className="bg-gray-50 text-left">
@@ -429,7 +501,7 @@ function LabPricingTab({ showToast }: { showToast: (m: string, t?: 'success' | '
                         <th className="p-2 text-right">Price</th><th className="p-2">HSN/SAC</th><th className="p-2 text-right">GST%</th><th className="p-2">Actions</th>
                     </tr></thead>
                     <tbody>
-                        {tests.map((test: any) => (
+                        {filtered.map((test: any) => (
                             <tr key={test.id} className="border-b hover:bg-gray-50">
                                 <td className="p-2 font-medium">{test.test_name}</td>
                                 <td className="p-2 text-gray-500">{test.category || '-'}</td>
@@ -470,7 +542,18 @@ function PharmacyPricingTab({ showToast }: { showToast: (m: string, t?: 'success
     const [medicines, setMedicines] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [editId, setEditId] = useState<number | null>(null);
+    const [search, setSearch] = useState('');
     const [editForm, setEditForm] = useState({ price_per_unit: '', hsn_sac_code: '', tax_rate: '' });
+
+    const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return medicines;
+        return medicines.filter((m: any) =>
+            (m.brand_name || '').toLowerCase().includes(q) ||
+            (m.generic_name || '').toLowerCase().includes(q) ||
+            (m.category || '').toLowerCase().includes(q)
+        );
+    }, [medicines, search]);
 
     useEffect(() => { loadData(); }, []);
 
@@ -502,7 +585,10 @@ function PharmacyPricingTab({ showToast }: { showToast: (m: string, t?: 'success
 
     return (
         <div>
-            <div className="mb-3 text-sm text-gray-500">{medicines.length} medicines</div>
+            <div className="flex items-center gap-3 mb-3">
+                <SearchBar value={search} onChange={setSearch} placeholder="Search brand, generic, category…" />
+                <span className="text-sm text-gray-500 whitespace-nowrap">{filtered.length} of {medicines.length}</span>
+            </div>
             {loading ? <p className="text-gray-400 text-center py-8">Loading...</p> : (
                 <table className="w-full text-sm">
                     <thead><tr className="bg-gray-50 text-left">
@@ -511,7 +597,7 @@ function PharmacyPricingTab({ showToast }: { showToast: (m: string, t?: 'success
                         <th className="p-2 text-right">Min Stock</th><th className="p-2">Actions</th>
                     </tr></thead>
                     <tbody>
-                        {medicines.map((med: any) => (
+                        {filtered.map((med: any) => (
                             <tr key={med.id} className="border-b hover:bg-gray-50">
                                 <td className="p-2 font-medium">{med.brand_name}</td>
                                 <td className="p-2 text-gray-500 text-xs">{med.generic_name || '-'}</td>
@@ -554,7 +640,18 @@ function DoctorFeesTab({ showToast }: { showToast: (m: string, t?: 'success' | '
     const [doctors, setDoctors] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [editId, setEditId] = useState<string | null>(null);
+    const [search, setSearch] = useState('');
     const [editForm, setEditForm] = useState({ consultation_fee: '', follow_up_fee: '' });
+
+    const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return doctors;
+        return doctors.filter((d: any) =>
+            (d.name || '').toLowerCase().includes(q) ||
+            (d.username || '').toLowerCase().includes(q) ||
+            (d.specialty || '').toLowerCase().includes(q)
+        );
+    }, [doctors, search]);
 
     useEffect(() => { loadData(); }, []);
 
@@ -585,6 +682,10 @@ function DoctorFeesTab({ showToast }: { showToast: (m: string, t?: 'success' | '
 
     return (
         <div>
+            <div className="flex items-center gap-3 mb-3">
+                <SearchBar value={search} onChange={setSearch} placeholder="Search doctor, username, specialty…" />
+                <span className="text-sm text-gray-500 whitespace-nowrap">{filtered.length} of {doctors.length}</span>
+            </div>
             {loading ? <p className="text-gray-400 text-center py-8">Loading...</p> : (
                 <table className="w-full text-sm">
                     <thead><tr className="bg-gray-50 text-left">
@@ -592,7 +693,7 @@ function DoctorFeesTab({ showToast }: { showToast: (m: string, t?: 'success' | '
                         <th className="p-2 text-right">First Visit Fee</th><th className="p-2 text-right">Follow-up Fee</th><th className="p-2">Actions</th>
                     </tr></thead>
                     <tbody>
-                        {doctors.map((doc: any) => (
+                        {filtered.map((doc: any) => (
                             <tr key={doc.id} className="border-b hover:bg-gray-50">
                                 <td className="p-2 font-medium">{doc.name || doc.username}</td>
                                 <td className="p-2 text-gray-500">{doc.specialty || '-'}</td>
@@ -630,7 +731,18 @@ function WardChargesTab({ showToast }: { showToast: (m: string, t?: 'success' | 
     const [wards, setWards] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [editId, setEditId] = useState<number | null>(null);
+    const [search, setSearch] = useState('');
     const [editForm, setEditForm] = useState({ cost_per_day: '', nursing_charge: '' });
+
+    const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return wards;
+        return wards.filter((w: any) =>
+            (w.ward_name || '').toLowerCase().includes(q) ||
+            (w.ward_type || '').toLowerCase().includes(q) ||
+            String(w.floor_number || '').toLowerCase().includes(q)
+        );
+    }, [wards, search]);
 
     useEffect(() => { loadData(); }, []);
 
@@ -661,6 +773,10 @@ function WardChargesTab({ showToast }: { showToast: (m: string, t?: 'success' | 
 
     return (
         <div>
+            <div className="flex items-center gap-3 mb-3">
+                <SearchBar value={search} onChange={setSearch} placeholder="Search ward, type, floor…" />
+                <span className="text-sm text-gray-500 whitespace-nowrap">{filtered.length} of {wards.length}</span>
+            </div>
             {loading ? <p className="text-gray-400 text-center py-8">Loading...</p> : (
                 <table className="w-full text-sm">
                     <thead><tr className="bg-gray-50 text-left">
@@ -669,7 +785,7 @@ function WardChargesTab({ showToast }: { showToast: (m: string, t?: 'success' | 
                         <th className="p-2">Active</th><th className="p-2">Actions</th>
                     </tr></thead>
                     <tbody>
-                        {wards.map((ward: any) => (
+                        {filtered.map((ward: any) => (
                             <tr key={ward.ward_id} className="border-b hover:bg-gray-50">
                                 <td className="p-2 font-medium">{ward.ward_name}</td>
                                 <td className="p-2 text-gray-500">{ward.ward_type}</td>
@@ -710,7 +826,18 @@ function TaxConfigTab({ showToast }: { showToast: (m: string, t?: 'success' | 'e
     const [configs, setConfigs] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
+    const [search, setSearch] = useState('');
     const [form, setForm] = useState({ tax_name: '', tax_code: '', rate: '', is_default: false, applicable_to: '' });
+
+    const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return configs;
+        return configs.filter((c: any) =>
+            (c.tax_name || '').toLowerCase().includes(q) ||
+            (c.tax_code || '').toLowerCase().includes(q) ||
+            (c.applicable_to || '').toLowerCase().includes(q)
+        );
+    }, [configs, search]);
 
     useEffect(() => { loadData(); }, []);
 
@@ -745,9 +872,12 @@ function TaxConfigTab({ showToast }: { showToast: (m: string, t?: 'success' | 'e
 
     return (
         <div>
-            <div className="flex justify-between items-center mb-4">
-                <span className="text-sm text-gray-500">{configs.length} tax configurations</span>
-                <button onClick={() => setShowForm(!showForm)} className="bg-emerald-600 text-white px-4 py-1.5 rounded text-sm hover:bg-emerald-700">+ Add Tax</button>
+            <div className="flex justify-between items-center mb-4 gap-3">
+                <div className="flex gap-2 items-center flex-1">
+                    <SearchBar value={search} onChange={setSearch} placeholder="Search name, code, applicable…" />
+                    <span className="text-sm text-gray-500 whitespace-nowrap">{filtered.length} of {configs.length}</span>
+                </div>
+                <button onClick={() => setShowForm(!showForm)} className="bg-emerald-600 text-white px-4 py-1.5 rounded text-sm hover:bg-emerald-700 whitespace-nowrap">+ Add Tax</button>
             </div>
             {showForm && (
                 <div className="border rounded-lg p-4 mb-4 bg-gray-50 grid grid-cols-6 gap-3 items-end">
@@ -767,7 +897,7 @@ function TaxConfigTab({ showToast }: { showToast: (m: string, t?: 'success' | 'e
                     <th className="p-2">Default</th><th className="p-2">Applicable To</th><th className="p-2">Active</th>
                 </tr></thead>
                 <tbody>
-                    {configs.map((cfg: any) => (
+                    {filtered.map((cfg: any) => (
                         <tr key={cfg.id} className="border-b hover:bg-gray-50">
                             <td className="p-2 font-medium">{cfg.tax_name}</td>
                             <td className="p-2 font-mono text-xs">{cfg.tax_code}</td>
