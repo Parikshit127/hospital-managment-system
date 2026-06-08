@@ -56,19 +56,36 @@ async function main() {
             console.log('No GL journal entry found (credit note may not have been fully applied).');
         }
 
-        // 2. Restore invoice balance
+        // 2. Restore invoice balance to previous outstanding
         if (cn.status === 'Applied') {
             const invoice = await tx.invoices.findUnique({ where: { id: cn.original_invoice_id } });
             if (invoice) {
+                const netAmount = Number(invoice.net_amount);
+                const paidAmount = Number(invoice.paid_amount);
                 const restoredBalance = Number(invoice.balance_due) + amount;
+
+                // Determine correct status based on actual payments vs net amount
+                let restoredStatus = invoice.status;
+                if (restoredBalance <= 0.01) {
+                    restoredStatus = 'Paid';
+                } else if (paidAmount > 0.01) {
+                    restoredStatus = 'Partially Paid';
+                } else {
+                    restoredStatus = 'Unpaid';
+                }
+
                 await tx.invoices.update({
                     where: { id: cn.original_invoice_id },
                     data: {
                         balance_due: restoredBalance,
-                        status: restoredBalance > 0.01 ? 'Unpaid' : invoice.status,
+                        status: restoredStatus,
                     },
                 });
-                console.log(`Invoice balance restored: ${Number(invoice.balance_due)} -> ${restoredBalance}`);
+                console.log(`Invoice ${invoice.invoice_number}:`);
+                console.log(`  Net amount:  ${netAmount}`);
+                console.log(`  Paid amount: ${paidAmount}`);
+                console.log(`  Balance:     ${Number(invoice.balance_due)} -> ${restoredBalance}`);
+                console.log(`  Status:      ${invoice.status} -> ${restoredStatus}`);
             }
         }
 
