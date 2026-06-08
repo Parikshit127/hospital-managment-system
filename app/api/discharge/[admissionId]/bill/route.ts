@@ -23,7 +23,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         const admission = await prisma.admissions.findFirst({
             where: { admission_id: admissionId, organizationId: auth.context.organizationId },
             include: {
-                patient: { select: { full_name: true, patient_id: true, phone: true, age: true, gender: true, address: true } },
+                patient: {
+                    select: {
+                        full_name: true, patient_id: true, phone: true, age: true, gender: true, address: true,
+                        patient_type: true, corporate_id: true,
+                        corporate: { select: { company_name: true, company_code: true } },
+                    },
+                },
                 ward: { select: { ward_name: true, ward_type: true } },
                 bed: { select: { bed_id: true } },
             },
@@ -43,18 +49,35 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 
         if (!invoice) return NextResponse.json({ error: 'No invoice found' }, { status: 404 });
 
-        // Fetch TPA provider name if applicable
+        // Fetch TPA provider name + policy number if applicable.
+        // Treat the bill as insurance/TPA when EITHER the invoice OR the patient master says so.
         let tpaProviderName = '';
+        let policyNumber = '';
+        const invoiceTypeNorm = String(invoice.billing_patient_type || '').toLowerCase();
+        const patientTypeNorm = String((admission.patient as any)?.patient_type || '').toLowerCase();
+        const isInsuranceBill =
+            ['tpa_insurance', 'insurance', 'tpa'].includes(invoiceTypeNorm) ||
+            ['tpa_insurance', 'insurance', 'tpa'].includes(patientTypeNorm);
+
+        // Priority 1: invoice-level tpa_provider_id
         if (invoice.tpa_provider_id) {
             const tpa = await prisma.insurance_providers.findUnique({ where: { id: invoice.tpa_provider_id } });
             tpaProviderName = tpa?.provider_name || '';
         }
-        if (!tpaProviderName && ['tpa_insurance', 'insurance', 'tpa'].includes(String(invoice.billing_patient_type || '').toLowerCase())) {
+        // Priority 2: pull from insurance_policies for this patient (covers TPA-tagged patients
+        // whose invoice didn't carry the provider id forward)
+        if (isInsuranceBill && (!tpaProviderName || !policyNumber)) {
             const policy = await prisma.insurance_policies.findFirst({
+                where: { patient_id: admission.patient_id, status: 'Active' },
+                orderBy: { created_at: 'desc' },
+                include: { provider: { select: { provider_name: true } } },
+            }) || await prisma.insurance_policies.findFirst({
                 where: { patient_id: admission.patient_id },
+                orderBy: { created_at: 'desc' },
                 include: { provider: { select: { provider_name: true } } },
             });
-            tpaProviderName = (policy as any)?.provider?.provider_name || '';
+            if (!tpaProviderName) tpaProviderName = (policy as any)?.provider?.provider_name || '';
+            policyNumber = policy?.policy_number || '';
         }
 
         const org = await prisma.organization.findUnique({
@@ -70,7 +93,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         });
 
         const isFinal = admission.status === 'Discharged';
-        const html = generateDischargeBillHTML(admission, invoice, org, deposits, isFinal, branding, sections, tpaProviderName);
+        const html = generateDischargeBillHTML(admission, invoice, org, deposits, isFinal, branding, sections, tpaProviderName, policyNumber, isInsuranceBill);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -101,7 +124,7 @@ function numberToWords(n: number): string {
     return result + ' Only';
 }
 
-function generateDischargeBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any, tpaProviderName: string = '') {
+function generateDischargeBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any, tpaProviderName: string = '', policyNumber: string = '', isInsuranceBill: boolean = false) {
     const patient = admission.patient || {};
     const items = invoice.items || [];
     const payments = invoice.payments || [];
@@ -270,12 +293,15 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 <p style="font-size:11px;"><strong>Discharged:</strong> ${isFinal ? dischargeDate : 'N/A'}</p>
                                 <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
                                 <p style="font-size:11px;"><strong>Category:</strong> ${(() => {
-                                    const t = String(invoice.billing_patient_type || '').toLowerCase();
+                                    const inv = String(invoice.billing_patient_type || '').toLowerCase();
+                                    const pat = String((admission.patient as any)?.patient_type || '').toLowerCase();
+                                    const t = inv || pat;
                                     if (t === 'tpa_insurance' || t === 'insurance' || t === 'tpa') return 'TPA / Insurance';
                                     if (t === 'corporate') return 'Corporate';
                                     return 'Cash / Self-Pay';
                                 })()}</p>
-                                ${tpaProviderName ? `<p style="font-size:11px;"><strong>TPA/Insurer:</strong> ${tpaProviderName}</p>` : ''}
+                                ${tpaProviderName ? `<p style="font-size:11px;"><strong>TPA/Insurer:</strong> ${tpaProviderName}${policyNumber ? ` &nbsp;|&nbsp; Policy: ${policyNumber}` : ''}</p>` : (isInsuranceBill ? `<p style="font-size:11px;color:#b04a00;"><strong>TPA/Insurer:</strong> (not configured — add via patient registration)</p>` : '')}
+                                ${(admission.patient as any)?.corporate ? `<p style="font-size:11px;"><strong>Corporate:</strong> ${(admission.patient as any).corporate.company_name}${(admission.patient as any).corporate.company_code ? ` (${(admission.patient as any).corporate.company_code})` : ''}</p>` : ''}
                                 <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
                             </div>
                         </div>` : ''}
