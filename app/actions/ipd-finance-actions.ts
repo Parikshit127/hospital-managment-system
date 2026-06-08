@@ -818,10 +818,24 @@ export async function settleAndDischarge(data: {
             });
         }
 
-        // 5. Finalize invoice
+        // 5. Finalize invoice — set correct status based on actual payments
+        const finalInvoice = await db.invoices.findUnique({ where: { id: invoice.id } });
+        const finalPaid = Number(finalInvoice?.paid_amount || 0);
+        const finalNet = Number(finalInvoice?.net_amount || 0);
+        const finalBalance = Number(finalInvoice?.balance_due || 0);
+
+        let finalStatus: string;
+        if (finalBalance <= 0.01) {
+            finalStatus = 'Paid';
+        } else if (finalPaid > 0.01) {
+            finalStatus = 'Partially Paid';
+        } else {
+            finalStatus = 'Unpaid';
+        }
+
         await db.invoices.update({
             where: { id: invoice.id },
-            data: { status: 'Paid', finalized_at: new Date() },
+            data: { status: finalStatus, finalized_at: new Date() },
         });
 
         // 6. Discharge patient
@@ -848,6 +862,7 @@ export async function settleAndDischarge(data: {
                 details: JSON.stringify({
                     invoice_id: invoice.id,
                     discount: data.discount_amount || 0,
+                    outstanding_balance: finalBalance,
                     settled_by: session.username,
                 }),
                 organizationId,
@@ -863,6 +878,7 @@ export async function settleAndDischarge(data: {
                 admission_id: data.admission_id,
                 invoice_id: invoice.id,
                 discharge_date: new Date(),
+                remaining_balance: finalBalance,
                 bill: finalBill.success ? finalBill.data : null,
             }),
         };

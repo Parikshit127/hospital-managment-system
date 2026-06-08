@@ -63,6 +63,7 @@ export default function DischargeSettlementPage() {
 
     const splitTotal = splits.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
     const isBalanced = balanceDue <= 0 || Math.abs(splitTotal - balanceDue) < 0.01;
+    const [dischargeWithOutstanding, setDischargeWithOutstanding] = useState(false);
 
     // Group items by category
     const categoryGroups = billData?.items?.reduce((acc: any, item: any) => {
@@ -74,8 +75,15 @@ export default function DischargeSettlementPage() {
     }, {} as Record<string, { items: any[]; total: number }>) || {};
 
     async function handleSettleAndDischarge() {
-        if (!isBalanced && balanceDue > 0) {
-            showToast('Payment amount does not match balance due', 'error');
+        // If not discharging with outstanding, payment must match balance
+        if (!dischargeWithOutstanding && !isBalanced && balanceDue > 0) {
+            showToast('Payment amount does not match balance due. Use "Discharge with Outstanding" to skip.', 'error');
+            return;
+        }
+
+        // If partial payment entered, splits must not exceed balance
+        if (splitTotal > 0 && splitTotal > balanceDue + 0.01) {
+            showToast('Payment exceeds balance due', 'error');
             return;
         }
 
@@ -85,13 +93,14 @@ export default function DischargeSettlementPage() {
         }
 
         setSettling(true);
+        const hasSplits = splits.some(s => parseFloat(s.amount) > 0);
         const res = await settleAndDischarge({
             admission_id: admissionId,
             apply_deposits: applyDeposits,
             discount_amount: discount > 0 ? discount : undefined,
             discount_reason: discountReason || undefined,
             approved_by: approvedBy || undefined,
-            splits: balanceDue > 0 ? splits.filter(s => parseFloat(s.amount) > 0).map(s => ({
+            splits: hasSplits ? splits.filter(s => parseFloat(s.amount) > 0).map(s => ({
                 amount: parseFloat(s.amount),
                 payment_method: s.method,
                 reference: s.reference || undefined,
@@ -100,7 +109,12 @@ export default function DischargeSettlementPage() {
         setSettling(false);
 
         if (res.success) {
-            showToast('Patient discharged and bill settled successfully');
+            const remainingBalance = (res.data as any)?.remaining_balance || 0;
+            if (remainingBalance > 0) {
+                showToast(`Discharged with outstanding balance: ${remainingBalance.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}`);
+            } else {
+                showToast('Patient discharged and bill settled successfully');
+            }
             setTimeout(() => router.push('/ipd'), 2000);
         } else {
             showToast(res.error || 'Settlement failed', 'error');
@@ -208,62 +222,91 @@ export default function DischargeSettlementPage() {
                 {/* Final Payment (Split) */}
                 {balanceDue > 0 && (
                     <div className="bg-white rounded-lg shadow p-4">
-                        <h2 className="font-semibold text-sm mb-3">Final Payment</h2>
-                        <div className="space-y-2 mb-3">
-                            {splits.map((split, idx) => (
-                                <div key={idx} className="flex gap-2 items-center">
-                                    <input
-                                        type="number"
-                                        value={split.amount}
-                                        onChange={(e) => {
-                                            const updated = [...splits];
-                                            updated[idx].amount = e.target.value;
-                                            setSplits(updated);
-                                        }}
-                                        className="w-32 px-2 py-1.5 border rounded text-sm"
-                                        placeholder="Amount"
-                                    />
-                                    <select
-                                        value={split.method}
-                                        onChange={(e) => {
-                                            const updated = [...splits];
-                                            updated[idx].method = e.target.value;
-                                            setSplits(updated);
-                                        }}
-                                        className="flex-1 px-2 py-1.5 border rounded text-sm"
-                                    >
-                                        <option>Cash</option>
-                                        <option>UPI</option>
-                                        <option>Card</option>
-                                        <option>BankTransfer</option>
-                                    </select>
-                                    <input
-                                        type="text"
-                                        value={split.reference}
-                                        onChange={(e) => {
-                                            const updated = [...splits];
-                                            updated[idx].reference = e.target.value;
-                                            setSplits(updated);
-                                        }}
-                                        className="w-36 px-2 py-1.5 border rounded text-sm"
-                                        placeholder="Ref / Txn ID"
-                                    />
-                                    {splits.length > 1 && (
-                                        <button onClick={() => setSplits(splits.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 text-lg">&times;</button>
-                                    )}
+                        <div className="flex justify-between items-center mb-3">
+                            <h2 className="font-semibold text-sm">Final Payment</h2>
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={dischargeWithOutstanding}
+                                    onChange={e => {
+                                        setDischargeWithOutstanding(e.target.checked);
+                                        if (e.target.checked) setSplits([{ amount: '0', method: 'Cash', reference: '' }]);
+                                    }}
+                                    className="rounded"
+                                />
+                                <span className="text-amber-700 font-medium">Discharge with Outstanding Balance</span>
+                            </label>
+                        </div>
+
+                        {dischargeWithOutstanding && (
+                            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg mb-3 text-sm text-amber-800">
+                                Patient will be discharged with <strong>{balanceDue.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</strong> outstanding.
+                                The balance will remain on the invoice for later collection.
+                                {splitTotal > 0 && splitTotal < balanceDue && (
+                                    <span> Partial payment of <strong>{splitTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</strong> will be recorded.</span>
+                                )}
+                            </div>
+                        )}
+
+                        {!dischargeWithOutstanding && (
+                            <>
+                                <div className="space-y-2 mb-3">
+                                    {splits.map((split, idx) => (
+                                        <div key={idx} className="flex gap-2 items-center">
+                                            <input
+                                                type="number"
+                                                value={split.amount}
+                                                onChange={(e) => {
+                                                    const updated = [...splits];
+                                                    updated[idx].amount = e.target.value;
+                                                    setSplits(updated);
+                                                }}
+                                                className="w-32 px-2 py-1.5 border rounded text-sm"
+                                                placeholder="Amount"
+                                            />
+                                            <select
+                                                value={split.method}
+                                                onChange={(e) => {
+                                                    const updated = [...splits];
+                                                    updated[idx].method = e.target.value;
+                                                    setSplits(updated);
+                                                }}
+                                                className="flex-1 px-2 py-1.5 border rounded text-sm"
+                                            >
+                                                <option>Cash</option>
+                                                <option>UPI</option>
+                                                <option>Card</option>
+                                                <option>BankTransfer</option>
+                                            </select>
+                                            <input
+                                                type="text"
+                                                value={split.reference}
+                                                onChange={(e) => {
+                                                    const updated = [...splits];
+                                                    updated[idx].reference = e.target.value;
+                                                    setSplits(updated);
+                                                }}
+                                                className="w-36 px-2 py-1.5 border rounded text-sm"
+                                                placeholder="Ref / Txn ID"
+                                            />
+                                            {splits.length > 1 && (
+                                                <button onClick={() => setSplits(splits.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 text-lg">&times;</button>
+                                            )}
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
-                        <button
-                            onClick={() => setSplits([...splits, { amount: '', method: 'Cash', reference: '' }])}
-                            className="text-sm text-blue-600 hover:underline mb-2"
-                        >
-                            + Add Payment Method
-                        </button>
-                        <div className={`flex justify-between items-center p-2 rounded text-sm font-medium ${isBalanced ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
-                            <span>Total: {splitTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</span>
-                            <span>{isBalanced ? 'Balanced' : `Remaining: ${(balanceDue - splitTotal).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}`}</span>
-                        </div>
+                                <button
+                                    onClick={() => setSplits([...splits, { amount: '', method: 'Cash', reference: '' }])}
+                                    className="text-sm text-blue-600 hover:underline mb-2"
+                                >
+                                    + Add Payment Method
+                                </button>
+                                <div className={`flex justify-between items-center p-2 rounded text-sm font-medium ${isBalanced ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                                    <span>Total: {splitTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</span>
+                                    <span>{isBalanced ? 'Balanced' : `Remaining: ${(balanceDue - splitTotal).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}`}</span>
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
 
@@ -308,10 +351,12 @@ export default function DischargeSettlementPage() {
                 <div className="bg-white rounded-lg shadow p-4 flex gap-3">
                     <button
                         onClick={handleSettleAndDischarge}
-                        disabled={settling || (!isBalanced && balanceDue > 0)}
+                        disabled={settling || (!isBalanced && !dischargeWithOutstanding && balanceDue > 0)}
                         className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50 text-sm"
                     >
-                        {settling ? 'Processing...' : 'Finalize & Discharge'}
+                        {settling ? 'Processing...' : dischargeWithOutstanding && balanceDue > 0
+                            ? `Discharge with ${balanceDue.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })} Outstanding`
+                            : 'Finalize & Discharge'}
                     </button>
                     <button
                         onClick={() => {
