@@ -794,7 +794,7 @@ model lab_audit_logs {
 model pharmacy_medicine_master {
   id             Int     @id @default(autoincrement())
   // Section 7.1 — Mandatory fields
-  brand_name     String  @unique          // Commercial name e.g. Crocin Advance
+  brand_name     String                   // Commercial name e.g. Crocin Advance
   generic_name   String?                  // INN/generic e.g. Paracamol (Mandatory per doc)
   strength       String?                  // Dose strength e.g. 500mg (Mandatory per doc)
   form           String?                  // Tablet | Capsule | Syrup | Injection | Cream | Drops | Inhaler | Ointment | Powder | Suspension (Mandatory)
@@ -824,6 +824,7 @@ model pharmacy_medicine_master {
   inventory_movements      PharmacyInventoryMovement[]
   purchase_invoice_lines   PharmacyPurchaseInvoiceLine[]
 
+  @@unique([brand_name, organizationId])
   @@index([organizationId])
 }
 

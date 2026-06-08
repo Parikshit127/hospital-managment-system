@@ -169,7 +169,6 @@ async function run() {
         selling_price: 0,
         price_per_unit: 0,
         form: med.form,
-        unit: med.unit,
         organizationId: org.id,
       }));
 
