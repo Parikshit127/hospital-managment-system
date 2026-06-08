@@ -21,6 +21,22 @@ const PT_LABEL: Record<string, string> = {
     tpa_insurance: 'TPA / Insurance',
 };
 
+// Distribute an overall bill-level percentage discount proportionally across line
+// items (on top of each item's own discount), so GST is computed on the
+// post-discount taxable value and invoice/split totals stay consistent.
+function applyBillDiscount(items: any[], pct: number): any[] {
+    const p = Math.min(100, Math.max(0, Number(pct) || 0));
+    if (p === 0) return items;
+    const afterLineTotal = items.reduce((s, i) => s + (i.unit_price * i.quantity - i.discount), 0);
+    if (afterLineTotal <= 0) return items;
+    const overall = afterLineTotal * (p / 100);
+    return items.map(i => {
+        const afterLine = i.unit_price * i.quantity - i.discount;
+        const share = overall * (afterLine / afterLineTotal);
+        return { ...i, discount: i.discount + share };
+    });
+}
+
 export default function ReceptionGenerateBillPage() {
     const sanitizePositiveInt = (value: string) => value.replace(/\D/g, '');
     const sanitizeDecimal = (value: string) => value.replace(/[^\d.]/g, '');
@@ -40,10 +56,13 @@ export default function ReceptionGenerateBillPage() {
 
     // Line items for the bill
     const [items, setItems] = useState<any[]>([]);
+    // Bill-level discount applied as a percentage on the whole bill
+    const [billDiscountPct, setBillDiscountPct] = useState(0);
 
     // New item draft (master service)
     const [draftQty, setDraftQty] = useState(1);
     const [draftDiscount, setDraftDiscount] = useState(0);
+    const [draftDiscountPct, setDraftDiscountPct] = useState(0);
     const [draftUnitPrice, setDraftUnitPrice] = useState<string>('');
 
     const [isSaving, setIsSaving] = useState(false);
@@ -84,7 +103,7 @@ export default function ReceptionGenerateBillPage() {
         setIsCalculating(true);
         calculateBillSplit(
             selectedPatient.patient_id,
-            items.map(i => ({
+            applyBillDiscount(items, billDiscountPct).map(i => ({
                 department: i.department,
                 description: i.description,
                 quantity: i.quantity,
@@ -97,7 +116,7 @@ export default function ReceptionGenerateBillPage() {
             setPreAuthBlocked(split.warnings.some(w => w.startsWith('PRE_AUTH_REQUIRED')));
             setIsCalculating(false);
         });
-    }, [selectedPatient, items]);
+    }, [selectedPatient, items, billDiscountPct]);
 
     const handleAddService = () => {
         if (!selectedServiceId) return;
@@ -125,6 +144,7 @@ export default function ReceptionGenerateBillPage() {
         setSelectedServiceId(null);
         setDraftQty(1);
         setDraftDiscount(0);
+        setDraftDiscountPct(0);
         setDraftUnitPrice('');
     };
 
@@ -165,8 +185,8 @@ export default function ReceptionGenerateBillPage() {
 
             const invoiceId = invRes.data.id;
 
-            // 2. Add Line Items
-            for (const item of items) {
+            // 2. Add Line Items (with overall bill discount distributed across them)
+            for (const item of applyBillDiscount(items, billDiscountPct)) {
                 await addInvoiceItem({
                     invoice_id: invoiceId,
                     department: item.department,
@@ -203,7 +223,7 @@ export default function ReceptionGenerateBillPage() {
         setIsSaving(false);
     };
 
-    const totals = items.reduce((acc, item) => {
+    const totals = applyBillDiscount(items, billDiscountPct).reduce((acc, item) => {
         const base = item.unit_price * item.quantity;
         const afterDiscount = base - item.discount;
         const tax = afterDiscount * (item.tax_rate / 100);
@@ -214,6 +234,24 @@ export default function ReceptionGenerateBillPage() {
             net: acc.net + afterDiscount + tax
         };
     }, { subtotal: 0, discount: 0, tax: 0, net: 0 });
+    // Split the combined discount into line-item vs. overall bill discount for display
+    const lineDiscountTotal = items.reduce((s, i) => s + i.discount, 0);
+    const overallDiscountAmount = Math.max(0, totals.discount - lineDiscountTotal);
+
+    // Base amount of the in-progress line item — used to keep the draft ₹ and %
+    // discount fields in sync as the user types in either one.
+    const draftUnit = draftUnitPrice !== '' ? Number(draftUnitPrice) : Number(services.find(s => s.id === selectedServiceId)?.default_rate || 0);
+    const draftBase = draftUnit * draftQty;
+    const setDiscountFromRupees = (val: string) => {
+        const amt = val === '' ? 0 : Number(val);
+        setDraftDiscount(amt);
+        setDraftDiscountPct(draftBase > 0 ? Number((amt / draftBase * 100).toFixed(2)) : 0);
+    };
+    const setDiscountFromPercent = (val: string) => {
+        const pct = val === '' ? 0 : Math.min(100, Number(val));
+        setDraftDiscountPct(pct);
+        setDraftDiscount(draftBase > 0 ? Number((draftBase * pct / 100).toFixed(2)) : 0);
+    };
 
     return (
         <AppShell
@@ -327,7 +365,7 @@ export default function ReceptionGenerateBillPage() {
                         <div className={`bg-white rounded-2xl shadow-sm border border-gray-200 p-6 transition-opacity ${!selectedPatient ? 'opacity-50 pointer-events-none' : ''}`}>
                             <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-4">2. Add Services / Consultations</h2>
 
-                            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
                                 <div className="md:col-span-2 relative">
                                     <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Service (Master Data)</label>
                                     {selectedServiceId ? (
@@ -437,11 +475,22 @@ export default function ReceptionGenerateBillPage() {
                                         value={draftDiscount === 0 ? '' : draftDiscount}
                                         placeholder="0"
                                         onFocus={e => e.target.select()}
-                                        onChange={e => {
-                                            const v = sanitizeDecimal(e.target.value);
-                                            setDraftDiscount(v === '' ? 0 : Number(v));
-                                        }}
+                                        onChange={e => setDiscountFromRupees(sanitizeDecimal(e.target.value))}
                                         className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Discount (%)</label>
+                                    <input
+                                        type="number" min="0" max="100"
+                                        step="0.5"
+                                        inputMode="decimal"
+                                        value={draftDiscountPct === 0 ? '' : draftDiscountPct}
+                                        placeholder="0"
+                                        onFocus={e => e.target.select()}
+                                        onChange={e => setDiscountFromPercent(sanitizeDecimal(e.target.value))}
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none focus:border-emerald-400"
                                     />
                                 </div>
 
@@ -524,8 +573,27 @@ export default function ReceptionGenerateBillPage() {
                                     <span>₹{totals.subtotal.toFixed(2)}</span>
                                 </div>
                                 <div className="flex justify-between text-rose-400">
-                                    <span>Discount</span>
-                                    <span>-₹{(isCalculating ? totals.discount : (billSplit?.totalDiscount ?? totals.discount)).toFixed(2)}</span>
+                                    <span>Line Discount</span>
+                                    <span>-₹{lineDiscountTotal.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-rose-400">
+                                    <div className="flex items-center gap-1.5">
+                                        <span>Overall Disc</span>
+                                        <input
+                                            type="number" min="0" max="100" step="0.5"
+                                            inputMode="decimal"
+                                            value={billDiscountPct === 0 ? '' : billDiscountPct}
+                                            placeholder="0"
+                                            onFocus={e => e.target.select()}
+                                            onChange={e => {
+                                                const v = sanitizeDecimal(e.target.value);
+                                                setBillDiscountPct(v === '' ? 0 : Math.min(100, Number(v)));
+                                            }}
+                                            className="w-12 px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-rose-300 text-right text-xs font-bold outline-none focus:border-rose-400"
+                                        />
+                                        <span className="text-slate-400">%</span>
+                                    </div>
+                                    <span>-₹{overallDiscountAmount.toFixed(2)}</span>
                                 </div>
                                 <div className="flex justify-between text-slate-300">
                                     <span>Estimated GST</span>

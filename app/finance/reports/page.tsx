@@ -196,8 +196,11 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                         </tr></thead>
                         <tbody className="divide-y divide-gray-100">
                             {payments.slice(0, 50).map((p: any) => (
-                                <tr key={p.id} className="hover:bg-gray-50">
-                                    <td className="px-6 py-3 text-sm font-mono text-gray-600">{p.receipt_number}</td>
+                                <tr key={p.id}
+                                    onClick={() => window.open(`/api/payment/${p.id}/receipt`, '_blank')}
+                                    title="Open receipt"
+                                    className="hover:bg-emerald-50/60 cursor-pointer transition-colors">
+                                    <td className="px-6 py-3 text-sm font-mono text-emerald-700 hover:underline">{p.receipt_number}</td>
                                     <td className="px-6 py-3 text-sm text-gray-900">{p.invoice?.patient?.full_name || '-'}</td>
                                     <td className="px-6 py-3 text-sm text-gray-600">{p.payment_method}</td>
                                     <td className="px-6 py-3 text-sm font-semibold text-gray-900 text-right">{fmt(Number(p.amount))}</td>
