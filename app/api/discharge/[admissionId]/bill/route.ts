@@ -4,6 +4,7 @@ import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { ensureIPDRoomChargesAccrued } from '@/app/actions/ipd-billing-helpers'
 import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, type BillBranding } from '@/app/lib/bill-branding';
 import { getBillSections } from '@/app/lib/bill-sections';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager'];
 
@@ -287,7 +288,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 <p style="font-size:11px;"><strong>UHID:</strong> ${patient.patient_id}</p>
                                 <p style="font-size:11px;"><strong>Age/Gender:</strong> ${patient.age || '-'} / ${patient.gender || '-'}</p>
                                 <p style="font-size:11px;"><strong>Admission ID:</strong> ${admission.admission_id}</p>
-                                <p style="font-size:11px;"><strong>Doctor:</strong> ${admission.doctor_name || '-'}</p>
+                                <p style="font-size:11px;"><strong>Doctor:</strong> ${formatDoctorName(admission.doctor_name) || '-'}</p>
                                 <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_id || '-'}</p>
                                 <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
                                 <p style="font-size:11px;"><strong>Discharged:</strong> ${isFinal ? dischargeDate : 'N/A'}</p>

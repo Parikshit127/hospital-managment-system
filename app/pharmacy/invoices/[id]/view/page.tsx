@@ -229,7 +229,7 @@ export default async function PharmacyInvoiceViewPage({ params }: { params: Prom
                     <div className="pt-grid">
                         <div className="pt-field">
                             <span className="pt-label">Patient:</span>
-                            <span className="pt-value">{invoice.patient?.full_name || 'Walk-in Patient'}</span>
+                            <span className="pt-value">{(invoice.patient_id === 'WALKIN' && invoice.notes?.trim()) ? invoice.notes.trim() : (invoice.patient?.full_name || 'Walk-in Patient')}</span>
                         </div>
                         <div className="pt-field" style={{ justifyContent: 'flex-end' }}>
                             <span className="pt-label">Patient ID:</span>

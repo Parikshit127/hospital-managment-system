@@ -3,6 +3,7 @@ import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, type BillBranding } from '@/app/lib/bill-branding';
 import { getBillSections } from '@/app/lib/bill-sections';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager'];
 
@@ -198,12 +199,12 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
         <p style="font-size:11px;"><strong>Age/Gender:</strong> ${patient.age || '-'} / ${patient.gender || '-'}</p>
         <p style="font-size:11px;"><strong>Phone:</strong> ${patient.phone || '-'}</p>
         <p style="font-size:11px;"><strong>Category:</strong> ${patientCategory}${tpaProviderName ? ` (${tpaProviderName})` : ''}</p>
-        ${!isIPD && opdDoctor ? `<p style="font-size:11px;"><strong>Doctor:</strong> Dr. ${opdDoctor}</p>` : ''}
+        ${!isIPD && opdDoctor ? `<p style="font-size:11px;"><strong>Doctor:</strong> ${formatDoctorName(opdDoctor)}</p>` : ''}
     `;
     if (isIPD) {
         patientInfoHTML += `
             <p style="font-size:11px;"><strong>Admission ID:</strong> ${admission.admission_id}</p>
-            <p style="font-size:11px;"><strong>Doctor:</strong> Dr. ${admission.doctor_name || '-'}</p>
+            <p style="font-size:11px;"><strong>Doctor:</strong> ${formatDoctorName(admission.doctor_name) || '-'}</p>
             <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_id || '-'}</p>
             <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
             <p style="font-size:11px;"><strong>Discharged:</strong> ${isFinal ? dischargeDate : 'N/A'}</p>

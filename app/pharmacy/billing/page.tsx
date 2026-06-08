@@ -64,6 +64,7 @@ export default function PharmacyPage() {
     const [patientSuggestions, setPatientSuggestions] = useState<any[]>([]);
     const [selectedPatient, setSelectedPatient] = useState<any>(null);
     const [isWalkIn, setIsWalkIn] = useState(false);
+    const [walkInName, setWalkInName] = useState('');
 
     const [showInvoiceModal, setShowInvoiceModal] = useState(false);
     const [invoiceResult, setInvoiceResult] = useState<any>(null);
@@ -211,7 +212,7 @@ export default function PharmacyPage() {
         try {
             const resolvedPatientId = isWalkIn ? 'WALKIN' : patientId;
             const payload = cart.map(item => ({ ...item, batch_no: item.batch_id }));
-            const res = await generateInvoice(resolvedPatientId, payload);
+            const res = await generateInvoice(resolvedPatientId, payload, isWalkIn ? walkInName : undefined);
             if (res.success) {
                 setInvoiceResult(res);
                 setCart([]);
@@ -232,7 +233,11 @@ export default function PharmacyPage() {
         setPatientId('');
         setPatientSearch('');
         setSelectedPatient(null);
+        setWalkInName('');
     };
+
+    // Name shown on the bill / receipt for the current sale.
+    const billPatientLabel = isWalkIn ? (walkInName.trim() || 'Walk-in / OTC') : patientId;
 
     const uniqueMedicines = Array.from(new Set(inventory.map(i => JSON.stringify({ id: i.medicine_id, name: i.medicine_name }))))
         .map(s => JSON.parse(s));
@@ -472,7 +477,7 @@ export default function PharmacyPage() {
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Patient</span>
                                 <button
                                     type="button"
-                                    onClick={() => { setIsWalkIn(!isWalkIn); clearPatient(); }}
+                                    onClick={() => { setIsWalkIn(!isWalkIn); clearPatient(); setWalkInName(''); }}
                                     className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors ${
                                         isWalkIn ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                                     }`}
@@ -482,8 +487,17 @@ export default function PharmacyPage() {
                             </div>
 
                             {isWalkIn ? (
-                                <div className="w-full p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-700 text-center">
-                                    Walk-in Sale — No registration needed
+                                <div className="space-y-1.5">
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-400" />
+                                        <input
+                                            value={walkInName}
+                                            onChange={e => setWalkInName(e.target.value)}
+                                            className="w-full pl-9 pr-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-400/30 focus:border-amber-300 outline-none font-medium text-amber-900 placeholder:text-amber-400"
+                                            placeholder="Customer name (optional)"
+                                        />
+                                    </div>
+                                    <p className="text-[10px] font-bold text-amber-600 px-1">Walk-in / OTC — no registration needed. Name appears on the bill.</p>
                                 </div>
                             ) : (
                                 <div className="relative">
@@ -670,7 +684,7 @@ export default function PharmacyPage() {
                                 <div className="p-6 space-y-4">
                                     <div className="flex justify-between text-sm">
                                         <span className="text-gray-500">Patient</span>
-                                        <span className="font-bold text-gray-700">{patientId}</span>
+                                        <span className="font-bold text-gray-700">{billPatientLabel}</span>
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-gray-500">Date</span>
@@ -734,7 +748,7 @@ export default function PharmacyPage() {
                                         <IndianRupee className="h-5 w-5 text-orange-600" />
                                     </div>
                                     <h2 className="text-lg font-black text-gray-900">Confirm Payment</h2>
-                                    <p className="text-xs text-gray-400 mt-1">Patient: <span className="font-bold text-gray-600">{patientId}</span></p>
+                                    <p className="text-xs text-gray-400 mt-1">Patient: <span className="font-bold text-gray-600">{billPatientLabel}</span></p>
                                 </div>
                                 <div className="p-6 space-y-3">
                                     <div className="border-b border-dashed border-gray-200 pb-3 space-y-2">

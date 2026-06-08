@@ -111,9 +111,12 @@ export async function getInventory() {
     }
 }
 
-export async function generateInvoice(patientId: string, items: any[]) {
+export async function generateInvoice(patientId: string, items: any[], walkInName?: string) {
     try {
         const { db, organizationId } = await requireTenantContext();
+        // For walk-in/OTC sales the patient name (if the cashier entered one) is
+        // stored on the invoice itself, since all walk-ins share one OPD_REG record.
+        const walkInLabel = patientId === 'WALKIN' ? (walkInName || '').trim() : '';
 
         let totalAmount = 0;
         let totalTax = 0;
@@ -340,6 +343,7 @@ export async function generateInvoice(patientId: string, items: any[]) {
                 sgst_amount: sgst,
                 igst_amount: 0,
                 is_inter_state: false,
+                notes: walkInLabel || undefined,
                 organizationId,
             }
         });
