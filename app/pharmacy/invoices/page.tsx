@@ -102,8 +102,13 @@ export default function PharmacyInvoicesPage() {
                                         <td colSpan={8} className="px-5 py-16 text-center text-gray-400 text-sm">No pharmacy invoices found</td>
                                     </tr>
                                 ) : filtered.map((inv: any) => (
-                                    <tr key={inv.id} className="hover:bg-orange-50/30 transition-colors">
-                                        <td className="px-5 py-3 font-mono font-bold text-gray-900">{inv.invoice_number}</td>
+                                    <tr key={`${inv.source}-${inv.id}`} className="hover:bg-orange-50/30 transition-colors">
+                                        <td className="px-5 py-3">
+                                            <span className="font-mono font-bold text-gray-900">{inv.invoice_number}</span>
+                                            {inv.source === 'IPD-PHARMACY' && (
+                                                <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-bold">IPD</span>
+                                            )}
+                                        </td>
                                         <td className="px-5 py-3 font-medium text-gray-800">{inv.patient?.full_name || '-'}</td>
                                         <td className="px-5 py-3 text-gray-500">{inv.patient?.phone || '-'}</td>
                                         <td className="px-5 py-3 text-right font-bold text-gray-900">{fmt(Number(inv.net_amount || inv.total_amount || 0))}</td>
@@ -117,7 +122,7 @@ export default function PharmacyInvoicesPage() {
                                             {new Date(inv.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                                         </td>
                                         <td className="px-5 py-3 text-center">
-                                            <Link href={`/pharmacy/invoices/${inv.id}/view`} target="_blank"
+                                            <Link href={inv.source === 'IPD-PHARMACY' ? `/finance/invoices/${inv.id}` : `/pharmacy/invoices/${inv.id}/view`} target="_blank"
                                                 className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-50 text-orange-700 border border-orange-200 text-xs font-bold rounded-lg hover:bg-orange-100 transition-colors">
                                                 <Eye className="h-3 w-3" /> View
                                             </Link>

@@ -291,9 +291,10 @@ export async function getInvoices(filters?: {
             });
         }
 
-        // 3. Fetch Pharmacy Invoices (from invoices table, not pharmacy_orders)
+        // 3. Fetch Pharmacy Invoices (OPD pharmacy invoices + IPD invoices with pharmacy items)
         let pharmacyOrders: any[] = [];
         if (fetchPharm) {
+            // 3a. OPD pharmacy invoices (invoice_type = 'Pharmacy')
             const where: any = { invoice_type: 'Pharmacy' };
             if (filters?.status) where.status = filters.status;
             if (filters?.patient_id) where.patient_id = filters.patient_id;
@@ -301,7 +302,7 @@ export async function getInvoices(filters?: {
                 where.patient = { phone: { contains: filters.mobile_number } };
             }
 
-            pharmacyOrders = await db.invoices.findMany({
+            const opdPharmInvoices = await db.invoices.findMany({
                 where,
                 include: {
                     patient: { select: { full_name: true, phone: true } },
@@ -309,6 +310,42 @@ export async function getInvoices(filters?: {
                 orderBy: { created_at: 'desc' },
                 take: limit,
             });
+
+            // 3b. IPD invoices that have pharmacy line items
+            const ipdPharmWhere: any = {
+                invoice_type: 'IPD',
+                items: { some: { service_category: 'Pharmacy' } },
+            };
+            if (filters?.status) ipdPharmWhere.status = filters.status;
+            if (filters?.patient_id) ipdPharmWhere.patient_id = filters.patient_id;
+            if (filters?.mobile_number) {
+                ipdPharmWhere.patient = { phone: { contains: filters.mobile_number } };
+            }
+
+            const ipdPharmInvoices = await db.invoices.findMany({
+                where: ipdPharmWhere,
+                include: {
+                    patient: { select: { full_name: true, phone: true } },
+                    items: { where: { service_category: 'Pharmacy' } },
+                },
+                orderBy: { created_at: 'desc' },
+                take: limit,
+            });
+
+            // Map IPD invoices to show only pharmacy totals
+            const ipdPharmMapped = ipdPharmInvoices.map((inv: any) => {
+                const pharmTotal = inv.items.reduce((s: number, it: any) => s + Number(it.net_price || 0), 0);
+                const pharmTax = inv.items.reduce((s: number, it: any) => s + Number(it.tax_amount || 0), 0);
+                return {
+                    ...inv,
+                    _isIpdPharmacy: true,
+                    _pharmTotal: pharmTotal + pharmTax,
+                    _pharmItemCount: inv.items.length,
+                    items: undefined, // don't carry heavy items array
+                };
+            });
+
+            pharmacyOrders = [...opdPharmInvoices, ...ipdPharmMapped];
         }
 
         // 4. Enrich Lab/Pharmacy with Patient Names & Lab pricing
@@ -369,11 +406,13 @@ export async function getInvoices(filters?: {
                 patient_id: pharm.patient_id,
                 patient: pharm.patient,
                 invoice_type: 'PHARMACY',
-                net_amount: pharm.net_amount,
+                net_amount: pharm._isIpdPharmacy ? pharm._pharmTotal : pharm.net_amount,
+                total_amount: pharm._isIpdPharmacy ? pharm._pharmTotal : pharm.total_amount,
                 balance_due: pharm.balance_due,
                 status: pharm.status,
                 created_at: pharm.created_at,
-                source: 'PHARMACY'
+                source: pharm._isIpdPharmacy ? 'IPD-PHARMACY' : 'PHARMACY',
+                admission_id: pharm.admission_id || null,
             }))
         ];
 
