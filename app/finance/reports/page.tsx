@@ -11,7 +11,7 @@ import { ReportChart } from '@/app/components/finance/ReportChart';
 import { ExportButton } from '@/app/components/finance/ExportButton';
 import {
     BarChart3, Clock, TrendingUp, IndianRupee, ShieldCheck, Building2,
-    Loader2, FileText, BookOpenCheck,
+    Loader2, FileText, BookOpenCheck, FileSpreadsheet,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { VoucherModal } from '@/app/components/finance/VoucherModal';
@@ -28,21 +28,6 @@ const REPORT_TABS: { key: ReportType; label: string; icon: React.ReactNode }[] =
     { key: 'department', label: 'Department', icon: <Building2 className="h-4 w-4" /> },
 ];
 
-function MISReportCard() {
-    return (
-        <Link href="/finance/reports/mis"
-            className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-xl hover:shadow-md transition group">
-            <div className="flex-shrink-0 w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center group-hover:bg-violet-200 transition">
-                <FileText className="h-5 w-5 text-violet-600" />
-            </div>
-            <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-gray-900">MIS Report (Bill Register)</p>
-                <p className="text-xs text-gray-500">Full breakdown — 30+ columns with Excel download</p>
-            </div>
-            <span className="text-violet-500 text-xs font-bold">Open &rarr;</span>
-        </Link>
-    );
-}
 
 export default function FinancialReportsPage() {
     const today = new Date().toISOString().slice(0, 10);
@@ -88,9 +73,6 @@ export default function FinancialReportsPage() {
         <AppShell pageTitle="Financial Reports" pageIcon={<BarChart3 className="h-5 w-5" />} onRefresh={loadReport} refreshing={loading}>
         <div className="max-w-7xl mx-auto">
 
-            {/* MIS Report Quick Link */}
-            <MISReportCard />
-
             {/* Report Tabs */}
             <div className="flex gap-1 overflow-x-auto pb-2 mb-4">
                 {REPORT_TABS.map(tab => (
@@ -101,6 +83,10 @@ export default function FinancialReportsPage() {
                         {tab.icon} {tab.label}
                     </button>
                 ))}
+                <Link href="/finance/reports/mis"
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg whitespace-nowrap transition bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100">
+                    <FileSpreadsheet className="h-4 w-4" /> MIS Report
+                </Link>
             </div>
 
             {/* Date Range + Export */}
