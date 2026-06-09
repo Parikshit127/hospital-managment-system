@@ -328,7 +328,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
                     </div>
                     <div style="text-align:right;">
                         <p style="font-size:11px;"><strong>Bill Date:</strong> ${invoiceDate}</p>
-                        <p style="font-size:11px;"><strong>Doctor:</strong> ${admission ? (formatDoctorName(admission.doctor_name) || '-') : (opdDoctor ? formatDoctorName(opdDoctor) : '-')}</p>
+                        <p style="font-size:11px;"><strong>Doctor:</strong> ${admission ? (formatDoctorName(admission.doctor_name) || '-') : (opdDoctor ? formatDoctorName(opdDoctor) : ((invoice as any).doctor_name ? formatDoctorName((invoice as any).doctor_name) : '-'))}</p>
                         ${isIPD ? `<p style="font-size:11px;"><strong>Adm. Date:</strong> ${fmtDate(admission.admission_date)} ${fmtTime(admission.admission_date)}</p>` : ''}
                     </div>
                 </div>

@@ -33,6 +33,7 @@ export default function IncomeExpensePage() {
     const allTimeNetIncome = allTimeRevenue - allTimeExpenses;
 
     const totalRevenue = revenueStats?.periodRevenue || 0;
+    const totalCollection = revenueStats?.periodCollection || 0;
     const totalExpenses = expenseStats?.periodExpenses || 0;
     const netIncome = totalRevenue - totalExpenses;
 
@@ -70,10 +71,16 @@ export default function IncomeExpensePage() {
                 </div>
 
                 {/* Summary Cards */}
-                <div className="grid grid-cols-4 gap-4 mb-6">
+                <div className="grid grid-cols-5 gap-4 mb-6">
                     <div className="bg-white rounded-lg shadow p-4">
-                        <p className="text-xs text-gray-500 mb-1">Total Revenue</p>
+                        <p className="text-xs text-gray-500 mb-1">Revenue (Billed)</p>
                         <p className="text-2xl font-bold text-green-700">{fmt(totalRevenue)}</p>
+                        <p className="text-xs text-gray-400 mt-1">Bills created incl. outstanding</p>
+                    </div>
+                    <div className="bg-white rounded-lg shadow p-4">
+                        <p className="text-xs text-gray-500 mb-1">Collection (Received)</p>
+                        <p className="text-2xl font-bold text-teal-700">{fmt(totalCollection)}</p>
+                        <p className="text-xs text-gray-400 mt-1">Cash actually received</p>
                     </div>
                     <div className="bg-white rounded-lg shadow p-4">
                         <p className="text-xs text-gray-500 mb-1">Total Expenses</p>

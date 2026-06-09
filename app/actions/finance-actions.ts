@@ -1085,9 +1085,9 @@ export async function getFinanceDashboardStats(params?: {
             totalInvoices,
             draftInvoices,
             pendingBalance,
-            todayRevenue,
-            totalRevenue,
-            periodRevenue,
+            todayCollection,
+            totalCollection,
+            periodCollection,
             totalPaymentsToday,
             outstandingInvoices,
             revenueByDept,
@@ -1097,6 +1097,9 @@ export async function getFinanceDashboardStats(params?: {
             aging60plus,
             ipdRevenue,
             opdRevenue,
+            todayRevenueInv,
+            totalRevenueInv,
+            periodRevenueInv,
         ] = await Promise.all([
             db.invoices.count({ where: { status: { not: 'Cancelled' } } }),
             db.invoices.count({ where: { status: 'Draft' } }),
@@ -1173,6 +1176,18 @@ export async function getFinanceDashboardStats(params?: {
                 _count: { _all: true },
                 where: { invoice_type: 'OPD', status: { not: 'Cancelled' }, ...(dateFilter ? { created_at: dateFilter } : {}) },
             }),
+            db.invoices.aggregate({
+                _sum: { net_amount: true },
+                where: { status: { not: 'Cancelled' }, created_at: { gte: today } },
+            }),
+            db.invoices.aggregate({
+                _sum: { net_amount: true },
+                where: { status: { not: 'Cancelled' } },
+            }),
+            db.invoices.aggregate({
+                _sum: { net_amount: true },
+                where: { status: { not: 'Cancelled' }, ...(dateFilter ? { created_at: dateFilter } : {}) },
+            }),
         ]);
 
         // Resolve doctor names for revenue-by-doctor
@@ -1193,9 +1208,12 @@ export async function getFinanceDashboardStats(params?: {
                 totalInvoices,
                 draftInvoices,
                 pendingBalance: Number(pendingBalance._sum.balance_due || 0),
-                todayRevenue: Number(todayRevenue._sum.amount || 0),
-                totalRevenue: Number(totalRevenue._sum.amount || 0),
-                periodRevenue: Number(periodRevenue._sum.amount || 0),
+                todayRevenue: Number(todayRevenueInv._sum.net_amount || 0),
+                totalRevenue: Number(totalRevenueInv._sum.net_amount || 0),
+                periodRevenue: Number(periodRevenueInv._sum.net_amount || 0),
+                todayCollection: Number(todayCollection._sum.amount || 0),
+                totalCollection: Number(totalCollection._sum.amount || 0),
+                periodCollection: Number(periodCollection._sum.amount || 0),
                 totalPaymentsToday,
                 outstandingInvoices,
                 revenueByDepartment: revenueByDept.map((d: any) => ({

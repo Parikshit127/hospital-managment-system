@@ -111,12 +111,44 @@ export async function getInventory() {
     }
 }
 
-export async function generateInvoice(patientId: string, items: any[], walkInName?: string) {
+export async function generateInvoice(
+    patientId: string,
+    items: any[],
+    optionsOrWalkInName?: string | { walkInName?: string; billDateTime?: string; doctorId?: string; doctorName?: string }
+) {
     try {
         const { db, organizationId } = await requireTenantContext();
+        const rawOptions = typeof optionsOrWalkInName === 'string'
+            ? { walkInName: optionsOrWalkInName }
+            : (optionsOrWalkInName || {});
+        // Default doctor to "Self" (counter sale / over-the-counter / pharmacist-led) when
+        // the cashier doesn't pick one. Stored verbatim so the print shows "Dr. Self".
+        const options = {
+            ...rawOptions,
+            doctorName: rawOptions.doctorName?.trim() || 'Self',
+        };
+        const walkInName = options.walkInName;
         // For walk-in/OTC sales the patient name (if the cashier entered one) is
         // stored on the invoice itself, since all walk-ins share one OPD_REG record.
         const walkInLabel = patientId === 'WALKIN' ? (walkInName || '').trim() : '';
+
+        // Validate optional backdated bill date.
+        let backdatedAt: Date | undefined;
+        if (options.billDateTime) {
+            const parsed = new Date(options.billDateTime);
+            if (isNaN(parsed.getTime())) {
+                return { success: false, error: 'Invalid bill date' };
+            }
+            const now = new Date();
+            const oneYearBack = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+            if (parsed.getTime() > now.getTime()) {
+                return { success: false, error: 'Bill date cannot be in the future' };
+            }
+            if (parsed.getTime() < oneYearBack.getTime()) {
+                return { success: false, error: 'Bill date too far in the past' };
+            }
+            backdatedAt = parsed;
+        }
 
         let totalAmount = 0;
         let totalTax = 0;
@@ -279,17 +311,19 @@ export async function generateInvoice(patientId: string, items: any[], walkInNam
                 select: { admission_id: true },
             });
             if (activeAdmission) {
+                const doctorSuffix = options.doctorName ? ` — Dr. ${options.doctorName}` : '';
                 for (const item of invoiceItems) {
                     await postChargeToIpdBill({
                         admission_id: activeAdmission.admission_id,
                         source_module: 'pharmacy',
                         source_ref_id: `PHARM-COUNTER-${item.medicine_id}-${item.batch_no}-${Date.now()}`,
-                        description: `Pharmacy: ${item.medicine_name} (Batch ${item.batch_no}) × ${item.qty}`,
+                        description: `Pharmacy: ${item.medicine_name} (Batch ${item.batch_no}) × ${item.qty}${doctorSuffix}`,
                         quantity: item.qty,
                         unit_price: item.unit_price,
                         tax_rate: item.tax_rate,
                         hsn_sac_code: item.hsn_sac_code,
                         service_category: 'Pharmacy',
+                        posted_at: backdatedAt,
                     });
                 }
 
@@ -345,6 +379,9 @@ export async function generateInvoice(patientId: string, items: any[], walkInNam
                 is_inter_state: false,
                 notes: walkInLabel || undefined,
                 organizationId,
+                ...(backdatedAt ? { created_at: backdatedAt } : {}),
+                ...(options.doctorId ? { doctor_id: options.doctorId } : {}),
+                ...(options.doctorName ? { doctor_name: options.doctorName } : {}),
             }
         });
 
@@ -383,7 +420,15 @@ export async function generateInvoice(patientId: string, items: any[], walkInNam
             module: 'Pharmacy',
             entity_type: 'invoice',
             entity_id: invoice.invoice_number,
-            details: JSON.stringify({ total: netAmount, itemCount: invoiceItems.length, patientId }),
+            details: JSON.stringify({
+                total: netAmount,
+                itemCount: invoiceItems.length,
+                patientId,
+                backdated: !!backdatedAt,
+                billDateTime: backdatedAt ? backdatedAt.toISOString() : undefined,
+                doctorId: options.doctorId || undefined,
+                doctorName: options.doctorName || undefined,
+            }),
         });
 
         revalidatePath('/pharmacy/billing');

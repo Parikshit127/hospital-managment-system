@@ -43,8 +43,13 @@ export default async function PharmacyInvoiceViewPage({ params }: { params: Prom
     // For IPD invoices, paid/balance are for the whole bill — show pharmacy total as the amount
     const paid    = isIpd ? 0 : Number((invoice as any).paid_amount || 0);
     const balance = isIpd ? total : (total - paid);
-    const date    = new Date(invoice.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const time    = new Date(invoice.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    // For IPD bills, the "Bill Date" shown is the pharmacy dispense date (line items'
+    // created_at), not the admission date on invoice.created_at.
+    const dateSource: Date = (isIpd && items.length > 0)
+        ? new Date((items[items.length - 1] as any).created_at || invoice.created_at)
+        : new Date(invoice.created_at);
+    const date    = dateSource.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const time    = dateSource.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
     // ─── words helper ───────────────────────────────────────────────────────────
     function numberToWords(n: number): string {

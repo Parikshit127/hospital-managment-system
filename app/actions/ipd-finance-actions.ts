@@ -182,6 +182,7 @@ export async function postChargeToIpdBill(data: {
     hsn_sac_code?: string;
     service_category?: string;
     posted_by?: string;
+    posted_at?: Date;
 }) {
     try {
         const { db, session, organizationId } = await requireTenantContext();
@@ -248,6 +249,7 @@ export async function postChargeToIpdBill(data: {
                 service_category: serviceCategory,
                 ref_id: refId,
                 organizationId,
+                ...(data.posted_at ? { created_at: data.posted_at } : {}),
             },
         });
 

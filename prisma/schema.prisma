@@ -1170,6 +1170,10 @@ model invoices {
   cancelled_by        String?
   cancellation_reason String?
 
+  // Prescribing doctor (used by pharmacy bills; OPD/IPD derive their doctor elsewhere)
+  doctor_id   String?
+  doctor_name String?
+
   organization          Organization         @relation(fields: [organizationId], references: [id])
   patient               OPD_REG              @relation(fields: [patient_id], references: [patient_id])
   admission             admissions?          @relation(fields: [admission_id], references: [admission_id])

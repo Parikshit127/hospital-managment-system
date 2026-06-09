@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { getInventory, generateInvoice, getPharmacyQueue, markOrderAsPaid, addInventoryBatch, processDoctorOrder } from '@/app/actions/pharmacy-actions';
 import { searchPatientsForBilling } from '@/app/actions/finance-actions';
+import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { fetchBillBranding, fetchPharmacyBranding } from '@/app/actions/branding-actions';
 import type { BillBranding } from '@/app/lib/bill-branding';
@@ -66,6 +67,12 @@ export default function PharmacyPage() {
     const [isWalkIn, setIsWalkIn] = useState(false);
     const [walkInName, setWalkInName] = useState('');
 
+    // Backdate + prescribing doctor (optional)
+    const [billDateTime, setBillDateTime] = useState('');
+    const [doctorId, setDoctorId] = useState('');
+    const [doctorName, setDoctorName] = useState('');
+    const [doctorOptions, setDoctorOptions] = useState<{ id: string; name: string }[]>([]);
+
     const [showInvoiceModal, setShowInvoiceModal] = useState(false);
     const [invoiceResult, setInvoiceResult] = useState<any>(null);
     const [showInventoryModal, setShowInventoryModal] = useState(false);
@@ -119,6 +126,11 @@ export default function PharmacyPage() {
         loadQueue();
         fetchBillBranding().then(r => r.success && r.data && setBranding(r.data));
         fetchPharmacyBranding().then(r => r.success && r.data && setPharmacyBranding(r.data));
+        getDoctorsForDropdown().then(r => {
+            if (r.success && Array.isArray(r.data)) {
+                setDoctorOptions(r.data.map((d: any) => ({ id: d.id, name: d.name })));
+            }
+        });
         // Poll queue every 15s instead of 5s
         const interval = setInterval(loadQueue, 15000);
         return () => clearInterval(interval);
@@ -208,11 +220,21 @@ export default function PharmacyPage() {
             alert('Please search and select a patient, or enable Walk-in / OTC mode.');
             return;
         }
+        if (billDateTime) {
+            const picked = new Date(billDateTime);
+            if (isNaN(picked.getTime())) { alert('Invalid bill date'); return; }
+            if (picked.getTime() > Date.now()) { alert('Bill date cannot be in the future'); return; }
+        }
         setIsSubmitting(true);
         try {
             const resolvedPatientId = isWalkIn ? 'WALKIN' : patientId;
             const payload = cart.map(item => ({ ...item, batch_no: item.batch_id }));
-            const res = await generateInvoice(resolvedPatientId, payload, isWalkIn ? walkInName : undefined);
+            const res = await generateInvoice(resolvedPatientId, payload, {
+                walkInName: isWalkIn ? walkInName : undefined,
+                billDateTime: billDateTime || undefined,
+                doctorId: doctorId || undefined,
+                doctorName: doctorName || undefined,
+            });
             if (res.success) {
                 setInvoiceResult(res);
                 setCart([]);
@@ -234,10 +256,16 @@ export default function PharmacyPage() {
         setPatientSearch('');
         setSelectedPatient(null);
         setWalkInName('');
+        setBillDateTime('');
+        setDoctorId('');
+        setDoctorName('');
     };
 
     // Name shown on the bill / receipt for the current sale.
     const billPatientLabel = isWalkIn ? (walkInName.trim() || 'Walk-in / OTC') : patientId;
+    const billDisplayDate = billDateTime ? new Date(billDateTime) : new Date();
+    const billDisplayDateStr = billDisplayDate.toLocaleDateString('en-IN');
+    const billDoctorLabel = `Dr. ${doctorName?.trim() || 'Self'}`;
 
     const uniqueMedicines = Array.from(new Set(inventory.map(i => JSON.stringify({ id: i.medicine_id, name: i.medicine_name }))))
         .map(s => JSON.parse(s));
@@ -622,6 +650,38 @@ export default function PharmacyPage() {
                             </div>
                         )}
 
+                        {/* Bill Date (optional backdate) + Prescribing Doctor */}
+                        <div className="grid grid-cols-2 gap-1.5 mb-3">
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1 block">Bill Date</label>
+                                <input
+                                    type="datetime-local"
+                                    value={billDateTime}
+                                    max={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
+                                    onChange={e => setBillDateTime(e.target.value)}
+                                    className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                    placeholder="Defaults to now"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1 block">Doctor</label>
+                                <select
+                                    value={doctorId}
+                                    onChange={e => {
+                                        const picked = doctorOptions.find(d => d.id === e.target.value);
+                                        setDoctorId(picked?.id || '');
+                                        setDoctorName(picked?.name || '');
+                                    }}
+                                    className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                >
+                                    <option value="">— None —</option>
+                                    {doctorOptions.map(d => (
+                                        <option key={d.id} value={d.id}>Dr. {d.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
                         {/* Payment Method */}
                         <div className="flex gap-1.5 mb-3">
                             {PAYMENT_METHODS.map(m => (
@@ -663,7 +723,7 @@ export default function PharmacyPage() {
                                         <div className="text-right">
                                             <p className="text-xs font-black uppercase tracking-widest" style={{ color: branding?.accentColor || '#1e3a6e' }}>Pharmacy Invoice</p>
                                             <p className="text-xs font-mono text-gray-500 mt-0.5">{invoiceResult.invoice_number}</p>
-                                            <p className="text-xs text-gray-400">{new Date().toLocaleDateString('en-IN')}</p>
+                                            <p className="text-xs text-gray-400">{billDisplayDateStr}</p>
                                         </div>
                                     </div>
                                     {/* Print-only invoice info with top padding for letterhead */}
@@ -671,7 +731,7 @@ export default function PharmacyPage() {
                                         <div className="text-right">
                                             <p className="text-xs font-black uppercase tracking-widest" style={{ color: branding?.accentColor || '#1e3a6e' }}>Pharmacy Invoice</p>
                                             <p className="text-xs font-mono text-gray-500 mt-0.5">{invoiceResult.invoice_number}</p>
-                                            <p className="text-xs text-gray-400">{new Date().toLocaleDateString('en-IN')}</p>
+                                            <p className="text-xs text-gray-400">{billDisplayDateStr}</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center justify-center gap-2 mt-2">
@@ -688,8 +748,14 @@ export default function PharmacyPage() {
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-gray-500">Date</span>
-                                        <span className="font-medium text-gray-700">{new Date().toLocaleDateString('en-IN')}</span>
+                                        <span className="font-medium text-gray-700">{billDisplayDateStr}</span>
                                     </div>
+                                    {billDoctorLabel && (
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-gray-500">Doctor</span>
+                                            <span className="font-medium text-gray-700">{billDoctorLabel}</span>
+                                        </div>
+                                    )}
                                     <div className="border-t border-dashed border-gray-200 pt-4 space-y-2">
                                         {invoiceResult.items?.map((item: any, idx: number) => (
                                             <div key={idx} className="flex justify-between text-sm">
@@ -812,12 +878,15 @@ export default function PharmacyPage() {
                             <div style={{ textAlign: 'right' }}>
                                 <p className="text-xs font-black uppercase tracking-widest" style={{ color: '#111' }}>Pharmacy Invoice</p>
                                 <p className="text-xs font-mono text-gray-600 mt-0.5">{invoiceResult.invoice_number}</p>
-                                <p className="text-xs text-gray-500">{new Date().toLocaleDateString('en-IN')}</p>
+                                <p className="text-xs text-gray-500">{billDisplayDateStr}</p>
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4 text-sm">
                             <div><span className="text-gray-500">Patient:</span> <span className="font-bold">{patientId}</span></div>
-                            <div className="text-right"><span className="text-gray-500">Date:</span> <span className="font-bold">{new Date().toLocaleDateString('en-IN')}</span></div>
+                            <div className="text-right"><span className="text-gray-500">Date:</span> <span className="font-bold">{billDisplayDateStr}</span></div>
+                            {billDoctorLabel && (
+                                <div><span className="text-gray-500">Doctor:</span> <span className="font-bold">{billDoctorLabel}</span></div>
+                            )}
                         </div>
                         <table className="w-full text-sm border-collapse mt-2">
                             <thead>
