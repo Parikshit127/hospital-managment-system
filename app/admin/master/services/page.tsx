@@ -279,23 +279,28 @@ export default function ServiceMasterPage() {
   const submitPkg = async (e: React.FormEvent) => {
     e.preventDefault();
     setPkgSubmitting(true);
-    const payload = {
-      ...pkgForm,
-      total_amount: Number(pkgForm.total_amount),
-      validity_days: Number(pkgForm.validity_days),
-      inclusions: pkgForm.inclusions.filter((inc: any) => inc.name.trim() !== '').map((inc: any) => ({ name: inc.name, qty: Number(inc.qty), ...(Number(inc.amount) > 0 ? { amount: Number(inc.amount) } : {}) })),
-    };
-    const res = pkgMode === 'create'
-      ? await createPackage(payload)
-      : await updatePackage(pkgEditingId!, payload);
-    if (res.success) {
-      toast.success(pkgMode === 'create' ? 'Package created' : 'Package updated');
-      closePkg();
-      loadPackages();
-    } else {
-      toast.error(res.error || 'Failed');
+    try {
+      const payload = {
+        ...pkgForm,
+        total_amount: Number(pkgForm.total_amount),
+        validity_days: Number(pkgForm.validity_days),
+        inclusions: pkgForm.inclusions.filter((inc: any) => inc.name.trim() !== '').map((inc: any) => ({ name: inc.name, qty: Number(inc.qty), ...(Number(inc.amount) > 0 ? { amount: Number(inc.amount) } : {}) })),
+      };
+      const res = pkgMode === 'create'
+        ? await createPackage(payload)
+        : await updatePackage(pkgEditingId!, payload);
+      if (res.success) {
+        toast.success(pkgMode === 'create' ? 'Package created' : 'Package updated');
+        closePkg();
+        loadPackages();
+      } else {
+        toast.error(res.error || 'Failed');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Network error — please check server status');
+    } finally {
+      setPkgSubmitting(false);
     }
-    setPkgSubmitting(false);
   };
 
   const TABS: { key: SubTab; label: string }[] = [

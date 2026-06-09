@@ -51,27 +51,36 @@ export default function CreditNotesPage() {
     async function handleCreate() {
         if (!createForm.original_invoice_id || !createForm.reason || !createForm.total_amount) return;
         setCreateLoading(true);
-        const res = await createCreditNote({
-            original_invoice_id: parseInt(createForm.original_invoice_id),
-            reason: createForm.reason,
-            total_amount: parseFloat(createForm.total_amount),
-            notes: createForm.notes || undefined,
-            items: createForm.items || undefined,
-        });
-        if (res.success) {
-            setShowCreate(false);
-            loadData();
-        } else {
-            toast.error(res.error || 'Failed to create credit note');
+        try {
+            const res = await createCreditNote({
+                original_invoice_id: parseInt(createForm.original_invoice_id),
+                reason: createForm.reason,
+                total_amount: parseFloat(createForm.total_amount),
+                notes: createForm.notes || undefined,
+                items: createForm.items || undefined,
+            });
+            if (res.success) {
+                setShowCreate(false);
+                loadData();
+            } else {
+                toast.error(res.error || 'Failed to create credit note');
+            }
+        } catch (err: any) {
+            toast.error(err?.message || 'Network error — please check server status');
+        } finally {
+            setCreateLoading(false);
         }
-        setCreateLoading(false);
     }
 
     async function handleApprove(id: number) {
         if (!confirm('Approve this credit note?')) return;
-        const res = await approveCreditNote(id);
-        if (res.success) loadData();
-        else toast.error(res.error || 'Failed to approve credit note');
+        try {
+            const res = await approveCreditNote(id);
+            if (res.success) loadData();
+            else toast.error(res.error || 'Failed to approve credit note');
+        } catch (err: any) {
+            toast.error(err?.message || 'Network error — please check server status');
+        }
     }
 
     const fmt = (n: number) => n.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
