@@ -560,6 +560,8 @@ export default function AdmitPatientPage() {
                       <option value="Card">Card</option>
                       <option value="UPI">UPI</option>
                       <option value="Bank Transfer">Bank Transfer</option>
+                      <option value="NEFT_RTGS">NEFT/RTGS</option>
+                      <option value="Cheque">Cheque</option>
                     </select>
                     <ChevronDown className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   </div>

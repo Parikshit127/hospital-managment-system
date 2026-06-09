@@ -35,7 +35,7 @@ export function PaymentRecordModal({ invoice, form, onFormChange, onSubmit, onCl
                             <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Method</label>
                             <select value={form.method} onChange={e => onFormChange({ ...form, method: e.target.value })}
                                 className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none">
-                                {['Cash', 'UPI', 'Card', 'Razorpay', 'BankTransfer'].map(m => <option key={m} value={m}>{m}</option>)}
+                                {['Cash', 'UPI', 'Card', 'BankTransfer', 'NEFT_RTGS', 'Cheque', 'Razorpay'].map(m => <option key={m} value={m}>{m}</option>)}
                             </select>
                         </div>
                         <div>

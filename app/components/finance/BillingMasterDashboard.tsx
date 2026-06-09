@@ -448,6 +448,8 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                     <option>Card</option>
                                     <option>UPI</option>
                                     <option>Bank Transfer</option>
+                                    <option>NEFT_RTGS</option>
+                                    <option>Cheque</option>
                                 </select>
                             </div>
                             <div className="flex gap-3 mt-6">

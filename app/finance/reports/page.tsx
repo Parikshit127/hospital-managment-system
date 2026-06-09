@@ -166,6 +166,8 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                     <option value="UPI">UPI</option>
                     <option value="Card">Card</option>
                     <option value="BankTransfer">Bank Transfer</option>
+                    <option value="NEFT_RTGS">NEFT/RTGS</option>
+                    <option value="Cheque">Cheque</option>
                     <option value="Razorpay">Razorpay</option>
                 </select>
             </div>

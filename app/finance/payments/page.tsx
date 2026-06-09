@@ -44,6 +44,9 @@ export default function PaymentsLedgerPage() {
                                 <option value="Cash">Cash</option>
                                 <option value="Card">Card</option>
                                 <option value="UPI">UPI</option>
+                                <option value="BankTransfer">Bank Transfer</option>
+                                <option value="NEFT_RTGS">NEFT/RTGS</option>
+                                <option value="Cheque">Cheque</option>
                                 <option value="Insurance">Insurance / TPA</option>
                             </select>
                         </div>

@@ -277,6 +277,8 @@ export default function DischargeSettlementPage() {
                                                 <option>UPI</option>
                                                 <option>Card</option>
                                                 <option>BankTransfer</option>
+                                                <option>NEFT_RTGS</option>
+                                                <option>Cheque</option>
                                             </select>
                                             <input
                                                 type="text"

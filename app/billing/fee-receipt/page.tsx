@@ -367,7 +367,7 @@ function NewReceiptForm() {
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-3">
                         <h3 className="font-bold text-gray-900 border-b border-gray-100 pb-2">Payment Method</h3>
                         <div className="grid grid-cols-2 gap-2">
-                            {["Cash", "Card", "UPI", "Bank"].map(m => (
+                            {["Cash", "Card", "UPI", "Bank", "NEFT_RTGS", "Cheque"].map(m => (
                                 <label
                                     key={m}
                                     className={`flex items-center justify-center gap-1.5 px-3 py-2.5 border rounded-xl cursor-pointer text-xs font-bold transition-colors ${paymentMethod === m ? "bg-emerald-50 border-emerald-400 text-emerald-700" : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"}`}
@@ -668,6 +668,8 @@ function ReceiptHistory() {
                                 <option value="Card">Card</option>
                                 <option value="UPI">UPI</option>
                                 <option value="Bank">Bank</option>
+                                <option value="NEFT_RTGS">NEFT/RTGS</option>
+                                <option value="Cheque">Cheque</option>
                             </select>
                         </div>
                         <div>

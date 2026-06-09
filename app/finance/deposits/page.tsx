@@ -308,6 +308,7 @@ export default function DepositsPage() {
                                         <option>Card</option>
                                         <option>UPI</option>
                                         <option>Bank Transfer</option>
+                                        <option>NEFT_RTGS</option>
                                         <option>Cheque</option>
                                     </select>
                                 </div>
