@@ -50,15 +50,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             include: { branding: true },
         });
 
-        // Get doctor name for OPD
-        let opdDoctor = '';
-        if (!invoice.admission_id && invoice.patient_id) {
+        // Doctor for OPD/Pharmacy bills: prefer the doctor recorded on the invoice
+        // itself, then the patient's latest appointment. Never fall back to
+        // patient.department — that's a specialty label, not a doctor name
+        // (it was rendering as e.g. "Dr. senior urologist").
+        let opdDoctor = (invoice as any).doctor_name || '';
+        if (!opdDoctor && !invoice.admission_id && invoice.patient_id) {
             const apt = await prisma.appointments.findFirst({
                 where: { patient_id: invoice.patient_id, organizationId: auth.context.organizationId },
                 orderBy: { appointment_date: 'desc' },
                 select: { doctor_name: true },
             });
-            opdDoctor = apt?.doctor_name || invoice.patient?.department || '';
+            opdDoctor = apt?.doctor_name || '';
         }
 
         // Fetch TPA/Insurance provider name if applicable
