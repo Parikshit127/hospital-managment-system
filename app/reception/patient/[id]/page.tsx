@@ -1178,13 +1178,13 @@ function CollectPaymentModal({ invoice, onClose, onSuccess }: {
                         {/* Payment Method */}
                         <div>
                             <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Payment Method</label>
-                            <div className="grid grid-cols-5 gap-1.5 mt-1.5">
-                                {['Cash', 'Card', 'UPI', 'Bank', 'Online'].map(m => (
+                            <div className="grid grid-cols-4 gap-1.5 mt-1.5">
+                                {['Cash', 'Card', 'UPI', 'Bank', 'NEFT_RTGS', 'Cheque', 'Online'].map(m => (
                                     <button key={m} onClick={() => setMethod(m)}
                                         className={`py-2 rounded-lg text-xs font-bold border transition-all ${
                                             method === m ? 'bg-emerald-50 border-emerald-400 text-emerald-700 shadow-sm'
                                                 : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                                        }`}>{m}</button>
+                                        }`}>{m === 'NEFT_RTGS' ? 'NEFT/RTGS' : m}</button>
                                 ))}
                             </div>
                             {method === 'Online' && (

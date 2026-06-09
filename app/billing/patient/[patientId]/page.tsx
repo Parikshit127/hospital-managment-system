@@ -900,8 +900,8 @@ function CollectPaymentModal({
             {/* Payment Method */}
             <div>
               <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Payment Method</label>
-              <div className="grid grid-cols-5 gap-1.5 mt-1.5">
-                {["Cash", "Card", "UPI", "Bank", "Online"].map((m) => (
+              <div className="grid grid-cols-4 gap-1.5 mt-1.5">
+                {["Cash", "Card", "UPI", "Bank", "NEFT_RTGS", "Cheque", "Online"].map((m) => (
                   <button
                     key={m}
                     onClick={() => setMethod(m)}
@@ -911,7 +911,7 @@ function CollectPaymentModal({
                         : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
                     }`}
                   >
-                    {m}
+                    {m === "NEFT_RTGS" ? "NEFT/RTGS" : m}
                   </button>
                 ))}
               </div>
