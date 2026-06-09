@@ -1989,7 +1989,7 @@ export async function getPharmacyAnalytics() {
                 where: { status: 'Completed', created_at: { gte: thirtyDaysAgo } },
                 select: {
                     id: true, total_amount: true, created_at: true,
-                    items: { select: { medicine_name: true, quantity: true } },
+                    items: { select: { medicine_name: true, quantity_requested: true, quantity_dispensed: true, total_price: true } },
                 },
                 take: 2000,
             }),
@@ -2000,14 +2000,14 @@ export async function getPharmacyAnalytics() {
             db.pharmacy_orders.count({ where: { status: 'Pending' } }),
             db.pharmacyReturn.findMany({
                 where: { created_at: { gte: thirtyDaysAgo } },
-                select: { id: true, quantity: true, return_type: true, total_value: true },
+                select: { id: true, quantity: true, return_type: true, unit_cost: true },
                 take: 500,
             }),
             db.purchaseOrder.findMany({
                 where: { created_at: { gte: thirtyDaysAgo }, status: 'Received' },
                 select: {
                     id: true, total_amount: true,
-                    items: { select: { quantity: true, unit_price: true } },
+                    items: { select: { quantity_ordered: true, unit_price: true } },
                 },
                 take: 500,
             }),
