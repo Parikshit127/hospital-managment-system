@@ -81,6 +81,7 @@ export async function getInventory() {
                 gst_percent: true, tax_rate: true, hsn_sac_code: true, is_active: true,
             },
             orderBy: { brand_name: 'asc' },
+            take: 1000,
         });
 
         // Convert catalog medicines to batch-like shape for UI compatibility
@@ -524,15 +525,16 @@ export async function getPharmacyQueue() {
         const orders = await db.pharmacy_orders.findMany({
             where: { status: { in: ['Pending', 'Processed'] } },
             orderBy: { created_at: 'desc' },
-            include: { items: true }
+            include: { items: true },
+            take: 100, // limit to most recent 100 pending orders
         });
 
         // Manual Join for Patient Details (since relation is missing in schema)
         const patientIds = Array.from(new Set(orders.map((o: any) => o.patient_id))) as string[];
-        const patients = await db.oPD_REG.findMany({
+        const patients = patientIds.length > 0 ? await db.oPD_REG.findMany({
             where: { patient_id: { in: patientIds } },
             select: { patient_id: true, full_name: true, phone: true },
-        });
+        }) : [];
 
         // Collect all medicine names from order items to check stock
         const allMedicineNames = Array.from(new Set(
@@ -540,14 +542,14 @@ export async function getPharmacyQueue() {
         ));
 
         // Fetch stock info for all medicines in these orders
-        const medicines = await db.pharmacy_medicine_master.findMany({
+        const medicines = allMedicineNames.length > 0 ? await db.pharmacy_medicine_master.findMany({
             where: { brand_name: { in: allMedicineNames as string[] } },
             select: {
                 brand_name: true,
                 min_threshold: true,
                 batches: { where: { current_stock: { gt: 0 } }, select: { current_stock: true } }
             },
-        });
+        }) : [];
 
         const stockMap = new Map<string, { totalStock: number; status: 'In Stock' | 'Low Stock' | 'Out of Stock' }>();
         for (const med of medicines) {
@@ -728,22 +730,11 @@ export async function getPharmacyDashboardStats() {
 
         const [
             pendingOrdersCount,
-            lowStockCount,
             expiringBatchesCount,
-            todayRevenue
+            todayRevenue,
+            lowStockRaw,
         ] = await Promise.all([
             db.pharmacy_orders.count({ where: { status: 'Pending' } }),
-
-            // Accurate low stock count: Sum stock across batches for each medicine
-            (async () => {
-                const meds = await db.pharmacy_medicine_master.findMany({
-                    include: { batches: true }
-                });
-                return meds.filter((m: any) => {
-                    const total = m.batches.reduce((s: number, b: any) => s + b.current_stock, 0);
-                    return total <= m.min_threshold;
-                }).length;
-            })(),
 
             db.pharmacy_batch_inventory.count({
                 where: {
@@ -752,18 +743,31 @@ export async function getPharmacyDashboardStats() {
                 }
             }),
 
-            // Approximate today's sales by looking at completed orders
             db.pharmacy_orders.aggregate({
                 _sum: { total_amount: true },
                 where: { status: 'Completed', created_at: { gte: today } }
-            })
+            }),
+
+            // Count low-stock medicines efficiently with minimal select
+            db.pharmacy_medicine_master.findMany({
+                select: {
+                    min_threshold: true,
+                    batches: { select: { current_stock: true } }
+                },
+                take: 2000,
+            }),
         ]);
+
+        const lowStockCount = (lowStockRaw as any[]).filter((m: any) => {
+            const total = m.batches.reduce((s: number, b: any) => s + b.current_stock, 0);
+            return total <= m.min_threshold;
+        }).length;
 
         return {
             success: true,
             data: {
                 pendingOrders: pendingOrdersCount,
-                lowStockAlerts: lowStockCount, // Note: simplistic approx
+                lowStockAlerts: lowStockCount,
                 expiringBatches: expiringBatchesCount,
                 todayRevenue: todayRevenue._sum.total_amount || 0
             }
@@ -1043,9 +1047,17 @@ export async function searchMedicine(query: string) {
 export async function getLowStockAlerts() {
     try {
         const { db } = await requireTenantContext();
-        // Since sqlite lacks direct sum relations in where, we fetch and aggregate.
+        // Fetch only medicines that have at least one batch with stock <= threshold
+        // Use a limited select to avoid loading unnecessary fields
         const allMedicines = await db.pharmacy_medicine_master.findMany({
-            include: { batches: true }
+            select: {
+                id: true, brand_name: true, generic_name: true,
+                category: true, min_threshold: true, is_active: true,
+                batches: {
+                    select: { current_stock: true },
+                }
+            },
+            take: 2000,
         });
 
         const lowStock = allMedicines
@@ -1481,7 +1493,8 @@ export async function getPurchaseOrders() {
                 vendor: { select: { id: true, vendor_name: true, vendor_code: true, gst_number: true } },
                 items: { include: { medicine: true } },
                 grns: { select: { id: true, grn_number: true, received_at: true } },
-            }
+            },
+            take: 200,
         });
         return { success: true, data: pos };
     } catch (error) {
@@ -1799,12 +1812,18 @@ export async function getNarcoticRegister(drugName?: string) {
     try {
         const { db, organizationId } = await requireTenantContext();
 
+        // Default to last 90 days to keep result set manageable
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
         const entries = await (db.narcoticRegister as any).findMany({
             where: {
                 organizationId,
                 ...(drugName ? { drug_name: drugName } : {}),
+                created_at: { gte: ninetyDaysAgo },
             },
             orderBy: { created_at: 'desc' },
+            take: 500,
         });
 
         return { success: true, data: entries };
@@ -1941,7 +1960,7 @@ export async function getPharmacyAnalytics() {
         const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         const ninetyDays = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
 
-        // Parallel fetch all data
+        // Parallel fetch all data — with limits and minimal selects
         const [
             allMedicines,
             allBatches,
@@ -1951,22 +1970,46 @@ export async function getPharmacyAnalytics() {
             returns30d,
             purchaseOrders30d,
         ] = await Promise.all([
-            db.pharmacy_medicine_master.findMany({ include: { batches: true } }),
-            db.pharmacy_batch_inventory.findMany({ include: { medicine: true } }),
+            db.pharmacy_medicine_master.findMany({
+                select: {
+                    id: true, brand_name: true, generic_name: true,
+                    category: true, min_threshold: true,
+                    batches: { select: { current_stock: true } }
+                },
+                take: 2000,
+            }),
+            db.pharmacy_batch_inventory.findMany({
+                select: {
+                    id: true, current_stock: true, expiry_date: true, medicine_id: true,
+                    medicine: { select: { selling_price: true, price_per_unit: true, brand_name: true } }
+                },
+                take: 3000,
+            }),
             db.pharmacy_orders.findMany({
                 where: { status: 'Completed', created_at: { gte: thirtyDaysAgo } },
-                include: { items: true },
+                select: {
+                    id: true, total_amount: true, created_at: true,
+                    items: { select: { medicine_name: true, quantity: true } },
+                },
+                take: 2000,
             }),
             db.pharmacy_orders.findMany({
                 where: { status: 'Completed', created_at: { gte: today } },
+                select: { id: true, total_amount: true },
             }),
             db.pharmacy_orders.count({ where: { status: 'Pending' } }),
             db.pharmacyReturn.findMany({
                 where: { created_at: { gte: thirtyDaysAgo } },
+                select: { id: true, quantity: true, return_type: true, total_value: true },
+                take: 500,
             }),
             db.purchaseOrder.findMany({
                 where: { created_at: { gte: thirtyDaysAgo }, status: 'Received' },
-                include: { items: true },
+                select: {
+                    id: true, total_amount: true,
+                    items: { select: { quantity: true, unit_price: true } },
+                },
+                take: 500,
             }),
         ]);
 
