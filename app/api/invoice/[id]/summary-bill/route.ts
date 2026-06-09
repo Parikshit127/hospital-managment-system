@@ -172,10 +172,12 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
             <td colspan="5" style="padding:5px 8px;font-size:11px;font-weight:700;">${cat}</td>
             <td style="padding:5px 8px;font-size:11px;font-weight:700;text-align:right;">Total Rs. ${catTotal.toFixed(2)}/-</td>
         </tr>`;
-        // Only list individual line items in detailed mode — except Packages, which
-        // are single named charges (e.g. "Package: Maternity") and must always be
-        // named on the bill, even in summary mode.
-        if (detailed || cat === 'Package') {
+        // Summary mode collapses only the bulky Pharmacy list to a single total;
+        // every other category (Packages, consultations, procedures, lab, services)
+        // stays itemized so the actual services are always named on the bill.
+        // Detailed mode (?detailed=true) lists everything, including medications.
+        const isBulkPharmacy = cat.toLowerCase() === 'pharmacy';
+        if (detailed || !isBulkPharmacy) {
             for (const item of catItems) {
                 detailRows += `<tr>
                     <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;">${fmtDate(item.created_at)}</td>
