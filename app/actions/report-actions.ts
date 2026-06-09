@@ -37,7 +37,22 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
             return acc;
         }, {});
 
-        return { success: true, data: { payments: serialize(payments), totals } };
+        // Advance deposits actually COLLECTED in this period, by real tender
+        // (Cash/UPI/Card). These are separate from the "Deposit" payment method
+        // above, which represents deposits *applied* to bills. Always computed
+        // across all tenders regardless of the payments method filter.
+        const depositRows = await db.patientDeposit.findMany({
+            where: { created_at: { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') } },
+            select: { amount: true, payment_method: true },
+        });
+        const depositsCollected = depositRows.reduce((acc: any, d: any) => {
+            const method = d.payment_method || 'Unknown';
+            acc[method] = (acc[method] || 0) + Number(d.amount);
+            acc.total = (acc.total || 0) + Number(d.amount);
+            return acc;
+        }, {});
+
+        return { success: true, data: { payments: serialize(payments), totals, depositsCollected } };
     } catch (error: any) {
         return { success: false, error: error.message };
     }

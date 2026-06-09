@@ -135,6 +135,10 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
 }) {
     const methods = Object.entries(data?.totals || {}).filter(([k]) => k !== 'total');
     const payments = data?.payments || [];
+    // "Deposit" payments are advances applied to bills, not a tender type — label clearly.
+    const methodLabel = (m: string) => (m === 'Deposit' ? 'Deposit Applied' : m);
+    const depositsCollected = data?.depositsCollected || {};
+    const depositModes = Object.entries(depositsCollected).filter(([k]) => k !== 'total');
     return (
         <>
             {/* Payment Method Filter Bar */}
@@ -169,12 +173,29 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <SummaryCard label="Total Collections" value={fmt(data?.totals?.total || 0)} color="emerald" />
                 {methods.map(([method, amount]) => (
-                    <SummaryCard key={method} label={method} value={fmt(amount as number)} color="gray" />
+                    <SummaryCard key={method} label={methodLabel(method)} value={fmt(amount as number)} color="gray" />
                 ))}
             </div>
             {methods.length > 0 && (
                 <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <ReportChart type="doughnut" labels={methods.map(([m]) => m)} datasets={[{ label: 'Amount', data: methods.map(([, a]) => a as number) }]} height={300} />
+                    <ReportChart type="doughnut" labels={methods.map(([m]) => methodLabel(m))} datasets={[{ label: 'Amount', data: methods.map(([, a]) => a as number) }]} height={300} />
+                </div>
+            )}
+            {/* Advance deposits collected in this period, by real tender (Cash/UPI/Card). */}
+            {depositModes.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                    <div className="flex items-center justify-between mb-1">
+                        <h3 className="font-semibold text-gray-900">Advance Deposits Collected</h3>
+                        <span className="text-lg font-black text-gray-900">{fmt((depositsCollected.total as number) || 0)}</span>
+                    </div>
+                    <p className="text-xs text-gray-400 mb-4">
+                        Advance money received this period, by tender. Separate from the &ldquo;Deposit Applied&rdquo; slice above (advances used to settle bills) and not added to Total Collections.
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        {depositModes.map(([method, amount]) => (
+                            <SummaryCard key={method} label={method} value={fmt(amount as number)} color="gray" />
+                        ))}
+                    </div>
                 </div>
             )}
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
