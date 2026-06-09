@@ -511,7 +511,7 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
                 {editingPolicyId ? 'Edit Policy' : 'Add New Policy'}
               </p>
               <div className="grid grid-cols-2 gap-2">
-                <div className="col-span-2">
+                <div>
                   <label className="text-[10px] font-bold text-gray-500 block mb-0.5">TPA / Insurance Provider *</label>
                   <select
                     value={policyForm.provider_id}
@@ -520,9 +520,19 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
                   >
                     <option value="">— Select Provider —</option>
                     {tpaProviders.map((p: any) => (
-                      <option key={p.id} value={p.id}>{p.provider_name}</option>
+                      <option key={p.id} value={p.id}>{p.provider_name}{p.provider_code ? ` (${p.provider_code})` : ''}</option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 block mb-0.5">TPA Code</label>
+                  <input
+                    readOnly
+                    value={tpaProviders.find((p: any) => String(p.id) === String(policyForm.provider_id))?.provider_code || ''}
+                    placeholder="Auto-filled from provider"
+                    title="Code of the selected TPA / insurance provider"
+                    className="w-full text-sm bg-gray-50 text-gray-600 border border-gray-200 rounded-md px-2 py-1 cursor-default"
+                  />
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Policy Number *</label>
