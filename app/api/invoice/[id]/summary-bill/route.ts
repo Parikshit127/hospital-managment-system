@@ -19,6 +19,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const invoiceId = parseInt(rawId, 10);
         if (isNaN(invoiceId)) return NextResponse.json({ error: 'Invalid invoice ID' }, { status: 400 });
 
+        // ?detailed=true lists individual line items (medications) under each
+        // category; default shows only per-category totals + grand total.
+        const detailed = new URL(req.url).searchParams.get('detailed') === 'true';
+
         const invoice = await prisma.invoices.findFirst({
             where: { id: invoiceId, organizationId: auth.context.organizationId },
             include: {
@@ -86,7 +90,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             })
             : [];
 
-        const html = generateSummaryBillHTML(invoice, admission, org, deposits, branding, sections, opdDoctor, tpaProviderName);
+        const html = generateSummaryBillHTML(invoice, admission, org, deposits, branding, sections, opdDoctor, tpaProviderName, detailed);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -113,7 +117,7 @@ function numberToWords(n: number): string {
     return 'Rupees ' + convert(Math.floor(n)) + ' Only';
 }
 
-function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[], branding: BillBranding, sections: any, opdDoctor: string = '', tpaProviderName: string = '') {
+function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[], branding: BillBranding, sections: any, opdDoctor: string = '', tpaProviderName: string = '', detailed: boolean = false) {
     const patient = invoice.patient || {};
     const items = invoice.items || [];
 
@@ -168,15 +172,18 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
             <td colspan="5" style="padding:5px 8px;font-size:11px;font-weight:700;">${cat}</td>
             <td style="padding:5px 8px;font-size:11px;font-weight:700;text-align:right;">Total Rs. ${catTotal.toFixed(2)}/-</td>
         </tr>`;
-        for (const item of catItems) {
-            detailRows += `<tr>
-                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;">${fmtDate(item.created_at)}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;">${item.description}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${Number(item.unit_price).toFixed(2)}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:center;">${item.quantity}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${Number(item.discount || 0).toFixed(2)}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${Number(item.net_price).toFixed(2)}</td>
-            </tr>`;
+        // Only list individual line items (medications/services) in detailed mode.
+        if (detailed) {
+            for (const item of catItems) {
+                detailRows += `<tr>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;">${fmtDate(item.created_at)}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;">${item.description}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${Number(item.unit_price).toFixed(2)}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:center;">${item.quantity}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${Number(item.discount || 0).toFixed(2)}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${Number(item.net_price).toFixed(2)}</td>
+                </tr>`;
+            }
         }
     }
 
