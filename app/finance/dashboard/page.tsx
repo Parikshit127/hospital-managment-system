@@ -135,14 +135,14 @@ export default function FinanceDashboard() {
     });
 
     const kpiCards = [
-        { label: "Today's Revenue", value: `${INR}${((stats?.todayRevenue || 0) / 1000).toFixed(1)}K`, sub: `${stats?.totalPaymentsToday || 0} transactions`, icon: <DollarSign className="h-3.5 w-3.5 text-emerald-400" />, color: 'emerald', subIcon: <ArrowUpRight className="h-3 w-3" />, drillType: 'today-revenue' as DrillDownType },
-        { label: 'Total Revenue', value: `${INR}${((stats?.totalRevenue || 0) / 1000).toFixed(1)}K`, sub: `${stats?.totalInvoices || 0} invoices`, icon: <Wallet className="h-3.5 w-3.5 text-teal-400" />, color: 'teal', subIcon: <TrendingUp className="h-3 w-3" />, drillType: 'total-revenue' as DrillDownType },
-        { label: 'Expenses (Month)', value: `${INR}${((expenseStats?.thisMonthTotal || 0) / 1000).toFixed(1)}K`, sub: `${expenseStats?.pendingApproval || 0} pending approval`, icon: <TrendingDown className="h-3.5 w-3.5 text-red-400" />, color: 'red', subIcon: <Clock className="h-3 w-3" />, drillType: 'expenses' as DrillDownType },
-        { label: 'Outstanding', value: `${INR}${((stats?.pendingBalance || 0) / 1000).toFixed(1)}K`, sub: `${stats?.outstandingInvoices || 0} pending`, icon: <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />, color: 'amber', subIcon: <Clock className="h-3 w-3" />, drillType: 'outstanding' as DrillDownType },
+        { label: "Today's Revenue", value: `${INR}${(stats?.todayRevenue || 0).toLocaleString('en-IN')}`, sub: `${stats?.totalPaymentsToday || 0} transactions`, icon: <DollarSign className="h-3.5 w-3.5 text-emerald-400" />, color: 'emerald', subIcon: <ArrowUpRight className="h-3 w-3" />, drillType: 'today-revenue' as DrillDownType },
+        { label: 'Total Revenue', value: `${INR}${(stats?.totalRevenue || 0).toLocaleString('en-IN')}`, sub: `${stats?.totalInvoices || 0} invoices`, icon: <Wallet className="h-3.5 w-3.5 text-teal-400" />, color: 'teal', subIcon: <TrendingUp className="h-3 w-3" />, drillType: 'total-revenue' as DrillDownType },
+        { label: 'Expenses (Month)', value: `${INR}${(expenseStats?.thisMonthTotal || 0).toLocaleString('en-IN')}`, sub: `${expenseStats?.pendingApproval || 0} pending approval`, icon: <TrendingDown className="h-3.5 w-3.5 text-red-400" />, color: 'red', subIcon: <Clock className="h-3 w-3" />, drillType: 'expenses' as DrillDownType },
+        { label: 'Outstanding', value: `${INR}${(stats?.pendingBalance || 0).toLocaleString('en-IN')}`, sub: `${stats?.outstandingInvoices || 0} pending`, icon: <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />, color: 'amber', subIcon: <Clock className="h-3 w-3" />, drillType: 'outstanding' as DrillDownType },
         { label: 'Draft Bills', value: String(stats?.draftInvoices || 0), sub: 'Awaiting finalization', icon: <FileText className="h-3.5 w-3.5 text-violet-400" />, color: 'violet', subIcon: <FileText className="h-3 w-3" />, drillType: 'drafts' as DrillDownType },
-        { label: 'Active Deposits', value: `${INR}${((depositStats?.activeBalance || 0) / 1000).toFixed(1)}K`, sub: `${depositStats?.activeDeposits || 0} active`, icon: <Wallet className="h-3.5 w-3.5 text-cyan-400" />, color: 'cyan', subIcon: <Receipt className="h-3 w-3" />, drillType: 'deposits' as DrillDownType },
-        { label: 'IPD Revenue', value: `${INR}${((stats?.ipdRevenue || 0) / 1000).toFixed(1)}K`, sub: `${stats?.ipdCount || 0} admissions billed`, icon: <Wallet className="h-3.5 w-3.5 text-blue-400" />, color: 'blue', subIcon: <TrendingUp className="h-3 w-3" />, drillType: 'ipd' as DrillDownType },
-        { label: 'OPD Revenue', value: `${INR}${((stats?.opdRevenue || 0) / 1000).toFixed(1)}K`, sub: `${stats?.opdCount || 0} visits billed`, icon: <Wallet className="h-3.5 w-3.5 text-indigo-400" />, color: 'indigo', subIcon: <TrendingUp className="h-3 w-3" />, drillType: 'opd' as DrillDownType },
+        { label: 'Active Deposits', value: `${INR}${(depositStats?.activeBalance || 0).toLocaleString('en-IN')}`, sub: `${depositStats?.activeDeposits || 0} active`, icon: <Wallet className="h-3.5 w-3.5 text-cyan-400" />, color: 'cyan', subIcon: <Receipt className="h-3 w-3" />, drillType: 'deposits' as DrillDownType },
+        { label: 'IPD Revenue', value: `${INR}${(stats?.ipdRevenue || 0).toLocaleString('en-IN')}`, sub: `${stats?.ipdCount || 0} admissions billed`, icon: <Wallet className="h-3.5 w-3.5 text-blue-400" />, color: 'blue', subIcon: <TrendingUp className="h-3 w-3" />, drillType: 'ipd' as DrillDownType },
+        { label: 'OPD Revenue', value: `${INR}${(stats?.opdRevenue || 0).toLocaleString('en-IN')}`, sub: `${stats?.opdCount || 0} visits billed`, icon: <Wallet className="h-3.5 w-3.5 text-indigo-400" />, color: 'indigo', subIcon: <TrendingUp className="h-3 w-3" />, drillType: 'opd' as DrillDownType },
     ];
 
     const CHART_COLORS = ['from-emerald-500 to-teal-500', 'from-violet-500 to-indigo-500', 'from-amber-500 to-orange-500', 'from-rose-500 to-pink-500', 'from-blue-500 to-cyan-500', 'from-fuchsia-500 to-purple-500'];
@@ -331,7 +331,7 @@ export default function FinanceDashboard() {
                                                                     {ipdPct > 8 && <span className="text-[10px] font-black text-white">{ipdPct}%</span>}
                                                                 </div>
                                                             </div>
-                                                            <span className="text-xs font-black text-gray-700 w-24 text-right">{INR}{((stats?.ipdRevenue || 0) / 1000).toFixed(1)}K</span>
+                                                            <span className="text-xs font-black text-gray-700 w-24 text-right">{INR}{(stats?.ipdRevenue || 0).toLocaleString('en-IN')}</span>
                                                         </div>
                                                         <div className="flex items-center gap-3">
                                                             <span className="text-xs font-bold text-gray-500 w-12">OPD</span>
@@ -341,7 +341,7 @@ export default function FinanceDashboard() {
                                                                     {opdPct > 8 && <span className="text-[10px] font-black text-white">{opdPct}%</span>}
                                                                 </div>
                                                             </div>
-                                                            <span className="text-xs font-black text-gray-700 w-24 text-right">{INR}{((stats?.opdRevenue || 0) / 1000).toFixed(1)}K</span>
+                                                            <span className="text-xs font-black text-gray-700 w-24 text-right">{INR}{(stats?.opdRevenue || 0).toLocaleString('en-IN')}</span>
                                                         </div>
                                                         <div className="flex gap-4 pt-2 border-t border-gray-100">
                                                             <button onClick={() => setDrillDown({ type: 'ipd', filters: {} })}

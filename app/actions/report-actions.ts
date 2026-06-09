@@ -504,3 +504,207 @@ export async function getDailyCollectionSummary(filters: { from: string; to: str
         return { success: false, error: error.message };
     }
 }
+
+// ========================================
+// MIS (Management Information System) Report
+// ========================================
+
+function categorizeDept(dept: string | null | undefined, svcCat: string | null | undefined): string {
+    const d = (dept || '').toLowerCase();
+    const s = (svcCat || '').toLowerCase();
+    if (s === 'pharmacy' || d === 'pharmacy') return 'pharmacy';
+    if (s === 'lab' || d.includes('lab') || d.includes('pathology')) return 'lab';
+    if (s === 'radiology' || d.includes('radiology') || d.includes('imaging') || d.includes('x-ray') || d.includes('xray') || d.includes('ultrasound') || d.includes('usg') || d.includes('sono')) return 'radiology';
+    if (d.includes('ct') || d.includes('mri') || d.includes('scan') || s.includes('ct') || s.includes('mri')) return 'ct_mri';
+    if (s === 'consultation' || d.includes('consultation') || d.includes('opd consult')) return 'consultation';
+    if (s === 'room rent' || s === 'room' || s === 'bed' || d.includes('room rent') || d.includes('bed charge') || d.includes('ward charge')) return 'room_rent';
+    if (s === 'procedure' || s === 'ot' || d.includes('procedure') || d.includes('ot ') || d.includes('operation') || d.includes('surgery')) return 'procedure';
+    if (s === 'nursing' || d.includes('nursing')) return 'nursing';
+    if (s === 'consumable' || s === 'consumables' || d.includes('consumable')) return 'consumables';
+    if (s === 'implant' || d.includes('implant') || d.includes('stent') || d.includes('prosthesis')) return 'implant';
+    if (s === 'package' || d.includes('package')) return 'package';
+    return 'other';
+}
+
+export async function getMISReport(filters: { from: string; to: string; billType?: string }) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const where: any = {
+            created_at: { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') },
+            status: { notIn: ['Cancelled'] },
+            is_archived: false,
+        };
+        if (filters.billType && filters.billType !== 'all') {
+            where.invoice_type = filters.billType;
+        }
+
+        const invoices = await db.invoices.findMany({
+            where,
+            include: {
+                patient: {
+                    select: {
+                        patient_id: true, full_name: true, phone: true,
+                        patient_type: true, registration_number: true,
+                        corporate: { select: { company_name: true } },
+                    },
+                },
+                admission: {
+                    select: {
+                        admission_id: true, admission_date: true, discharge_date: true,
+                        doctor_name: true, diagnosis: true, patient_class: true,
+                        billing_category: true, admission_source: true,
+                        bed: { select: { bed_category: true, pricing_tier: true } },
+                        ward: { select: { ward_name: true, ward_type: true } },
+                    },
+                },
+                items: {
+                    select: {
+                        department: true, description: true, quantity: true,
+                        unit_price: true, total_price: true, discount: true,
+                        net_price: true, tax_amount: true, service_category: true,
+                    },
+                },
+                payments: {
+                    where: { status: 'Completed' },
+                    select: { amount: true, payment_method: true, payment_type: true },
+                },
+                credit_notes: {
+                    where: { status: 'Applied' },
+                    select: { total_amount: true },
+                },
+            },
+            orderBy: { created_at: 'asc' },
+        });
+
+        // Get TPA provider names for TPA invoices
+        const tpaProviderIds = [...new Set(invoices.filter((i: any) => i.tpa_provider_id).map((i: any) => i.tpa_provider_id))];
+        let tpaMap: Record<number, string> = {};
+        if (tpaProviderIds.length > 0) {
+            const tpaProviders = await db.insurance_providers.findMany({
+                where: { id: { in: tpaProviderIds } },
+                select: { id: true, provider_name: true },
+            });
+            tpaProviders.forEach((tp: any) => { tpaMap[tp.id] = tp.provider_name; });
+        }
+
+        const rows = invoices.map((inv: any) => {
+            const items = inv.items || [];
+            const categorySums: Record<string, number> = {
+                pharmacy: 0, lab: 0, radiology: 0, ct_mri: 0,
+                consultation: 0, room_rent: 0, procedure: 0, nursing: 0,
+                consumables: 0, implant: 0, package: 0, other: 0,
+            };
+
+            items.forEach((it: any) => {
+                const cat = categorizeDept(it.department, it.service_category);
+                const lineTotal = Number(it.net_price || 0) + Number(it.tax_amount || 0);
+                categorySums[cat] += lineTotal;
+            });
+
+            const creditNoteTotal = (inv.credit_notes || []).reduce((s: number, cn: any) => s + Number(cn.total_amount || 0), 0);
+
+            const patientPayments = (inv.payments || []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+
+            // Determine admission category label
+            let admCat = 'Cash';
+            if (inv.billing_patient_type === 'tpa_insurance') admCat = 'TPA/Insurance';
+            else if (inv.billing_patient_type === 'corporate') admCat = 'Corporate';
+
+            // TPA/Corporate name
+            let tpaCorporateName = '';
+            if (inv.tpa_provider_id && tpaMap[inv.tpa_provider_id]) {
+                tpaCorporateName = tpaMap[inv.tpa_provider_id];
+            } else if (inv.patient?.corporate?.company_name) {
+                tpaCorporateName = inv.patient.corporate.company_name;
+            }
+
+            // Doctor name — from admission or from consultation items
+            let doctorName = inv.admission?.doctor_name || '';
+            if (!doctorName) {
+                const consultItem = items.find((it: any) =>
+                    (it.service_category || '').toLowerCase() === 'consultation'
+                );
+                if (consultItem) doctorName = consultItem.description.replace(/^(Dr\.?\s*|Consultation\s*[-–—]\s*)/i, '');
+            }
+
+            // Department — from admission diagnosis area or most common item dept
+            let department = '';
+            if (inv.admission) {
+                department = inv.admission.diagnosis || '';
+            }
+            if (!department && items.length > 0) {
+                const deptCounts: Record<string, number> = {};
+                items.forEach((it: any) => { if (it.department) deptCounts[it.department] = (deptCounts[it.department] || 0) + 1; });
+                const sorted = Object.entries(deptCounts).sort(([, a], [, b]) => b - a);
+                if (sorted.length > 0) department = sorted[0][0];
+            }
+
+            // Room category
+            const roomCat = inv.admission?.billing_category || inv.admission?.patient_class || inv.admission?.ward?.ward_type || '';
+
+            // Package vs Non-Package
+            const hasPackage = categorySums.package > 0;
+
+            return {
+                patient_name: inv.patient?.full_name || '-',
+                bill_type: inv.invoice_type || 'OPD',
+                admission_category: admCat,
+                bill_no: inv.invoice_number,
+                uhid: inv.patient?.patient_id || '',
+                bill_date: inv.created_at,
+                admission_date: inv.admission?.admission_date || null,
+                discharge_date: inv.admission?.discharge_date || null,
+                doctor_name: doctorName,
+                department: department,
+                room_category: roomCat,
+                phone: inv.patient?.phone || '',
+                // Income breakdown
+                package_income: categorySums.package,
+                pharma_income: categorySums.pharmacy,
+                lab_income: categorySums.lab,
+                radiology_income: categorySums.radiology,
+                ct_mri_income: categorySums.ct_mri,
+                room_rent_income: categorySums.room_rent,
+                procedure_income: categorySums.procedure,
+                consultation_income: categorySums.consultation,
+                nursing_income: categorySums.nursing,
+                consumables_income: categorySums.consumables,
+                implant_income: categorySums.implant,
+                other_income: categorySums.other,
+                // Totals
+                discount: Number(inv.total_discount || 0),
+                credit_note: creditNoteTotal,
+                gross_amount: Number(inv.total_amount || 0) + Number(inv.total_tax || 0),
+                net_amount: Number(inv.net_amount || 0),
+                received_amount: Number(inv.paid_amount || 0),
+                outstanding_amount: Number(inv.balance_due || 0),
+                patient_receipt: patientPayments,
+                tpa_corporate_name: tpaCorporateName,
+                referral_source: inv.admission?.admission_source || '',
+                package_vs_nonpackage: hasPackage ? 'Package' : 'Non-Package',
+                remarks: inv.notes || '',
+                status: inv.status,
+            };
+        });
+
+        // Summary totals
+        const summary = {
+            total_bills: rows.length,
+            total_gross: rows.reduce((s: number, r: any) => s + r.gross_amount, 0),
+            total_net: rows.reduce((s: number, r: any) => s + r.net_amount, 0),
+            total_received: rows.reduce((s: number, r: any) => s + r.received_amount, 0),
+            total_outstanding: rows.reduce((s: number, r: any) => s + r.outstanding_amount, 0),
+            total_discount: rows.reduce((s: number, r: any) => s + r.discount, 0),
+            total_pharma: rows.reduce((s: number, r: any) => s + r.pharma_income, 0),
+            total_lab: rows.reduce((s: number, r: any) => s + r.lab_income, 0),
+            total_radiology: rows.reduce((s: number, r: any) => s + r.radiology_income, 0),
+            ipd_count: rows.filter((r: any) => r.bill_type === 'IPD').length,
+            opd_count: rows.filter((r: any) => r.bill_type !== 'IPD').length,
+        };
+
+        return serialize({ success: true, data: { rows, summary } });
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
