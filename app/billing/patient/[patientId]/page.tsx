@@ -470,19 +470,52 @@ function InvoicesTab({
                       </tr>
                     </thead>
                     <tbody>
-                      {inv.items.map((it: any) => (
-                        <tr key={it.id} className="border-t border-gray-100">
-                          <td className="py-1">{it.description}</td>
-                          <td className="py-1 text-gray-500">{it.department}</td>
-                          <td className="py-1 text-right">{it.quantity}</td>
-                          <td className="py-1 text-right">{fmtMoney(Number(it.unit_price))}</td>
-                          <td className="py-1 text-right">{fmtMoney(Number(it.discount))}</td>
-                          <td className="py-1 text-right">{fmtMoney(Number(it.tax_amount))}</td>
-                          <td className="py-1 text-right font-bold">
-                            {fmtMoney(Number(it.net_price))}
-                          </td>
-                        </tr>
-                      ))}
+                      {(() => {
+                        // Group pharmacy items into a single summary row
+                        const pharmacyItems = inv.items.filter((it: any) =>
+                          it.department?.toLowerCase() === 'pharmacy' ||
+                          it.description?.toLowerCase().startsWith('pharmacy:')
+                        );
+                        const nonPharmacyItems = inv.items.filter((it: any) =>
+                          it.department?.toLowerCase() !== 'pharmacy' &&
+                          !it.description?.toLowerCase().startsWith('pharmacy:')
+                        );
+                        const pharmacyNet = pharmacyItems.reduce((sum: number, it: any) => sum + Number(it.net_price), 0);
+                        const pharmacyDiscount = pharmacyItems.reduce((sum: number, it: any) => sum + Number(it.discount), 0);
+                        const pharmacyTax = pharmacyItems.reduce((sum: number, it: any) => sum + Number(it.tax_amount), 0);
+                        const pharmacyQty = pharmacyItems.reduce((sum: number, it: any) => sum + Number(it.quantity), 0);
+
+                        return (
+                          <>
+                            {nonPharmacyItems.map((it: any) => (
+                              <tr key={it.id} className="border-t border-gray-100">
+                                <td className="py-1">{it.description}</td>
+                                <td className="py-1 text-gray-500">{it.department}</td>
+                                <td className="py-1 text-right">{it.quantity}</td>
+                                <td className="py-1 text-right">{fmtMoney(Number(it.unit_price))}</td>
+                                <td className="py-1 text-right">{fmtMoney(Number(it.discount))}</td>
+                                <td className="py-1 text-right">{fmtMoney(Number(it.tax_amount))}</td>
+                                <td className="py-1 text-right font-bold">
+                                  {fmtMoney(Number(it.net_price))}
+                                </td>
+                              </tr>
+                            ))}
+                            {pharmacyItems.length > 0 && (
+                              <tr className="border-t border-gray-100">
+                                <td className="py-1">Pharmacy ({pharmacyItems.length} items)</td>
+                                <td className="py-1 text-gray-500">Pharmacy</td>
+                                <td className="py-1 text-right">{pharmacyQty}</td>
+                                <td className="py-1 text-right">—</td>
+                                <td className="py-1 text-right">{fmtMoney(pharmacyDiscount)}</td>
+                                <td className="py-1 text-right">{fmtMoney(pharmacyTax)}</td>
+                                <td className="py-1 text-right font-bold">
+                                  {fmtMoney(pharmacyNet)}
+                                </td>
+                              </tr>
+                            )}
+                          </>
+                        );
+                      })()}
                     </tbody>
                   </table>
                 </div>
