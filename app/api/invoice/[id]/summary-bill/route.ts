@@ -172,8 +172,10 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
             <td colspan="5" style="padding:5px 8px;font-size:11px;font-weight:700;">${cat}</td>
             <td style="padding:5px 8px;font-size:11px;font-weight:700;text-align:right;">Total Rs. ${catTotal.toFixed(2)}/-</td>
         </tr>`;
-        // Only list individual line items (medications/services) in detailed mode.
-        if (detailed) {
+        // Only list individual line items in detailed mode — except Packages, which
+        // are single named charges (e.g. "Package: Maternity") and must always be
+        // named on the bill, even in summary mode.
+        if (detailed || cat === 'Package') {
             for (const item of catItems) {
                 detailRows += `<tr>
                     <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;">${fmtDate(item.created_at)}</td>
