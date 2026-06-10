@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { BedDouble, Wrench, X, Loader2, ShieldAlert } from 'lucide-react';
-import { updateBedStatus } from '@/app/admin/ipd-setup/actions';
+import { BedDouble, Wrench, X, Loader2, ShieldAlert, Trash2 } from 'lucide-react';
+import { updateBedStatus, renameBed, deleteBed } from '@/app/admin/ipd-setup/actions';
 
 const STATUS_OPTIONS = [
     { value: 'Available',   label: 'Available',   color: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
@@ -28,12 +28,20 @@ function getStatusStyle(status: string) {
 export function BedGrid({ beds, wardName }: { beds: any[]; wardName: string }) {
     const [editBed, setEditBed]     = useState<any | null>(null);
     const [saving,  setSaving]      = useState(false);
-    const [editForm, setEditForm]   = useState({ status: '', bed_category: '', pricing_tier: '', is_isolation: false });
+    const [deleting, setDeleting]   = useState(false);
+    const [editForm, setEditForm]   = useState({ bed_name: '', status: '', bed_category: '', pricing_tier: '', is_isolation: false });
+
+    const bedLabel = (bed: any) => {
+        if (bed.bed_name) return bed.bed_name;
+        const prefix = `${bed.organizationId}-${bed.ward_id}-`;
+        return bed.bed_id.startsWith(prefix) ? bed.bed_id.slice(prefix.length) : bed.bed_id;
+    };
 
     const openEdit = (bed: any, e: React.MouseEvent) => {
         e.stopPropagation();
         setEditBed(bed);
         setEditForm({
+            bed_name:     bed.bed_name ?? bedLabel(bed),
             status:       bed.status       ?? 'Available',
             bed_category: bed.bed_category ?? 'General',
             pricing_tier: bed.pricing_tier ?? 'Base',
@@ -45,12 +53,27 @@ export function BedGrid({ beds, wardName }: { beds: any[]; wardName: string }) {
         if (!editBed) return;
         setSaving(true);
         try {
-            await updateBedStatus(editBed.bed_id, editForm.status, editForm.bed_category, editForm.pricing_tier);
+            await updateBedStatus(editBed.bed_id, editForm.status, editForm.bed_category, editForm.pricing_tier, editForm.is_isolation);
+            await renameBed(editBed.bed_id, editForm.bed_name);
             setEditBed(null);
         } catch (e) {
             console.error('Failed to update bed', e);
+            alert((e as any)?.message || 'Failed to update bed');
         }
         setSaving(false);
+    };
+
+    const handleDelete = async () => {
+        if (!editBed) return;
+        if (!confirm(`Delete bed "${bedLabel(editBed)}" permanently? This cannot be undone.`)) return;
+        setDeleting(true);
+        try {
+            await deleteBed(editBed.bed_id);
+            setEditBed(null);
+        } catch (e) {
+            alert((e as any)?.message || 'Failed to delete bed');
+        }
+        setDeleting(false);
     };
 
     if (!beds || beds.length === 0) {
@@ -81,10 +104,7 @@ export function BedGrid({ beds, wardName }: { beds: any[]; wardName: string }) {
             {/* Bed grid */}
             <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2.5">
                 {beds.map((bed) => {
-                    const prefixToStrip = `${bed.organizationId}-${bed.ward_id}-`;
-                    const label = bed.bed_id.startsWith(prefixToStrip)
-                        ? bed.bed_id.slice(prefixToStrip.length)
-                        : bed.bed_id;
+                    const label = bedLabel(bed);
 
                     return (
                         <button
@@ -127,10 +147,7 @@ export function BedGrid({ beds, wardName }: { beds: any[]; wardName: string }) {
                             <div>
                                 <h3 className="font-bold text-gray-900 text-sm">Edit Bed</h3>
                                 <p className="text-[10px] text-gray-400 mt-0.5 font-mono">
-                                    {editBed.bed_id.startsWith(`${editBed.organizationId}-${editBed.ward_id}-`)
-                                        ? editBed.bed_id.slice(`${editBed.organizationId}-${editBed.ward_id}-`.length)
-                                        : editBed.bed_id}
-                                    {' '}— {wardName}
+                                    {bedLabel(editBed)} — {wardName}
                                 </p>
                             </div>
                             <button onClick={() => setEditBed(null)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400">
@@ -139,6 +156,18 @@ export function BedGrid({ beds, wardName }: { beds: any[]; wardName: string }) {
                         </div>
 
                         <div className="p-5 space-y-4">
+                            {/* Bed Name (editable label) */}
+                            <div>
+                                <label className={labelCls}>Bed Name</label>
+                                <input
+                                    type="text"
+                                    value={editForm.bed_name}
+                                    onChange={e => setEditForm(p => ({ ...p, bed_name: e.target.value }))}
+                                    placeholder="e.g. B-1, ICU-3"
+                                    className={inputCls}
+                                />
+                            </div>
+
                             {/* Status */}
                             <div>
                                 <label className={labelCls}>Status</label>
@@ -190,11 +219,16 @@ export function BedGrid({ beds, wardName }: { beds: any[]; wardName: string }) {
                         </div>
 
                         <div className="px-5 py-4 border-t border-gray-100 flex gap-3">
-                            <button onClick={() => setEditBed(null)}
-                                className="flex-1 py-2.5 border border-gray-300 rounded-xl text-gray-700 text-sm font-semibold hover:bg-gray-50 transition">
+                            <button onClick={handleDelete} disabled={saving || deleting}
+                                title="Delete bed permanently"
+                                className="py-2.5 px-3 border border-rose-200 text-rose-600 rounded-xl text-sm font-semibold hover:bg-rose-50 disabled:opacity-50 transition flex items-center justify-center gap-1.5">
+                                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                            </button>
+                            <button onClick={() => setEditBed(null)} disabled={saving || deleting}
+                                className="flex-1 py-2.5 border border-gray-300 rounded-xl text-gray-700 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50 transition">
                                 Cancel
                             </button>
-                            <button onClick={handleSave} disabled={saving}
+                            <button onClick={handleSave} disabled={saving || deleting}
                                 className="flex-1 py-2.5 bg-orange-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold disabled:opacity-50 transition flex items-center justify-center gap-2">
                                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                                 {saving ? 'Saving…' : 'Save Changes'}

@@ -1072,6 +1072,7 @@ model discharge_summaries {
 
 model beds {
   bed_id                String       @id
+  bed_name              String?      // Editable display label (bed_id stays the immutable key)
   ward_id               Int?
   status                String?      @default("Available")
   bed_category          String?

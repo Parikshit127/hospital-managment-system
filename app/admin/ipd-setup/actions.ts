@@ -1,6 +1,6 @@
 'use server';
 
-import { requireTenantContext } from '@/backend/tenant';
+import { requireTenantContext, requireRoleAndTenant } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
 export async function getIpdInventory() {
@@ -132,5 +132,41 @@ export async function toggleWardActive(ward_id: number, is_active: boolean) {
         where: { ward_id },
         data: { is_active }
     });
+    revalidatePath('/admin/ipd-setup');
+}
+
+// Rename a bed's display label (bed_id remains the immutable key). Admin only.
+export async function renameBed(bed_id: string, bed_name: string) {
+    const { db } = await requireRoleAndTenant(['admin']);
+    await db.beds.update({
+        where: { bed_id },
+        data: { bed_name: bed_name.trim() || null },
+    });
+    revalidatePath('/admin/ipd-setup');
+}
+
+// Permanently delete a bed. Blocked if it has any admission history. Admin only.
+export async function deleteBed(bed_id: string) {
+    const { db } = await requireRoleAndTenant(['admin']);
+    const admissionCount = await db.admissions.count({ where: { bed_id } });
+    if (admissionCount > 0) {
+        throw new Error('This bed has admission history and cannot be deleted. Set its status to "Blocked" instead.');
+    }
+    await db.beds.delete({ where: { bed_id } });
+    revalidatePath('/admin/ipd-setup');
+}
+
+// Permanently delete a ward. Blocked if it still has beds or any admission history. Admin only.
+export async function deleteWard(ward_id: number) {
+    const { db } = await requireRoleAndTenant(['admin']);
+    const bedCount = await db.beds.count({ where: { ward_id } });
+    if (bedCount > 0) {
+        throw new Error(`Cannot delete a ward that still has ${bedCount} bed(s). Delete the beds first, or deactivate the ward.`);
+    }
+    const admissionCount = await db.admissions.count({ where: { ward_id } });
+    if (admissionCount > 0) {
+        throw new Error('This ward has admission history and cannot be deleted. Deactivate it instead.');
+    }
+    await db.wards.delete({ where: { ward_id } });
     revalidatePath('/admin/ipd-setup');
 }

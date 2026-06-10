@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react';
 import { BedGrid } from './BedGrid';
-import { createWard, updateWard, bulkAddBeds, toggleWardActive } from '@/app/admin/ipd-setup/actions';
-import { Plus, Settings2, Building2, BedDouble, ChevronDown, ChevronUp, Pencil, X, Loader2 } from 'lucide-react';
+import { createWard, updateWard, bulkAddBeds, toggleWardActive, deleteWard } from '@/app/admin/ipd-setup/actions';
+import { Plus, Settings2, Building2, BedDouble, ChevronDown, ChevronUp, Pencil, X, Loader2, Trash2 } from 'lucide-react';
 import { useToast } from '@/app/components/ui/Toast';
 
 // All 14 ward types from the document
@@ -156,6 +156,17 @@ export function WardManager({ wards, departments, organizationId }: { wards: any
         await toggleWardActive(wardId, !current);
     };
 
+    const handleDeleteWard = async (wardId: number, wardName: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm(`Delete ward "${wardName}" permanently? This cannot be undone.`)) return;
+        try {
+            await deleteWard(wardId);
+            toast.success('Ward deleted');
+        } catch (err: any) {
+            toast.error(err.message || 'Failed to delete ward');
+        }
+    };
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -215,6 +226,9 @@ export function WardManager({ wards, departments, organizationId }: { wards: any
                                         className={`text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all ${ward.is_active ? 'bg-white border-rose-200 text-rose-600 hover:bg-rose-50' : 'bg-orange-500 text-white border-teal-600 hover:bg-teal-400'}`}>
                                         {ward.is_active ? 'Deactivate' : 'Activate'}
                                     </button>
+                                    <button onClick={(e) => handleDeleteWard(ward.ward_id, ward.ward_name, e)}
+                                        title="Delete ward permanently"
+                                        className="p-1.5 hover:bg-rose-50 rounded-lg text-gray-400 hover:text-rose-600 transition"><Trash2 className="h-4 w-4" /></button>
                                     {isExpanded ? <ChevronUp className="h-5 w-5 text-gray-400" /> : <ChevronDown className="h-5 w-5 text-gray-400" />}
                                 </div>
                             </div>
