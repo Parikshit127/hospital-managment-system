@@ -321,6 +321,7 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
                     // Clear corporate fields when switching away from corporate
                     if (v !== 'corporate') {
                       onDraftChange?.('corporate_id', '');
+                      onDraftChange?.('corporate_name', '');
                       onDraftChange?.('corporate_card_number', '');
                       onDraftChange?.('employee_id', '');
                     }
@@ -342,21 +343,28 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
                   </div>
                   <div>
                     <label className="text-[10px] font-semibold text-blue-700 uppercase tracking-wide block mb-1">Company *</label>
-                    <select
-                      value={draft?.corporate_id ?? ''}
-                      onChange={e => onDraftChange?.('corporate_id', e.target.value)}
+                    <input
+                      list="corp-company-list"
+                      value={draft?.corporate_name ?? (selectedCorp?.company_name ?? '')}
+                      onChange={e => onDraftChange?.('corporate_name', e.target.value)}
+                      placeholder="Type company name…"
                       className="w-full text-sm font-semibold text-gray-800 bg-white border border-gray-200 rounded-md px-2 py-1"
-                    >
-                      <option value="">— Select Company —</option>
+                    />
+                    <datalist id="corp-company-list">
                       {corporates.map(c => (
-                        <option key={c.id} value={c.id}>{c.company_name} ({c.company_code})</option>
+                        <option key={c.id} value={c.company_name}>{c.company_code}</option>
                       ))}
-                    </select>
-                    {selectedCorp && (
-                      <p className="text-[10px] text-blue-600 font-bold ml-1 mt-1">
-                        Discount: {Number(selectedCorp.discount_percentage || 0)}%
-                      </p>
-                    )}
+                    </datalist>
+                    {(() => {
+                      const typed = (draft?.corporate_name ?? selectedCorp?.company_name ?? '').trim();
+                      if (!typed) return null;
+                      const match = corporates.find((c: any) => (c.company_name || '').toLowerCase() === typed.toLowerCase());
+                      return match ? (
+                        <p className="text-[10px] text-blue-600 font-bold ml-1 mt-1">Discount: {Number(match.discount_percentage || 0)}%</p>
+                      ) : (
+                        <p className="text-[10px] text-emerald-600 font-bold ml-1 mt-1">New company — will be added to the corporate master on save.</p>
+                      );
+                    })()}
                   </div>
                   <div>
                     <label className="text-[10px] font-semibold text-blue-700 uppercase tracking-wide block mb-1">Employee ID</label>

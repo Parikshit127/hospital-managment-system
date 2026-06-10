@@ -275,7 +275,34 @@ export async function updatePatientField(patientId: string, field: string, value
  */
 export async function updatePatient(patientId: string, payload: Record<string, string | null>) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
+
+        // Corporate payer can be typed manually — resolve the company name to a
+        // CorporateMaster (find existing by name, else create one) and set corporate_id.
+        if (Object.prototype.hasOwnProperty.call(payload, 'corporate_name')) {
+            const rawName = (payload.corporate_name ?? '').toString().trim();
+            if (!rawName) {
+                payload.corporate_id = null;
+            } else {
+                let corp = await db.corporateMaster.findFirst({
+                    where: { organizationId, company_name: { equals: rawName, mode: 'insensitive' } },
+                    select: { id: true },
+                });
+                if (!corp) {
+                    const base = rawName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || 'CORP';
+                    let code = base, n = 1;
+                    while (await db.corporateMaster.findFirst({ where: { organizationId, company_code: code }, select: { id: true } })) {
+                        code = `${base}${n++}`;
+                    }
+                    corp = await db.corporateMaster.create({
+                        data: { organizationId, company_name: rawName, company_code: code, credit_limit: 0, discount_percentage: 0, payment_terms_days: 30, covered_services: [] },
+                        select: { id: true },
+                    });
+                }
+                payload.corporate_id = corp.id;
+            }
+            delete payload.corporate_name;
+        }
 
         const allowedFields = [
             'full_name', 'phone', 'email', 'address', 'age', 'gender',
