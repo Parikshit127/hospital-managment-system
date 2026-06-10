@@ -349,7 +349,10 @@ export default function DepositsPage() {
                             <button onClick={() => setApplyModal(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="h-5 w-5 text-gray-400" /></button>
                         </div>
                         <div className="mb-4 p-3 bg-emerald-50 rounded-xl border border-emerald-200">
-                            <p className="text-sm text-emerald-800">
+                            <p className="text-sm font-semibold text-emerald-900">
+                                {applyModal.patient_name || '—'} <span className="font-normal text-emerald-700">({applyModal.patient_id})</span>
+                            </p>
+                            <p className="text-sm text-emerald-800 mt-0.5">
                                 <span className="font-semibold">{applyModal.deposit_number}</span> — Available: <span className="font-bold">{fmt(getAvailable(applyModal))}</span>
                             </p>
                         </div>
@@ -397,7 +400,10 @@ export default function DepositsPage() {
                             <button onClick={() => setRefundModal(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="h-5 w-5 text-gray-400" /></button>
                         </div>
                         <div className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
-                            <p className="text-sm text-amber-800">
+                            <p className="text-sm font-semibold text-amber-900">
+                                {refundModal.patient_name || '—'} <span className="font-normal text-amber-700">({refundModal.patient_id})</span>
+                            </p>
+                            <p className="text-sm text-amber-800 mt-0.5">
                                 <span className="font-semibold">{refundModal.deposit_number}</span> — Available: <span className="font-bold">{fmt(getAvailable(refundModal))}</span>
                             </p>
                         </div>
