@@ -5,22 +5,24 @@ import {
     getCollectionsReport, getARAgingReport, getCashFlowReport,
     getProfitLossReport, getInsuranceCollectionReport, getRevenueByDepartment,
     getPnLIncomeBreakdown, getPnLExpenseBreakdown, getInvoiceItemsBrief,
+    getDailyActivityReport,
 } from '@/app/actions/report-actions';
 import { DateRangePicker } from '@/app/components/finance/DateRangePicker';
 import { ReportChart } from '@/app/components/finance/ReportChart';
 import { ExportButton } from '@/app/components/finance/ExportButton';
 import {
     BarChart3, Clock, TrendingUp, IndianRupee, ShieldCheck, Building2,
-    Loader2, FileText, BookOpenCheck, FileSpreadsheet,
+    Loader2, FileText, BookOpenCheck, FileSpreadsheet, CalendarDays,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { VoucherModal } from '@/app/components/finance/VoucherModal';
 import Link from 'next/link';
 
-type ReportType = 'collections' | 'aging' | 'cashflow' | 'pnl' | 'insurance' | 'department';
+type ReportType = 'collections' | 'daily' | 'aging' | 'cashflow' | 'pnl' | 'insurance' | 'department';
 
 const REPORT_TABS: { key: ReportType; label: string; icon: React.ReactNode }[] = [
     { key: 'collections', label: 'Collections', icon: <IndianRupee className="h-4 w-4" /> },
+    { key: 'daily', label: 'Daily Activity', icon: <CalendarDays className="h-4 w-4" /> },
     { key: 'aging', label: 'A/R Aging', icon: <Clock className="h-4 w-4" /> },
     { key: 'cashflow', label: 'Cash Flow', icon: <TrendingUp className="h-4 w-4" /> },
     { key: 'pnl', label: 'Profit & Loss', icon: <BarChart3 className="h-4 w-4" /> },
@@ -59,6 +61,7 @@ export default function FinancialReportsPage() {
                     res = await getCollectionsReport({ from, to, method: activeMethod, invoiceType: it, admissionStatus: adm });
                     break;
                 }
+            case 'daily': res = await getDailyActivityReport({ from, to }); break;
             case 'aging': res = await getARAgingReport({ invoiceType: it, admissionStatus: adm }); break;
             case 'cashflow': res = await getCashFlowReport({ from, to, invoiceType: it, admissionStatus: adm }); break;
             case 'pnl': res = await getProfitLossReport({ from, to, invoiceType: it, admissionStatus: adm }); break;
@@ -137,6 +140,7 @@ export default function FinancialReportsPage() {
                             methodFilter={methodFilter} setMethodFilter={setMethodFilter}
                         />
                     )}
+                    {activeReport === 'daily' && <DailyActivityReport data={data} fmt={fmt} from={from} to={to} />}
                     {activeReport === 'aging' && <AgingReport data={data} fmt={fmt} />}
                     {activeReport === 'cashflow' && <CashFlowReport data={data} fmt={fmt} from={from} to={to} />}
                     {activeReport === 'pnl' && <ProfitLossReport data={data} fmt={fmt} from={from} to={to} />}
@@ -254,6 +258,60 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                                     <td className="px-6 py-3 text-sm text-gray-600">{p.payment_method}</td>
                                     <td className="px-6 py-3 text-sm font-semibold text-gray-900 text-right">{fmt(Number(p.amount))}</td>
                                     <td className="px-6 py-3 text-sm text-gray-500">{new Date(p.created_at).toLocaleDateString('en-IN')}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </>
+    );
+}
+
+function DailyActivityReport({ data, fmt, from, to }: { data: any; fmt: (n: number) => string; from: string; to: string }) {
+    const daily = data?.daily || [];
+    const totals = data?.totals || { opd: 0, admissions: 0, discharges: 0, collections: 0 };
+    const fmtDay = (s: string) => { const [y, m, d] = (s || '').split('-'); return d ? `${d}/${m}/${y}` : s; };
+    return (
+        <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <SummaryCard label="OPD Visits" value={String(totals.opd)} color="emerald" />
+                <SummaryCard label="IPD Admissions" value={String(totals.admissions)} color="gray" />
+                <SummaryCard label="IPD Discharges" value={String(totals.discharges)} color="gray" />
+                <SummaryCard label="Total Collections" value={fmt(totals.collections)} color="gray" />
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-900">Day-wise Activity ({daily.length} day{daily.length !== 1 ? 's' : ''})</h3>
+                    <ExportButton
+                        data={daily.map((d: any) => ({ date: fmtDay(d.date), opd: d.opd, admissions: d.admissions, discharges: d.discharges, collections: d.collections }))}
+                        filename={`daily-activity-${from}-${to}`}
+                        columns={[
+                            { key: 'date', label: 'Date' }, { key: 'opd', label: 'OPD Visits' },
+                            { key: 'admissions', label: 'Admissions' }, { key: 'discharges', label: 'Discharges' },
+                            { key: 'collections', label: 'Collections' },
+                        ]}
+                    />
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full">
+                        <thead><tr className="bg-gray-50">
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                            <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">OPD Visits</th>
+                            <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Admissions</th>
+                            <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Discharges</th>
+                            <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Collections</th>
+                        </tr></thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {daily.length === 0 ? (
+                                <tr><td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-400">No activity in this date range</td></tr>
+                            ) : daily.map((d: any) => (
+                                <tr key={d.date} className="hover:bg-gray-50">
+                                    <td className="px-6 py-3 text-sm font-medium text-gray-800">{fmtDay(d.date)}</td>
+                                    <td className="px-6 py-3 text-sm text-gray-700 text-right">{d.opd}</td>
+                                    <td className="px-6 py-3 text-sm text-emerald-700 font-semibold text-right">{d.admissions}</td>
+                                    <td className="px-6 py-3 text-sm text-rose-600 font-semibold text-right">{d.discharges}</td>
+                                    <td className="px-6 py-3 text-sm font-bold text-gray-900 text-right">{fmt(d.collections)}</td>
                                 </tr>
                             ))}
                         </tbody>

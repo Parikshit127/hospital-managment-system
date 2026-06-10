@@ -538,6 +538,41 @@ export async function getInsuranceCollectionReport(filters: { from: string; to: 
     }
 }
 
+// Per-day operational + financial summary for finance: OPD visits, IPD admissions,
+// IPD discharges, and collections — one row per calendar day (IST).
+export async function getDailyActivityReport(filters: { from: string; to: string }) {
+    try {
+        const { db } = await requireTenantContext();
+        const start = new Date(filters.from);
+        const end = new Date(filters.to + 'T23:59:59');
+        const istDay = (d: any) => new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
+
+        const [appts, admits, discharges, payments] = await Promise.all([
+            db.appointments.findMany({ where: { appointment_date: { gte: start, lte: end } }, select: { appointment_date: true } }),
+            db.admissions.findMany({ where: { admission_date: { gte: start, lte: end } }, select: { admission_date: true } }),
+            db.admissions.findMany({ where: { discharge_date: { gte: start, lte: end } }, select: { discharge_date: true } }),
+            db.payments.findMany({ where: { status: 'Completed', created_at: { gte: start, lte: end } }, select: { amount: true, created_at: true } }),
+        ]);
+
+        const map: Record<string, { date: string; opd: number; admissions: number; discharges: number; collections: number }> = {};
+        const row = (day: string) => (map[day] ||= { date: day, opd: 0, admissions: 0, discharges: 0, collections: 0 });
+        appts.forEach((a: any) => { row(istDay(a.appointment_date)).opd += 1; });
+        admits.forEach((a: any) => { row(istDay(a.admission_date)).admissions += 1; });
+        discharges.forEach((a: any) => { row(istDay(a.discharge_date)).discharges += 1; });
+        payments.forEach((p: any) => { row(istDay(p.created_at)).collections += Number(p.amount); });
+
+        const daily = Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
+        const totals = daily.reduce((t, d) => ({
+            opd: t.opd + d.opd, admissions: t.admissions + d.admissions,
+            discharges: t.discharges + d.discharges, collections: t.collections + d.collections,
+        }), { opd: 0, admissions: 0, discharges: 0, collections: 0 });
+
+        return { success: true, data: { daily, totals } };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
 export async function getDailyCollectionSummary(filters: { from: string; to: string }) {
     try {
         const { db } = await requireTenantContext();
