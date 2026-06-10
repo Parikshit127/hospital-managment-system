@@ -548,17 +548,18 @@ export async function getDailyActivityReport(filters: { from: string; to: string
         const istDay = (d: any) => new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
 
         const [appts, admits, discharges, payments] = await Promise.all([
-            db.appointments.findMany({ where: { appointment_date: { gte: start, lte: end } }, select: { appointment_date: true } }),
-            db.admissions.findMany({ where: { admission_date: { gte: start, lte: end } }, select: { admission_date: true } }),
-            db.admissions.findMany({ where: { discharge_date: { gte: start, lte: end } }, select: { discharge_date: true } }),
+            db.appointments.findMany({ where: { appointment_date: { gte: start, lte: end } }, select: { appointment_date: true, doctor_name: true, patient: { select: { full_name: true, patient_id: true } } } }),
+            db.admissions.findMany({ where: { admission_date: { gte: start, lte: end } }, select: { admission_date: true, admission_id: true, patient: { select: { full_name: true, patient_id: true } } } }),
+            db.admissions.findMany({ where: { discharge_date: { gte: start, lte: end } }, select: { discharge_date: true, admission_id: true, patient: { select: { full_name: true, patient_id: true } } } }),
             db.payments.findMany({ where: { status: 'Completed', created_at: { gte: start, lte: end } }, select: { amount: true, created_at: true } }),
         ]);
 
-        const map: Record<string, { date: string; opd: number; admissions: number; discharges: number; collections: number }> = {};
-        const row = (day: string) => (map[day] ||= { date: day, opd: 0, admissions: 0, discharges: 0, collections: 0 });
-        appts.forEach((a: any) => { row(istDay(a.appointment_date)).opd += 1; });
-        admits.forEach((a: any) => { row(istDay(a.admission_date)).admissions += 1; });
-        discharges.forEach((a: any) => { row(istDay(a.discharge_date)).discharges += 1; });
+        type DayRow = { date: string; opd: number; admissions: number; discharges: number; collections: number; opdList: any[]; admitList: any[]; dischargeList: any[] };
+        const map: Record<string, DayRow> = {};
+        const row = (day: string) => (map[day] ||= { date: day, opd: 0, admissions: 0, discharges: 0, collections: 0, opdList: [], admitList: [], dischargeList: [] });
+        appts.forEach((a: any) => { const r = row(istDay(a.appointment_date)); r.opd += 1; r.opdList.push({ name: a.patient?.full_name || 'Unknown', patient_id: a.patient?.patient_id || '', doctor: a.doctor_name || '' }); });
+        admits.forEach((a: any) => { const r = row(istDay(a.admission_date)); r.admissions += 1; r.admitList.push({ name: a.patient?.full_name || 'Unknown', patient_id: a.patient?.patient_id || '', admission_id: a.admission_id }); });
+        discharges.forEach((a: any) => { const r = row(istDay(a.discharge_date)); r.discharges += 1; r.dischargeList.push({ name: a.patient?.full_name || 'Unknown', patient_id: a.patient?.patient_id || '', admission_id: a.admission_id }); });
         payments.forEach((p: any) => { row(istDay(p.created_at)).collections += Number(p.amount); });
 
         const daily = Object.values(map).sort((a, b) => a.date.localeCompare(b.date));

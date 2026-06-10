@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import {
     getCollectionsReport, getARAgingReport, getCashFlowReport,
     getProfitLossReport, getInsuranceCollectionReport, getRevenueByDepartment,
@@ -12,7 +12,7 @@ import { ReportChart } from '@/app/components/finance/ReportChart';
 import { ExportButton } from '@/app/components/finance/ExportButton';
 import {
     BarChart3, Clock, TrendingUp, IndianRupee, ShieldCheck, Building2,
-    Loader2, FileText, BookOpenCheck, FileSpreadsheet, CalendarDays,
+    Loader2, FileText, BookOpenCheck, FileSpreadsheet, CalendarDays, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { VoucherModal } from '@/app/components/finance/VoucherModal';
@@ -272,6 +272,21 @@ function DailyActivityReport({ data, fmt, from, to }: { data: any; fmt: (n: numb
     const daily = data?.daily || [];
     const totals = data?.totals || { opd: 0, admissions: 0, discharges: 0, collections: 0 };
     const fmtDay = (s: string) => { const [y, m, d] = (s || '').split('-'); return d ? `${d}/${m}/${y}` : s; };
+    const [open, setOpen] = useState<string | null>(null);
+
+    const NameList = ({ title, color, items, render }: { title: string; color: string; items: any[]; render: (i: any) => React.ReactNode }) => (
+        <div className="flex-1 min-w-[180px]">
+            <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 ${color}`}>{title} ({items.length})</p>
+            {items.length === 0 ? (
+                <p className="text-xs text-gray-400">—</p>
+            ) : (
+                <ul className="space-y-1">
+                    {items.map((i, idx) => <li key={idx} className="text-xs text-gray-700">{render(i)}</li>)}
+                </ul>
+            )}
+        </div>
+    );
+
     return (
         <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -305,15 +320,39 @@ function DailyActivityReport({ data, fmt, from, to }: { data: any; fmt: (n: numb
                         <tbody className="divide-y divide-gray-100">
                             {daily.length === 0 ? (
                                 <tr><td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-400">No activity in this date range</td></tr>
-                            ) : daily.map((d: any) => (
-                                <tr key={d.date} className="hover:bg-gray-50">
-                                    <td className="px-6 py-3 text-sm font-medium text-gray-800">{fmtDay(d.date)}</td>
-                                    <td className="px-6 py-3 text-sm text-gray-700 text-right">{d.opd}</td>
-                                    <td className="px-6 py-3 text-sm text-emerald-700 font-semibold text-right">{d.admissions}</td>
-                                    <td className="px-6 py-3 text-sm text-rose-600 font-semibold text-right">{d.discharges}</td>
-                                    <td className="px-6 py-3 text-sm font-bold text-gray-900 text-right">{fmt(d.collections)}</td>
-                                </tr>
-                            ))}
+                            ) : daily.map((d: any) => {
+                                const isOpen = open === d.date;
+                                return (
+                                    <Fragment key={d.date}>
+                                        <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => setOpen(isOpen ? null : d.date)} title="Click to see patient names">
+                                            <td className="px-6 py-3 text-sm font-medium text-gray-800">
+                                                <span className="inline-flex items-center gap-1.5">
+                                                    {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
+                                                    {fmtDay(d.date)}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-3 text-sm text-gray-700 text-right">{d.opd}</td>
+                                            <td className="px-6 py-3 text-sm text-emerald-700 font-semibold text-right">{d.admissions}</td>
+                                            <td className="px-6 py-3 text-sm text-rose-600 font-semibold text-right">{d.discharges}</td>
+                                            <td className="px-6 py-3 text-sm font-bold text-gray-900 text-right">{fmt(d.collections)}</td>
+                                        </tr>
+                                        {isOpen && (
+                                            <tr className="bg-gray-50/60">
+                                                <td colSpan={5} className="px-6 py-4">
+                                                    <div className="flex flex-wrap gap-6">
+                                                        <NameList title="OPD Visits" color="text-gray-500" items={d.opdList || []}
+                                                            render={(i) => <span>{i.name}{i.doctor ? <span className="text-gray-400"> · {i.doctor}</span> : null}</span>} />
+                                                        <NameList title="Admissions" color="text-emerald-700" items={d.admitList || []}
+                                                            render={(i) => <span>{i.name} <span className="text-gray-400 font-mono">({i.patient_id})</span></span>} />
+                                                        <NameList title="Discharges" color="text-rose-600" items={d.dischargeList || []}
+                                                            render={(i) => <span>{i.name} <span className="text-gray-400 font-mono">({i.patient_id})</span></span>} />
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </Fragment>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
