@@ -204,6 +204,9 @@ export default function PatientProfilePage() {
         if (res.success) setData(res.data);
         const extRes = await getPatientExternalRecords(patientId);
         if (extRes.success) setExternalRecords(extRes.data || []);
+        // Load insurance policies so the header can show policy details (or '–').
+        const polRes = await getPatientPolicies(patientId);
+        if (polRes.success) setPatientPolicies(polRes.data || []);
         setLoading(false);
     }, [patientId]);
 
@@ -362,6 +365,13 @@ export default function PatientProfilePage() {
         })),
     ].sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime());
 
+    // Primary (latest) insurance policy for the header display; '–' when none.
+    const primaryPolicy = patientPolicies[0];
+    const fmtPolicyDate = (d: any) => (d ? new Date(d).toLocaleDateString('en-IN') : '');
+    const policyValidity = primaryPolicy
+        ? `${fmtPolicyDate(primaryPolicy.valid_from)} – ${fmtPolicyDate(primaryPolicy.valid_until)}`
+        : '';
+
     return (
         <AppShell pageTitle={patient.full_name} pageIcon={<User className="h-5 w-5" />}
             headerActions={headerActions} onRefresh={loadData} refreshing={loading}>
@@ -388,6 +398,18 @@ export default function PatientProfilePage() {
                             <EditableField label="Address" value={patient.address || ''} field="address" patientId={patientId} onSave={loadData} />
                             <EditableField label="Emergency Contact" value={patient.emergency_contact_name || ''} field="emergency_contact_name" patientId={patientId} onSave={loadData} />
                             <EditableField label="Emergency Phone" value={patient.emergency_contact_phone || ''} field="emergency_contact_phone" patientId={patientId} onSave={loadData} type="tel" />
+                            <div>
+                                <span className="text-[10px] font-semibold text-gray-400 uppercase">Policy Name</span>
+                                <p className="text-sm font-medium text-gray-800">{primaryPolicy?.provider?.provider_name || '–'}</p>
+                            </div>
+                            <div>
+                                <span className="text-[10px] font-semibold text-gray-400 uppercase">Policy Number</span>
+                                <p className="text-sm font-mono font-medium text-gray-800">{primaryPolicy?.policy_number || '–'}</p>
+                            </div>
+                            <div>
+                                <span className="text-[10px] font-semibold text-gray-400 uppercase">Policy Validity</span>
+                                <p className="text-sm font-medium text-gray-800">{policyValidity || '–'}</p>
+                            </div>
                         </div>
                         <div className="flex gap-2 mt-3 md:mt-0">
                             <button onClick={() => window.open(`/api/patient/${patientId}/stickers`, '_blank')}
