@@ -135,14 +135,14 @@ export default function FinanceDashboard() {
     });
 
     const kpiCards = [
-        { label: "Today's Revenue", value: `${INR}${(stats?.todayRevenue || 0).toLocaleString('en-IN')}`, sub: `Collected: ${INR}${(stats?.todayCollection || 0).toLocaleString('en-IN')}`, icon: <DollarSign className="h-3.5 w-3.5 text-emerald-400" />, color: 'emerald', subIcon: <ArrowUpRight className="h-3 w-3" />, drillType: 'today-revenue' as DrillDownType },
-        { label: 'Total Revenue', value: `${INR}${(stats?.totalRevenue || 0).toLocaleString('en-IN')}`, sub: `Collected: ${INR}${(stats?.totalCollection || 0).toLocaleString('en-IN')}`, icon: <Wallet className="h-3.5 w-3.5 text-teal-400" />, color: 'teal', subIcon: <TrendingUp className="h-3 w-3" />, drillType: 'total-revenue' as DrillDownType },
-        { label: 'Expenses (Month)', value: `${INR}${(expenseStats?.thisMonthTotal || 0).toLocaleString('en-IN')}`, sub: `${expenseStats?.pendingApproval || 0} pending approval`, icon: <TrendingDown className="h-3.5 w-3.5 text-red-400" />, color: 'red', subIcon: <Clock className="h-3 w-3" />, drillType: 'expenses' as DrillDownType },
-        { label: 'Outstanding', value: `${INR}${(stats?.pendingBalance || 0).toLocaleString('en-IN')}`, sub: `${stats?.outstandingInvoices || 0} pending`, icon: <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />, color: 'amber', subIcon: <Clock className="h-3 w-3" />, drillType: 'outstanding' as DrillDownType },
+        { label: "Today's Revenue", value: `${INR}${(stats?.todayRevenue || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, sub: `Collected: ${INR}${(stats?.todayCollection || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, icon: <DollarSign className="h-3.5 w-3.5 text-emerald-400" />, color: 'emerald', subIcon: <ArrowUpRight className="h-3 w-3" />, drillType: 'today-revenue' as DrillDownType },
+        { label: 'Total Revenue', value: `${INR}${(stats?.totalRevenue || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, sub: `Collected: ${INR}${(stats?.totalCollection || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, icon: <Wallet className="h-3.5 w-3.5 text-teal-400" />, color: 'teal', subIcon: <TrendingUp className="h-3 w-3" />, drillType: 'total-revenue' as DrillDownType },
+        { label: 'Expenses (Month)', value: `${INR}${(expenseStats?.thisMonthTotal || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, sub: `${expenseStats?.pendingApproval || 0} pending approval`, icon: <TrendingDown className="h-3.5 w-3.5 text-red-400" />, color: 'red', subIcon: <Clock className="h-3 w-3" />, drillType: 'expenses' as DrillDownType },
+        { label: 'Outstanding', value: `${INR}${(stats?.pendingBalance || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, sub: `${stats?.outstandingInvoices || 0} pending`, icon: <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />, color: 'amber', subIcon: <Clock className="h-3 w-3" />, drillType: 'outstanding' as DrillDownType },
         { label: 'Draft Bills', value: String(stats?.draftInvoices || 0), sub: 'Awaiting finalization', icon: <FileText className="h-3.5 w-3.5 text-violet-400" />, color: 'violet', subIcon: <FileText className="h-3 w-3" />, drillType: 'drafts' as DrillDownType },
-        { label: 'Active Deposits', value: `${INR}${(depositStats?.activeBalance || 0).toLocaleString('en-IN')}`, sub: `${depositStats?.activeDeposits || 0} active`, icon: <Wallet className="h-3.5 w-3.5 text-cyan-400" />, color: 'cyan', subIcon: <Receipt className="h-3 w-3" />, drillType: 'deposits' as DrillDownType },
-        { label: 'IPD Revenue', value: `${INR}${(stats?.ipdRevenue || 0).toLocaleString('en-IN')}`, sub: `${stats?.ipdCount || 0} admissions billed`, icon: <Wallet className="h-3.5 w-3.5 text-blue-400" />, color: 'blue', subIcon: <TrendingUp className="h-3 w-3" />, drillType: 'ipd' as DrillDownType },
-        { label: 'OPD Revenue', value: `${INR}${(stats?.opdRevenue || 0).toLocaleString('en-IN')}`, sub: `${stats?.opdCount || 0} visits billed`, icon: <Wallet className="h-3.5 w-3.5 text-indigo-400" />, color: 'indigo', subIcon: <TrendingUp className="h-3 w-3" />, drillType: 'opd' as DrillDownType },
+        { label: 'Active Deposits', value: `${INR}${(depositStats?.activeBalance || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, sub: `${depositStats?.activeDeposits || 0} active`, icon: <Wallet className="h-3.5 w-3.5 text-cyan-400" />, color: 'cyan', subIcon: <Receipt className="h-3 w-3" />, drillType: 'deposits' as DrillDownType },
+        { label: 'IPD Revenue', value: `${INR}${(stats?.ipdRevenue || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, sub: `${stats?.ipdCount || 0} admissions billed`, icon: <Wallet className="h-3.5 w-3.5 text-blue-400" />, color: 'blue', subIcon: <TrendingUp className="h-3 w-3" />, drillType: 'ipd' as DrillDownType },
+        { label: 'OPD Revenue', value: `${INR}${(stats?.opdRevenue || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, sub: `${stats?.opdCount || 0} visits billed`, icon: <Wallet className="h-3.5 w-3.5 text-indigo-400" />, color: 'indigo', subIcon: <TrendingUp className="h-3 w-3" />, drillType: 'opd' as DrillDownType },
     ];
 
     const CHART_COLORS = ['from-emerald-500 to-teal-500', 'from-violet-500 to-indigo-500', 'from-amber-500 to-orange-500', 'from-rose-500 to-pink-500', 'from-blue-500 to-cyan-500', 'from-fuchsia-500 to-purple-500'];
@@ -253,7 +253,7 @@ export default function FinanceDashboard() {
                                                                 <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
                                                                     <div className={`h-full bg-gradient-to-r ${CHART_COLORS[i % CHART_COLORS.length]} rounded-full transition-all duration-700`} style={{ width: `${(dept.amount / maxAmt) * 100}%` }} />
                                                                 </div>
-                                                                <span className="text-xs font-black text-gray-500 w-20 text-right">{INR}{dept.amount.toLocaleString()}</span>
+                                                                <span className="text-xs font-black text-gray-500 w-20 text-right">{INR}{dept.amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                                                             </div>
                                                         );
                                                     })}
@@ -293,7 +293,7 @@ export default function FinanceDashboard() {
                                                                 <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
                                                                     <div className={`h-full bg-gradient-to-r ${DOCTOR_COLORS[i % DOCTOR_COLORS.length]} rounded-full transition-all duration-700`} style={{ width: `${(doc.amount / maxAmt) * 100}%` }} />
                                                                 </div>
-                                                                <span className="text-xs font-black text-gray-500 w-20 text-right">{INR}{doc.amount.toLocaleString()}</span>
+                                                                <span className="text-xs font-black text-gray-500 w-20 text-right">{INR}{doc.amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                                                             </div>
                                                         );
                                                     })}
@@ -331,7 +331,7 @@ export default function FinanceDashboard() {
                                                                     {ipdPct > 8 && <span className="text-[10px] font-black text-white">{ipdPct}%</span>}
                                                                 </div>
                                                             </div>
-                                                            <span className="text-xs font-black text-gray-700 w-24 text-right">{INR}{(stats?.ipdRevenue || 0).toLocaleString('en-IN')}</span>
+                                                            <span className="text-xs font-black text-gray-700 w-24 text-right">{INR}{(stats?.ipdRevenue || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                                                         </div>
                                                         <div className="flex items-center gap-3">
                                                             <span className="text-xs font-bold text-gray-500 w-12">OPD</span>
@@ -341,7 +341,7 @@ export default function FinanceDashboard() {
                                                                     {opdPct > 8 && <span className="text-[10px] font-black text-white">{opdPct}%</span>}
                                                                 </div>
                                                             </div>
-                                                            <span className="text-xs font-black text-gray-700 w-24 text-right">{INR}{(stats?.opdRevenue || 0).toLocaleString('en-IN')}</span>
+                                                            <span className="text-xs font-black text-gray-700 w-24 text-right">{INR}{(stats?.opdRevenue || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                                                         </div>
                                                         <div className="flex gap-4 pt-2 border-t border-gray-100">
                                                             <button onClick={() => setDrillDown({ type: 'ipd', filters: {} })}
@@ -379,7 +379,7 @@ export default function FinanceDashboard() {
                                                     <div className={`h-2.5 w-2.5 rounded-full ${b.dot}`} />
                                                     <span className="text-xs font-bold text-gray-600">{b.label}</span>
                                                 </div>
-                                                <span className={`text-2xl font-black ${b.text}`}>{INR}{b.amount.toLocaleString()}</span>
+                                                <span className={`text-2xl font-black ${b.text}`}>{INR}{b.amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -422,9 +422,9 @@ export default function FinanceDashboard() {
                                                         <td className="px-5 py-3.5 text-xs font-bold text-gray-700 font-mono">{inv.invoice_number}</td>
                                                         <td className="px-5 py-3.5"><p className="text-xs font-bold text-gray-700">{inv.patient?.full_name || inv.patient_id}</p><p className="text-[10px] text-gray-400">{inv.patient_id}</p></td>
                                                         <td className="px-5 py-3.5"><span className={`text-[10px] font-black px-2 py-0.5 rounded ${inv.invoice_type === 'IPD' ? 'bg-violet-500/10 text-violet-400' : 'bg-orange-500/10 text-teal-400'}`}>{inv.invoice_type}</span></td>
-                                                        <td className="px-5 py-3.5 text-right text-xs font-black text-gray-700">{INR}{Number(inv.net_amount).toLocaleString()}</td>
-                                                        <td className="px-5 py-3.5 text-right text-xs font-bold text-emerald-400">{INR}{Number(inv.paid_amount).toLocaleString()}</td>
-                                                        <td className="px-5 py-3.5 text-right text-xs font-bold text-amber-400">{INR}{Number(inv.balance_due).toLocaleString()}</td>
+                                                        <td className="px-5 py-3.5 text-right text-xs font-black text-gray-700">{INR}{Number(inv.net_amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                                                        <td className="px-5 py-3.5 text-right text-xs font-bold text-emerald-400">{INR}{Number(inv.paid_amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                                                        <td className="px-5 py-3.5 text-right text-xs font-bold text-amber-400">{INR}{Number(inv.balance_due).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
                                                         <td className="px-5 py-3.5 text-center"><span className={`text-[10px] font-black px-2.5 py-1 rounded-lg ${getStatusColor(inv.status)}`}>{inv.status}</span></td>
                                                         <td className="px-5 py-3.5 text-center">
                                                             <div className="flex items-center justify-center gap-1.5">
@@ -466,7 +466,7 @@ export default function FinanceDashboard() {
                                                     <td className="px-5 py-3 text-xs font-bold text-gray-700">{item.item_name}</td>
                                                     <td className="px-5 py-3 text-[10px] font-bold text-gray-500">{item.category}</td>
                                                     <td className="px-5 py-3 text-[10px] font-bold text-gray-500">{item.department || '-'}</td>
-                                                    <td className="px-5 py-3 text-right text-xs font-black text-emerald-400">{INR}{Number(item.default_price).toLocaleString()}</td>
+                                                    <td className="px-5 py-3 text-right text-xs font-black text-emerald-400">{INR}{Number(item.default_price).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
