@@ -14,6 +14,8 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<'All' | 'Admitted' | 'Discharged' | 'Cancelled'>('Admitted');
     const [wardFilter, setWardFilter] = useState<string>('All');
+    const [fromDate, setFromDate] = useState<string>('');
+    const [toDate, setToDate] = useState<string>('');
     
     // Transfer Modal State
     const [transferModal, setTransferModal] = useState<any | null>(null);
@@ -117,7 +119,18 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
             
             // Ward match
             if (wardFilter !== 'All' && adm.ward_id !== Number(wardFilter)) return false;
-            
+
+            // Admission date range (compares the local calendar date of admission)
+            if (fromDate || toDate) {
+                const d = adm.admission_date ? new Date(adm.admission_date) : null;
+                const admDay = d
+                    ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+                    : '';
+                if (!admDay) return false;
+                if (fromDate && admDay < fromDate) return false;
+                if (toDate && admDay > toDate) return false;
+            }
+
             // Search match
             if (search) {
                 const q = search.toLowerCase();
@@ -129,7 +142,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
             
             return true;
         });
-    }, [initialData, search, statusFilter, wardFilter]);
+    }, [initialData, search, statusFilter, wardFilter, fromDate, toDate]);
 
     return (
         <div className="space-y-6">
@@ -163,7 +176,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
 
                     {/* Ward Filter */}
                     <div className="shrink-0 w-48">
-                        <select 
+                        <select
                             className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:outline-none focus:border-orange-500"
                             value={wardFilter}
                             onChange={(e) => setWardFilter(e.target.value)}
@@ -173,6 +186,37 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                                 <option key={w.ward_id} value={w.ward_id}>{w.ward_name}</option>
                             ))}
                         </select>
+                    </div>
+
+                    {/* Admission Date Range Filter */}
+                    <div className="shrink-0 flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1.5">
+                        <Calendar className="h-4 w-4 text-gray-400 shrink-0" />
+                        <input
+                            type="date"
+                            value={fromDate}
+                            max={toDate || undefined}
+                            onChange={(e) => setFromDate(e.target.value)}
+                            title="Admitted from"
+                            className="bg-transparent text-xs font-medium text-gray-700 focus:outline-none w-[112px]"
+                        />
+                        <span className="text-gray-300 text-xs">–</span>
+                        <input
+                            type="date"
+                            value={toDate}
+                            min={fromDate || undefined}
+                            onChange={(e) => setToDate(e.target.value)}
+                            title="Admitted up to"
+                            className="bg-transparent text-xs font-medium text-gray-700 focus:outline-none w-[112px]"
+                        />
+                        {(fromDate || toDate) && (
+                            <button
+                                onClick={() => { setFromDate(''); setToDate(''); }}
+                                title="Clear date filter"
+                                className="text-gray-400 hover:text-rose-500 shrink-0"
+                            >
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
