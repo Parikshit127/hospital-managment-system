@@ -11,7 +11,7 @@ function serialize<T>(data: T): T {
     ));
 }
 
-export async function getCollectionsReport(filters: { from: string; to: string; method?: string; invoiceType?: string }) {
+export async function getCollectionsReport(filters: { from: string; to: string; method?: string; invoiceType?: string; admissionStatus?: string }) {
     try {
         const { db } = await requireTenantContext();
         const where: any = {
@@ -23,9 +23,13 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
         } else if (filters.method === 'others') {
             where.payment_method = { notIn: ['Cash', 'UPI'] };
         }
-        // IPD / OPD (etc.) split — filter payments by their invoice's type
-        if (filters.invoiceType) {
-            where.invoice = { invoice_type: filters.invoiceType };
+        // IPD/OPD split (by invoice type) and Admit/Discharge split (by the
+        // invoice's admission status) — both filter via the related invoice.
+        if (filters.invoiceType || filters.admissionStatus) {
+            where.invoice = {
+                ...(filters.invoiceType ? { invoice_type: filters.invoiceType } : {}),
+                ...(filters.admissionStatus ? { admission: { status: filters.admissionStatus } } : {}),
+            };
         }
 
         const payments = await db.payments.findMany({
@@ -62,11 +66,12 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
     }
 }
 
-export async function getARAgingReport(filters?: { invoiceType?: string }) {
+export async function getARAgingReport(filters?: { invoiceType?: string; admissionStatus?: string }) {
     try {
         const { db } = await requireTenantContext();
         const where: any = { status: { in: ['Final', 'Partial'] }, balance_due: { gt: 0 } };
         if (filters?.invoiceType) where.invoice_type = filters.invoiceType;
+        if (filters?.admissionStatus) where.admission = { status: filters.admissionStatus };
         const invoices = await db.invoices.findMany({
             where,
             include: { patient: { select: { full_name: true, phone: true } } },
@@ -94,14 +99,19 @@ export async function getARAgingReport(filters?: { invoiceType?: string }) {
     }
 }
 
-export async function getCashFlowReport(filters: { from: string; to: string; invoiceType?: string }) {
+export async function getCashFlowReport(filters: { from: string; to: string; invoiceType?: string; admissionStatus?: string }) {
     try {
         const { db } = await requireTenantContext();
         const dateFilter = { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') };
         // Inflows can be split by IPD/OPD via the payment's invoice; expenses are
         // org-wide and not attributable to a bill type, so they stay unfiltered.
         const inflowWhere: any = { status: 'Completed', created_at: dateFilter };
-        if (filters.invoiceType) inflowWhere.invoice = { invoice_type: filters.invoiceType };
+        if (filters.invoiceType || filters.admissionStatus) {
+            inflowWhere.invoice = {
+                ...(filters.invoiceType ? { invoice_type: filters.invoiceType } : {}),
+                ...(filters.admissionStatus ? { admission: { status: filters.admissionStatus } } : {}),
+            };
+        }
 
         const [inflows, outflows] = await Promise.all([
             db.payments.findMany({
@@ -140,13 +150,18 @@ export async function getCashFlowReport(filters: { from: string; to: string; inv
     }
 }
 
-export async function getProfitLossReport(filters: { from: string; to: string; invoiceType?: string }) {
+export async function getProfitLossReport(filters: { from: string; to: string; invoiceType?: string; admissionStatus?: string }) {
     try {
         const { db } = await requireTenantContext();
         const dateFilter = { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') };
-        // Income (invoice items) can be split by IPD/OPD; expenses are org-wide.
+        // Income (invoice items) can be split by IPD/OPD or admit/discharge; expenses are org-wide.
         const itemWhere: any = { created_at: dateFilter };
-        if (filters.invoiceType) itemWhere.invoice = { invoice_type: filters.invoiceType };
+        if (filters.invoiceType || filters.admissionStatus) {
+            itemWhere.invoice = {
+                ...(filters.invoiceType ? { invoice_type: filters.invoiceType } : {}),
+                ...(filters.admissionStatus ? { admission: { status: filters.admissionStatus } } : {}),
+            };
+        }
 
         const [revenueByDept, expensesByCat] = await Promise.all([
             db.invoice_items.groupBy({
@@ -435,14 +450,20 @@ export async function getPnLExpenseBreakdown(filters: {
     }
 }
 
-export async function getRevenueByDepartment(filters: { from: string; to: string; invoiceType?: string }) {
+export async function getRevenueByDepartment(filters: { from: string; to: string; invoiceType?: string; admissionStatus?: string }) {
     try {
         const { db } = await requireTenantContext();
         const dateFilter = { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') };
         const itemWhere: any = { created_at: dateFilter };
-        if (filters.invoiceType) itemWhere.invoice = { invoice_type: filters.invoiceType };
+        if (filters.invoiceType || filters.admissionStatus) {
+            itemWhere.invoice = {
+                ...(filters.invoiceType ? { invoice_type: filters.invoiceType } : {}),
+                ...(filters.admissionStatus ? { admission: { status: filters.admissionStatus } } : {}),
+            };
+        }
         const invWhere: any = { status: { not: 'Cancelled' }, created_at: dateFilter };
         if (filters.invoiceType) invWhere.invoice_type = filters.invoiceType;
+        if (filters.admissionStatus) invWhere.admission = { status: filters.admissionStatus };
 
         const [byDept, byType] = await Promise.all([
             db.invoice_items.groupBy({
@@ -479,12 +500,17 @@ export async function getRevenueByDepartment(filters: { from: string; to: string
     }
 }
 
-export async function getInsuranceCollectionReport(filters: { from: string; to: string; invoiceType?: string }) {
+export async function getInsuranceCollectionReport(filters: { from: string; to: string; invoiceType?: string; admissionStatus?: string }) {
     try {
         const { db } = await requireTenantContext();
         const dateFilter = { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') };
         const claimWhere: any = { submitted_at: dateFilter };
-        if (filters.invoiceType) claimWhere.invoice = { invoice_type: filters.invoiceType };
+        if (filters.invoiceType || filters.admissionStatus) {
+            claimWhere.invoice = {
+                ...(filters.invoiceType ? { invoice_type: filters.invoiceType } : {}),
+                ...(filters.admissionStatus ? { admission: { status: filters.admissionStatus } } : {}),
+            };
+        }
 
         const claims = await db.insurance_claims.findMany({
             where: claimWhere,

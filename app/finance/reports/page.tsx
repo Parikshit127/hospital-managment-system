@@ -47,20 +47,23 @@ export default function FinancialReportsPage() {
     async function loadReport() {
         setLoading(true);
         setData(null); // always clear stale data before loading new report
-        const it = billType !== 'all' ? billType : undefined; // IPD/OPD separation
+        // Bill Type: OPD/IPD/Pharmacy/Lab filter by invoice type; Admit/Discharge
+        // filter IPD bills by the patient's admission status.
+        const it = ['OPD', 'IPD', 'Pharmacy', 'Lab'].includes(billType) ? billType : undefined;
+        const adm = billType === 'Admit' ? 'Admitted' : billType === 'Discharge' ? 'Discharged' : undefined;
         let res;
         switch (activeReport) {
             case 'collections': {
                     const quickFilterMap: Record<string, string> = { cash: 'Cash', upi: 'UPI', others: 'others' };
                     const activeMethod = methodFilter !== 'all' ? methodFilter : quickFilter !== 'all' ? quickFilterMap[quickFilter] : undefined;
-                    res = await getCollectionsReport({ from, to, method: activeMethod, invoiceType: it });
+                    res = await getCollectionsReport({ from, to, method: activeMethod, invoiceType: it, admissionStatus: adm });
                     break;
                 }
-            case 'aging': res = await getARAgingReport({ invoiceType: it }); break;
-            case 'cashflow': res = await getCashFlowReport({ from, to, invoiceType: it }); break;
-            case 'pnl': res = await getProfitLossReport({ from, to, invoiceType: it }); break;
-            case 'insurance': res = await getInsuranceCollectionReport({ from, to, invoiceType: it }); break;
-            case 'department': res = await getRevenueByDepartment({ from, to, invoiceType: it }); break;
+            case 'aging': res = await getARAgingReport({ invoiceType: it, admissionStatus: adm }); break;
+            case 'cashflow': res = await getCashFlowReport({ from, to, invoiceType: it, admissionStatus: adm }); break;
+            case 'pnl': res = await getProfitLossReport({ from, to, invoiceType: it, admissionStatus: adm }); break;
+            case 'insurance': res = await getInsuranceCollectionReport({ from, to, invoiceType: it, admissionStatus: adm }); break;
+            case 'department': res = await getRevenueByDepartment({ from, to, invoiceType: it, admissionStatus: adm }); break;
         }
         if (res?.success) setData(res.data);
         setLoading(false);
@@ -108,6 +111,8 @@ export default function FinancialReportsPage() {
                             <option value="IPD">IPD only</option>
                             <option value="Pharmacy">Pharmacy only</option>
                             <option value="Lab">Lab only</option>
+                            <option value="Admit">Admitted (IPD in-house)</option>
+                            <option value="Discharge">Discharged (IPD)</option>
                         </select>
                     </div>
                     <button onClick={loadReport} className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700">
