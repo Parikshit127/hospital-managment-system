@@ -547,8 +547,9 @@ export async function getDailyActivityReport(filters: { from: string; to: string
         const end = new Date(filters.to + 'T23:59:59');
         const istDay = (d: any) => new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
 
-        const [appts, admits, discharges, payments] = await Promise.all([
-            db.appointments.findMany({ where: { appointment_date: { gte: start, lte: end } }, select: { appointment_date: true, doctor_name: true, patient: { select: { full_name: true, patient_id: true } } } }),
+        const [opdInvoices, admits, discharges, payments] = await Promise.all([
+            // OPD visits are recorded as OPD invoices (appointments table is not used for walk-in OPD).
+            db.invoices.findMany({ where: { invoice_type: { in: ['OPD', 'OPD_FEE'] }, created_at: { gte: start, lte: end } }, select: { created_at: true, invoice_number: true, patient: { select: { full_name: true, patient_id: true } } } }),
             db.admissions.findMany({ where: { admission_date: { gte: start, lte: end } }, select: { admission_date: true, admission_id: true, patient: { select: { full_name: true, patient_id: true } } } }),
             db.admissions.findMany({ where: { discharge_date: { gte: start, lte: end } }, select: { discharge_date: true, admission_id: true, patient: { select: { full_name: true, patient_id: true } } } }),
             db.payments.findMany({ where: { status: 'Completed', created_at: { gte: start, lte: end } }, select: { amount: true, created_at: true } }),
@@ -557,7 +558,7 @@ export async function getDailyActivityReport(filters: { from: string; to: string
         type DayRow = { date: string; opd: number; admissions: number; discharges: number; collections: number; opdList: any[]; admitList: any[]; dischargeList: any[] };
         const map: Record<string, DayRow> = {};
         const row = (day: string) => (map[day] ||= { date: day, opd: 0, admissions: 0, discharges: 0, collections: 0, opdList: [], admitList: [], dischargeList: [] });
-        appts.forEach((a: any) => { const r = row(istDay(a.appointment_date)); r.opd += 1; r.opdList.push({ name: a.patient?.full_name || 'Unknown', patient_id: a.patient?.patient_id || '', doctor: a.doctor_name || '' }); });
+        opdInvoices.forEach((a: any) => { const r = row(istDay(a.created_at)); r.opd += 1; r.opdList.push({ name: a.patient?.full_name || 'Unknown', patient_id: a.patient?.patient_id || '', ref: a.invoice_number || '' }); });
         admits.forEach((a: any) => { const r = row(istDay(a.admission_date)); r.admissions += 1; r.admitList.push({ name: a.patient?.full_name || 'Unknown', patient_id: a.patient?.patient_id || '', admission_id: a.admission_id }); });
         discharges.forEach((a: any) => { const r = row(istDay(a.discharge_date)); r.discharges += 1; r.dischargeList.push({ name: a.patient?.full_name || 'Unknown', patient_id: a.patient?.patient_id || '', admission_id: a.admission_id }); });
         payments.forEach((p: any) => { row(istDay(p.created_at)).collections += Number(p.amount); });

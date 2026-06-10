@@ -341,7 +341,7 @@ function DailyActivityReport({ data, fmt, from, to }: { data: any; fmt: (n: numb
                                                 <td colSpan={5} className="px-6 py-4">
                                                     <div className="flex flex-wrap gap-6">
                                                         <NameList title="OPD Visits" color="text-gray-500" items={d.opdList || []}
-                                                            render={(i) => <span>{i.name}{i.doctor ? <span className="text-gray-400"> · {i.doctor}</span> : null}</span>} />
+                                                            render={(i) => <span>{i.name}{i.ref ? <span className="text-gray-400 font-mono"> · {i.ref}</span> : null}</span>} />
                                                         <NameList title="Admissions" color="text-emerald-700" items={d.admitList || []}
                                                             render={(i) => <span>{i.name} <span className="text-gray-400 font-mono">({i.patient_id})</span></span>} />
                                                         <NameList title="Discharges" color="text-rose-600" items={d.dischargeList || []}
