@@ -11,7 +11,7 @@ function serialize<T>(data: T): T {
     ));
 }
 
-export async function getCollectionsReport(filters: { from: string; to: string; method?: string }) {
+export async function getCollectionsReport(filters: { from: string; to: string; method?: string; invoiceType?: string }) {
     try {
         const { db } = await requireTenantContext();
         const where: any = {
@@ -22,6 +22,10 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
             where.payment_method = filters.method;
         } else if (filters.method === 'others') {
             where.payment_method = { notIn: ['Cash', 'UPI'] };
+        }
+        // IPD / OPD (etc.) split — filter payments by their invoice's type
+        if (filters.invoiceType) {
+            where.invoice = { invoice_type: filters.invoiceType };
         }
 
         const payments = await db.payments.findMany({
@@ -58,11 +62,13 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
     }
 }
 
-export async function getARAgingReport() {
+export async function getARAgingReport(filters?: { invoiceType?: string }) {
     try {
         const { db } = await requireTenantContext();
+        const where: any = { status: { in: ['Final', 'Partial'] }, balance_due: { gt: 0 } };
+        if (filters?.invoiceType) where.invoice_type = filters.invoiceType;
         const invoices = await db.invoices.findMany({
-            where: { status: { in: ['Final', 'Partial'] }, balance_due: { gt: 0 } },
+            where,
             include: { patient: { select: { full_name: true, phone: true } } },
             orderBy: { created_at: 'asc' },
         });
@@ -88,14 +94,18 @@ export async function getARAgingReport() {
     }
 }
 
-export async function getCashFlowReport(filters: { from: string; to: string }) {
+export async function getCashFlowReport(filters: { from: string; to: string; invoiceType?: string }) {
     try {
         const { db } = await requireTenantContext();
         const dateFilter = { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') };
+        // Inflows can be split by IPD/OPD via the payment's invoice; expenses are
+        // org-wide and not attributable to a bill type, so they stay unfiltered.
+        const inflowWhere: any = { status: 'Completed', created_at: dateFilter };
+        if (filters.invoiceType) inflowWhere.invoice = { invoice_type: filters.invoiceType };
 
         const [inflows, outflows] = await Promise.all([
             db.payments.findMany({
-                where: { status: 'Completed', created_at: dateFilter },
+                where: inflowWhere,
                 select: { amount: true, created_at: true, payment_method: true },
             }),
             db.expense.findMany({
@@ -130,16 +140,19 @@ export async function getCashFlowReport(filters: { from: string; to: string }) {
     }
 }
 
-export async function getProfitLossReport(filters: { from: string; to: string }) {
+export async function getProfitLossReport(filters: { from: string; to: string; invoiceType?: string }) {
     try {
         const { db } = await requireTenantContext();
         const dateFilter = { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') };
+        // Income (invoice items) can be split by IPD/OPD; expenses are org-wide.
+        const itemWhere: any = { created_at: dateFilter };
+        if (filters.invoiceType) itemWhere.invoice = { invoice_type: filters.invoiceType };
 
         const [revenueByDept, expensesByCat] = await Promise.all([
             db.invoice_items.groupBy({
                 by: ['department'],
                 _sum: { net_price: true },
-                where: { created_at: dateFilter },
+                where: itemWhere,
             }),
             db.expense.groupBy({
                 by: ['category_id'],
@@ -422,23 +435,27 @@ export async function getPnLExpenseBreakdown(filters: {
     }
 }
 
-export async function getRevenueByDepartment(filters: { from: string; to: string }) {
+export async function getRevenueByDepartment(filters: { from: string; to: string; invoiceType?: string }) {
     try {
         const { db } = await requireTenantContext();
         const dateFilter = { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') };
+        const itemWhere: any = { created_at: dateFilter };
+        if (filters.invoiceType) itemWhere.invoice = { invoice_type: filters.invoiceType };
+        const invWhere: any = { status: { not: 'Cancelled' }, created_at: dateFilter };
+        if (filters.invoiceType) invWhere.invoice_type = filters.invoiceType;
 
         const [byDept, byType] = await Promise.all([
             db.invoice_items.groupBy({
                 by: ['department'],
                 _sum: { net_price: true },
                 _count: { _all: true },
-                where: { created_at: dateFilter },
+                where: itemWhere,
             }),
             db.invoices.groupBy({
                 by: ['invoice_type'],
                 _sum: { net_amount: true },
                 _count: { _all: true },
-                where: { status: { not: 'Cancelled' }, created_at: dateFilter },
+                where: invWhere,
             }),
         ]);
 
@@ -462,13 +479,15 @@ export async function getRevenueByDepartment(filters: { from: string; to: string
     }
 }
 
-export async function getInsuranceCollectionReport(filters: { from: string; to: string }) {
+export async function getInsuranceCollectionReport(filters: { from: string; to: string; invoiceType?: string }) {
     try {
         const { db } = await requireTenantContext();
         const dateFilter = { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') };
+        const claimWhere: any = { submitted_at: dateFilter };
+        if (filters.invoiceType) claimWhere.invoice = { invoice_type: filters.invoiceType };
 
         const claims = await db.insurance_claims.findMany({
-            where: { submitted_at: dateFilter },
+            where: claimWhere,
             include: {
                 policy: { include: { provider: { select: { provider_name: true } } } },
                 invoice: { select: { invoice_number: true, net_amount: true } },

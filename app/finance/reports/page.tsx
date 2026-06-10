@@ -40,25 +40,27 @@ export default function FinancialReportsPage() {
     const [loading, setLoading] = useState(false);
     const [quickFilter, setQuickFilter] = useState<'all' | 'cash' | 'upi' | 'others'>('all');
     const [methodFilter, setMethodFilter] = useState<string>('all');
+    const [billType, setBillType] = useState<string>('all'); // all | OPD | IPD | Pharmacy | Lab
 
-    useEffect(() => { loadReport(); }, [activeReport, from, to, quickFilter, methodFilter]);
+    useEffect(() => { loadReport(); }, [activeReport, from, to, quickFilter, methodFilter, billType]);
 
     async function loadReport() {
         setLoading(true);
         setData(null); // always clear stale data before loading new report
+        const it = billType !== 'all' ? billType : undefined; // IPD/OPD separation
         let res;
         switch (activeReport) {
             case 'collections': {
                     const quickFilterMap: Record<string, string> = { cash: 'Cash', upi: 'UPI', others: 'others' };
                     const activeMethod = methodFilter !== 'all' ? methodFilter : quickFilter !== 'all' ? quickFilterMap[quickFilter] : undefined;
-                    res = await getCollectionsReport({ from, to, method: activeMethod });
+                    res = await getCollectionsReport({ from, to, method: activeMethod, invoiceType: it });
                     break;
                 }
-            case 'aging': res = await getARAgingReport(); break;
-            case 'cashflow': res = await getCashFlowReport({ from, to }); break;
-            case 'pnl': res = await getProfitLossReport({ from, to }); break;
-            case 'insurance': res = await getInsuranceCollectionReport({ from, to }); break;
-            case 'department': res = await getRevenueByDepartment({ from, to }); break;
+            case 'aging': res = await getARAgingReport({ invoiceType: it }); break;
+            case 'cashflow': res = await getCashFlowReport({ from, to, invoiceType: it }); break;
+            case 'pnl': res = await getProfitLossReport({ from, to, invoiceType: it }); break;
+            case 'insurance': res = await getInsuranceCollectionReport({ from, to, invoiceType: it }); break;
+            case 'department': res = await getRevenueByDepartment({ from, to, invoiceType: it }); break;
         }
         if (res?.success) setData(res.data);
         setLoading(false);
@@ -95,9 +97,23 @@ export default function FinancialReportsPage() {
                     <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
                 )}
                 {activeReport === 'aging' && <div />}
-                <button onClick={loadReport} className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700">
-                    Generate Report
-                </button>
+                <div className="flex items-center gap-2">
+                    {/* IPD / OPD report separation */}
+                    <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Bill Type</span>
+                        <select value={billType} onChange={e => setBillType(e.target.value)}
+                            className="text-sm font-bold text-gray-700 border-none focus:ring-0 p-0 bg-transparent outline-none">
+                            <option value="all">All</option>
+                            <option value="OPD">OPD only</option>
+                            <option value="IPD">IPD only</option>
+                            <option value="Pharmacy">Pharmacy only</option>
+                            <option value="Lab">Lab only</option>
+                        </select>
+                    </div>
+                    <button onClick={loadReport} className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700">
+                        Generate Report
+                    </button>
+                </div>
             </div>
 
             {loading ? (
