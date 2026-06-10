@@ -130,7 +130,8 @@ export default function DepositsPage() {
         if (!search) return true;
         const q = search.toLowerCase();
         return d.deposit_number?.toLowerCase().includes(q) ||
-            d.patient_id?.toLowerCase().includes(q);
+            d.patient_id?.toLowerCase().includes(q) ||
+            d.patient_name?.toLowerCase().includes(q);
     });
 
     return (
@@ -190,7 +191,7 @@ export default function DepositsPage() {
                     <div className="flex flex-col sm:flex-row gap-3">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                            <input type="text" placeholder="Search by deposit # or patient ID..." value={search} onChange={e => setSearch(e.target.value)}
+                            <input type="text" placeholder="Search by deposit #, patient name or ID..." value={search} onChange={e => setSearch(e.target.value)}
                                 className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
                         </div>
                         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
@@ -209,7 +210,7 @@ export default function DepositsPage() {
                                 <thead>
                                     <tr className="bg-gray-50 border-b border-gray-100">
                                         <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Deposit #</th>
-                                        <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Patient ID</th>
+                                        <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Patient</th>
                                         <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Amount</th>
                                         <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Applied</th>
                                         <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Refunded</th>
@@ -230,7 +231,10 @@ export default function DepositsPage() {
                                         return (
                                             <tr key={d.id} className="hover:bg-gray-50">
                                                 <td className="px-5 py-3 text-sm font-medium text-gray-900">{d.deposit_number}</td>
-                                                <td className="px-5 py-3 text-sm text-gray-600">{d.patient_id}</td>
+                                                <td className="px-5 py-3">
+                                                    <div className="text-sm font-medium text-gray-900">{d.patient_name || '—'}</div>
+                                                    <div className="text-xs text-gray-500">{d.patient_id}</div>
+                                                </td>
                                                 <td className="px-5 py-3 text-sm font-semibold text-gray-900 text-right">{fmt(Number(d.amount))}</td>
                                                 <td className="px-5 py-3 text-sm text-orange-600 text-right">{fmt(Number(d.applied_amount || 0))}</td>
                                                 <td className="px-5 py-3 text-sm text-amber-600 text-right">{fmt(Number(d.refunded_amount || 0))}</td>

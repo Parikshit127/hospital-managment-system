@@ -73,7 +73,22 @@ export async function getPatientDeposits(patientId?: string) {
             orderBy: { created_at: 'desc' },
             take: 200,
         });
-        return { success: true, data: serialize(deposits) };
+
+        // Attach patient name (PatientDeposit has no relation, so resolve by patient_id)
+        const patientIds = [...new Set(deposits.map((d: any) => d.patient_id))];
+        const patients = patientIds.length
+            ? await db.oPD_REG.findMany({
+                where: { patient_id: { in: patientIds } },
+                select: { patient_id: true, full_name: true },
+            })
+            : [];
+        const nameById = new Map(patients.map((p: any) => [p.patient_id, p.full_name]));
+        const enriched = deposits.map((d: any) => ({
+            ...d,
+            patient_name: nameById.get(d.patient_id) || null,
+        }));
+
+        return { success: true, data: serialize(enriched) };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
