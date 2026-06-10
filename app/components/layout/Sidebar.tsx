@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logout } from "@/app/login/actions";
 import { getPortalBranding, type PortalBranding } from "@/app/lib/get-portal-branding";
+import { ChangePasswordModal } from "@/app/components/ChangePasswordModal";
 import {
   LayoutDashboard,
   Users,
@@ -561,6 +562,7 @@ export function Sidebar({ session }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const [branding, setBranding] = useState<PortalBranding | null>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -765,6 +767,15 @@ export function Sidebar({ session }: SidebarProps) {
           </div>
         )}
         <button
+          onClick={() => { setShowChangePassword(true); setMobileOpen(false); }}
+          title={collapsed ? "Change Password" : undefined}
+          className={`flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-gray-400 hover:text-gray-200 hover:bg-white/[0.06] transition-all duration-150 ${collapsed ? "justify-center px-2" : ""
+            }`}
+        >
+          <KeyRound className="h-4 w-4 shrink-0" />
+          {!collapsed && <span>Change Password</span>}
+        </button>
+        <button
           onClick={() => logout()}
           title={collapsed ? "Logout" : undefined}
           className={`flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-gray-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-150 ${collapsed ? "justify-center px-2" : ""
@@ -791,6 +802,8 @@ export function Sidebar({ session }: SidebarProps) {
 
   return (
     <>
+      <ChangePasswordModal open={showChangePassword} onClose={() => setShowChangePassword(false)} />
+
       {/* Mobile hamburger */}
       <button
         onClick={() => setMobileOpen(true)}

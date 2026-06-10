@@ -5,9 +5,10 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useBranding } from './ThemeProvider';
 import { logout } from '@/app/login/actions';
-import { Building2, LogOut, ChevronLeft, ChevronRight, Menu, X, ChevronDown } from 'lucide-react';
+import { Building2, LogOut, ChevronLeft, ChevronRight, Menu, X, ChevronDown, KeyRound } from 'lucide-react';
 import PortalSwitcher from './PortalSwitcher';
 import { ADMIN_NAV_SECTIONS } from '@/lib/navigation/admin-nav';
+import { ChangePasswordModal } from '@/app/components/ChangePasswordModal';
 
 export default function AdminSidebar() {
     const pathname = usePathname();
@@ -15,6 +16,7 @@ export default function AdminSidebar() {
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+    const [showChangePassword, setShowChangePassword] = useState(false);
 
     useEffect(() => {
         const saved = window.localStorage.getItem('admin-sidebar-collapsed');
@@ -154,6 +156,14 @@ export default function AdminSidebar() {
             <div className="px-2.5 py-3 space-y-1 shrink-0" style={{ borderTop: '1px solid var(--admin-sidebar-border)' }}>
                 <PortalSwitcher collapsed={collapsed} />
                 <button
+                    onClick={() => { setShowChangePassword(true); setMobileOpen(false); }}
+                    title={collapsed ? 'Change Password' : undefined}
+                    className={`flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-all duration-150 ${collapsed ? 'justify-center px-2' : ''}`}
+                >
+                    <KeyRound className="h-4 w-4 shrink-0" />
+                    {!collapsed && <span>Change Password</span>}
+                </button>
+                <button
                     onClick={() => logout()}
                     title={collapsed ? 'Logout' : undefined}
                     className={`flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-all duration-150 ${collapsed ? 'justify-center px-2' : ''}`}
@@ -174,6 +184,8 @@ export default function AdminSidebar() {
 
     return (
         <>
+            <ChangePasswordModal open={showChangePassword} onClose={() => setShowChangePassword(false)} />
+
             {/* Mobile hamburger */}
             <button
                 onClick={() => setMobileOpen(true)}
