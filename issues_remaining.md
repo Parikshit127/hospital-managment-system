@@ -24,8 +24,10 @@ Excluded per request: pharmacy OPD/IPD charge details in bill/report, and cash t
 
 ## Done / resolved
 
-### 2. 'Add patient' option in nursing module — ✅ RESOLVED
-- New `app/nurse/admit/page.tsx` — full admit flow (patient search, ward/bed, doctor, admission type, optional deposit) reusing the role-agnostic `admitPatientIPD` action. Linked in the nurse sidebar as "Admit Patient".
+### 2. Patients visible in nursing module — ✅ ALREADY AVAILABLE
+- Clarified: the need is **viewing patients** in the nurse module, not an admit option.
+- The nurse **"My Patients"** page (`app/nurse/patients/page.tsx` → `getWardPatients`) already lists all **Admitted** patients for the org (defaults to All Wards), with search, ward filter, and per-patient nursing notes. Verified data exists (Axten 5, Avise 10 admitted).
+- The earlier "Admit Patient" page was removed per request.
 
 ### 4. TPA / corporate — ✅ RESOLVED
 - Insurance management at `/insurance` (now in **admin nav**, manual add works).

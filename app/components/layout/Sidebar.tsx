@@ -404,7 +404,6 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       items: [
         { label: "Dashboard", href: "/nurse/dashboard", icon: LayoutDashboard },
         { label: "My Patients", href: "/nurse/patients", icon: Users },
-        { label: "Admit Patient", href: "/nurse/admit", icon: UserPlus },
         { label: "Vitals", href: "/nurse/vitals", icon: Activity },
         { label: "Medications", href: "/nurse/medications", icon: Syringe },
         { label: "Tasks", href: "/nurse/tasks", icon: ClipboardCheck },
