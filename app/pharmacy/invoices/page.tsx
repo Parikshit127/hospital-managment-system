@@ -82,7 +82,7 @@ export default function PharmacyInvoicesPage() {
                 invoice_id: payInvoice.id,
                 amount: amt,
                 payment_method: payMethod,
-                reference_number: payRef || undefined,
+                notes: payRef || undefined,
                 payment_type: amt >= Number(payInvoice.balance_due) ? 'Full' : 'Partial',
             });
             if (res.success) { setPayModal(false); await load(); }
