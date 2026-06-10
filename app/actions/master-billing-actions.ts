@@ -145,7 +145,7 @@ export interface MasterBillingFilter {
 
 export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
   try {
-    const { db, organizationId } = await requireTenantContext();
+    const { db, organizationId, session } = await requireTenantContext();
     const page = Math.max(1, filter.page || 1);
     // Export pulls the full filtered set (safety-capped); the normal grid is paginated.
     const limit = filter.export_all ? 5000 : Math.min(200, filter.limit || 25);
@@ -162,6 +162,14 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
       if (filter.date_from) where.created_at.gte = new Date(filter.date_from);
       // Make the "to" date inclusive of the whole day (end-of-day)
       if (filter.date_to) where.created_at.lte = new Date(filter.date_to + "T23:59:59.999");
+    }
+
+    // Reception role: show only IPD invoices, hide pharmacy OPD bills
+    const receptionRoles = ['ipd_recep', 'receptionist', 'reception', 'front_desk'];
+    const isReceptionRole = receptionRoles.includes((session?.role || '').toLowerCase());
+    if (isReceptionRole && !filter.invoice_type) {
+      where.invoice_type = { in: ['IPD', 'OPD', 'OPD_FEE'] };
+      where.NOT = { invoice_type: 'PHARMACY' };
     }
 
     if (filter.search && filter.search.trim().length >= 2) {

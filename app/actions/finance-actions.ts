@@ -233,16 +233,22 @@ export async function getInvoices(filters?: {
     invoice_type?: string;
     mobile_number?: string;
     limit?: number;
+    exclude_pharmacy?: boolean;
 }) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, session } = await requireTenantContext();
 
         const limit = filters?.limit || 100;
+
+        // Reception roles should not see pharmacy OPD invoices
+        const receptionRoles = ['receptionist', 'reception', 'front_desk', 'ipd_recep'];
+        const isReception = receptionRoles.includes((session?.role || '').toLowerCase());
+        const excludePharmacy = filters?.exclude_pharmacy || isReception;
 
         // Determine which sources to fetch based on invoice_type filter
         const fetchStandard = !filters?.invoice_type || ['OPD', 'IPD'].includes(filters.invoice_type);
         const fetchLab = !filters?.invoice_type || filters.invoice_type === 'LAB';
-        const fetchPharm = !filters?.invoice_type || filters.invoice_type === 'PHARMACY';
+        const fetchPharm = !excludePharmacy && (!filters?.invoice_type || filters.invoice_type === 'PHARMACY');
 
         // 1. Fetch Standard Invoices (IPD/OPD)
         let standardInvoices: any[] = [];

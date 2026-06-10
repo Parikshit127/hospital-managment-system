@@ -64,89 +64,74 @@ export async function generateSequentialNumber(
     let lastSeq = 0;
 
     if (type === 'OPD' || type === 'IPD') {
-        // Search in invoices table
-        const lastInvoice = await database.invoices.findFirst({
+        // Count all invoices with this prefix — count is atomic unlike findFirst+increment
+        const count = await database.invoices.count({
             where: {
                 organizationId,
                 invoice_number: { startsWith: prefix },
             },
-            orderBy: { created_at: 'desc' },
-            select: { invoice_number: true },
         });
-        if (lastInvoice) {
-            const parts = lastInvoice.invoice_number.split('-');
-            lastSeq = parseInt(parts[parts.length - 1]) || 0;
-        }
+        lastSeq = count;
     } else if (type === 'RCP') {
-        const lastReceipt = await database.payments.findFirst({
+        const count = await database.payments.count({
             where: {
                 organizationId,
                 receipt_number: { startsWith: prefix },
             },
-            orderBy: { created_at: 'desc' },
-            select: { receipt_number: true },
         });
-        if (lastReceipt) {
-            const parts = lastReceipt.receipt_number.split('-');
-            lastSeq = parseInt(parts[parts.length - 1]) || 0;
-        }
+        lastSeq = count;
     } else if (type === 'DEP') {
-        const lastDeposit = await database.patientDeposit.findFirst({
+        const count = await database.patientDeposit.count({
             where: {
                 organizationId,
                 deposit_number: { startsWith: prefix },
             },
-            orderBy: { created_at: 'desc' },
-            select: { deposit_number: true },
         });
-        if (lastDeposit) {
-            const parts = lastDeposit.deposit_number.split('-');
-            lastSeq = parseInt(parts[parts.length - 1]) || 0;
-        }
+        lastSeq = count;
     } else if (type === 'PHM') {
-        const lastPharm = await database.invoices.findFirst({
+        const count = await database.invoices.count({
             where: {
                 organizationId,
                 invoice_number: { startsWith: prefix },
             },
-            orderBy: { created_at: 'desc' },
-            select: { invoice_number: true },
         });
-        if (lastPharm) {
-            const parts = lastPharm.invoice_number.split('-');
-            lastSeq = parseInt(parts[parts.length - 1]) || 0;
-        }
+        lastSeq = count;
     } else if (type === 'CN') {
-        const lastCN = await database.creditNote.findFirst({
+        const count = await database.creditNote.count({
             where: {
                 organizationId,
                 credit_note_number: { startsWith: prefix },
             },
-            orderBy: { created_at: 'desc' },
-            select: { credit_note_number: true },
         });
-        if (lastCN) {
-            const parts = lastCN.credit_note_number.split('-');
-            lastSeq = parseInt(parts[parts.length - 1]) || 0;
-        }
+        lastSeq = count;
     } else {
-        // Generic fallback — search invoices
-        const last = await database.invoices.findFirst({
+        const count = await database.invoices.count({
             where: {
                 organizationId,
                 invoice_number: { startsWith: prefix },
             },
-            orderBy: { created_at: 'desc' },
-            select: { invoice_number: true },
         });
-        if (last) {
-            const parts = last.invoice_number.split('-');
-            lastSeq = parseInt(parts[parts.length - 1]) || 0;
-        }
+        lastSeq = count;
     }
 
     const nextSeq = String(lastSeq + 1).padStart(3, '0');
-    return `${prefix}${nextSeq}`;
+    const candidate = `${prefix}${nextSeq}`;
+
+    // Verify uniqueness — if collision, keep incrementing
+    let finalNumber = candidate;
+    let attempt = lastSeq + 1;
+    while (true) {
+        const field = type === 'RCP' ? 'receipt_number' : type === 'DEP' ? 'deposit_number' : type === 'CN' ? 'credit_note_number' : 'invoice_number';
+        const table = type === 'RCP' ? database.payments : type === 'DEP' ? database.patientDeposit : type === 'CN' ? database.creditNote : database.invoices;
+        const existing = await table.findFirst({
+            where: { [field]: finalNumber },
+            select: { id: true },
+        });
+        if (!existing) break;
+        attempt++;
+        finalNumber = `${prefix}${String(attempt).padStart(3, '0')}`;
+    }
+    return finalNumber;
 }
 
 /**
