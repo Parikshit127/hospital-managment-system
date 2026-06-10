@@ -43,11 +43,14 @@ export async function getNurseDashboard(nurseId: string) {
 // WARD PATIENTS
 // ========================================
 
-export async function getWardPatients(wardId?: number) {
+export async function getWardPatients(wardId?: number, status?: string) {
     try {
         const { db } = await requireTenantContext();
 
-        const where: any = { status: 'Admitted' };
+        const where: any = {};
+        // status 'All' → no filter; otherwise filter (default 'Admitted')
+        if (status && status !== 'All') where.status = status;
+        else if (!status) where.status = 'Admitted';
         if (wardId) where.ward_id = wardId;
 
         const admissions = await db.admissions.findMany({
@@ -62,20 +65,28 @@ export async function getWardPatients(wardId?: number) {
 
         return {
             success: true,
-            data: admissions.map((a: any) => ({
-                admissionId: a.admission_id,
-                patientId: a.patient_id,
-                patientName: a.patient?.full_name || 'Unknown',
-                age: a.patient?.age,
-                gender: a.patient?.gender,
-                bedId: a.bed_id,
-                bedStatus: a.bed?.status,
-                wardName: a.ward?.ward_name || 'Unassigned',
-                wardType: a.ward?.ward_type,
-                diagnosis: a.diagnosis,
-                doctorName: a.doctor_name,
-                admissionDate: a.admission_date,
-            })),
+            data: admissions.map((a: any) => {
+                const prefix = `${a.organizationId}-${a.ward_id}-`;
+                const bedLabel = a.bed_id?.startsWith(prefix) ? a.bed_id.slice(prefix.length) : a.bed_id;
+                return {
+                    admissionId: a.admission_id,
+                    patientId: a.patient_id,
+                    patientName: a.patient?.full_name || 'Unknown',
+                    age: a.patient?.age,
+                    gender: a.patient?.gender,
+                    bedId: a.bed_id,
+                    bedLabel,
+                    bedStatus: a.bed?.status,
+                    wardId: a.ward_id,
+                    wardName: a.ward?.ward_name || 'Unassigned',
+                    wardType: a.ward?.ward_type,
+                    diagnosis: a.diagnosis,
+                    doctorName: a.doctor_name,
+                    status: a.status,
+                    admissionDate: a.admission_date,
+                    dischargeDate: a.discharge_date,
+                };
+            }),
         };
     } catch (error) {
         console.error('Ward Patients Error:', error);

@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     Users, Search, X, FileText, Loader2, Clock, User,
-    BedDouble, Building2, Stethoscope, Plus, Save
+    BedDouble, Building2, Stethoscope, Plus, Save, Calendar, Activity
 } from 'lucide-react';
 import {
     getWardPatients, getWardsList, getNursingNotes, addNursingNote
@@ -15,6 +15,9 @@ export default function NursePatientsPage() {
     const [patients, setPatients] = useState<any[]>([]);
     const [wards, setWards] = useState<any[]>([]);
     const [selectedWard, setSelectedWard] = useState<number | undefined>(undefined);
+    const [statusFilter, setStatusFilter] = useState<string>('Admitted');
+    const [fromDate, setFromDate] = useState('');
+    const [toDate, setToDate] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -47,7 +50,7 @@ export default function NursePatientsPage() {
         setRefreshing(true);
         try {
             const [patientsRes, wardsRes] = await Promise.all([
-                getWardPatients(selectedWard),
+                getWardPatients(selectedWard, statusFilter),
                 getWardsList(),
             ]);
             if (patientsRes.success) setPatients(patientsRes.data || []);
@@ -58,7 +61,7 @@ export default function NursePatientsPage() {
             setRefreshing(false);
             setLoading(false);
         }
-    }, [selectedWard]);
+    }, [selectedWard, statusFilter]);
 
     useEffect(() => {
         loadData();
@@ -104,10 +107,20 @@ export default function NursePatientsPage() {
     };
 
     const filteredPatients = patients.filter(p => {
+        // Admission-date range (local calendar date)
+        if (fromDate || toDate) {
+            const d = p.admissionDate ? new Date(p.admissionDate) : null;
+            const day = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : '';
+            if (!day) return false;
+            if (fromDate && day < fromDate) return false;
+            if (toDate && day > toDate) return false;
+        }
         if (!searchQuery) return true;
         const q = searchQuery.toLowerCase();
         return (
             p.patientName?.toLowerCase().includes(q) ||
+            p.admissionId?.toLowerCase().includes(q) ||
+            p.patientId?.toLowerCase().includes(q) ||
             p.diagnosis?.toLowerCase().includes(q) ||
             p.wardName?.toLowerCase().includes(q) ||
             p.doctorName?.toLowerCase().includes(q)
@@ -261,29 +274,58 @@ export default function NursePatientsPage() {
 
             {/* Filters */}
             <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
-                <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row gap-4 justify-between bg-gray-50/50">
+                <div className="p-4 border-b border-gray-200 flex flex-col lg:flex-row gap-3 lg:items-center justify-between bg-gray-50/50">
                     <div className="relative max-w-sm w-full">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input
                             type="text"
-                            placeholder="Search patient name, diagnosis, doctor..."
+                            placeholder="Search by Name, IPD ID, or Mobile..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                         />
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-gray-400" />
+
+                    <div className="flex items-center gap-3 flex-wrap">
+                        {/* Status chips */}
+                        <div className="flex bg-gray-100 p-1 rounded-xl shrink-0">
+                            {['All', 'Admitted', 'Discharged', 'Cancelled'].map((s) => (
+                                <button
+                                    key={s}
+                                    onClick={() => setStatusFilter(s)}
+                                    className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${statusFilter === s ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    {s}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Ward */}
                         <select
                             value={selectedWard ?? ''}
                             onChange={e => setSelectedWard(e.target.value ? Number(e.target.value) : undefined)}
                             className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                         >
-                            <option value="">All Wards</option>
+                            <option value="">All Wards / Units</option>
                             {wards.map((w: any) => (
                                 <option key={w.ward_id} value={w.ward_id}>{w.ward_name}</option>
                             ))}
                         </select>
+
+                        {/* Admission date range */}
+                        <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-xl px-2.5 py-1.5">
+                            <Calendar className="h-4 w-4 text-gray-400 shrink-0" />
+                            <input type="date" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} title="Admitted from"
+                                className="bg-transparent text-xs font-medium text-gray-700 focus:outline-none w-[110px]" />
+                            <span className="text-gray-300 text-xs">–</span>
+                            <input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} title="Admitted up to"
+                                className="bg-transparent text-xs font-medium text-gray-700 focus:outline-none w-[110px]" />
+                            {(fromDate || toDate) && (
+                                <button onClick={() => { setFromDate(''); setToDate(''); }} title="Clear dates" className="text-gray-400 hover:text-rose-500 shrink-0">
+                                    <X className="h-3.5 w-3.5" />
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -316,11 +358,16 @@ export default function NursePatientsPage() {
                                         className="hover:bg-gray-50 transition-colors cursor-pointer"
                                         onClick={() => openPatientModal(p)}
                                     >
-                                        <td className="px-6 py-4 font-bold text-gray-900 flex items-center gap-2">
-                                            <div className="h-8 w-8 bg-orange-50 rounded-lg flex items-center justify-center shrink-0">
-                                                <User className="h-4 w-4 text-orange-500" />
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white font-black shrink-0">
+                                                    {p.patientName?.charAt(0) || 'P'}
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-gray-900">{p.patientName}</p>
+                                                    <p className="text-[10px] text-gray-500 font-mono mt-0.5">{p.admissionId}</p>
+                                                </div>
                                             </div>
-                                            {p.patientName}
                                         </td>
                                         <td className="px-6 py-4 text-gray-600 font-medium">
                                             {p.age ? `${p.age}y` : ''}{p.gender ? ` / ${p.gender}` : ''}
@@ -334,7 +381,7 @@ export default function NursePatientsPage() {
                                         <td className="px-6 py-4">
                                             <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-700 bg-blue-50 px-2 py-1 rounded-lg border border-blue-200">
                                                 <BedDouble className="h-3 w-3 text-blue-400" />
-                                                {p.bedId || 'N/A'}
+                                                {p.bedLabel || p.bedId || 'N/A'}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-gray-600 font-medium max-w-[200px] truncate">
@@ -353,8 +400,8 @@ export default function NursePatientsPage() {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <button className="inline-flex items-center gap-1 text-orange-600 hover:text-orange-700 font-bold text-xs bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-colors">
-                                                <FileText className="h-3 w-3" /> View / Notes
+                                            <button className="inline-flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition-all">
+                                                <Activity className="h-3.5 w-3.5" /> Nursing Action
                                             </button>
                                         </td>
                                     </tr>
@@ -363,7 +410,7 @@ export default function NursePatientsPage() {
                                 <tr>
                                     <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                                         <Users className="h-8 w-8 mx-auto text-gray-300 mb-2" />
-                                        <p className="font-medium">No admitted patients found.</p>
+                                        <p className="font-medium">No patients found for this filter.</p>
                                     </td>
                                 </tr>
                             )}
