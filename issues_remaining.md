@@ -8,11 +8,6 @@ Excluded per request: pharmacy OPD/IPD charge details in bill/report, and cash t
 
 ## Genuinely open
 
-### 2. 'Add patient' option in nursing module — ❌ REMAINING
-- **Verified:** `app/actions/nurse-actions.ts` has no admit/register/create function; `app/nurse/*` (dashboard/patients/tasks/vitals/medications/handover) is view-only.
-- **Needed:** An admit/register flow (or a button linking to the existing IPD admit flow) from the nurse module.
-- **Effort:** Medium.
-
 ### 5. Roles & permissions fully editable by Super Admin — 🟡 PARTIAL
 - **Done (on branch `feat/roles-enforcement`, NOT yet merged/deployed):**
   - Login embeds the role's permissions in the JWT; `proxy.ts` now honours them (custom roles + permission grants take effect); admin baseline protected; old sessions fall back safely.
@@ -28,6 +23,9 @@ Excluded per request: pharmacy OPD/IPD charge details in bill/report, and cash t
 ---
 
 ## Done / resolved
+
+### 2. 'Add patient' option in nursing module — ✅ RESOLVED
+- New `app/nurse/admit/page.tsx` — full admit flow (patient search, ward/bed, doctor, admission type, optional deposit) reusing the role-agnostic `admitPatientIPD` action. Linked in the nurse sidebar as "Admit Patient".
 
 ### 4. TPA / corporate — ✅ RESOLVED
 - Insurance management at `/insurance` (now in **admin nav**, manual add works).
