@@ -548,19 +548,31 @@ export default function PharmacyPage() {
                                                     onClick={() => selectPatient(p)}
                                                     className="w-full text-left px-4 py-2.5 hover:bg-orange-50 border-b border-gray-50 last:border-0 transition-colors"
                                                 >
-                                                    <p className="text-sm font-bold text-gray-900">{p.full_name}</p>
-                                                    <p className="text-[10px] text-gray-400 font-mono">{p.patient_id} · {p.phone}</p>
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <p className="text-sm font-bold text-gray-900">{p.full_name}</p>
+                                                            <p className="text-[10px] text-gray-400 font-mono">{p.patient_id} · {p.phone}</p>
+                                                        </div>
+                                                        {p.is_admitted && (
+                                                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full shrink-0">IPD</span>
+                                                        )}
+                                                    </div>
                                                 </button>
                                             ))}
                                         </div>
                                     )}
                                     {selectedPatient && (
-                                        <div className="mt-1.5 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg flex items-center justify-between">
+                                        <div className={`mt-1.5 px-3 py-2 border rounded-lg flex items-center justify-between ${selectedPatient.is_admitted ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'}`}>
                                             <div>
                                                 <p className="text-xs font-bold text-teal-800">{selectedPatient.full_name}</p>
                                                 <p className="text-[10px] font-mono text-orange-500">{selectedPatient.patient_id}</p>
+                                                {selectedPatient.is_admitted && (
+                                                    <p className="text-[10px] font-bold text-blue-700 mt-0.5">
+                                                        🏥 IPD Admitted — medicines will be posted to IPD bill
+                                                    </p>
+                                                )}
                                             </div>
-                                            <CheckCircle className="h-4 w-4 text-orange-500 flex-shrink-0" />
+                                            <CheckCircle className={`h-4 w-4 flex-shrink-0 ${selectedPatient.is_admitted ? 'text-blue-500' : 'text-orange-500'}`} />
                                         </div>
                                     )}
                                 </div>
@@ -682,25 +694,32 @@ export default function PharmacyPage() {
                             </div>
                         </div>
 
-                        {/* Payment Method */}
-                        <div className="flex gap-1.5 mb-3">
-                            {PAYMENT_METHODS.map(m => (
-                                <button
-                                    key={m.id}
-                                    onClick={() => setPaymentMethod(m.id)}
-                                    className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${paymentMethod === m.id ? 'bg-orange-50 border-teal-300 text-orange-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
-                                >
-                                    <m.icon className="h-3.5 w-3.5" /> {m.label}
-                                </button>
-                            ))}
-                        </div>
+                        {/* IPD notice — hide payment method for admitted patients */}
+                        {selectedPatient?.is_admitted ? (
+                            <div className="mb-3 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 font-medium">
+                                🏥 <strong>IPD Patient</strong> — medicines will be posted directly to the IPD bill. No separate pharmacy invoice will be created.
+                            </div>
+                        ) : (
+                            /* Payment Method */
+                            <div className="flex gap-1.5 mb-3">
+                                {PAYMENT_METHODS.map(m => (
+                                    <button
+                                        key={m.id}
+                                        onClick={() => setPaymentMethod(m.id)}
+                                        className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${paymentMethod === m.id ? 'bg-orange-50 border-teal-300 text-orange-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                                    >
+                                        <m.icon className="h-3.5 w-3.5" /> {m.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
 
                         <button
                             onClick={handleCheckout}
                             disabled={cart.length === 0 || (!isWalkIn && !patientId)}
-                            className="w-full bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-xl shadow-teal-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98]"
+                            className={`w-full font-bold py-3.5 rounded-xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98] ${selectedPatient?.is_admitted ? 'bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white shadow-blue-500/20' : 'bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white shadow-teal-500/20'}`}
                         >
-                            <Receipt className="h-5 w-5" /> Generate Invoice
+                            <Receipt className="h-5 w-5" /> {selectedPatient?.is_admitted ? 'Post to IPD Bill' : 'Generate Invoice'}
                         </button>
                     </div>
                 </aside>

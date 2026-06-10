@@ -333,6 +333,7 @@ export async function getInvoices(filters?: {
                 include: {
                     patient: { select: { full_name: true, phone: true } },
                     items: { where: { service_category: 'Pharmacy' } },
+                    admission: { select: { status: true, admission_id: true } },
                 },
                 orderBy: { created_at: 'desc' },
                 take: limit,
@@ -347,6 +348,7 @@ export async function getInvoices(filters?: {
                     _isIpdPharmacy: true,
                     _pharmTotal: pharmTotal + pharmTax,
                     _pharmItemCount: inv.items.length,
+                    _admissionStatus: inv.admission?.status || null,
                     items: undefined, // don't carry heavy items array
                 };
             });
@@ -419,6 +421,7 @@ export async function getInvoices(filters?: {
                 created_at: pharm.created_at,
                 source: pharm._isIpdPharmacy ? 'IPD-PHARMACY' : 'PHARMACY',
                 admission_id: pharm.admission_id || null,
+                admission_status: pharm._admissionStatus || null,
             }))
         ];
 
@@ -1565,11 +1568,28 @@ export async function searchPatientsForBilling(query: string) {
                             }
                         }
                     }
+                },
+                admissions: {
+                    where: { status: 'Admitted' },
+                    orderBy: { admission_date: 'desc' },
+                    take: 1,
+                    select: {
+                        admission_id: true,
+                        status: true,
+                        bed_id: true,
+                        ward_id: true,
+                    }
                 }
             }
         });
 
-        return { success: true, data: serialize(patients) };
+        // Flatten active admission for easy access
+        const enriched = patients.map((p: any) => ({
+            ...p,
+            active_admission: p.admissions?.[0] || null,
+            is_admitted: (p.admissions?.length || 0) > 0,
+        }));
+        return { success: true, data: serialize(enriched) };
     } catch (error: any) {
         console.error('searchPatientsForBilling error:', error);
         return { success: false, error: error.message };
