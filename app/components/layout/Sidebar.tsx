@@ -113,6 +113,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Finance", href: "/admin/finance", icon: DollarSign },
         { label: "Master Billing", href: "/billing", icon: CircleDollarSign },
         { label: "TPA / Insurance", href: "/insurance", icon: ShieldCheck },
+        { label: "Corporates", href: "/reception/finance/corporates", icon: Building2 },
         { label: "Approval Center", href: "/billing/approvals", icon: ShieldAlert },
         { label: "Write-offs", href: "/billing/writeoffs", icon: Scale },
         { label: "HR", href: "/admin/hr", icon: Briefcase },
