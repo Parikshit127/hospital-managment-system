@@ -134,11 +134,14 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     let admissionDate = '';
     let dischargeDate = '';
     let los = 0;
+    const fmtDateTime = (d: any) => d
+        ? new Date(d).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
+        : '-';
     if (admission) {
-        admissionDate = new Date(admission.admission_date).toLocaleDateString('en-IN');
+        admissionDate = fmtDateTime(admission.admission_date);
         dischargeDate = admission.discharge_date
-            ? new Date(admission.discharge_date).toLocaleDateString('en-IN')
-            : new Date().toLocaleDateString('en-IN');
+            ? fmtDateTime(admission.discharge_date)
+            : fmtDateTime(new Date());
         los = Math.max(1, Math.ceil(
             (new Date(admission.discharge_date || new Date()).getTime() -
                 new Date(admission.admission_date).getTime()) / (1000 * 60 * 60 * 24)
