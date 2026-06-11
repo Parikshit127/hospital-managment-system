@@ -131,6 +131,9 @@ export async function applyDepositToInvoice(depositId: number, invoiceId: number
                 payment_type: 'Settlement',
                 status: 'Completed',
                 notes: `Applied from deposit ${deposit.deposit_number}`,
+                // Money was received when the deposit was collected — keep that date
+                // on the receipt, not the (later) date it was applied to the bill.
+                created_at: deposit.created_at,
             },
         });
 

@@ -157,9 +157,12 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     const total = Number(invoice.total_amount || 0);
     const totalDiscount = Number(invoice.total_discount || 0);
     const totalTax = Number(invoice.total_tax || 0);
-    const net = Number(invoice.net_amount || 0);
+    // Net = gross − discount + tax (the definition), computed live so it always
+    // reflects the current discount. The stored net_amount can go stale when a
+    // discount/package is applied without the invoice header being recalculated.
+    const net = total - totalDiscount + totalTax;
     const paid = Number(invoice.paid_amount || 0);
-    const balance = Number(invoice.balance_due || 0);
+    const balance = net - paid;
 
     // Group items by service_category for MEDNET-style detail rows
     const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';

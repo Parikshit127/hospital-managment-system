@@ -104,9 +104,10 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
     const total = Number(invoice.total_amount || 0);
     const totalDiscount = Number(invoice.total_discount || 0);
     const totalTax = Number(invoice.total_tax || 0);
-    const net = Number(invoice.net_amount || 0);
+    // Net = gross − discount + tax (live), so it always reflects the current discount.
+    const net = total - totalDiscount + totalTax;
     const paid = Number(invoice.paid_amount || 0);
-    const balance = Number(invoice.balance_due || 0);
+    const balance = net - paid;
 
     const billColor = isFinal ? branding.accentColor : '#f97316';
 

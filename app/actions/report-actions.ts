@@ -819,7 +819,9 @@ export async function getMISReport(filters: { from: string; to: string; billType
 
             // Amounts (deposit-aware Received)
             const grossAmount = Number(inv.total_amount || 0) + Number(inv.total_tax || 0);
-            const netAmount = Number(inv.net_amount || 0);
+            // Net = gross − discount + tax (live), so the discount is always reflected
+            // even when the stored net_amount is stale.
+            const netAmount = Number(inv.total_amount || 0) - Number(inv.total_discount || 0) + Number(inv.total_tax || 0);
             const appliedDep = appliedDepByInvoice[inv.id] || 0;
             const availDep = inv.admission_id ? (availDepByAdmission[inv.admission_id] || 0) : 0;
             const receivedAmount = nonDepositPaid + appliedDep + availDep;

@@ -748,6 +748,9 @@ export async function settleAndDischarge(data: {
                         status: 'Completed',
                         notes: `Applied from deposit ${deposit.deposit_number}`,
                         organizationId,
+                        // Keep the original deposit collection date on the receipt,
+                        // not the date it was applied to the bill.
+                        created_at: deposit.created_at,
                     },
                 });
 
