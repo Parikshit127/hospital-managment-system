@@ -685,6 +685,60 @@ export async function getMISReport(filters: { from: string; to: string; billType
             tpaProviders.forEach((tp: any) => { tpaMap[tp.id] = tp.provider_name; });
         }
 
+        const patientIds = [...new Set(invoices.map((i: any) => i.patient_id).filter(Boolean))] as string[];
+        const isGenericDoc = (n?: string) => !n || /\brmo\b|resident/i.test(String(n).trim());
+
+        // Real consulting doctor per patient from appointments — used to fill blank
+        // or placeholder ("RMO") doctor names on bills.
+        const apptDocByPatient: Record<string, string> = {};
+        // TPA provider per patient from their insurance policy (fallback when the
+        // invoice has no tpa_provider_id but the patient is TPA in the master).
+        const policyProviderByPatient: Record<string, string> = {};
+        if (patientIds.length) {
+            const [appts, policies] = await Promise.all([
+                db.appointments.findMany({
+                    where: { patient_id: { in: patientIds } },
+                    select: { patient_id: true, doctor_name: true },
+                    orderBy: { appointment_date: 'desc' },
+                }),
+                db.insurance_policies.findMany({
+                    where: { patient_id: { in: patientIds } },
+                    select: { patient_id: true, provider: { select: { provider_name: true } } },
+                    orderBy: { created_at: 'desc' },
+                }),
+            ]);
+            for (const a of appts) {
+                if (!apptDocByPatient[a.patient_id] && a.doctor_name && !isGenericDoc(a.doctor_name)) {
+                    apptDocByPatient[a.patient_id] = a.doctor_name;
+                }
+            }
+            for (const p of policies as any[]) {
+                if (!policyProviderByPatient[p.patient_id] && p.provider?.provider_name) {
+                    policyProviderByPatient[p.patient_id] = p.provider.provider_name;
+                }
+            }
+        }
+
+        // Deposits — applied to the invoice + available (un-applied) admission advances,
+        // so the deposit effect shows up in Received Amount.
+        const invoiceIds = invoices.map((i: any) => i.id);
+        const admissionIds = [...new Set(invoices.filter((i: any) => i.admission_id).map((i: any) => i.admission_id))] as string[];
+        const appliedDepByInvoice: Record<number, number> = {};
+        const availDepByAdmission: Record<string, number> = {};
+        const depositRows = await db.patientDeposit.findMany({
+            where: { OR: [{ applied_to_invoice: { in: invoiceIds } }, ...(admissionIds.length ? [{ admission_id: { in: admissionIds } }] : [])] },
+            select: { applied_to_invoice: true, admission_id: true, amount: true, applied_amount: true, refunded_amount: true, status: true },
+        });
+        for (const d of depositRows as any[]) {
+            if (d.applied_to_invoice != null) {
+                appliedDepByInvoice[d.applied_to_invoice] = (appliedDepByInvoice[d.applied_to_invoice] || 0) + Number(d.applied_amount || 0);
+            }
+            if (d.admission_id && d.status === 'Active') {
+                const avail = Math.max(0, Number(d.amount || 0) - Number(d.applied_amount || 0) - Number(d.refunded_amount || 0));
+                availDepByAdmission[d.admission_id] = (availDepByAdmission[d.admission_id] || 0) + avail;
+            }
+        }
+
         const rows = invoices.map((inv: any) => {
             const items = inv.items || [];
             const categorySums: Record<string, number> = {
@@ -701,29 +755,49 @@ export async function getMISReport(filters: { from: string; to: string; billType
 
             const creditNoteTotal = (inv.credit_notes || []).reduce((s: number, cn: any) => s + Number(cn.total_amount || 0), 0);
 
-            const patientPayments = (inv.payments || []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+            const allPayments = inv.payments || [];
+            const patientPayments = allPayments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+            const nonDepositPaid = allPayments
+                .filter((p: any) => (p.payment_method || '').toLowerCase() !== 'deposit')
+                .reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
 
-            // Determine admission category label
+            // Category — use the bill's billing_patient_type, else fall back to the
+            // patient master type (TPA patients were showing as Cash when the bill
+            // wasn't explicitly tagged).
+            const effectiveType = (inv.billing_patient_type && inv.billing_patient_type !== 'cash')
+                ? inv.billing_patient_type
+                : (inv.patient?.patient_type || 'cash');
             let admCat = 'Cash';
-            if (inv.billing_patient_type === 'tpa_insurance') admCat = 'TPA/Insurance';
-            else if (inv.billing_patient_type === 'corporate') admCat = 'Corporate';
+            if (effectiveType === 'tpa_insurance') admCat = 'TPA/Insurance';
+            else if (effectiveType === 'corporate') admCat = 'Corporate';
 
             // TPA/Corporate name
             let tpaCorporateName = '';
             if (inv.tpa_provider_id && tpaMap[inv.tpa_provider_id]) {
                 tpaCorporateName = tpaMap[inv.tpa_provider_id];
-            } else if (inv.patient?.corporate?.company_name) {
+            } else if (effectiveType === 'corporate' && inv.patient?.corporate?.company_name) {
                 tpaCorporateName = inv.patient.corporate.company_name;
+            } else if (effectiveType === 'tpa_insurance' && policyProviderByPatient[inv.patient_id]) {
+                tpaCorporateName = policyProviderByPatient[inv.patient_id];
             }
 
-            // Doctor name — from admission or from consultation items
-            let doctorName = inv.admission?.doctor_name || '';
-            if (!doctorName) {
+            // Doctor — admission doctor → invoice doctor → appointment (real consultant)
+            // → consultation line item. Generic placeholders ("RMO"/"Resident") are
+            // skipped in favour of the actual doctor where available.
+            let doctorName = inv.admission?.doctor_name || (inv as any).doctor_name || '';
+            if (isGenericDoc(doctorName) && apptDocByPatient[inv.patient_id]) {
+                doctorName = apptDocByPatient[inv.patient_id];
+            }
+            if (isGenericDoc(doctorName)) {
                 const consultItem = items.find((it: any) =>
                     (it.service_category || '').toLowerCase() === 'consultation'
                 );
-                if (consultItem) doctorName = consultItem.description.replace(/^(Dr\.?\s*|Consultation\s*[-–—]\s*)/i, '');
+                if (consultItem) {
+                    const parsed = consultItem.description.replace(/^(Dr\.?\s*|Consultation\s*[-–—]\s*)/i, '').trim();
+                    if (parsed && !isGenericDoc(parsed)) doctorName = parsed;
+                }
             }
+            doctorName = doctorName || '';
 
             // Department — from admission diagnosis area or most common item dept
             let department = '';
@@ -742,6 +816,13 @@ export async function getMISReport(filters: { from: string; to: string; billType
 
             // Package vs Non-Package
             const hasPackage = categorySums.package > 0;
+
+            // Amounts (deposit-aware Received)
+            const grossAmount = Number(inv.total_amount || 0) + Number(inv.total_tax || 0);
+            const netAmount = Number(inv.net_amount || 0);
+            const appliedDep = appliedDepByInvoice[inv.id] || 0;
+            const availDep = inv.admission_id ? (availDepByAdmission[inv.admission_id] || 0) : 0;
+            const receivedAmount = nonDepositPaid + appliedDep + availDep;
 
             return {
                 patient_name: inv.patient?.full_name || '-',
@@ -772,10 +853,11 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 // Totals
                 discount: Number(inv.total_discount || 0),
                 credit_note: creditNoteTotal,
-                gross_amount: Number(inv.total_amount || 0) + Number(inv.total_tax || 0),
-                net_amount: Number(inv.net_amount || 0),
-                received_amount: Number(inv.paid_amount || 0),
-                outstanding_amount: Number(inv.balance_due || 0),
+                gross_amount: grossAmount,
+                net_amount: netAmount,
+                gross_net_diff: grossAmount - netAmount,
+                received_amount: receivedAmount,
+                outstanding_amount: Math.max(0, netAmount - receivedAmount),
                 patient_receipt: patientPayments,
                 tpa_corporate_name: tpaCorporateName,
                 referral_source: inv.admission?.admission_source || '',
