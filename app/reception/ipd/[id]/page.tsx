@@ -415,11 +415,6 @@ export default function IPDAdmissionDetailPage() {
                                             <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full border ${getInvoiceStatusBadge(inv.status)}`}>
                                                 {inv.status}
                                             </span>
-                                            {inv.items?.some((it: any) => it.service_category === 'Pharmacy') && (
-                                                <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full border bg-orange-50 text-orange-700 border-orange-200">
-                                                    Pharmacy
-                                                </span>
-                                            )}
                                         </div>
                                         <div className="flex items-center gap-5">
                                             <div className="text-right">

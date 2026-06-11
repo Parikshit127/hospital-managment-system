@@ -50,11 +50,7 @@ export default function PharmacyInvoicesPage() {
             status: statusFilter || undefined,
             limit: 500,
         });
-        if (res.success && res.data) {
-            // IPD pharmacy bills belong to reception (visible on IPD detail page).
-            // Only keep OPD pharmacy invoices here.
-            setInvoices(res.data.filter((inv: any) => inv.source !== 'IPD-PHARMACY'));
-        }
+        if (res.success && res.data) setInvoices(res.data);
         setLoading(false);
     };
 
