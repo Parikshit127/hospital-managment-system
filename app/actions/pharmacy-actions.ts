@@ -2144,6 +2144,249 @@ export async function getPharmacyAnalytics() {
 }
 
 // ============================================
+// PHARMACY REVENUE REPORT — IPD / OPD / COUNTER SEGMENTATION
+// ============================================
+// Authoritative billed-revenue report sourced from the invoices/invoice_items
+// tables (NOT pharmacy_orders, which misses direct counter sales and mislabels
+// IPD dispenses). Three channels:
+//   Counter = invoices invoice_type='Pharmacy' AND patient_id='WALKIN'
+//   OPD     = invoices invoice_type='Pharmacy' AND patient_id != 'WALKIN'
+//   IPD     = invoice_items service_category='Pharmacy' on invoice_type='IPD' bills
+
+// Strip "Pharmacy: " prefix and "(Batch ...)" suffix to recover the medicine name
+function extractMedicineName(desc: string): string {
+    const raw = desc || '';
+    let s = raw.replace(/^Pharmacy:\s*/i, '');
+    s = s.replace(/\s*\(Batch[:\s].*$/i, '');
+    s = s.replace(/\s*[×x]\s*\d.*$/i, '');
+    return s.trim() || raw;
+}
+
+export async function getPharmacyRevenueReport(filters?: {
+    from?: string;
+    to?: string;
+    channel?: 'all' | 'counter' | 'opd' | 'ipd';
+    doctor?: string;
+    search?: string;
+}) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const now = new Date();
+        const fromDate = filters?.from
+            ? new Date(filters.from.length <= 10 ? filters.from + 'T00:00:00' : filters.from)
+            : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        const toDate = filters?.to
+            ? new Date(filters.to.length <= 10 ? filters.to + 'T23:59:59.999' : filters.to)
+            : now;
+        const channel = filters?.channel || 'all';
+        const doctor = filters?.doctor?.trim();
+        const search = filters?.search?.trim().toLowerCase();
+        const dateRange = { gte: fromDate, lte: toDate };
+
+        // a. Counter + OPD — standalone Pharmacy invoices
+        const pharmacyInvoices = await db.invoices.findMany({
+            where: {
+                invoice_type: 'Pharmacy',
+                status: { not: 'Cancelled' },
+                created_at: dateRange,
+                ...(doctor ? { doctor_name: doctor } : {}),
+            },
+            select: {
+                id: true, invoice_number: true, patient_id: true, net_amount: true,
+                doctor_name: true, notes: true, created_at: true,
+                patient: { select: { full_name: true } },
+                items: { select: { description: true, quantity: true, net_price: true, tax_amount: true } },
+            },
+            take: 5000,
+        });
+
+        // b. IPD pharmacy — line items off IPD bills
+        const ipdItems = await db.invoice_items.findMany({
+            where: {
+                service_category: 'Pharmacy',
+                created_at: dateRange,
+                invoice: {
+                    invoice_type: 'IPD',
+                    status: { not: 'Cancelled' },
+                    ...(doctor ? { doctor_name: doctor } : {}),
+                },
+            },
+            select: {
+                description: true, quantity: true, net_price: true, tax_amount: true, created_at: true,
+                invoice: {
+                    select: {
+                        id: true, invoice_number: true, patient_id: true, doctor_name: true,
+                        patient: { select: { full_name: true } },
+                    },
+                },
+            },
+            take: 10000,
+        });
+
+        // -- Aggregation accumulators --
+        const channels = {
+            counter: { revenue: 0, billCount: 0, itemCount: 0 },
+            opd: { revenue: 0, billCount: 0, itemCount: 0 },
+            ipd: { revenue: 0, billCount: 0, itemCount: 0 },
+        };
+        const dayMap = new Map<string, { counter: number; opd: number; ipd: number }>();
+        const medMap = new Map<string, { name: string; qty: number; revenue: number }>();
+        const docMap = new Map<string, { name: string; revenue: number }>();
+        const bills: { billNo: string; patient: string; channel: 'counter' | 'opd' | 'ipd'; doctor: string; date: string; items: number; revenue: number }[] = [];
+
+        const dayKey = (d: Date) => {
+            const x = new Date(d);
+            return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+        };
+        const bumpDay = (d: Date, ch: 'counter' | 'opd' | 'ipd', amt: number) => {
+            const k = dayKey(d);
+            const e = dayMap.get(k) || { counter: 0, opd: 0, ipd: 0 };
+            e[ch] += amt;
+            dayMap.set(k, e);
+        };
+        const bumpMed = (desc: string, qty: number, rev: number) => {
+            const name = extractMedicineName(desc);
+            if (search && !name.toLowerCase().includes(search)) return;
+            const e = medMap.get(name) || { name, qty: 0, revenue: 0 };
+            e.qty += qty; e.revenue += rev;
+            medMap.set(name, e);
+        };
+        const bumpDoc = (name: string | null | undefined, rev: number) => {
+            const key = name || 'Unassigned';
+            const e = docMap.get(key) || { name: key, revenue: 0 };
+            e.revenue += rev;
+            docMap.set(key, e);
+        };
+
+        // Counter + OPD
+        for (const inv of pharmacyInvoices) {
+            const ch: 'counter' | 'opd' = inv.patient_id === 'WALKIN' ? 'counter' : 'opd';
+            const rev = Number(inv.net_amount) || 0;
+            channels[ch].revenue += rev;
+            channels[ch].billCount += 1;
+            channels[ch].itemCount += inv.items.length;
+            bumpDay(inv.created_at, ch, rev);
+            bumpDoc(inv.doctor_name, rev);
+            for (const it of inv.items) {
+                bumpMed(it.description, Number(it.quantity) || 0, (Number(it.net_price) || 0) + (Number(it.tax_amount) || 0));
+            }
+            const patientName = ch === 'counter'
+                ? ((inv.notes && inv.notes.trim()) || 'Walk-in')
+                : ((inv.patient as any)?.full_name || inv.patient_id);
+            bills.push({
+                billNo: inv.invoice_number,
+                patient: patientName,
+                channel: ch,
+                doctor: inv.doctor_name || '—',
+                date: inv.created_at.toISOString(),
+                items: inv.items.length,
+                revenue: rev,
+            });
+        }
+
+        // IPD — group items by parent invoice (one bill per IPD invoice)
+        const ipdBillMap = new Map<number, { billNo: string; patient: string; doctor: string; date: string; items: number; revenue: number }>();
+        for (const it of ipdItems) {
+            const rev = (Number(it.net_price) || 0) + (Number(it.tax_amount) || 0);
+            channels.ipd.revenue += rev;
+            channels.ipd.itemCount += 1;
+            bumpDay(it.created_at, 'ipd', rev);
+            bumpDoc(it.invoice.doctor_name, rev);
+            bumpMed(it.description, Number(it.quantity) || 0, rev);
+            const existing = ipdBillMap.get(it.invoice.id);
+            if (existing) {
+                existing.items += 1;
+                existing.revenue += rev;
+            } else {
+                ipdBillMap.set(it.invoice.id, {
+                    billNo: it.invoice.invoice_number,
+                    patient: (it.invoice.patient as any)?.full_name || it.invoice.patient_id,
+                    doctor: it.invoice.doctor_name || '—',
+                    date: it.created_at.toISOString(),
+                    items: 1,
+                    revenue: rev,
+                });
+            }
+        }
+        channels.ipd.billCount = ipdBillMap.size;
+        for (const b of ipdBillMap.values()) {
+            bills.push({ ...b, channel: 'ipd' });
+        }
+
+        // -- Corrected gross margin from DISPENSE movement ledger --
+        const dispenseMoves = await db.pharmacyInventoryMovement.findMany({
+            where: { movement_type: 'DISPENSE', created_at: dateRange },
+            select: { quantity_out: true, unit_cost: true },
+            take: 20000,
+        });
+        const cogs = dispenseMoves.reduce((s: number, m: any) => s + (Number(m.unit_cost) || 0) * (m.quantity_out || 0), 0);
+
+        // -- Apply channel filter to outputs --
+        const activeChannels: ('counter' | 'opd' | 'ipd')[] =
+            channel === 'all' ? ['counter', 'opd', 'ipd'] : [channel];
+        const totalRevenue = activeChannels.reduce((s, c) => s + channels[c].revenue, 0);
+
+        // revenueByDay across the range (cap 62 buckets)
+        const revenueByDay: { date: string; counter: number; opd: number; ipd: number; revenue: number }[] = [];
+        const spanDays = Math.min(Math.ceil((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000)) + 1, 62);
+        const startBucket = new Date(toDate.getTime() - (spanDays - 1) * 24 * 60 * 60 * 1000);
+        for (let i = 0; i < spanDays; i++) {
+            const d = new Date(startBucket.getTime() + i * 24 * 60 * 60 * 1000);
+            const e = dayMap.get(dayKey(d)) || { counter: 0, opd: 0, ipd: 0 };
+            const counter = activeChannels.includes('counter') ? e.counter : 0;
+            const opd = activeChannels.includes('opd') ? e.opd : 0;
+            const ipd = activeChannels.includes('ipd') ? e.ipd : 0;
+            revenueByDay.push({
+                date: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+                counter, opd, ipd, revenue: counter + opd + ipd,
+            });
+        }
+
+        const topMovers = Array.from(medMap.values())
+            .sort((a, b) => b.revenue - a.revenue)
+            .slice(0, 10);
+        const byDoctor = Array.from(docMap.values())
+            .sort((a, b) => b.revenue - a.revenue)
+            .slice(0, 10);
+
+        // Bills list — respect channel filter, newest first
+        const billsList = bills
+            .filter(b => activeChannels.includes(b.channel))
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            .slice(0, 500);
+
+        const pct = (v: number) => (totalRevenue > 0 ? Math.round((v / totalRevenue) * 1000) / 10 : 0);
+        const grossMarginPct = totalRevenue > 0 ? Math.round(((totalRevenue - cogs) / totalRevenue) * 1000) / 10 : 0;
+
+        return {
+            success: true,
+            data: {
+                from: fromDate.toISOString(),
+                to: toDate.toISOString(),
+                totalRevenue,
+                cogs: Math.round(cogs),
+                grossMarginPct,
+                byChannel: {
+                    counter: { ...channels.counter, pct: pct(channels.counter.revenue) },
+                    opd: { ...channels.opd, pct: pct(channels.opd.revenue) },
+                    ipd: { ...channels.ipd, pct: pct(channels.ipd.revenue) },
+                },
+                totalBills: activeChannels.reduce((s, c) => s + channels[c].billCount, 0),
+                revenueByDay,
+                topMovers,
+                byDoctor,
+                bills: billsList,
+                activeChannels,
+            },
+        };
+    } catch (error) {
+        console.error('Pharmacy Revenue Report Error:', error);
+        return { success: false, error: 'Failed to load revenue report' };
+    }
+}
+
+// ============================================
 // PHASE 3 — INVENTORY MOVEMENT LEDGER QUERIES
 // ============================================
 

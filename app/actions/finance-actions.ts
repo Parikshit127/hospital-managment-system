@@ -234,6 +234,8 @@ export async function getInvoices(filters?: {
     mobile_number?: string;
     limit?: number;
     exclude_pharmacy?: boolean;
+    date_from?: Date;
+    date_to?: Date;
 }) {
     try {
         const { db, session } = await requireTenantContext();
@@ -307,6 +309,11 @@ export async function getInvoices(filters?: {
             if (filters?.mobile_number) {
                 where.patient = { phone: { contains: filters.mobile_number } };
             }
+            if (filters?.date_from || filters?.date_to) {
+                where.created_at = {};
+                if (filters.date_from) where.created_at.gte = filters.date_from;
+                if (filters.date_to) where.created_at.lte = filters.date_to;
+            }
 
             const opdPharmInvoices = await db.invoices.findMany({
                 where,
@@ -326,6 +333,11 @@ export async function getInvoices(filters?: {
             if (filters?.patient_id) ipdPharmWhere.patient_id = filters.patient_id;
             if (filters?.mobile_number) {
                 ipdPharmWhere.patient = { phone: { contains: filters.mobile_number } };
+            }
+            if (filters?.date_from || filters?.date_to) {
+                ipdPharmWhere.created_at = {};
+                if (filters.date_from) ipdPharmWhere.created_at.gte = filters.date_from;
+                if (filters.date_to) ipdPharmWhere.created_at.lte = filters.date_to;
             }
 
             const ipdPharmInvoices = await db.invoices.findMany({
@@ -422,6 +434,7 @@ export async function getInvoices(filters?: {
                 source: pharm._isIpdPharmacy ? 'IPD-PHARMACY' : 'PHARMACY',
                 admission_id: pharm.admission_id || null,
                 admission_status: pharm._admissionStatus || null,
+                doctor_name: pharm.doctor_name || null,
             }))
         ];
 

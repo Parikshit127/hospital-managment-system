@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { FileText, Search, Eye, CreditCard, X, Pencil, Plus, Trash2 } from 'lucide-react';
+import { FileText, Search, Eye, CreditCard, X, Pencil, Plus, Trash2, IndianRupee, Receipt, TrendingDown, ShoppingBag } from 'lucide-react';
 import { getInvoices, addInvoiceItem, recordPayment } from '@/app/actions/finance-actions';
 import { getInventory } from '@/app/actions/pharmacy-actions';
 import Link from 'next/link';
@@ -17,13 +17,49 @@ const STATUS_COLOR: Record<string, string> = {
     Cancelled: 'bg-red-100 text-red-700',
 };
 
+type DatePreset = 'today' | 'week' | 'month' | 'custom';
+type CategoryFilter = 'all' | 'counter' | 'ipd-admitted' | 'ipd-discharged';
+
 type MedRow = { medicine_id: number; name: string; qty: number; unit_price: number; tax_rate: number; hsn: string; batch_no: string };
+
+function getPresetRange(preset: DatePreset): { from: Date; to: Date } | null {
+    const now = new Date();
+    if (preset === 'today') {
+        const from = new Date(now); from.setHours(0, 0, 0, 0);
+        const to = new Date(now); to.setHours(23, 59, 59, 999);
+        return { from, to };
+    }
+    if (preset === 'week') {
+        const from = new Date(now); from.setDate(now.getDate() - 6); from.setHours(0, 0, 0, 0);
+        const to = new Date(now); to.setHours(23, 59, 59, 999);
+        return { from, to };
+    }
+    if (preset === 'month') {
+        const from = new Date(now); from.setDate(1); from.setHours(0, 0, 0, 0);
+        const to = new Date(now); to.setHours(23, 59, 59, 999);
+        return { from, to };
+    }
+    return null;
+}
+
+function fmtDateTime(d: string | Date) {
+    return new Date(d).toLocaleString('en-IN', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', hour12: true,
+    });
+}
 
 export default function PharmacyInvoicesPage() {
     const [invoices, setInvoices] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // Filters
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+    const [datePreset, setDatePreset] = useState<DatePreset>('month');
+    const [customFrom, setCustomFrom] = useState('');
+    const [customTo, setCustomTo] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
 
     // Payment modal
     const [payModal, setPayModal] = useState(false);
@@ -45,23 +81,64 @@ export default function PharmacyInvoicesPage() {
 
     const load = async () => {
         setLoading(true);
-        const res = await getInvoices({
-            invoice_type: 'PHARMACY',
-            status: statusFilter || undefined,
-            limit: 500,
-        });
+        const opts: any = { invoice_type: 'PHARMACY', limit: 1000 };
+        if (statusFilter) opts.status = statusFilter;
+
+        // For custom range pass dates to server; presets filter client-side from a larger set
+        if (datePreset === 'custom' && customFrom && customTo) {
+            opts.date_from = new Date(customFrom + 'T00:00:00');
+            opts.date_to = new Date(customTo + 'T23:59:59');
+        }
+
+        const res = await getInvoices(opts);
         if (res.success && res.data) setInvoices(res.data);
         setLoading(false);
     };
 
-    useEffect(() => { load(); }, [statusFilter]);
+    useEffect(() => { load(); }, [statusFilter, datePreset, customFrom, customTo]);
 
-    const filtered = invoices.filter(inv =>
-        !search ||
-        inv.invoice_number?.toLowerCase().includes(search.toLowerCase()) ||
-        inv.patient?.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-        inv.patient?.phone?.includes(search)
-    );
+    // Client-side filtering
+    const filtered = useMemo(() => {
+        const presetRange = datePreset !== 'custom' ? getPresetRange(datePreset) : null;
+
+        return invoices.filter(inv => {
+            // Text search
+            if (search) {
+                const q = search.toLowerCase();
+                const hit = inv.invoice_number?.toLowerCase().includes(q) ||
+                    inv.patient?.full_name?.toLowerCase().includes(q) ||
+                    inv.patient?.phone?.includes(search) ||
+                    inv.patient_id?.toLowerCase().includes(q);
+                if (!hit) return false;
+            }
+
+            // Date preset (client-side for today/week/month)
+            if (presetRange) {
+                const d = new Date(inv.created_at);
+                if (d < presetRange.from || d > presetRange.to) return false;
+            }
+
+            // Category
+            if (categoryFilter !== 'all') {
+                const isIpd = inv.source === 'IPD-PHARMACY';
+                const isAdmitted = inv.admission_status === 'Admitted';
+                if (categoryFilter === 'counter' && isIpd) return false;
+                if (categoryFilter === 'ipd-admitted' && (!isIpd || !isAdmitted)) return false;
+                if (categoryFilter === 'ipd-discharged' && (!isIpd || isAdmitted)) return false;
+            }
+
+            return true;
+        });
+    }, [invoices, search, datePreset, categoryFilter]);
+
+    // KPI summary
+    const summary = useMemo(() => {
+        const totalBills = filtered.length;
+        const grossAmount = filtered.reduce((s, inv) => s + Number(inv.net_amount || 0), 0);
+        const balanceDue = filtered.reduce((s, inv) => s + Number(inv.balance_due || 0), 0);
+        const receipts = grossAmount - balanceDue;
+        return { totalBills, grossAmount, receipts, balanceDue };
+    }, [filtered]);
 
     // ── Payment modal ─────────────────────────────────────────────────────
     const openPayModal = (inv: any) => {
@@ -98,7 +175,6 @@ export default function PharmacyInvoicesPage() {
         setMedSearch('');
         setSaveError('');
         setEditModal(true);
-        // Load inventory in background
         const res = await getInventory();
         if (res.success) setInventory(res.data || []);
     }, []);
@@ -150,55 +226,135 @@ export default function PharmacyInvoicesPage() {
         setSaving(false);
     };
 
+    const PRESETS: { key: DatePreset; label: string }[] = [
+        { key: 'today', label: 'Today' },
+        { key: 'week', label: 'This Week' },
+        { key: 'month', label: 'This Month' },
+        { key: 'custom', label: 'Custom' },
+    ];
+
     return (
         <AppShell
-            pageTitle="Customer Invoices"
+            pageTitle="Pharmacy Sales"
             pageIcon={<FileText className="h-5 w-5" />}
             onRefresh={load}
             refreshing={loading}
         >
             <div className="space-y-4">
-                {/* Filters */}
-                <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="relative flex-1">
+
+                {/* ── KPI Summary Bar ──────────────────────────────────────── */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
+                        <div className="p-2 bg-orange-50 rounded-lg"><ShoppingBag className="h-4 w-4 text-orange-500" /></div>
+                        <div>
+                            <p className="text-xs text-gray-500 font-medium">Total Bills</p>
+                            <p className="text-lg font-bold text-gray-900">{summary.totalBills}</p>
+                        </div>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
+                        <div className="p-2 bg-blue-50 rounded-lg"><IndianRupee className="h-4 w-4 text-blue-500" /></div>
+                        <div>
+                            <p className="text-xs text-gray-500 font-medium">Gross Amount</p>
+                            <p className="text-lg font-bold text-gray-900">{fmt(summary.grossAmount)}</p>
+                        </div>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
+                        <div className="p-2 bg-emerald-50 rounded-lg"><Receipt className="h-4 w-4 text-emerald-500" /></div>
+                        <div>
+                            <p className="text-xs text-gray-500 font-medium">Receipts</p>
+                            <p className="text-lg font-bold text-emerald-700">{fmt(summary.receipts)}</p>
+                        </div>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
+                        <div className="p-2 bg-rose-50 rounded-lg"><TrendingDown className="h-4 w-4 text-rose-500" /></div>
+                        <div>
+                            <p className="text-xs text-gray-500 font-medium">Balance Due</p>
+                            <p className="text-lg font-bold text-rose-600">{fmt(summary.balanceDue)}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ── Filters ──────────────────────────────────────────────── */}
+                <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3">
+                    {/* Row 1: date presets + category + status */}
+                    <div className="flex flex-wrap items-center gap-2">
+                        {/* Date preset pills */}
+                        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                            {PRESETS.map(p => (
+                                <button key={p.key} onClick={() => setDatePreset(p.key)}
+                                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${datePreset === p.key ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                                    {p.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Custom date pickers */}
+                        {datePreset === 'custom' && (
+                            <div className="flex items-center gap-2">
+                                <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 outline-none" />
+                                <span className="text-xs text-gray-400">to</span>
+                                <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 outline-none" />
+                            </div>
+                        )}
+
+                        <div className="flex-1" />
+
+                        {/* Category filter */}
+                        <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value as CategoryFilter)}
+                            className="px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-orange-500 outline-none">
+                            <option value="all">All Categories</option>
+                            <option value="counter">Counter (OPD)</option>
+                            <option value="ipd-admitted">IPD · Admitted</option>
+                            <option value="ipd-discharged">IPD · Discharged</option>
+                        </select>
+
+                        {/* Status filter */}
+                        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+                            className="px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-orange-500 outline-none">
+                            <option value="">All Statuses</option>
+                            <option value="Draft">Draft</option>
+                            <option value="Final">Final</option>
+                            <option value="Paid">Paid</option>
+                            <option value="Partial">Partial</option>
+                            <option value="Cancelled">Cancelled</option>
+                        </select>
+                    </div>
+
+                    {/* Row 2: search */}
+                    <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <input type="text" placeholder="Search by invoice #, patient name, or phone..."
+                        <input type="text" placeholder="Search by invoice #, patient name, MRN, or phone..."
                             value={search} onChange={e => setSearch(e.target.value)}
                             className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none" />
                     </div>
-                    <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-                        className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none">
-                        <option value="">All Statuses</option>
-                        <option value="Draft">Draft</option>
-                        <option value="Final">Final</option>
-                        <option value="Paid">Paid</option>
-                        <option value="Partial">Partial</option>
-                        <option value="Cancelled">Cancelled</option>
-                    </select>
                 </div>
 
-                {/* Table */}
+                {/* ── Table ────────────────────────────────────────────────── */}
                 <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead className="bg-gray-50 border-b border-gray-200">
                                 <tr>
-                                    <th className="px-5 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Invoice #</th>
-                                    <th className="px-5 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Patient</th>
-                                    <th className="px-5 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Phone</th>
-                                    <th className="px-5 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Amount</th>
-                                    <th className="px-5 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Balance</th>
-                                    <th className="px-5 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                                    <th className="px-5 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
-                                    <th className="px-5 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-10">SR</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Invoice #</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Patient / MRN</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Category</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Doctor</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date & Time</th>
+                                    <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Bill Amt</th>
+                                    <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Balance</th>
+                                    <th className="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th className="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {loading ? (
-                                    <tr><td colSpan={8} className="px-5 py-16 text-center text-gray-400 text-sm">Loading...</td></tr>
+                                    <tr><td colSpan={10} className="px-5 py-16 text-center text-gray-400 text-sm">Loading...</td></tr>
                                 ) : filtered.length === 0 ? (
-                                    <tr><td colSpan={8} className="px-5 py-16 text-center text-gray-400 text-sm">No pharmacy invoices found</td></tr>
-                                ) : filtered.map((inv: any) => {
+                                    <tr><td colSpan={10} className="px-5 py-16 text-center text-gray-400 text-sm">No pharmacy invoices found</td></tr>
+                                ) : filtered.map((inv: any, idx: number) => {
                                     const isIpd = inv.source === 'IPD-PHARMACY';
                                     const isAdmitted = inv.admission_status === 'Admitted';
                                     const isDischarged = !isAdmitted;
@@ -207,43 +363,83 @@ export default function PharmacyInvoicesPage() {
 
                                     return (
                                         <tr key={`${inv.source}-${inv.id}`} className="hover:bg-orange-50/30 transition-colors">
-                                            <td className="px-5 py-3">
-                                                <span className="font-mono font-bold text-gray-900">{inv.invoice_number}</span>
-                                                {isIpd && (
-                                                    <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold ${isAdmitted ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                                        {isAdmitted ? 'IPD · Admitted' : 'IPD · Discharged'}
+                                            {/* SR # */}
+                                            <td className="px-4 py-3 text-xs text-gray-400 font-mono">{idx + 1}</td>
+
+                                            {/* Invoice # */}
+                                            <td className="px-4 py-3">
+                                                <span className="font-mono font-bold text-gray-900 text-xs">{inv.invoice_number}</span>
+                                            </td>
+
+                                            {/* Patient + MRN */}
+                                            <td className="px-4 py-3">
+                                                <p className="font-semibold text-gray-900">{inv.patient?.full_name || 'Walk-in'}</p>
+                                                {inv.patient_id && (
+                                                    <p className="text-[10px] text-gray-400 font-mono mt-0.5">MRN: {inv.patient_id}</p>
+                                                )}
+                                                {inv.patient?.phone && (
+                                                    <p className="text-[10px] text-gray-400 mt-0.5">{inv.patient.phone}</p>
+                                                )}
+                                            </td>
+
+                                            {/* Category */}
+                                            <td className="px-4 py-3">
+                                                {isIpd ? (
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${isAdmitted ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                        IPD · {isAdmitted ? 'Admitted' : 'Discharged'}
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">
+                                                        Counter
                                                     </span>
                                                 )}
                                             </td>
-                                            <td className="px-5 py-3 font-medium text-gray-800">{inv.patient?.full_name || '-'}</td>
-                                            <td className="px-5 py-3 text-gray-500">{inv.patient?.phone || '-'}</td>
-                                            <td className="px-5 py-3 text-right font-bold text-gray-900">{fmt(Number(inv.net_amount || inv.total_amount || 0))}</td>
-                                            <td className="px-5 py-3 text-right font-bold text-rose-600">{fmt(Number(inv.balance_due || 0))}</td>
-                                            <td className="px-5 py-3 text-center">
-                                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${STATUS_COLOR[inv.status] || 'bg-gray-100 text-gray-600'}`}>
+
+                                            {/* Doctor */}
+                                            <td className="px-4 py-3 text-xs text-gray-600">
+                                                {inv.doctor_name || <span className="text-gray-300">—</span>}
+                                            </td>
+
+                                            {/* Date & Time */}
+                                            <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                                                {fmtDateTime(inv.created_at)}
+                                            </td>
+
+                                            {/* Bill Amount */}
+                                            <td className="px-4 py-3 text-right font-bold text-gray-900 text-sm">
+                                                {fmt(Number(inv.net_amount || inv.total_amount || 0))}
+                                            </td>
+
+                                            {/* Balance */}
+                                            <td className="px-4 py-3 text-right font-bold text-sm">
+                                                <span className={Number(inv.balance_due) > 0 ? 'text-rose-600' : 'text-gray-300'}>
+                                                    {Number(inv.balance_due) > 0 ? fmt(Number(inv.balance_due)) : '—'}
+                                                </span>
+                                            </td>
+
+                                            {/* Status */}
+                                            <td className="px-4 py-3 text-center">
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${STATUS_COLOR[inv.status] || 'bg-gray-100 text-gray-600'}`}>
                                                     {inv.status}
                                                 </span>
                                             </td>
-                                            <td className="px-5 py-3 text-center text-xs text-gray-500">
-                                                {new Date(inv.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                            </td>
-                                            <td className="px-5 py-3 text-center">
-                                                <div className="flex items-center justify-center gap-1.5 flex-wrap">
+
+                                            {/* Actions */}
+                                            <td className="px-4 py-3 text-center">
+                                                <div className="flex items-center justify-center gap-1 flex-wrap">
                                                     <Link href={`/pharmacy/invoices/${inv.id}/view`} target="_blank"
-                                                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-50 text-orange-700 border border-orange-200 text-xs font-bold rounded-lg hover:bg-orange-100 transition-colors">
+                                                        className="inline-flex items-center gap-1 px-2 py-1 bg-orange-50 text-orange-700 border border-orange-200 text-[10px] font-bold rounded-lg hover:bg-orange-100 transition-colors">
                                                         <Eye className="h-3 w-3" /> View
                                                     </Link>
-                                                    {/* Edit medicines — only for active IPD admissions */}
                                                     {isIpd && isAdmitted && notCancelled && (
                                                         <button onClick={() => openEditModal(inv)}
-                                                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold rounded-lg hover:bg-blue-100 transition-colors">
-                                                            <Pencil className="h-3 w-3" /> Add Medicines
+                                                            className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold rounded-lg hover:bg-blue-100 transition-colors">
+                                                            <Pencil className="h-3 w-3" /> Add Meds
                                                         </button>
                                                     )}
-                                                    {/* Collect payment — for discharged IPD or any OPD with balance */}
                                                     {hasBalance && notCancelled && (!isIpd || isDischarged) && (
                                                         <button onClick={() => openPayModal(inv)}
-                                                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-lg hover:bg-emerald-100 transition-colors">
+                                                            className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold rounded-lg hover:bg-emerald-100 transition-colors">
                                                             <CreditCard className="h-3 w-3" /> Collect
                                                         </button>
                                                     )}
@@ -257,7 +453,7 @@ export default function PharmacyInvoicesPage() {
                     </div>
                     {filtered.length > 0 && (
                         <div className="px-5 py-3 bg-gray-50 border-t border-gray-200 text-xs text-gray-500">
-                            Showing {filtered.length} pharmacy invoice{filtered.length !== 1 ? 's' : ''}
+                            Showing {filtered.length} of {invoices.length} invoice{invoices.length !== 1 ? 's' : ''}
                         </div>
                     )}
                 </div>
@@ -325,7 +521,6 @@ export default function PharmacyInvoicesPage() {
                         </div>
 
                         <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
-                            {/* Medicine search */}
                             <div>
                                 <label className="text-xs font-semibold text-gray-600 mb-1 block">Search & Add Medicine</label>
                                 <div className="relative">
@@ -360,7 +555,6 @@ export default function PharmacyInvoicesPage() {
                                 )}
                             </div>
 
-                            {/* Added medicines table */}
                             {editRows.length > 0 && (
                                 <div>
                                     <label className="text-xs font-semibold text-gray-600 mb-2 block">Medicines to Add ({editRows.length})</label>
