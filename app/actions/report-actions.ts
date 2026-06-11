@@ -687,6 +687,19 @@ export async function getMISReport(filters: { from: string; to: string; billType
 
         const patientIds = [...new Set(invoices.map((i: any) => i.patient_id).filter(Boolean))] as string[];
         const isGenericDoc = (n?: string) => !n || /\brmo\b|resident/i.test(String(n).trim());
+        // Normalize varied payer-type strings (e.g. "Insurance", "tpa", "TPA/Insurance").
+        const normType = (t: any) => {
+            const s = String(t || '').toLowerCase();
+            if (s.includes('tpa') || s.includes('insurance')) return 'tpa_insurance';
+            if (s.includes('corporate')) return 'corporate';
+            return 'cash';
+        };
+        // Doctor specialty = clinical department (avoids "Pharmacy" dominating from line counts).
+        const docKey = (n?: string) => String(n || '').replace(/^dr\.?\s*/i, '').trim().toLowerCase();
+        const docSpecByName: Record<string, string> = {};
+        const docs = await db.user.findMany({ where: { role: 'doctor' }, select: { name: true, specialty: true } });
+        for (const d of docs as any[]) { if (d.name && d.specialty) docSpecByName[docKey(d.name)] = d.specialty; }
+        const ANCILLARY = new Set(['pharmacy', 'lab', 'laboratory', 'diagnostics', 'diagnostics charges', 'radiology', 'haematology', 'serology', 'biochemistry', 'microbiology', 'pathology']);
 
         // Real consulting doctor per patient from appointments — used to fill blank
         // or placeholder ("RMO") doctor names on bills.
@@ -764,9 +777,12 @@ export async function getMISReport(filters: { from: string; to: string; billType
             // Category — use the bill's billing_patient_type, else fall back to the
             // patient master type (TPA patients were showing as Cash when the bill
             // wasn't explicitly tagged).
-            const effectiveType = (inv.billing_patient_type && inv.billing_patient_type !== 'cash')
-                ? inv.billing_patient_type
-                : (inv.patient?.patient_type || 'cash');
+            const bptNorm = normType(inv.billing_patient_type);
+            const effectiveType = bptNorm !== 'cash'
+                ? bptNorm
+                : (normType(inv.patient?.patient_type) !== 'cash'
+                    ? normType(inv.patient?.patient_type)
+                    : (policyProviderByPatient[inv.patient_id] ? 'tpa_insurance' : 'cash'));
             let admCat = 'Cash';
             if (effectiveType === 'tpa_insurance') admCat = 'TPA/Insurance';
             else if (effectiveType === 'corporate') admCat = 'Corporate';
@@ -799,10 +815,22 @@ export async function getMISReport(filters: { from: string; to: string; billType
             }
             doctorName = doctorName || '';
 
-            // Department — from admission diagnosis area or most common item dept
-            let department = '';
-            if (inv.admission) {
-                department = inv.admission.diagnosis || '';
+            // Department — the clinical department: doctor's specialty → consultation
+            // item's dept → most-common NON-ancillary dept → most-common dept.
+            // (Avoids showing "Pharmacy" just because pharmacy has the most line items.)
+            let department = (doctorName && docSpecByName[docKey(doctorName)]) || '';
+            if (!department) {
+                const consult = items.find((it: any) => (it.service_category || '').toLowerCase() === 'consultation');
+                if (consult?.department) department = consult.department;
+            }
+            if (!department && items.length > 0) {
+                const clinicalCounts: Record<string, number> = {};
+                items.forEach((it: any) => {
+                    const d = (it.department || '').trim();
+                    if (d && !ANCILLARY.has(d.toLowerCase())) clinicalCounts[d] = (clinicalCounts[d] || 0) + 1;
+                });
+                const sorted = Object.entries(clinicalCounts).sort(([, a], [, b]) => b - a);
+                if (sorted.length > 0) department = sorted[0][0];
             }
             if (!department && items.length > 0) {
                 const deptCounts: Record<string, number> = {};
