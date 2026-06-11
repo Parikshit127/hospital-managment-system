@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Search, Loader2, Plus, ArrowLeft, Receipt, CheckCircle } from 'lucide-react';
-import { searchPatientsForBilling, createInvoice, addInvoiceItem } from '@/app/actions/finance-actions';
+import { searchPatientsForBilling, createInvoice, addInvoiceItem, getSuggestedOpdDoctor } from '@/app/actions/finance-actions';
 import { calculateBillSplit, createPaymentSplits, type BillSplit } from '@/app/actions/billing-engine';
 import { getAllBillableServices } from '@/app/actions/ipd-master-actions';
+import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 import { useToast } from '@/app/components/ui/Toast';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -49,6 +50,9 @@ export default function ReceptionGenerateBillPage() {
     const [patients, setPatients] = useState<any[]>([]);
     const [selectedPatient, setSelectedPatient] = useState<any>(null);
 
+    const [doctors, setDoctors] = useState<any[]>([]);
+    const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
+
     const [services, setServices] = useState<any[]>([]);
     const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
     const [serviceSearch, setServiceSearch] = useState('');
@@ -77,7 +81,27 @@ export default function ReceptionGenerateBillPage() {
         getAllBillableServices().then(res => {
             if (res.success && res.data) setServices(res.data);
         });
+        getDoctorsForDropdown().then(res => {
+            if (res.success && res.data) setDoctors(res.data);
+        });
     }, []);
+
+    // Select a patient and pre-fill the consulting doctor from their latest
+    // appointment (biller can still change it before generating the bill).
+    const handleSelectPatient = async (p: any) => {
+        setSelectedPatient(p);
+        setSelectedDoctorId('');
+        const res = await getSuggestedOpdDoctor(p.patient_id);
+        if (res.success && res.data) {
+            const { doctor_id, doctor_name } = res.data;
+            const byId = doctor_id && doctors.find(d => d.id === doctor_id);
+            const byName = !byId && doctor_name
+                ? doctors.find(d => (d.name || '').toLowerCase() === doctor_name.toLowerCase())
+                : null;
+            const match = byId || byName;
+            if (match) setSelectedDoctorId(match.id);
+        }
+    };
 
     useEffect(() => {
         if (!searchQuery || searchQuery.length < 2) {
@@ -164,10 +188,13 @@ export default function ReceptionGenerateBillPage() {
             const split = billSplit;
 
             // 1. Create Invoice with Phase 2 fields
+            const selectedDoctor = doctors.find(d => d.id === selectedDoctorId);
             const invRes = await createInvoice({
                 patient_id: selectedPatient.patient_id,
                 invoice_type: 'OPD',
                 notes: 'Generated from Reception Billing',
+                doctor_id: selectedDoctorId || undefined,
+                doctor_name: selectedDoctor?.name || undefined,
                 billing_patient_type: patientType,
                 corporate_id: patientType === 'corporate' ? selectedPatient.corporate_id : undefined,
                 tpa_provider_id: patientType === 'tpa_insurance' ? activePolicy?.provider?.id : undefined,
@@ -290,7 +317,7 @@ export default function ReceptionGenerateBillPage() {
                                             {patients.map(p => (
                                                 <div
                                                     key={p.patient_id}
-                                                    onClick={() => setSelectedPatient(p)}
+                                                    onClick={() => handleSelectPatient(p)}
                                                     className="p-3 hover:bg-slate-50 cursor-pointer flex justify-between items-center transition-colors group"
                                                 >
                                                     <div>
@@ -336,9 +363,26 @@ export default function ReceptionGenerateBillPage() {
                                             </div>
                                         </div>
                                         <button
-                                            onClick={() => { setSelectedPatient(null); setSearchQuery(''); setBillSplit(null); setPreAuthBlocked(false); }}
+                                            onClick={() => { setSelectedPatient(null); setSelectedDoctorId(''); setSearchQuery(''); setBillSplit(null); setPreAuthBlocked(false); }}
                                             className="text-xs font-bold text-orange-600 hover:text-teal-800 underline"
                                         >Change Patient</button>
+                                    </div>
+
+                                    {/* Consulting doctor — saved on the bill so the printed bill header shows it */}
+                                    <div className="mt-3">
+                                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Consulting Doctor</label>
+                                        <select
+                                            value={selectedDoctorId}
+                                            onChange={e => setSelectedDoctorId(e.target.value)}
+                                            className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+                                        >
+                                            <option value="">— Select consulting doctor —</option>
+                                            {doctors.map(d => (
+                                                <option key={d.id} value={d.id}>
+                                                    {d.name}{d.specialty ? ` · ${d.specialty}` : ''}
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
                                     {/* Pre-auth blocking warning */}
                                     {preAuthBlocked && (

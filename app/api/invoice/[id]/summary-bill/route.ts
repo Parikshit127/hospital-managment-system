@@ -217,7 +217,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
         <p style="font-size:11px;"><strong>Age/Gender:</strong> ${patient.age || '-'} / ${patient.gender || '-'}</p>
         <p style="font-size:11px;"><strong>Phone:</strong> ${patient.phone || '-'}</p>
         <p style="font-size:11px;"><strong>Category:</strong> ${patientCategory}${tpaProviderName ? ` (${tpaProviderName})` : ''}</p>
-        ${!isIPD && opdDoctor ? `<p style="font-size:11px;"><strong>Doctor:</strong> ${formatDoctorName(opdDoctor)}</p>` : ''}
+        ${!isIPD ? `<p style="font-size:11px;"><strong>Doctor:</strong> ${opdDoctor ? formatDoctorName(opdDoctor) : (patient.department || '-')}</p>` : ''}
     `;
     if (isIPD) {
         patientInfoHTML += `

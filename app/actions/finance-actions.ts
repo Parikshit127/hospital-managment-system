@@ -68,6 +68,9 @@ export async function createInvoice(data: {
     concession_amount?: number;
     concession_reason?: string;
     concession_approved_by?: string;
+    // Consulting doctor (OPD bills) — captured at billing time so the bill header shows it
+    doctor_name?: string;
+    doctor_id?: string;
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
@@ -113,6 +116,8 @@ export async function createInvoice(data: {
                 concession_amount: data.concession_amount ?? 0,
                 concession_reason: data.concession_reason || null,
                 concession_approved_by: data.concession_approved_by || null,
+                doctor_name: data.doctor_name || null,
+                doctor_id: data.doctor_id || null,
             },
         });
 
@@ -137,6 +142,25 @@ export async function createInvoice(data: {
     } catch (error: any) {
         console.error('createInvoice error:', error);
         return { success: false, error: error.message };
+    }
+}
+
+// Suggest the consulting doctor for an OPD bill from the patient's latest
+// appointment, so the billing UI can pre-fill it (biller can still override).
+export async function getSuggestedOpdDoctor(patientId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const apt = await db.appointments.findFirst({
+            where: { patient_id: patientId, organizationId },
+            orderBy: { appointment_date: 'desc' },
+            select: { doctor_name: true, doctor_id: true },
+        });
+        return {
+            success: true,
+            data: { doctor_name: apt?.doctor_name || '', doctor_id: apt?.doctor_id || '' },
+        };
+    } catch (error: any) {
+        return { success: false, error: error.message, data: { doctor_name: '', doctor_id: '' } };
     }
 }
 
