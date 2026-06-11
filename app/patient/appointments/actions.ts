@@ -234,7 +234,7 @@ export async function bookAppointment(
                 select: { email: true, phone: true },
             });
             const formattedDate = appointmentDate.toLocaleDateString('en-GB', {
-                weekday: 'long', year: 'numeric', month: '2-digit', day: 'numeric',
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
             });
             const formattedTime = appointmentDate.toLocaleTimeString('en-IN', {
                 hour: '2-digit', minute: '2-digit', hour12: true,

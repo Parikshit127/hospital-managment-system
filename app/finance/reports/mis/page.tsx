@@ -14,7 +14,7 @@ const fmtNum = (n: number) => {
     if (!n || n === 0) return '-';
     return Number(n).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 };
-const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
+const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
 
 // All 30 MIS columns definition
 const MIS_COLUMNS: { key: string; label: string; type: 'text' | 'currency' | 'date'; width: string }[] = [

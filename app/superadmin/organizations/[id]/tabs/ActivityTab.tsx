@@ -86,7 +86,7 @@ export default function ActivityTab({ orgId }: ActivityTabProps) {
                                 {logs.map((log) => (
                                     <tr key={log.id} className="hover:bg-white/[0.02] transition">
                                         <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
-                                            {new Date(log.created_at).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                            {new Date(log.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                         </td>
                                         <td className="px-4 py-3">
                                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${actionColor(log.action)}`}>

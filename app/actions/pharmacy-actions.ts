@@ -2338,7 +2338,7 @@ export async function getPharmacyRevenueReport(filters?: {
             const opd = activeChannels.includes('opd') ? e.opd : 0;
             const ipd = activeChannels.includes('ipd') ? e.ipd : 0;
             revenueByDay.push({
-                date: d.toLocaleDateString('en-GB', { day: 'numeric', month: '2-digit' }),
+                date: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
                 counter, opd, ipd, revenue: counter + opd + ipd,
             });
         }

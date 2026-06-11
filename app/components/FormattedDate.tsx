@@ -20,7 +20,7 @@ export function FormattedDate({ date, timezone = DEFAULT_TZ, format = 'datetime'
             return d.toLocaleDateString('en-GB', {
                 timeZone: timezone,
                 day: '2-digit',
-                month: '2-digit',
+                month: 'short',
                 year: 'numeric',
             });
         }
@@ -35,7 +35,7 @@ export function FormattedDate({ date, timezone = DEFAULT_TZ, format = 'datetime'
         return d.toLocaleString('en-IN', {
             timeZone: timezone,
             day: '2-digit',
-            month: '2-digit',
+            month: 'short',
             year: 'numeric',
             hour: '2-digit',
             minute: '2-digit',

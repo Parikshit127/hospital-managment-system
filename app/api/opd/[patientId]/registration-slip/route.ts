@@ -64,7 +64,7 @@ function ymdt(d: Date | string | null | undefined): string {
     if (!d) return '';
     const dt = new Date(d);
     if (isNaN(dt.getTime())) return '';
-    return dt.toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return dt.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function field(label: string, value: any, span = 1): string {

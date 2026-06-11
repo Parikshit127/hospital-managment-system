@@ -18,7 +18,7 @@ const fmtDate = (v?: string | Date | null) => {
   if (!v) return 'N/A';
   return new Date(v).toLocaleDateString('en-GB', {
     day: '2-digit',
-    month: '2-digit',
+    month: 'short',
     year: 'numeric',
   });
 };

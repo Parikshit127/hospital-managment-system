@@ -751,7 +751,7 @@ export default function AdmissionDetailPage() {
                                                 </button>
                                             )}
                                         </div>
-                                        <DetailRow label="Admitted" value={new Date(data.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} />
+                                        <DetailRow label="Admitted" value={new Date(data.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} />
                                         {showAdmissionEdit ? (
                                             <div className="space-y-3 pt-1">
                                                 <div>
@@ -811,7 +811,7 @@ export default function AdmissionDetailPage() {
                                             </>
                                         )}
                                         {data.surgery_requested && <DetailRow label="Surgery" value={data.surgery_requested} />}
-                                        {data.discharge_date && <DetailRow label="Discharged" value={new Date(data.discharge_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} />}
+                                        {data.discharge_date && <DetailRow label="Discharged" value={new Date(data.discharge_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} />}
                                     </div>
                                     <div className="bg-gray-50 rounded-xl border border-gray-200 p-5 space-y-3">
                                         <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Patient Details</h4>
@@ -1291,7 +1291,7 @@ export default function AdmissionDetailPage() {
                                                     {vitalsHistory.map((v: any) => (
                                                         <tr key={v.id} className="hover:bg-gray-50">
                                                             <td className="px-4 py-3 whitespace-nowrap text-gray-500 text-xs">
-                                                                {new Date(v.created_at).toLocaleString([], { month: '2-digit', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                                {new Date(v.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                             </td>
                                                             <td className="px-4 py-3 font-mono text-xs">{v.bp_systolic ? `${v.bp_systolic}/${v.bp_diastolic}` : '—'}</td>
                                                             <td className="px-4 py-3 font-mono text-xs">{v.heart_rate ?? '—'}</td>

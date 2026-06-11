@@ -106,7 +106,7 @@ export default function PlatformAuditLogPage() {
                                 {logs.map((log) => (
                                     <tr key={log.id} className="hover:bg-white/[0.02] transition">
                                         <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
-                                            {new Date(log.created_at).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                            {new Date(log.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                         </td>
                                         <td className="px-4 py-3">
                                             {log.organization ? (

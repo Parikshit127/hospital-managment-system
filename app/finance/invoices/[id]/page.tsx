@@ -188,7 +188,7 @@ export default function InvoiceDetailPage() {
                                 </p>
                             )}
                             <p className="text-xs text-gray-400">
-                                Date: {new Date(invoice.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })} |
+                                Date: {new Date(invoice.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} |
                                 Type: {invoice.invoice_type}
                                 {invoice.admission && ` | Admitted: ${new Date(invoice.admission.admission_date).toLocaleDateString('en-GB')}`}
                                 {invoice.admission?.diagnosis && ` | Dx: ${invoice.admission.diagnosis}`}

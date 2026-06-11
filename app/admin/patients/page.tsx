@@ -438,7 +438,7 @@ export default function AdminPatientsPage() {
                               <CalendarDays className="h-3.5 w-3.5" />
                               {new Date(dateValue).toLocaleDateString("en-IN", {
                                 day: "2-digit",
-                                month: "2-digit",
+                                month: "short",
                                 year: "numeric",
                               })}
                             </p>

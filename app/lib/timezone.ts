@@ -28,7 +28,7 @@ export function getTodayRange(timezone: string = DEFAULT_TIMEZONE): { start: Dat
     const formatter = new Intl.DateTimeFormat('en-CA', {
         timeZone: timezone,
         year: 'numeric',
-        month: '2-digit',
+        month: 'short',
         day: '2-digit',
     });
     const dateStr = formatter.format(now); // "2025-03-20"
@@ -62,7 +62,7 @@ export function formatDateTime(date: Date | string, timezone: string = DEFAULT_T
     return d.toLocaleString('en-IN', {
         timeZone: timezone,
         day: '2-digit',
-        month: '2-digit',
+        month: 'short',
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
@@ -78,7 +78,7 @@ export function formatDateShort(date: Date | string, timezone: string = DEFAULT_
     return d.toLocaleDateString('en-GB', {
         timeZone: timezone,
         day: '2-digit',
-        month: '2-digit',
+        month: 'short',
         year: 'numeric',
     });
 }

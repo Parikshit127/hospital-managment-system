@@ -44,7 +44,7 @@ function getExpiryStatus(expiry: Date | null) {
     if (daysLeft <= 30) return { label: `${daysLeft}d left`, color: 'bg-red-100 text-red-700 border border-red-200', urgent: true };
     if (daysLeft <= 60) return { label: `${daysLeft}d left`, color: 'bg-amber-100 text-amber-700 border border-amber-200', urgent: false };
     if (daysLeft <= 90) return { label: `${daysLeft}d left`, color: 'bg-yellow-50 text-yellow-700 border border-yellow-200', urgent: false };
-    return { label: new Date(expiry).toLocaleDateString('en-GB', { month: '2-digit', year: '2-digit' }), color: 'bg-gray-100 text-gray-500 border border-gray-200', urgent: false };
+    return { label: new Date(expiry).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }), color: 'bg-gray-100 text-gray-500 border border-gray-200', urgent: false };
 }
 
 export default function PharmacyPage() {

@@ -2593,7 +2593,7 @@ export default function DoctorDashboard() {
                       Good morning, Dr. {doctorName.split(' ')[0]} — Here&apos;s your day
                     </h3>
                     <p className="text-xs text-orange-600 mt-0.5">
-                      {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: '2-digit' })}
+                      {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
                     </p>
                   </div>
                   <button

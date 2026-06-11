@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
         const totalOutstanding = totalRevenue - totalPaid;
         const invoiceCount = invoices.length;
 
-        const periodLabel = `${startDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })} - ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+        const periodLabel = `${startDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} - ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`;
 
         const branding = await getBillBranding(auth.context.organizationId);
 

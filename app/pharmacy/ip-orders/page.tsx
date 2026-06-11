@@ -168,7 +168,7 @@ export default function IPMedicationOrdersPage() {
                             <td className="px-6 py-4 text-gray-900 font-bold align-top" rowSpan={order.items.length}>
                               <div>{order.patient?.patient_name || order.patient_id}</div>
                               <div className="text-xs font-medium text-gray-500 mt-0.5">
-                                {new Date(order.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })}
+                                {new Date(order.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                               </div>
                             </td>
                           )}

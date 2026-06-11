@@ -982,7 +982,7 @@ export async function getOrganizationUsageTrend(orgId: string, months: number = 
             ]);
 
             trends.push({
-                month: start.toLocaleDateString('en-GB', { month: '2-digit', year: '2-digit' }),
+                month: start.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }),
                 patients,
                 invoices: invoiceAgg._count,
                 revenue: Number(invoiceAgg._sum.net_amount || 0),

@@ -236,7 +236,7 @@ export default function ProfilePage() {
                                     <p className="text-[10px] text-indigo-300 font-bold uppercase tracking-wider mb-1">Date of Birth</p>
                                     <p className="text-white font-bold text-sm flex items-center gap-1">
                                         <Calendar className="h-3.5 w-3.5" />
-                                        {new Date(p.date_of_birth).toLocaleDateString('en-GB', { day: 'numeric', month: '2-digit', year: 'numeric' })}
+                                        {new Date(p.date_of_birth).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                                     </p>
                                 </div>
                             )}
@@ -447,7 +447,7 @@ export default function ProfilePage() {
                                                 <div>
                                                     <p className="text-gray-400 font-medium">Valid Until</p>
                                                     <p className="font-bold text-gray-700">
-                                                        {new Date(ins.valid_until).toLocaleDateString('en-GB', { day: 'numeric', month: '2-digit', year: 'numeric' })}
+                                                        {new Date(ins.valid_until).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                                                     </p>
                                                 </div>
                                             )}

@@ -147,7 +147,7 @@ export default function AuditTrailPage() {
                                             <div className="flex items-center gap-1.5">
                                                 <Clock className="h-3 w-3 text-gray-300" />
                                                 <span className="text-[11px] text-gray-500 font-mono">
-                                                    {new Date(log.created_at).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                                    {new Date(log.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                                                 </span>
                                             </div>
                                         </td>

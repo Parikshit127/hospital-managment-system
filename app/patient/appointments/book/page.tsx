@@ -662,7 +662,7 @@ function BookAppointmentContent() {
                         undefined,
                         {
                           weekday: "long",
-                          month: "2-digit",
+                          month: "long",
                           day: "numeric",
                           year: "numeric",
                         },
@@ -840,7 +840,7 @@ function BookAppointmentContent() {
                   {selectedDate
                     ? new Date(selectedDate + "T00:00:00").toLocaleDateString(
                       undefined,
-                      { month: "2-digit", day: "numeric", year: "numeric" },
+                      { month: "short", day: "numeric", year: "numeric" },
                     )
                     : ""}
                 </span>
@@ -926,7 +926,7 @@ function BookAppointmentContent() {
                     undefined,
                     {
                       weekday: "long",
-                      month: "2-digit",
+                      month: "long",
                       day: "numeric",
                       year: "numeric",
                     },

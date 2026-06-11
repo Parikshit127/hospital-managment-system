@@ -47,7 +47,7 @@ function VideoCallStatus() {
                     <h3 className="font-black text-gray-900">{active.status === 'Accepted' ? 'Video Call Accepted' : 'Call Request Pending'}</h3>
                     <p className="text-sm text-gray-600 font-medium">
                         {active.status === 'Accepted' 
-                            ? `Scheduled for: ${new Date(active.scheduled_at!).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: '2-digit', day: 'numeric' })}` 
+                            ? `Scheduled for: ${new Date(active.scheduled_at!).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}` 
                             : 'Waiting for your doctor to respond...'}
                     </p>
                 </div>
@@ -191,7 +191,7 @@ export default function PatientDashboard() {
                                 <p className="text-emerald-100 font-medium mt-1">{nextAppt.department || 'General'}</p>
                             </div>
                             <div className="sm:text-right">
-                                <p className="text-lg font-black">{new Date(nextAppt.appointment_date).toLocaleDateString(undefined, { weekday: 'short', month: '2-digit', day: 'numeric' })}</p>
+                                <p className="text-lg font-black">{new Date(nextAppt.appointment_date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</p>
                                 <p className="text-emerald-200 font-bold text-sm">{daysUntil(nextAppt.appointment_date)}</p>
                             </div>
                         </div>
@@ -340,7 +340,7 @@ export default function PatientDashboard() {
                         {data.upcomingAppointments?.length > 0 ? data.upcomingAppointments.map((app: any) => (
                             <div key={app.id || app.appointment_id} className="p-3 rounded-xl border border-gray-100 bg-gray-50 flex justify-between items-center">
                                 <div>
-                                    <p className="text-sm font-bold text-gray-900">{new Date(app.appointment_date).toLocaleDateString(undefined, { weekday: 'short', month: '2-digit', day: 'numeric' })}</p>
+                                    <p className="text-sm font-bold text-gray-900">{new Date(app.appointment_date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</p>
                                     <p className="text-xs text-indigo-600 font-bold mt-0.5">{formatDoctorName(app.doctor_name || app.doctor_id)} &middot; {app.department || 'General'}</p>
                                 </div>
                                 <span className="text-xs font-bold text-gray-500 bg-white px-2 py-1 rounded-lg border border-gray-200">

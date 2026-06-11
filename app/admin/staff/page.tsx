@@ -257,7 +257,7 @@ export default function StaffManagement() {
                                         <td className="px-4 py-3 text-gray-500 text-xs">{user.specialty || user.department || '-'}</td>
                                         <td className="px-4 py-3"><div className="text-xs text-gray-500">{user.email && <p>{user.email}</p>}{user.phone && <p>{user.phone}</p>}{!user.email && !user.phone && '-'}</div></td>
                                         <td className="px-4 py-3"><span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full ${user.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-400 border border-gray-200'}`}><span className={`w-1.5 h-1.5 rounded-full ${user.is_active ? 'bg-emerald-500' : 'bg-gray-300'}`} />{user.is_active ? 'Active' : 'Inactive'}</span></td>
-                                        <td className="px-4 py-3 text-gray-400 text-xs">{new Date(user.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}</td>
+                                        <td className="px-4 py-3 text-gray-400 text-xs">{new Date(user.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-1">
                                                 <button onClick={() => openEdit(user)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-orange-600 transition-colors" title="Edit"><Pencil className="h-3.5 w-3.5" /></button>

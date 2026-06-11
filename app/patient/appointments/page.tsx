@@ -285,7 +285,7 @@ export default function MyAppointmentsPage() {
                                                     undefined,
                                                     {
                                                         weekday: 'short',
-                                                        month: '2-digit',
+                                                        month: 'short',
                                                         day: 'numeric',
                                                         year: 'numeric',
                                                     }
@@ -355,7 +355,7 @@ export default function MyAppointmentsPage() {
                                 <span className="font-bold">Dr. {cancelTarget.doctor_name}</span> on{' '}
                                 {new Date(cancelTarget.appointment_date).toLocaleDateString(undefined, {
                                     weekday: 'long',
-                                    month: '2-digit',
+                                    month: 'long',
                                     day: 'numeric',
                                 })}
                                 ?

@@ -149,7 +149,7 @@ export default function TokenDisplayPage() {
                             {currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                         </p>
                         <p className="text-slate-400 text-sm">
-                            {currentTime.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: '2-digit' })}
+                            {currentTime.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
                         </p>
                     </div>
                 </div>

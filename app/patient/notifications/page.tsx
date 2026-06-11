@@ -55,7 +55,7 @@ function formatDate(date: string) {
     const days = Math.floor(hours / 24);
     if (days < 7) return `${days} day${days !== 1 ? 's' : ''} ago`;
 
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: '2-digit', year: 'numeric' });
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export default function PatientNotificationsPage() {

@@ -95,7 +95,7 @@ export default function DoctorLeavePage() {
   };
 
   const formatDate = (d: string | Date) =>
-    new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
   const leaveTypeColor: Record<string, string> = {
     Leave: 'bg-red-50 text-red-700 border border-red-200',

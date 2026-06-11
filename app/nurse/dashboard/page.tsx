@@ -129,7 +129,7 @@ export default function NurseDashboardPage() {
                             <div className="hidden md:flex items-center gap-2">
                                 <Clock className="h-5 w-5 text-white/60" />
                                 <span className="text-sm font-bold text-white/80">
-                                    {new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: '2-digit', day: 'numeric' })}
+                                    {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                                 </span>
                             </div>
                         </div>

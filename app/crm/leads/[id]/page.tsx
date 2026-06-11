@@ -312,7 +312,7 @@ export default function LeadDetailPage() {
                           )}
                         </div>
                         <span className="text-[10px] text-gray-400">
-                          {new Date(act.performed_at).toLocaleDateString('en-GB', { day: 'numeric', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          {new Date(act.performed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
                       <p className="text-xs text-gray-700 leading-relaxed">{act.content}</p>

@@ -66,7 +66,7 @@ export default function VitalsPage() {
 
     // Chart data
     const chartLabels = filteredVitals.map((v: any) =>
-        new Date(v.recorded_at || v.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })
+        new Date(v.recorded_at || v.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
     );
 
     const hrValues = filteredVitals.map((v: any) => v.heart_rate || null);

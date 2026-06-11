@@ -38,7 +38,7 @@ interface TallyExportRecord {
 function formatDate(date: Date | null | undefined): string {
     if (!date) return '—';
     const d = new Date(date);
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function formatFileSize(bytes: bigint | null | undefined): string {

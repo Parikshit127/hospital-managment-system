@@ -431,7 +431,7 @@ function CashFlowReport({ data, fmt, from, to }: { data: any; fmt: (n: number) =
                 <h3 className="font-semibold text-gray-900 mb-4">Daily Cash Flow</h3>
                 {daily.length > 0 ? (
                     <ReportChart type="bar"
-                        labels={daily.map((d: any) => new Date(d.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }))}
+                        labels={daily.map((d: any) => new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }))}
                         datasets={[
                             { label: 'Inflow', data: daily.map((d: any) => d.inflow) },
                             { label: 'Outflow', data: daily.map((d: any) => d.outflow) },

@@ -383,7 +383,7 @@ export default function AppointmentsPage() {
                 <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
                     <div className="px-4 py-3 border-b border-gray-100">
                         <h3 className="text-sm font-bold text-gray-900">
-                            Appointments for {new Date(selectedDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: '2-digit', year: 'numeric' })}
+                            Appointments for {new Date(selectedDate).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                         </h3>
                     </div>
                     <div className="overflow-x-auto">
