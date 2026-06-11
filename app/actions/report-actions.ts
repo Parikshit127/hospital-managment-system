@@ -642,7 +642,7 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 patient: {
                     select: {
                         patient_id: true, full_name: true, phone: true,
-                        patient_type: true, registration_number: true,
+                        patient_type: true, registration_number: true, department: true,
                         corporate: { select: { company_name: true } },
                     },
                 },
@@ -669,6 +669,9 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 credit_notes: {
                     where: { status: 'Applied' },
                     select: { total_amount: true },
+                },
+                insurance_claims: {
+                    select: { id: true, policy: { select: { provider: { select: { provider_name: true } } } } },
                 },
             },
             orderBy: { created_at: 'asc' },
@@ -704,6 +707,8 @@ export async function getMISReport(filters: { from: string; to: string; billType
         // Real consulting doctor per patient from appointments — used to fill blank
         // or placeholder ("RMO") doctor names on bills.
         const apptDocByPatient: Record<string, string> = {};
+        // Booked clinical department per patient from appointments (department fallback).
+        const apptDeptByPatient: Record<string, string> = {};
         // TPA provider per patient from their insurance policy (fallback when the
         // invoice has no tpa_provider_id but the patient is TPA in the master).
         const policyProviderByPatient: Record<string, string> = {};
@@ -711,7 +716,7 @@ export async function getMISReport(filters: { from: string; to: string; billType
             const [appts, policies] = await Promise.all([
                 db.appointments.findMany({
                     where: { patient_id: { in: patientIds } },
-                    select: { patient_id: true, doctor_name: true },
+                    select: { patient_id: true, doctor_name: true, department: true },
                     orderBy: { appointment_date: 'desc' },
                 }),
                 db.insurance_policies.findMany({
@@ -723,6 +728,9 @@ export async function getMISReport(filters: { from: string; to: string; billType
             for (const a of appts) {
                 if (!apptDocByPatient[a.patient_id] && a.doctor_name && !isGenericDoc(a.doctor_name)) {
                     apptDocByPatient[a.patient_id] = a.doctor_name;
+                }
+                if (!apptDeptByPatient[a.patient_id] && a.department && !ANCILLARY.has(a.department.trim().toLowerCase())) {
+                    apptDeptByPatient[a.patient_id] = a.department.trim();
                 }
             }
             for (const p of policies as any[]) {
@@ -774,15 +782,25 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 .filter((p: any) => (p.payment_method || '').toLowerCase() !== 'deposit')
                 .reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
 
-            // Category — use the bill's billing_patient_type, else fall back to the
-            // patient master type (TPA patients were showing as Cash when the bill
-            // wasn't explicitly tagged).
-            const bptNorm = normType(inv.billing_patient_type);
-            const effectiveType = bptNorm !== 'cash'
-                ? bptNorm
-                : (normType(inv.patient?.patient_type) !== 'cash'
-                    ? normType(inv.patient?.patient_type)
-                    : (policyProviderByPatient[inv.patient_id] ? 'tpa_insurance' : 'cash'));
+            // Category — TPA patients were showing as Cash when the bill wasn't
+            // explicitly tagged. Resolve payer from every available signal, strongest
+            // first: explicit billing type → invoice-level payer links (corporate /
+            // TPA provider / pre-auth / insurance claim) → patient master type →
+            // patient corporate link → patient insurance policy.
+            const hasClaim = (inv.insurance_claims?.length || 0) > 0;
+            let effectiveType = normType(inv.billing_patient_type);
+            if (effectiveType === 'cash') {
+                if (inv.corporate_id) effectiveType = 'corporate';
+                else if (inv.tpa_provider_id || inv.pre_auth_id || hasClaim) effectiveType = 'tpa_insurance';
+            }
+            if (effectiveType === 'cash') {
+                const pt = normType(inv.patient?.patient_type);
+                if (pt !== 'cash') effectiveType = pt;
+            }
+            if (effectiveType === 'cash') {
+                if (inv.patient?.corporate?.company_name) effectiveType = 'corporate';
+                else if (policyProviderByPatient[inv.patient_id]) effectiveType = 'tpa_insurance';
+            }
             let admCat = 'Cash';
             if (effectiveType === 'tpa_insurance') admCat = 'TPA/Insurance';
             else if (effectiveType === 'corporate') admCat = 'Corporate';
@@ -793,8 +811,10 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 tpaCorporateName = tpaMap[inv.tpa_provider_id];
             } else if (effectiveType === 'corporate' && inv.patient?.corporate?.company_name) {
                 tpaCorporateName = inv.patient.corporate.company_name;
-            } else if (effectiveType === 'tpa_insurance' && policyProviderByPatient[inv.patient_id]) {
-                tpaCorporateName = policyProviderByPatient[inv.patient_id];
+            } else if (effectiveType === 'tpa_insurance') {
+                tpaCorporateName = policyProviderByPatient[inv.patient_id]
+                    || inv.insurance_claims?.find((c: any) => c.policy?.provider?.provider_name)?.policy?.provider?.provider_name
+                    || '';
             }
 
             // Doctor — admission doctor → invoice doctor → appointment (real consultant)
@@ -815,13 +835,18 @@ export async function getMISReport(filters: { from: string; to: string; billType
             }
             doctorName = doctorName || '';
 
-            // Department — the clinical department: doctor's specialty → consultation
-            // item's dept → most-common NON-ancillary dept → most-common dept.
-            // (Avoids showing "Pharmacy" just because pharmacy has the most line items.)
+            // Department — the clinical department, resolved strongest-first:
+            // doctor's specialty → consultation item's dept → booked appointment dept
+            // → most-common NON-ancillary item dept → patient registration dept
+            // → most-common item dept. (Avoids showing blank, or "Pharmacy" just
+            // because pharmacy has the most line items.)
             let department = (doctorName && docSpecByName[docKey(doctorName)]) || '';
             if (!department) {
                 const consult = items.find((it: any) => (it.service_category || '').toLowerCase() === 'consultation');
-                if (consult?.department) department = consult.department;
+                if (consult?.department && !ANCILLARY.has(consult.department.trim().toLowerCase())) department = consult.department;
+            }
+            if (!department && apptDeptByPatient[inv.patient_id]) {
+                department = apptDeptByPatient[inv.patient_id];
             }
             if (!department && items.length > 0) {
                 const clinicalCounts: Record<string, number> = {};
@@ -831,6 +856,9 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 });
                 const sorted = Object.entries(clinicalCounts).sort(([, a], [, b]) => b - a);
                 if (sorted.length > 0) department = sorted[0][0];
+            }
+            if (!department && inv.patient?.department && !ANCILLARY.has(String(inv.patient.department).trim().toLowerCase())) {
+                department = String(inv.patient.department).trim();
             }
             if (!department && items.length > 0) {
                 const deptCounts: Record<string, number> = {};
