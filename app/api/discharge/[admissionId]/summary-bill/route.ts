@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { ensureIPDRoomChargesAccrued } from '@/app/actions/ipd-billing-helpers';
-import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, type BillBranding } from '@/app/lib/bill-branding';
+import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, type BillBranding } from '@/app/lib/bill-branding';
 import { getBillSections } from '@/app/lib/bill-sections';
 import { formatDoctorName } from '@/app/lib/format-name';
 
@@ -88,10 +88,10 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
 
     const gstin = branding.gstin;
 
-    const admissionDate = new Date(admission.admission_date).toLocaleDateString('en-IN');
+    const admissionDate = fmtBillDate(admission.admission_date);
     const dischargeDate = admission.discharge_date
-        ? new Date(admission.discharge_date).toLocaleDateString('en-IN')
-        : new Date().toLocaleDateString('en-IN');
+        ? fmtBillDate(admission.discharge_date)
+        : fmtBillDate(new Date());
     const los = Math.max(
         1,
         Math.ceil(
@@ -175,7 +175,7 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                                 <h2 style="font-size:16px;font-weight:800;color:${billColor};">${isFinal ? 'SUMMARY BILL' : 'INTERIM SUMMARY'}</h2>
                                 <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${invoice.invoice_number}</p>
                                 <p style="font-size:10px;color:#6b7280;">Type: <strong>${invoice.invoice_type || 'IPD'}</strong></p>
-                                <p style="font-size:10px;color:#6b7280;">Date: ${new Date().toLocaleDateString('en-IN')}</p>
+                                <p style="font-size:10px;color:#6b7280;">Date: ${fmtBillDate(new Date())}</p>
                                 <p style="font-size:10px;color:#6b7280;">GSTIN: ${gstin}</p>
                             </div>
                         </div>

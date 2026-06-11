@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { validateZealthixApiKey } from '@/app/lib/zealthix/auth'
-import { getBillBranding, inlineHeaderHtml, billFooterHtml } from '@/app/lib/bill-branding'
+import { getBillBranding, inlineHeaderHtml, billFooterHtml, fmtBillDate } from '@/app/lib/bill-branding'
 
 const ALLOWED_STAFF_ROLES = ['admin', 'doctor', 'ipd_manager', 'nurse', 'finance'];
 
@@ -100,8 +100,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         const hospitalName = branding.hospitalName;
 
         const patient = admission.patient || {}
-        const admissionDate = admission.admission_date ? new Date(admission.admission_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'
-        const dischargeDate = admission.discharge_date ? new Date(admission.discharge_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'
+        const admissionDate = admission.admission_date ? fmtBillDate(admission.admission_date) : 'N/A'
+        const dischargeDate = admission.discharge_date ? fmtBillDate(admission.discharge_date) : 'N/A'
         const daysStayed = admission.discharge_date
             ? Math.ceil((new Date(admission.discharge_date).getTime() - new Date(admission.admission_date).getTime()) / (1000 * 60 * 60 * 24))
             : Math.ceil((Date.now() - new Date(admission.admission_date).getTime()) / (1000 * 60 * 60 * 24))
@@ -167,7 +167,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             <p class="section-title">Clinical Notes</p>
             ${ehrNotes.map(n => `
                 <div style="background:#f9fafb;border-radius:6px;padding:10px;margin-bottom:6px;">
-                    <p style="font-size:10px;color:#6b7280;margin-bottom:4px;">${new Date(n.created_at).toLocaleDateString('en-IN')} &bull; ${n.doctor_name || 'Note'}</p>
+                    <p style="font-size:10px;color:#6b7280;margin-bottom:4px;">${fmtBillDate(n.created_at)} &bull; ${n.doctor_name || 'Note'}</p>
                     ${n.diagnosis ? `<p><strong>Diagnosis:</strong> ${n.diagnosis}</p>` : ''}
                     ${n.doctor_notes ? `<p><strong>Notes:</strong> ${n.doctor_notes}</p>` : ''}
                 </div>
@@ -183,7 +183,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
                 <tbody>
                     ${vitals.map(v => `
                         <tr>
-                            <td>${new Date(v.created_at).toLocaleDateString('en-IN')}</td>
+                            <td>${fmtBillDate(v.created_at)}</td>
                             <td>${v.blood_pressure || '-'}</td>
                             <td>${v.heart_rate || '-'}</td>
                             <td>${v.temperature || '-'}</td>
@@ -207,7 +207,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
                             <td>${l.test_type}</td>
                             <td>${l.result_value || 'Pending'}</td>
                             <td>${l.status}</td>
-                            <td>${new Date(l.created_at).toLocaleDateString('en-IN')}</td>
+                            <td>${fmtBillDate(l.created_at)}</td>
                         </tr>
                     `).join('')}
                 </tbody>

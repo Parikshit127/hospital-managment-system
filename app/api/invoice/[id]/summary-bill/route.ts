@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
-import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, type BillBranding } from '@/app/lib/bill-branding';
+import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, fmtBillDateTime, type BillBranding } from '@/app/lib/bill-branding';
 import { getBillSections } from '@/app/lib/bill-sections';
 import { formatDoctorName } from '@/app/lib/format-name';
 
@@ -129,14 +129,12 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     const isFinal = invoice.status === 'Paid' || invoice.status === 'Final' || admission?.status === 'Discharged';
     const billType = isIPD ? (isFinal ? 'SUMMARY BILL' : 'INTERIM SUMMARY') : 'TAX INVOICE';
     const billColor = isFinal ? branding.accentColor : '#f97316';
-    const invoiceDate = new Date(invoice.created_at).toLocaleDateString('en-IN');
+    const invoiceDate = fmtBillDate(invoice.created_at);
 
     let admissionDate = '';
     let dischargeDate = '';
     let los = 0;
-    const fmtDateTime = (d: any) => d
-        ? new Date(d).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
-        : '-';
+    const fmtDateTime = fmtBillDateTime;
     if (admission) {
         admissionDate = fmtDateTime(admission.admission_date);
         dischargeDate = admission.discharge_date
@@ -165,7 +163,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     const balance = net - paid;
 
     // Group items by service_category for MEDNET-style detail rows
-    const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
+    const fmtDate = fmtBillDate;
     const categoryMap: Record<string, any[]> = {};
     for (const item of items) {
         const cat = item.service_category || item.department || 'Other';

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getSignedDownloadUrl } from '@/app/lib/s3';
+import { fmtBillDateTime } from '@/app/lib/bill-branding';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -84,9 +85,7 @@ function generateReceiptHTML(payment: any, org: any, logoSignedUrl = '') {
     const invoice = payment.invoice || {};
     const patient = invoice.patient || {};
     const amount = Number(payment.amount || 0);
-    const paymentDate = payment.created_at
-        ? new Date(payment.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-        : '';
+    const paymentDate = payment.created_at ? fmtBillDateTime(payment.created_at) : '';
 
     const hospitalName = org?.name || 'Hospital';
     const hospitalAddress = org?.address || '';

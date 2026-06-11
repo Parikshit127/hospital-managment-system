@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { ensureIPDRoomChargesAccrued } from '@/app/actions/ipd-billing-helpers'
-import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, type BillBranding } from '@/app/lib/bill-branding';
+import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, type BillBranding } from '@/app/lib/bill-branding';
 import { getBillSections } from '@/app/lib/bill-sections';
 import { formatDoctorName } from '@/app/lib/format-name';
 
@@ -135,8 +135,8 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
 
     const billColor = isFinal ? branding.accentColor : '#f97316';
 
-    const admissionDate = new Date(admission.admission_date).toLocaleDateString('en-IN');
-    const dischargeDate = admission.discharge_date ? new Date(admission.discharge_date).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN');
+    const admissionDate = fmtBillDate(admission.admission_date);
+    const dischargeDate = admission.discharge_date ? fmtBillDate(admission.discharge_date) : fmtBillDate(new Date());
     const los = Math.max(1, Math.ceil((new Date(admission.discharge_date || new Date()).getTime() - new Date(admission.admission_date).getTime()) / (1000 * 60 * 60 * 24)));
 
     const total = Number(invoice.total_amount || 0);
@@ -224,7 +224,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
         <td style="padding:4px 12px;font-size:10px;">${p.receipt_number}</td>
         <td style="padding:4px 12px;font-size:10px;">${p.payment_method}</td>
         <td style="padding:4px 12px;font-size:10px;text-align:right;">${Number(p.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td style="padding:4px 12px;font-size:10px;">${new Date(p.created_at).toLocaleDateString('en-IN')}</td>
+        <td style="padding:4px 12px;font-size:10px;">${fmtBillDate(p.created_at)}</td>
     </tr>`).join('');
 
     return `<!DOCTYPE html>
@@ -277,7 +277,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 <h2 style="font-size:16px;font-weight:800;color:${billColor};">${isFinal ? 'FINAL BILL' : 'INTERIM BILL'}</h2>
                                 <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${invoice.invoice_number}</p>
                                 <p style="font-size:10px;color:#6b7280;">Type: <strong>${invoice.invoice_type || 'IPD'}</strong></p>
-                                <p style="font-size:10px;color:#6b7280;">Date: ${new Date().toLocaleDateString('en-IN')}</p>
+                                <p style="font-size:10px;color:#6b7280;">Date: ${fmtBillDate(new Date())}</p>
                             </div>
                         </div>
 
@@ -373,7 +373,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                     <td style="padding:4px 12px;font-size:10px;">${c.credit_note_number}</td>
                                     <td style="padding:4px 12px;font-size:10px;">${c.reason || '-'}</td>
                                     <td style="padding:4px 12px;font-size:10px;text-align:right;color:#0891b2;">-${Number(c.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                                    <td style="padding:4px 12px;font-size:10px;">${new Date(c.created_at).toLocaleDateString('en-IN')}</td>
+                                    <td style="padding:4px 12px;font-size:10px;">${fmtBillDate(c.created_at)}</td>
                                 </tr>`).join('')}</tbody>
                             </table>
                         </div>` : ''}

@@ -167,6 +167,25 @@ export function printButtonHtml(b: BillBranding, subtitle = ''): string {
     </div>`;
 }
 
+// ─── Date helpers (single source of truth for bill/receipt dates) ────────────
+// All bills/receipts use dd/mm/yyyy, rendered in IST so the day is correct.
+
+/** dd/mm/yyyy (e.g. 12/06/2026). Returns '-' for empty. */
+export function fmtBillDate(d: any): string {
+    if (!d) return '-';
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return '-';
+    return dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+/** dd/mm/yyyy, hh:mm am/pm. Returns '-' for empty. */
+export function fmtBillDateTime(d: any): string {
+    if (!d) return '-';
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return '-';
+    return dt.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
 // ─── Utility ─────────────────────────────────────────────────────────────────
 
 function escHtml(s: string): string {
