@@ -43,14 +43,14 @@ export default function ReportsHub() {
 
         if (reportType === 'revenue') {
             formattedData = data.map(d => ({
-                Date: new Date(d.created_at).toLocaleDateString(),
+                Date: new Date(d.created_at).toLocaleDateString('en-GB'),
                 Time: new Date(d.created_at).toLocaleTimeString(),
                 Type: d.invoice_type,
                 Amount_Collected: d.net_amount
             }));
         } else if (reportType === 'footfall') {
             formattedData = data.map(d => ({
-                Appointment_Date: new Date(d.appointment_date).toLocaleDateString(),
+                Appointment_Date: new Date(d.appointment_date).toLocaleDateString('en-GB'),
                 Department: d.department
             }));
         } else if (reportType === 'staff_activity') {
@@ -179,7 +179,7 @@ export default function ReportsHub() {
                                                 <tbody className="divide-y divide-gray-50">
                                                     {data.map((d: any, i) => (
                                                         <tr key={i} className="hover:bg-gray-50/50 transition-colors">
-                                                            <td className="px-6 py-4 font-bold text-gray-700">{new Date(d.appointment_date).toLocaleDateString()}</td>
+                                                            <td className="px-6 py-4 font-bold text-gray-700">{new Date(d.appointment_date).toLocaleDateString('en-GB')}</td>
                                                             <td className="px-6 py-4 font-black text-gray-900 relative pl-10">
                                                                 <div className="absolute left-6 h-2 w-2 rounded-full bg-indigo-500 top-1/2 -mt-1"></div>
                                                                 {d.department}

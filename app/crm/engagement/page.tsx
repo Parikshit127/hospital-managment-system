@@ -95,7 +95,7 @@ export default function CRMEngagementPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-gray-500 text-xs">
-                        {p.last_visit ? new Date(p.last_visit).toLocaleDateString('en-IN') : '—'}
+                        {p.last_visit ? new Date(p.last_visit).toLocaleDateString('en-GB') : '—'}
                       </td>
                       <td className="px-4 py-3 text-gray-700 text-xs font-semibold">{p.visit_count ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-700 text-xs font-semibold">
@@ -103,7 +103,7 @@ export default function CRMEngagementPage() {
                       </td>
                       <td className="px-4 py-3 text-gray-700 text-xs font-semibold">{p.engagement_score ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-500 text-xs">
-                        {p.next_followup ? new Date(p.next_followup).toLocaleDateString('en-IN') : '—'}
+                        {p.next_followup ? new Date(p.next_followup).toLocaleDateString('en-GB') : '—'}
                       </td>
                       <td className="px-4 py-3">
                         <button className="text-xs font-bold text-orange-600 hover:text-orange-700 border border-orange-200 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-lg transition-colors">

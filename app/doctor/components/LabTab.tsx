@@ -57,7 +57,7 @@ export function LabTab({ labOrders, selectedTest, setSelectedTest, loadingLabs, 
                         <div key={order.id} className="flex items-center justify-between bg-gray-50 border border-gray-200 p-4 rounded-xl hover:border-orange-500/20 transition-all">
                             <div className="flex items-center gap-4">
                                 <div className={`h-3 w-3 rounded-full ${order.status === 'Completed' ? 'bg-emerald-500 shadow-emerald-500/30' : 'bg-amber-500 shadow-amber-500/30'} shadow-sm`} />
-                                <div><p className="font-bold text-gray-700">{order.test_type}</p><p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">{order.barcode && <span className="font-mono bg-gray-100 px-1 rounded border border-gray-200">#{order.barcode}</span>}<span className="text-gray-200">&bull;</span>{new Date(order.created_at).toLocaleDateString()}</p></div>
+                                <div><p className="font-bold text-gray-700">{order.test_type}</p><p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">{order.barcode && <span className="font-mono bg-gray-100 px-1 rounded border border-gray-200">#{order.barcode}</span>}<span className="text-gray-200">&bull;</span>{new Date(order.created_at).toLocaleDateString('en-GB')}</p></div>
                             </div>
                             <div className="text-right">
                                 <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide border ${order.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>{order.status}</span>

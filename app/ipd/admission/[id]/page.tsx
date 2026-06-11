@@ -568,7 +568,7 @@ export default function AdmissionDetailPage() {
                                 {data.expected_discharge_date && (
                                     <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1 ${new Date(data.expected_discharge_date) < new Date() ? 'bg-red-50 text-red-600' : 'bg-violet-50 text-violet-700'}`}>
                                         <CalendarDays className="h-3 w-3" />
-                                        EDD: {new Date(data.expected_discharge_date).toLocaleDateString()}
+                                        EDD: {new Date(data.expected_discharge_date).toLocaleDateString('en-GB')}
                                     </span>
                                 )}
                             </div>
@@ -751,7 +751,7 @@ export default function AdmissionDetailPage() {
                                                 </button>
                                             )}
                                         </div>
-                                        <DetailRow label="Admitted" value={new Date(data.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} />
+                                        <DetailRow label="Admitted" value={new Date(data.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} />
                                         {showAdmissionEdit ? (
                                             <div className="space-y-3 pt-1">
                                                 <div>
@@ -811,7 +811,7 @@ export default function AdmissionDetailPage() {
                                             </>
                                         )}
                                         {data.surgery_requested && <DetailRow label="Surgery" value={data.surgery_requested} />}
-                                        {data.discharge_date && <DetailRow label="Discharged" value={new Date(data.discharge_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} />}
+                                        {data.discharge_date && <DetailRow label="Discharged" value={new Date(data.discharge_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} />}
                                     </div>
                                     <div className="bg-gray-50 rounded-xl border border-gray-200 p-5 space-y-3">
                                         <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Patient Details</h4>
@@ -1203,7 +1203,7 @@ export default function AdmissionDetailPage() {
                                         <p className="text-xs font-bold text-violet-700">Expected Discharge Date (EDD)</p>
                                         <p className="text-[10px] text-violet-500 mt-0.5">
                                             {data.expected_discharge_date
-                                                ? `Currently: ${new Date(data.expected_discharge_date).toLocaleDateString()}`
+                                                ? `Currently: ${new Date(data.expected_discharge_date).toLocaleDateString('en-GB')}`
                                                 : 'Not set — set within 24h of admission'}
                                         </p>
                                     </div>
@@ -1291,7 +1291,7 @@ export default function AdmissionDetailPage() {
                                                     {vitalsHistory.map((v: any) => (
                                                         <tr key={v.id} className="hover:bg-gray-50">
                                                             <td className="px-4 py-3 whitespace-nowrap text-gray-500 text-xs">
-                                                                {new Date(v.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                                {new Date(v.created_at).toLocaleString([], { month: '2-digit', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                             </td>
                                                             <td className="px-4 py-3 font-mono text-xs">{v.bp_systolic ? `${v.bp_systolic}/${v.bp_diastolic}` : '—'}</td>
                                                             <td className="px-4 py-3 font-mono text-xs">{v.heart_rate ?? '—'}</td>
@@ -1353,7 +1353,7 @@ export default function AdmissionDetailPage() {
                                             <div key={c.id} className="px-5 py-3 flex items-center justify-between">
                                                 <div>
                                                     <p className="text-sm font-bold text-gray-900">Dr. {c.doctor_name}</p>
-                                                    <p className="text-xs text-gray-400">{c.specialty ?? 'General'} · {new Date(c.consulted_at).toLocaleDateString()}</p>
+                                                    <p className="text-xs text-gray-400">{c.specialty ?? 'General'} · {new Date(c.consulted_at).toLocaleDateString('en-GB')}</p>
                                                     {c.notes && <p className="text-xs text-gray-500 mt-0.5 italic">{c.notes}</p>}
                                                 </div>
                                                 <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${c.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -1376,7 +1376,7 @@ export default function AdmissionDetailPage() {
                                                     <div className="flex items-center justify-between">
                                                         <div>
                                                             <p className="text-xs font-black text-gray-800">{pa.tpa_name}</p>
-                                                            <p className="text-[10px] text-gray-400">{pa.submission_type} · {new Date(pa.submitted_at ?? pa.created_at).toLocaleDateString()}</p>
+                                                            <p className="text-[10px] text-gray-400">{pa.submission_type} · {new Date(pa.submitted_at ?? pa.created_at).toLocaleDateString('en-GB')}</p>
                                                             <p className="text-[10px] text-gray-600 mt-0.5">
                                                                 Requested: ₹{Number(pa.requested_amount).toLocaleString('en-IN')}
                                                                 {pa.approved_amount ? ` · Approved: ₹${Number(pa.approved_amount).toLocaleString('en-IN')}` : ''}

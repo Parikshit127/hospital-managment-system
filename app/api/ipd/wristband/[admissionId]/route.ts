@@ -25,7 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const allergies: string = patient?.allergies || '';
     const hasAllergies = allergies && allergies.trim().length > 0 && allergies.toLowerCase() !== 'none';
     const admissionDate = admission.admission_date
-      ? new Date(admission.admission_date).toLocaleDateString('en-IN')
+      ? new Date(admission.admission_date).toLocaleDateString('en-GB')
       : '—';
     const dob = patient?.date_of_birth || '—';
     const uhid = patient?.patient_id || admission.patient_id || '—';

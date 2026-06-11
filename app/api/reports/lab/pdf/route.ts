@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
 function renderLabReport(order: any, patient: any, barcode: string, branding: BillBranding): NextResponse {
     const patientName = patient?.full_name || 'Unknown';
     const orderDate = order.created_at
-        ? new Date(order.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        ? new Date(order.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
         : 'N/A';
 
     const html = `<!DOCTYPE html>

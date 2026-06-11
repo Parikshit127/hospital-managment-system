@@ -219,7 +219,7 @@ export default function DaycarePage() {
                     <td className="px-5 py-3 text-gray-700">{b.department || '—'}</td>
                     <td className="px-5 py-3 text-gray-600">{b.doctor_name || '—'}</td>
                     <td className="px-5 py-3 text-gray-600">
-                      {b.expected_date ? new Date(b.expected_date).toLocaleDateString('en-IN') : '—'}
+                      {b.expected_date ? new Date(b.expected_date).toLocaleDateString('en-GB') : '—'}
                     </td>
                     <td className="px-5 py-3 text-gray-600">{duration}</td>
                     <td className="px-5 py-3">
@@ -422,7 +422,7 @@ export default function DaycarePage() {
               <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 space-y-1 text-sm">
                 <p className="font-black text-gray-800">{(() => { const m = (billModal.notes||'').match(/Patient:\s*([^|]+)/); return m ? m[1].trim() : billModal.patient_id; })()}</p>
                 <p className="text-gray-500">Procedure: <span className="font-bold text-gray-700">{billModal.department}</span></p>
-                <p className="text-gray-500">Date: <span className="font-bold text-gray-700">{new Date(billModal.expected_date).toLocaleDateString('en-IN')}</span></p>
+                <p className="text-gray-500">Date: <span className="font-bold text-gray-700">{new Date(billModal.expected_date).toLocaleDateString('en-GB')}</span></p>
                 {billModal.doctor_name && <p className="text-gray-500">Doctor: <span className="font-bold text-gray-700">{billModal.doctor_name}</span></p>}
               </div>
 

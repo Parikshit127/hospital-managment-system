@@ -142,7 +142,7 @@ export function PrescriptionPrint({ data, onClose, branding }: PrescriptionPrint
                             </div>
                             <div>
                                 <p className="text-[9px] uppercase font-bold text-gray-400 tracking-wider">Date / UHID</p>
-                                <p className="font-bold text-sm">{new Date(data.date).toLocaleDateString('en-IN')}</p>
+                                <p className="font-bold text-sm">{new Date(data.date).toLocaleDateString('en-GB')}</p>
                                 <p className="text-xs text-gray-400">{data.patient.patient_id}</p>
                             </div>
                         </div>

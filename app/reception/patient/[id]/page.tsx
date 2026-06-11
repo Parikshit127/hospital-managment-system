@@ -258,7 +258,7 @@ export default function PatientProfilePage() {
     };
 
     const formatDate = (d: string | Date) =>
-        new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
     const headerActions = (
         <div className="flex items-center gap-2">
@@ -328,7 +328,7 @@ export default function PatientProfilePage() {
         setSavingRecord(false);
     };
 
-    const fmtDate = (v?: string | null) => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+    const fmtDate = (v?: string | null) => v ? new Date(v).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A';
 
     // Build timeline from all data sources
     const timelineEvents = [
@@ -367,7 +367,7 @@ export default function PatientProfilePage() {
 
     // Primary (latest) insurance policy for the header display; '–' when none.
     const primaryPolicy = patientPolicies[0];
-    const fmtPolicyDate = (d: any) => (d ? new Date(d).toLocaleDateString('en-IN') : '');
+    const fmtPolicyDate = (d: any) => (d ? new Date(d).toLocaleDateString('en-GB') : '');
     const policyValidity = primaryPolicy
         ? `${fmtPolicyDate(primaryPolicy.valid_from)} – ${fmtPolicyDate(primaryPolicy.valid_until)}`
         : '';

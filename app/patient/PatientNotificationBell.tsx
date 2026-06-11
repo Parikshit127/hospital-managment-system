@@ -46,7 +46,7 @@ function timeAgo(date: string) {
     if (hours < 24) return `${hours}h ago`;
     const days = Math.floor(hours / 24);
     if (days < 7) return `${days}d ago`;
-    return new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    return new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: '2-digit' });
 }
 
 export function PatientNotificationBell() {

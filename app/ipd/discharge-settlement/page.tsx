@@ -88,7 +88,7 @@ export default function IPDSettlementListPage() {
                                         <div className="p-1.5 bg-gray-50 rounded-lg">
                                             <Clock className="h-3.5 w-3.5 text-gray-400" />
                                         </div>
-                                        <span className="font-medium">Admitted: {new Date(adm.admission_date).toLocaleDateString()}</span>
+                                        <span className="font-medium">Admitted: {new Date(adm.admission_date).toLocaleDateString('en-GB')}</span>
                                     </div>
                                 </div>
 

@@ -193,7 +193,7 @@ export default function PatientHistoryPage() {
                                         <tr key={record.id} className="hover:bg-blue-50/30 transition-colors group">
                                             <td className="py-5 px-6 align-top">
                                                 <div className="space-y-1">
-                                                    <p className="text-sm font-bold text-gray-900">{new Date(record.date).toLocaleDateString()}</p>
+                                                    <p className="text-sm font-bold text-gray-900">{new Date(record.date).toLocaleDateString('en-GB')}</p>
                                                     <p className="text-xs font-medium text-gray-500">{new Date(record.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                                                 </div>
                                             </td>
@@ -254,7 +254,7 @@ export default function PatientHistoryPage() {
                         <div className="flex justify-end border-b-2 border-gray-300 pb-4">
                             <div className="text-right space-y-1">
                                 <p className="text-xl font-bold">{printingRecord.invoice_number}</p>
-                                <p className="text-sm font-medium">{new Date(printingRecord.date).toLocaleDateString()} {new Date(printingRecord.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                <p className="text-sm font-medium">{new Date(printingRecord.date).toLocaleDateString('en-GB')} {new Date(printingRecord.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                             </div>
                         </div>
 

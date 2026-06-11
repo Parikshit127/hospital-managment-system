@@ -17,10 +17,10 @@ export function FormattedDate({ date, timezone = DEFAULT_TZ, format = 'datetime'
         if (isNaN(d.getTime())) return '—';
 
         if (format === 'date') {
-            return d.toLocaleDateString('en-IN', {
+            return d.toLocaleDateString('en-GB', {
                 timeZone: timezone,
                 day: '2-digit',
-                month: 'short',
+                month: '2-digit',
                 year: 'numeric',
             });
         }
@@ -35,7 +35,7 @@ export function FormattedDate({ date, timezone = DEFAULT_TZ, format = 'datetime'
         return d.toLocaleString('en-IN', {
             timeZone: timezone,
             day: '2-digit',
-            month: 'short',
+            month: '2-digit',
             year: 'numeric',
             hour: '2-digit',
             minute: '2-digit',

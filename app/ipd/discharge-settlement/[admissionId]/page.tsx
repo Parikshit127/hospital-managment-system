@@ -144,7 +144,7 @@ export default function DischargeSettlementPage() {
                                 Dr. {billData.admission.doctor_name} | {billData.admission.ward_name} | Bed: {billData.admission.bed_id}
                             </p>
                             <p className="text-xs text-gray-400">
-                                Admitted: {new Date(billData.admission.admission_date).toLocaleDateString('en-IN')} |
+                                Admitted: {new Date(billData.admission.admission_date).toLocaleDateString('en-GB')} |
                                 Days: {billData.admission.days_admitted} |
                                 Diagnosis: {billData.admission.diagnosis || 'N/A'}
                             </p>

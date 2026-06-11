@@ -74,7 +74,7 @@ export default function MedicalRecordsPage() {
         loadData();
     };
 
-    const fmtDate = (v?: string | null) => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+    const fmtDate = (v?: string | null) => v ? new Date(v).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A';
 
     if (loading) return (
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">

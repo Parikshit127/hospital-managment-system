@@ -62,7 +62,7 @@ export default function OTCalendarPage() {
             <ChevronLeft className="h-4 w-4" />
           </button>
           <div className="text-sm font-bold text-gray-700 px-3">
-            {days[0].toLocaleDateString()} – {days[6].toLocaleDateString()}
+            {days[0].toLocaleDateString('en-GB')} – {days[6].toLocaleDateString('en-GB')}
           </div>
           <button
             onClick={() => {

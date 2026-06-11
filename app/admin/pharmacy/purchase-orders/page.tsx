@@ -168,7 +168,7 @@ export default function PurchaseOrdersPage() {
                                     <td className="px-6 py-4 font-mono font-bold text-gray-900 bg-gray-100 rounded px-2 m-4 inline-flex items-center mt-3">{po.po_number}</td>
                                     <td className="px-6 py-4 text-gray-800 font-medium">{po.supplier?.name || `Vendor #${po.supplier_id}`}</td>
                                     <td className="px-6 py-4 font-black text-gray-900">₹{po.total_amount}</td>
-                                    <td className="px-6 py-4 text-xs text-gray-500">{new Date(po.created_at).toLocaleDateString()}</td>
+                                    <td className="px-6 py-4 text-xs text-gray-500">{new Date(po.created_at).toLocaleDateString('en-GB')}</td>
                                     <td className="px-6 py-4">
                                         <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase ${po.status === 'Draft' ? 'bg-gray-100 text-gray-700' : po.status === 'Sent' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                             {po.status}

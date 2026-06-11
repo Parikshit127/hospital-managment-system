@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
         const hospitalPhone = branding.hospitalPhone;
 
         const patientName = patient?.full_name || 'Unknown';
-        const orderDate = order.created_at ? new Date(order.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+        const orderDate = order.created_at ? new Date(order.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A';
         const items = order.items || [];
 
         const itemsHTML = items.map((item: any, idx: number) => `

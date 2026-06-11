@@ -265,7 +265,7 @@ export default function CaseSheetPage() {
                                                         </div>
                                                         <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{med.status as string}</span>
                                                     </div>
-                                                    <p className="text-xs text-gray-400 mt-2">Started: {new Date(med.start_date as string).toLocaleDateString('en-IN')}</p>
+                                                    <p className="text-xs text-gray-400 mt-2">Started: {new Date(med.start_date as string).toLocaleDateString('en-GB')}</p>
                                                 </div>
                                             ))}
                                         </div>

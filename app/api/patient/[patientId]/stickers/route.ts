@@ -53,9 +53,9 @@ function generateStickerHTML(patient: any, admission: any, appointment: any, bra
     const isIPD = !!admission;
 
     const admDate = isIPD && admission.admission_date
-        ? new Date(admission.admission_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        ? new Date(admission.admission_date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
         + ' ' + new Date(admission.admission_date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-        : new Date(patient.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        : new Date(patient.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
     const ipdNo = isIPD ? admission.admission_id : '';
     const doctorName = isIPD

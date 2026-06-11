@@ -873,7 +873,7 @@ export default function ReceptionPage() {
                                         </p>
                                         {p.date_of_birth && (
                                             <p className="text-[10px] text-gray-400 mt-0.5">
-                                                Registered {new Date(p.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                Registered {new Date(p.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                                             </p>
                                         )}
                                     </div>

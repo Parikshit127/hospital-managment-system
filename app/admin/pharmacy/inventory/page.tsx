@@ -83,7 +83,7 @@ export default function PharmacyInventoryPage() {
                                     <div key={b.id} className="flex justify-between items-center bg-gray-50 p-2 rounded-lg border border-gray-100">
                                         <div>
                                             <p className="text-xs font-bold text-gray-700 tracking-wider">BATCH: {b.batch_no}</p>
-                                            <p className="text-[10px] text-gray-400">Exp: {new Date(b.expiry_date).toLocaleDateString()}</p>
+                                            <p className="text-[10px] text-gray-400">Exp: {new Date(b.expiry_date).toLocaleDateString('en-GB')}</p>
                                         </div>
                                         <div className="text-right">
                                             <p className={`text-sm font-black ${b.current_stock < 10 ? 'text-red-500' : 'text-emerald-600'}`}>{b.current_stock}</p>

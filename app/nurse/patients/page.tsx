@@ -179,7 +179,7 @@ export default function NursePatientsPage() {
                                 <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center">
                                     <p className="text-[10px] font-black text-gray-400 uppercase">Admitted</p>
                                     <p className="text-sm font-black text-gray-700">
-                                        {selectedPatient.admissionDate ? new Date(selectedPatient.admissionDate).toLocaleDateString() : 'N/A'}
+                                        {selectedPatient.admissionDate ? new Date(selectedPatient.admissionDate).toLocaleDateString('en-GB') : 'N/A'}
                                     </p>
                                 </div>
                             </div>
@@ -396,7 +396,7 @@ export default function NursePatientsPage() {
                                         <td className="px-6 py-4 text-gray-500 text-xs">
                                             <span className="inline-flex items-center gap-1">
                                                 <Clock className="h-3 w-3" />
-                                                {p.admissionDate ? new Date(p.admissionDate).toLocaleDateString() : 'N/A'}
+                                                {p.admissionDate ? new Date(p.admissionDate).toLocaleDateString('en-GB') : 'N/A'}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">

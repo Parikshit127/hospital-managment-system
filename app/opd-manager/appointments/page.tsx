@@ -128,7 +128,7 @@ export default function OPDManagerAppointmentsPage() {
                                             <Calendar className="h-4 w-4 text-gray-300 group-hover:text-red-400 transition-colors" />
                                             <div>
                                                 <p className="font-bold text-gray-900">
-                                                    {new Date(record.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                                    {new Date(record.date).toLocaleDateString(undefined, { month: '2-digit', day: 'numeric' })}
                                                 </p>
                                                 <p className="text-[10px] text-gray-400">
                                                     {new Date(record.date).toLocaleDateString(undefined, { weekday: 'short' })}

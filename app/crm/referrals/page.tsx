@@ -95,7 +95,7 @@ export default function ReferralsPage() {
                     <span className="text-lg font-black text-gray-900">{r.referral_count}</span>
                   </td>
                   <td className="px-4 py-3 text-gray-400 text-xs">
-                    {r.last_referral ? new Date(r.last_referral).toLocaleDateString('en-IN') : '—'}
+                    {r.last_referral ? new Date(r.last_referral).toLocaleDateString('en-GB') : '—'}
                   </td>
                   <td className="px-4 py-3 text-gray-700 font-medium text-xs">
                     {r.payout_percentage != null ? `${r.payout_percentage}%` : '—'}

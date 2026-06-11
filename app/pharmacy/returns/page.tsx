@@ -168,7 +168,7 @@ export default function ReturnsPage() {
                                     <option value="">Select Batch...</option>
                                     {(form as any).available_batches?.map((b: any) => (
                                         <option key={b.id} value={b.batch_no}>
-                                            {b.batch_no} (Exp: {new Date(b.expiry_date).toLocaleDateString()}) - {b.current_stock} units
+                                            {b.batch_no} (Exp: {new Date(b.expiry_date).toLocaleDateString('en-GB')}) - {b.current_stock} units
                                         </option>
                                     ))}
                                 </select>

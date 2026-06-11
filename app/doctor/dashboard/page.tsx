@@ -1039,7 +1039,7 @@ export default function DoctorDashboard() {
                   <div>
                     <p className="text-xs font-bold text-slate-400 uppercase">Doctor</p>
                     <p className="font-bold text-slate-900">{doctorName}</p>
-                    <p className="text-xs text-slate-500">{new Date().toLocaleDateString()}</p>
+                    <p className="text-xs text-slate-500">{new Date().toLocaleDateString('en-GB')}</p>
                   </div>
                 }
               />
@@ -1049,7 +1049,7 @@ export default function DoctorDashboard() {
               <div className="text-right">
                 <p className="text-xs font-bold text-slate-400 uppercase">Doctor</p>
                 <p className="font-bold text-slate-900">{doctorName}</p>
-                <p className="text-xs text-slate-500">{new Date().toLocaleDateString()}</p>
+                <p className="text-xs text-slate-500">{new Date().toLocaleDateString('en-GB')}</p>
               </div>
             </div>
             <div className="p-8 space-y-6">
@@ -2014,7 +2014,7 @@ export default function DoctorDashboard() {
                                   <p className="text-sm text-gray-400 mt-1 font-medium">
                                     {new Date(
                                       record.created_at,
-                                    ).toLocaleDateString()}{" "}
+                                    ).toLocaleDateString('en-GB')}{" "}
                                     &bull; {record.doctor_name || "Dr. Unknown"}
                                   </p>
                                 </div>
@@ -2185,7 +2185,7 @@ export default function DoctorDashboard() {
                                     </span>
                                     {new Date(
                                       order.created_at,
-                                    ).toLocaleDateString()}
+                                    ).toLocaleDateString('en-GB')}
                                   </p>
                                 </div>
                               </div>
@@ -2593,7 +2593,7 @@ export default function DoctorDashboard() {
                       Good morning, Dr. {doctorName.split(' ')[0]} — Here&apos;s your day
                     </h3>
                     <p className="text-xs text-orange-600 mt-0.5">
-                      {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+                      {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: '2-digit' })}
                     </p>
                   </div>
                   <button

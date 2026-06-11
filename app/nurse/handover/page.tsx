@@ -154,7 +154,7 @@ export default function NurseHandoverPage() {
                                     </div>
                                     <span className="text-[10px] text-gray-400 flex items-center gap-1 shrink-0">
                                         <Clock className="h-2.5 w-2.5" />
-                                        {h.shift_date ? new Date(h.shift_date).toLocaleDateString() : 'N/A'}
+                                        {h.shift_date ? new Date(h.shift_date).toLocaleDateString('en-GB') : 'N/A'}
                                     </span>
                                 </div>
                                 <div className="bg-gray-50 rounded-xl p-3">

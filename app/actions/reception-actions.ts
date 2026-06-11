@@ -804,8 +804,8 @@ export async function bookAppointment(data: {
                 select: { email: true, phone: true, full_name: true },
             });
             if (patient) {
-                const formattedDate = appointmentDate.toLocaleDateString('en-IN', {
-                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+                const formattedDate = appointmentDate.toLocaleDateString('en-GB', {
+                    weekday: 'long', year: 'numeric', month: '2-digit', day: 'numeric',
                 });
                 const formattedTime = appointmentDate.toLocaleTimeString('en-IN', {
                     hour: '2-digit', minute: '2-digit', hour12: true,
@@ -942,7 +942,7 @@ export async function cancelAppointment(appointmentId: string, reason: string) {
             const { sendSMS } = await import('@/app/lib/sms');
             const apptDateStr = existing.appointment_date
                 ? new Date(existing.appointment_date).toLocaleString('en-IN', {
-                    day: '2-digit', month: 'short', year: 'numeric',
+                    day: '2-digit', month: '2-digit', year: 'numeric',
                     hour: '2-digit', minute: '2-digit',
                 })
                 : 'your scheduled time';

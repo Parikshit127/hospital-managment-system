@@ -92,7 +92,7 @@ export default async function PatientPaymentsPage() {
                                             <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
                                                 <span className="flex items-center gap-1">
                                                     <Clock className="h-3 w-3" />
-                                                    {new Date(inv.created_at).toLocaleDateString()}
+                                                    {new Date(inv.created_at).toLocaleDateString('en-GB')}
                                                 </span>
                                                 <span>Total: {'\u20B9'}{inv.total_amount.toLocaleString()}</span>
                                                 {inv.paid_amount > 0 && (

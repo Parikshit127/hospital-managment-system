@@ -57,7 +57,7 @@ export default function PrescriptionsPage() {
                                 <div>
                                     <div className="flex items-center gap-3 mb-1">
                                         <span className="bg-purple-100 text-purple-700 font-bold text-xs px-2 py-1 rounded-md uppercase tracking-wider">Order #{px.id}</span>
-                                        <p className="text-sm font-black text-gray-900">{new Date(px.created_at).toLocaleDateString()}</p>
+                                        <p className="text-sm font-black text-gray-900">{new Date(px.created_at).toLocaleDateString('en-GB')}</p>
                                     </div>
                                     <p className="text-xs font-bold text-gray-500 uppercase">
                                         {px.doctor_id ? `Dr. ID: ${px.doctor_id}` : 'Doctor prescribed'}

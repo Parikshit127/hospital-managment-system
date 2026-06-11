@@ -591,7 +591,7 @@ export async function getAIPreConsultBrief(patientId: string) {
       age: patient.age ? Number(patient.age) : undefined,
       gender: patient.gender || undefined,
       recentVisits: recentVisits.map((v: any) => ({
-        date: new Date(v.created_at).toLocaleDateString(),
+        date: new Date(v.created_at).toLocaleDateString('en-GB'),
         diagnosis: v.diagnosis || "Unspecified",
         notes: v.doctor_notes || "",
       })),
@@ -1024,7 +1024,7 @@ export async function getTemplates(doctorId: string, type?: string) {
         type: t.type,
         contentPreview: t.content,
         used: 0,
-        lastUpdated: t.updated_at.toLocaleDateString(),
+        lastUpdated: t.updated_at.toLocaleDateString('en-GB'),
       })),
     };
   } catch (error) {

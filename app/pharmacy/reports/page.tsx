@@ -336,7 +336,7 @@ export default function PharmacyReportsPage() {
                                                             </span>
                                                         </td>
                                                         <td className="px-4 py-2.5 text-xs text-gray-500">{b.doctor}</td>
-                                                        <td className="px-4 py-2.5 text-xs text-gray-500">{new Date(b.date).toLocaleDateString('en-IN')}</td>
+                                                        <td className="px-4 py-2.5 text-xs text-gray-500">{new Date(b.date).toLocaleDateString('en-GB')}</td>
                                                         <td className="px-4 py-2.5 text-right text-sm text-gray-500">{b.items}</td>
                                                         <td className="px-4 py-2.5 text-right text-sm font-black text-gray-900">{inr(b.revenue)}</td>
                                                     </tr>
@@ -460,7 +460,7 @@ export default function PharmacyReportsPage() {
                                                 <td className="px-5 py-3 text-sm font-bold text-gray-700">{batch.medicine?.brand_name}</td>
                                                 <td className="px-5 py-3"><span className="font-mono text-xs text-gray-500 bg-gray-50 px-2 py-0.5 rounded border border-gray-200">{batch.batch_no}</span></td>
                                                 <td className="px-5 py-3 text-sm font-bold text-gray-700">{batch.current_stock}</td>
-                                                <td className="px-5 py-3 text-xs text-gray-500">{new Date(batch.expiry_date).toLocaleDateString('en-IN')}</td>
+                                                <td className="px-5 py-3 text-xs text-gray-500">{new Date(batch.expiry_date).toLocaleDateString('en-GB')}</td>
                                                 <td className="px-5 py-3"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${badge.cls}`}>{badge.label}</span></td>
                                                 <td className="px-5 py-3 text-sm font-bold text-red-600">{inr(atRisk)}</td>
                                             </tr>
@@ -545,7 +545,7 @@ export default function PharmacyReportsPage() {
                                         };
                                         return (
                                             <tr key={m.id} className="hover:bg-gray-50">
-                                                <td className="px-4 py-2 text-gray-500">{new Date(m.created_at).toLocaleDateString('en-IN')} {new Date(m.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</td>
+                                                <td className="px-4 py-2 text-gray-500">{new Date(m.created_at).toLocaleDateString('en-GB')} {new Date(m.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</td>
                                                 <td className="px-4 py-2 font-bold text-gray-900">{m.medicine?.brand_name}</td>
                                                 <td className="px-4 py-2 font-mono text-gray-500">{m.batch?.batch_no || '—'}</td>
                                                 <td className="px-4 py-2"><span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${typeColors[m.movement_type] || 'bg-gray-100 text-gray-600'}`}>{m.movement_type}</span></td>
@@ -584,7 +584,7 @@ export default function PharmacyReportsPage() {
                                         <tr><td colSpan={10} className="text-center py-8 text-gray-400">No controlled drug entries</td></tr>
                                     ) : narcotics.map((n: any) => (
                                         <tr key={n.id} className="hover:bg-gray-50">
-                                            <td className="px-4 py-2 text-gray-500">{new Date(n.created_at).toLocaleDateString('en-IN')}</td>
+                                            <td className="px-4 py-2 text-gray-500">{new Date(n.created_at).toLocaleDateString('en-GB')}</td>
                                             <td className="px-4 py-2 font-bold text-gray-900">{n.drug_name}</td>
                                             <td className="px-4 py-2 font-mono text-gray-500">{n.batch_no || '—'}</td>
                                             <td className="px-4 py-2"><span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-gray-100 text-gray-600">{n.source_type || n.transaction_type}</span></td>

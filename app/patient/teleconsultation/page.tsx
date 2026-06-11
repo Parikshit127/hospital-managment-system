@@ -157,7 +157,7 @@ export default function TeleconsultationPage() {
                                     <p className="font-semibold text-sm text-gray-900">{req.reason || 'Video Consultation'}</p>
                                     <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
                                         <Calendar className="w-3 h-3" />
-                                        {new Date(req.request_date).toLocaleDateString('en-IN')}
+                                        {new Date(req.request_date).toLocaleDateString('en-GB')}
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">

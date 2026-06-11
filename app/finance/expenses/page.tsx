@@ -285,7 +285,7 @@ function ExpenseTable({ expenses, onApprove, onReject, onPay, onRefresh }: {
                                 </span>
                             </td>
                             <td className="px-6 py-3 text-sm text-gray-500">
-                                {new Date(exp.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                {new Date(exp.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })}
                             </td>
                             <td className="px-6 py-3">
                                 {exp.receipt_key ? (

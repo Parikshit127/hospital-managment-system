@@ -57,7 +57,7 @@ const fmtDateTime = (iso: string | Date | null | undefined) => {
 };
 const fmtDate = (iso: string | Date | null | undefined) => {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString();
+  return new Date(iso).toLocaleDateString('en-GB');
 };
 
 type Tab =

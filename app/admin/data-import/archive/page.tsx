@@ -44,7 +44,7 @@ export default function ArchiveSearchPage() {
         setArchiveResult(null);
         const res = await triggerArchival(5);
         if (res.success) {
-            setArchiveResult(`Archived ${res.archived} patient records (cutoff: ${new Date(res.cutoffDate!).toLocaleDateString()})`);
+            setArchiveResult(`Archived ${res.archived} patient records (cutoff: ${new Date(res.cutoffDate!).toLocaleDateString('en-GB')})`);
         }
         setArchiving(false);
     }
@@ -123,7 +123,7 @@ export default function ArchiveSearchPage() {
                                     <div className="flex-1 min-w-0">
                                         <p className="font-semibold text-gray-900">{patientData.full_name || 'Unknown'}</p>
                                         <p className="text-xs text-gray-500 mt-0.5">
-                                            ID: {record.original_patient_id} | Archived: {new Date(record.archived_at).toLocaleDateString()}
+                                            ID: {record.original_patient_id} | Archived: {new Date(record.archived_at).toLocaleDateString('en-GB')}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-2">

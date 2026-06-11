@@ -221,7 +221,7 @@ export default function AnalyticsDashboard() {
                                                         <li key={idx} className="p-3 hover:bg-gray-50 flex justify-between items-center">
                                                             <div>
                                                                 <p className="text-sm font-bold text-gray-800">{inv.patient?.full_name || 'Walk-in'}</p>
-                                                                <p className="text-xs font-medium text-gray-500">{new Date(inv.created_at).toLocaleDateString()}</p>
+                                                                <p className="text-xs font-medium text-gray-500">{new Date(inv.created_at).toLocaleDateString('en-GB')}</p>
                                                             </div>
                                                             <div className="text-right">
                                                                 <p className="text-sm font-black text-amber-600">{fmt(inv.net_amount)}</p>
@@ -259,7 +259,7 @@ export default function AnalyticsDashboard() {
                                                             <tr key={lab.id} className="hover:bg-gray-50">
                                                                 <td className="px-4 py-2 font-mono text-xs text-gray-600">{lab.barcode}</td>
                                                                 <td className="px-4 py-2 font-medium text-gray-800">{lab.test_type}</td>
-                                                                <td className="px-4 py-2 text-gray-500">{new Date(lab.created_at).toLocaleDateString()}</td>
+                                                                <td className="px-4 py-2 text-gray-500">{new Date(lab.created_at).toLocaleDateString('en-GB')}</td>
                                                             </tr>
                                                         ))}
                                                     </tbody>

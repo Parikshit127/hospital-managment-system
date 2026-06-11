@@ -47,7 +47,7 @@ function fmtAmt(n: number): string {
 
 function fmtDate(d: Date | string | null | undefined): string {
   if (!d) return '-';
-  return new Date(d).toLocaleDateString('en-IN');
+  return new Date(d).toLocaleDateString('en-GB');
 }
 
 export default function GLReportsPage() {

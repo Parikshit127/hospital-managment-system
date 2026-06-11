@@ -187,7 +187,7 @@ export default function AdminPatientDetailsPage() {
     if (!v) return "N/A";
     return new Date(v).toLocaleDateString("en-IN", {
       day: "2-digit",
-      month: "short",
+      month: "2-digit",
       year: "numeric",
     });
   };

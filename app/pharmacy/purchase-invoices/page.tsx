@@ -205,7 +205,7 @@ export default function PurchaseInvoicesPage() {
                                     <td className="px-4 py-3 text-center">
                                         <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-md ${STATUS_COLORS[inv.status] || 'bg-gray-100 text-gray-700'}`}>{inv.status}</span>
                                     </td>
-                                    <td className="px-4 py-3 text-center text-xs text-gray-500">{new Date(inv.invoice_date).toLocaleDateString('en-IN')}</td>
+                                    <td className="px-4 py-3 text-center text-xs text-gray-500">{new Date(inv.invoice_date).toLocaleDateString('en-GB')}</td>
                                     <td className="px-4 py-3 text-right">
                                         <div className="flex gap-1.5 justify-end">
                                             <button onClick={() => setShowDetail(inv)} className="p-1.5 hover:bg-gray-100 rounded-lg" title="View Details"><Eye className="h-3.5 w-3.5 text-gray-500" /></button>
@@ -267,8 +267,8 @@ export default function PurchaseInvoicesPage() {
                             <div className="grid grid-cols-2 gap-4 text-sm">
                                 <div><span className="text-gray-500">Vendor:</span> <span className="font-bold">{showDetail.vendor?.vendor_name}</span></div>
                                 <div><span className="text-gray-500">Status:</span> <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-md ${STATUS_COLORS[showDetail.status]}`}>{showDetail.status}</span></div>
-                                <div><span className="text-gray-500">Date:</span> {new Date(showDetail.invoice_date).toLocaleDateString('en-IN')}</div>
-                                <div><span className="text-gray-500">Due:</span> {showDetail.due_date ? new Date(showDetail.due_date).toLocaleDateString('en-IN') : '—'}</div>
+                                <div><span className="text-gray-500">Date:</span> {new Date(showDetail.invoice_date).toLocaleDateString('en-GB')}</div>
+                                <div><span className="text-gray-500">Due:</span> {showDetail.due_date ? new Date(showDetail.due_date).toLocaleDateString('en-GB') : '—'}</div>
                                 <div><span className="text-gray-500">Subtotal:</span> {fmt(showDetail.subtotal)}</div>
                                 <div><span className="text-gray-500">GST:</span> CGST {fmt(showDetail.cgst_amount)} + SGST {fmt(showDetail.sgst_amount)}</div>
                                 <div><span className="text-gray-500">Total:</span> <span className="font-black text-lg">{fmt(showDetail.total_amount)}</span></div>

@@ -54,7 +54,7 @@ function fmtMoney(n: number | null | undefined): string {
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return d.toLocaleDateString();
+  return d.toLocaleDateString('en-GB');
 }
 
 // ── status badges ─────────────────────────────────────────────────────────
@@ -918,7 +918,7 @@ function FinanceSearchModal({ onClose }: { onClose: () => void }) {
                       )}
                       {h.date && (
                         <div className="text-[10px] text-gray-400 font-medium">
-                          {new Date(h.date).toLocaleDateString()}
+                          {new Date(h.date).toLocaleDateString('en-GB')}
                         </div>
                       )}
                     </div>

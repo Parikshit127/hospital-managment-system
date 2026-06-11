@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 function generatePreviewHTML(branding: any, sections: any, type: string): string {
     const typeLabel = type.split('_').map((w: string) => w[0].toUpperCase() + w.slice(1)).join(' ');
     const useLetterhead = type === 'invoice' || type === 'discharge_summary';
-    const today = new Date().toLocaleDateString('en-IN');
+    const today = new Date().toLocaleDateString('en-GB');
 
     const rightHtml = `
         <h2 style="font-size:16px;font-weight:800;color:${branding.accentColor};">SAMPLE ${typeLabel.toUpperCase()}</h2>

@@ -21,9 +21,9 @@ interface IPDJourneyTabProps {
 
 const fmtDate = (v?: string | Date | null) => {
   if (!v) return 'N/A';
-  return new Date(v).toLocaleDateString('en-IN', {
+  return new Date(v).toLocaleDateString('en-GB', {
     day: '2-digit',
-    month: 'short',
+    month: '2-digit',
     year: 'numeric',
   });
 };

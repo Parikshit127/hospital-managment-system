@@ -292,13 +292,13 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                                             <div className="flex flex-col gap-1.5">
                                                 <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500">
                                                     <Calendar className="h-3 w-3 text-orange-500" />
-                                                    <span className="text-orange-600">In: {new Date(adm.admission_date).toLocaleDateString()}</span>
+                                                    <span className="text-orange-600">In: {new Date(adm.admission_date).toLocaleDateString('en-GB')}</span>
                                                 </div>
                                                 {adm.expected_discharge_date && adm.status === 'Admitted' && (
                                                     <div className="flex items-center gap-1.5 text-[10px] font-bold">
                                                         <Calendar className="h-3 w-3 text-violet-400" />
                                                         <span className={new Date(adm.expected_discharge_date) < new Date() ? 'text-red-500' : 'text-violet-500'}>
-                                                            EDD: {new Date(adm.expected_discharge_date).toLocaleDateString()}
+                                                            EDD: {new Date(adm.expected_discharge_date).toLocaleDateString('en-GB')}
                                                             {new Date(adm.expected_discharge_date) < new Date() && ' ⚠'}
                                                         </span>
                                                     </div>
@@ -309,7 +309,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                                                 {adm.status === 'Discharged' && adm.discharge_date && (
                                                     <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500">
                                                         <CheckCircle2 className="h-3 w-3 text-rose-400" />
-                                                        <span className="text-rose-500">Out: {new Date(adm.discharge_date).toLocaleDateString()}</span>
+                                                        <span className="text-rose-500">Out: {new Date(adm.discharge_date).toLocaleDateString('en-GB')}</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -400,7 +400,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                         <div className="bg-rose-50 border border-rose-200 p-3 rounded-xl space-y-1">
                             <p className="text-sm font-bold text-gray-800">{cancelModal.patient?.full_name}</p>
                             <p className="text-xs text-gray-500">
-                                Admitted: <span className="font-bold text-gray-700">{new Date(cancelModal.admission_date).toLocaleDateString()}</span>
+                                Admitted: <span className="font-bold text-gray-700">{new Date(cancelModal.admission_date).toLocaleDateString('en-GB')}</span>
                                 {cancelModal.bed_id && <> &bull; Bed <span className="font-bold text-gray-700">{cancelModal.bed_id}</span></>}
                             </p>
                             <p className="text-[10px] text-rose-600 font-bold mt-1">⚠ This will free the bed and cancel the invoice. This cannot be undone.</p>

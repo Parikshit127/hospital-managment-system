@@ -420,7 +420,7 @@ export default function ReceptionDashboard() {
                                         </td>
                                         <td className="px-4 py-3 text-gray-500">{patient.department || '-'}</td>
                                         <td className="px-4 py-3 text-gray-400 text-xs">
-                                            {new Date(patient.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
+                                            {new Date(patient.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}
                                         </td>
                                         <td className="px-4 py-3">
                                             {patient.lastAppointmentStatus ? (

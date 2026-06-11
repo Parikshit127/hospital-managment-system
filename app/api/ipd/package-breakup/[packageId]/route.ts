@@ -137,7 +137,7 @@ function packageBreakupHTML(pkg: any, branding: BillBranding): string {
                 </div>
                 <div style="text-align:right;">
                     <span style="display:inline-block;padding:3px 12px;background:${accent};color:#fff;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.12em;border-radius:3px;">Package Breakup</span>
-                    <p style="font-size:10px;color:#6b7280;margin-top:6px;">Date: <strong style="color:#1a1a1a;">${new Date().toLocaleDateString('en-IN')}</strong></p>
+                    <p style="font-size:10px;color:#6b7280;margin-top:6px;">Date: <strong style="color:#1a1a1a;">${new Date().toLocaleDateString('en-GB')}</strong></p>
                 </div>
             </div>
 
@@ -222,7 +222,7 @@ function packageBreakupHTML(pkg: any, branding: BillBranding): string {
             <div style="display:flex;justify-content:space-between;align-items:flex-end;padding-top:16px;border-top:1px solid #e5e7eb;">
                 <div>
                     <p style="font-size:9px;color:#9ca3af;">Package Code: <strong style="color:#6b7280;">${pkg.package_code}</strong></p>
-                    <p style="font-size:9px;color:#9ca3af;">Generated on: ${new Date().toLocaleDateString('en-IN')} at ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
+                    <p style="font-size:9px;color:#9ca3af;">Generated on: ${new Date().toLocaleDateString('en-GB')} at ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
                 </div>
                 <div style="text-align:right;">
                     <div style="border-top:1px solid #9ca3af;width:140px;margin:0 0 4px auto;"></div>

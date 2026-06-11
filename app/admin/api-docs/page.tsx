@@ -620,7 +620,7 @@ export default function ApiDocsPage() {
                                         <div className="flex items-center gap-4">
                                             <div className="text-right hidden sm:block">
                                                 <p className="text-xs text-gray-400">
-                                                    Created {new Date(key.created_at).toLocaleDateString()}
+                                                    Created {new Date(key.created_at).toLocaleDateString('en-GB')}
                                                 </p>
                                                 {key.last_used_at && (
                                                     <p className="text-[11px] text-gray-600">

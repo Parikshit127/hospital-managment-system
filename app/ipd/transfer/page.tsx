@@ -90,7 +90,7 @@ export default function TransferPage() {
                                     <td className="px-6 py-4 font-bold text-gray-900">{a.patient?.full_name}</td>
                                     <td className="px-6 py-4 text-gray-600">{a.wardName}</td>
                                     <td className="px-6 py-4"><span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded font-bold uppercase">{a.bed_id}</span></td>
-                                    <td className="px-6 py-4 text-gray-500">{new Date(a.admission_date).toLocaleDateString()}</td>
+                                    <td className="px-6 py-4 text-gray-500">{new Date(a.admission_date).toLocaleDateString('en-GB')}</td>
                                     <td className="px-6 py-4 text-right">
                                         <button onClick={() => { setSelectedAd(a); setModalOpen(true); }} className="text-orange-600 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg font-bold text-xs inline-flex items-center gap-1 transition-colors">
                                             <MoveRight className="h-3 w-3" /> Initiate Transfer

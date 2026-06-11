@@ -80,7 +80,7 @@ export function PatientTimeline({ events, maxItems = 50 }: PatientTimelineProps)
                             <div className="flex items-baseline gap-2 flex-wrap">
                                 <span className="text-[10px] font-black text-gray-500 uppercase tracking-wide">{cfg.label}</span>
                                 <span className="text-[9px] text-gray-400">
-                                    {event._date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                    {event._date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })}
                                     {' · '}
                                     {event._date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
                                 </span>

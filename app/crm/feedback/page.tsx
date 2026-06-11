@@ -139,7 +139,7 @@ export default function CRMFeedbackPage() {
                     return (
                       <tr key={f.id} className={`hover:brightness-95 transition-all ${rowBg(rating)}`}>
                         <td className="px-4 py-3 text-gray-500 text-xs">
-                          {f.created_at ? new Date(f.created_at).toLocaleDateString('en-IN') : '—'}
+                          {f.created_at ? new Date(f.created_at).toLocaleDateString('en-GB') : '—'}
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-gray-700">
                           {f.patient_id || f.id?.slice(0, 8)}

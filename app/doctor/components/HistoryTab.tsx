@@ -17,7 +17,7 @@ export function HistoryTab({ history, loadingHistory }: HistoryTabProps) {
             ) : (<div className="space-y-4">{history.map((record, i) => (
                 <div key={i} className="bg-gray-50 border border-gray-200 p-5 rounded-xl hover:border-orange-500/20 transition-all">
                     <div className="flex justify-between items-start mb-3">
-                        <div><p className="font-bold text-teal-400 text-base">{record.diagnosis || 'No Diagnosis'}</p><p className="text-xs text-gray-400 mt-1">{new Date(record.created_at).toLocaleDateString()} &bull; {record.doctor_name || 'Dr. Unknown'}</p></div>
+                        <div><p className="font-bold text-teal-400 text-base">{record.diagnosis || 'No Diagnosis'}</p><p className="text-xs text-gray-400 mt-1">{new Date(record.created_at).toLocaleDateString('en-GB')} &bull; {record.doctor_name || 'Dr. Unknown'}</p></div>
                         <div className="bg-gray-100 text-gray-400 text-[10px] uppercase font-black px-2 py-1 rounded-lg border border-gray-200">#{record.appointment_id}</div>
                     </div>
                     <p className="text-sm text-gray-500 whitespace-pre-wrap leading-relaxed">{record.doctor_notes}</p>

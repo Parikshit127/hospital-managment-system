@@ -121,7 +121,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
         setProcessLoading(false);
     };
 
-    const formatDate = (d: any) => new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const formatDate = (d: any) => new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
     // Grouping helper for the expanded view
     const groupItemsByCategory = (invoices: any[]) => {

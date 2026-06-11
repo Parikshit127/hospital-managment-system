@@ -159,10 +159,10 @@ export default function LeadsPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{lead.assigned_to || '—'}</td>
                     <td className="px-4 py-3 text-gray-400 text-xs">
-                      {lead.last_contacted ? new Date(lead.last_contacted).toLocaleDateString('en-IN') : '—'}
+                      {lead.last_contacted ? new Date(lead.last_contacted).toLocaleDateString('en-GB') : '—'}
                     </td>
                     <td className="px-4 py-3 text-gray-400 text-xs">
-                      {lead.follow_up_date ? new Date(lead.follow_up_date).toLocaleDateString('en-IN') : '—'}
+                      {lead.follow_up_date ? new Date(lead.follow_up_date).toLocaleDateString('en-GB') : '—'}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">

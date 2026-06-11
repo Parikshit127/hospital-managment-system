@@ -413,7 +413,7 @@ function PatientHistoryTab() {
                                     <tr key={record.id} className="hover:bg-blue-50/30 transition-colors group">
                                         <td className="py-5 px-6 align-top">
                                             <div className="space-y-1">
-                                                <p className="text-sm font-bold text-gray-900">{new Date(record.date).toLocaleDateString()}</p>
+                                                <p className="text-sm font-bold text-gray-900">{new Date(record.date).toLocaleDateString('en-GB')}</p>
                                                 <p className="text-xs font-medium text-gray-500">{new Date(record.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                                             </div>
                                         </td>

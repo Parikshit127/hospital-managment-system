@@ -111,13 +111,13 @@ export default function PrivacySettingsPage() {
                                 {consent?.granted_at && granted && (
                                     <p className="text-[10px] text-emerald-600 mt-1 flex items-center gap-1">
                                         <Clock className="w-3 h-3" />
-                                        Granted {new Date(consent.granted_at).toLocaleDateString('en-IN')}
+                                        Granted {new Date(consent.granted_at).toLocaleDateString('en-GB')}
                                     </p>
                                 )}
                                 {consent?.revoked_at && !granted && (
                                     <p className="text-[10px] text-amber-600 mt-1 flex items-center gap-1">
                                         <Clock className="w-3 h-3" />
-                                        Revoked {new Date(consent.revoked_at).toLocaleDateString('en-IN')}
+                                        Revoked {new Date(consent.revoked_at).toLocaleDateString('en-GB')}
                                     </p>
                                 )}
                             </div>

@@ -1170,7 +1170,7 @@ export default function IPDDashboard() {
                         </p>
                         <p className="text-[11px] text-rose-700">
                           Admitted on{' '}
-                          {new Date(existingAdmission.admission_date).toLocaleDateString('en-IN')}
+                          {new Date(existingAdmission.admission_date).toLocaleDateString('en-GB')}
                           {existingAdmission.doctor_name && (
                             <> under <strong>{existingAdmission.doctor_name}</strong></>
                           )}

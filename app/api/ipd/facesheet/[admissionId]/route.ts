@@ -54,7 +54,7 @@ ${inlineHeaderHtml(branding, `<div class="ft">Patient Admission Facesheet</div>`
 </div>
 <div class="sec"><div class="sec-t">Admission Details</div>
 <div class="grid">
-  <div class="field"><div class="lbl">Admission Date</div><div class="val">${new Date(admission.admission_date).toLocaleDateString('en-IN')}</div></div>
+  <div class="field"><div class="lbl">Admission Date</div><div class="val">${new Date(admission.admission_date).toLocaleDateString('en-GB')}</div></div>
   <div class="field"><div class="lbl">Ward / Bed</div><div class="val">${admission.ward_name || '—'} / ${admission.bed_number || '—'}</div></div>
   <div class="field"><div class="lbl">Department</div><div class="val">${admission.department || '—'}</div></div>
   <div class="field"><div class="lbl">Consulting Doctor</div><div class="val">${admission.doctor_name || '—'}</div></div>

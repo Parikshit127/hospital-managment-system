@@ -91,7 +91,7 @@ export default function DiscountSchemesPage() {
         }
     };
 
-    const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-IN') : '—';
+    const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-GB') : '—';
 
     return (
         <AdminPage

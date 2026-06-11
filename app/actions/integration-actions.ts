@@ -319,7 +319,7 @@ export async function sendRealTestNotification(channel: 'smtp' | 'whatsapp' | 's
                     'Test Patient',
                     'Dr. Akshay Pandey',
                     'General Medicine',
-                    new Date().toLocaleDateString(),
+                    new Date().toLocaleDateString('en-GB'),
                     '11:00 AM',
                 ],
                 organizationId,

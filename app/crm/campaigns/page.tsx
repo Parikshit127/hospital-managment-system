@@ -108,10 +108,10 @@ export default function CampaignsPage() {
                     {c.total_recipients > 0 ? `${Math.round((c.delivered / c.total_recipients) * 100)}%` : '—'}
                   </td>
                   <td className="px-4 py-3 text-gray-400 text-xs">
-                    {c.scheduled_at ? new Date(c.scheduled_at).toLocaleDateString('en-IN') : '—'}
+                    {c.scheduled_at ? new Date(c.scheduled_at).toLocaleDateString('en-GB') : '—'}
                   </td>
                   <td className="px-4 py-3 text-gray-400 text-xs">
-                    {new Date(c.created_at).toLocaleDateString('en-IN')}
+                    {new Date(c.created_at).toLocaleDateString('en-GB')}
                   </td>
                 </tr>
               ))}

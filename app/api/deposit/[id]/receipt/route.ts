@@ -78,8 +78,8 @@ function numberToWords(n: number): string {
 function generateDepositReceiptHTML(deposit: any, patient: any, org: any, logoSignedUrl = '') {
     const amount = Number(deposit.amount || 0);
     const depositDate = deposit.created_at
-        ? new Date(deposit.created_at).toLocaleDateString('en-IN', {
-            day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+        ? new Date(deposit.created_at).toLocaleDateString('en-GB', {
+            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
           })
         : '';
 

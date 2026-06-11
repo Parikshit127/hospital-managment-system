@@ -209,7 +209,7 @@ export default function CreditNotesPage() {
                                                     {cn.status}
                                                 </span>
                                             </td>
-                                            <td className="px-5 py-3 text-sm text-gray-500">{new Date(cn.created_at).toLocaleDateString('en-IN')}</td>
+                                            <td className="px-5 py-3 text-sm text-gray-500">{new Date(cn.created_at).toLocaleDateString('en-GB')}</td>
                                             <td className="px-5 py-3 text-sm text-gray-600">{cn.approved_by || '—'}</td>
                                             <td className="px-5 py-3 text-center">
                                                 {cn.status === 'Draft' && (

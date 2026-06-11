@@ -90,7 +90,7 @@ function packageAcceptanceHTML(admission: any, admPkg: any, org: any, branding: 
 
     const hospitalName = branding.hospitalName;
     const gstin = branding.gstin || org?.registration_number || 'N/A';
-    const admissionDate = new Date(admission.admission_date).toLocaleDateString('en-IN');
+    const admissionDate = new Date(admission.admission_date).toLocaleDateString('en-GB');
     const amount = Number(admPkg.applied_amount || pkg.total_amount || 0);
 
     const incRows = inclusions.length
@@ -132,7 +132,7 @@ function packageAcceptanceHTML(admission: any, admPkg: any, org: any, branding: 
             <div style="text-align:right;">
                 <h2 style="color:${branding.accentColor};">IPD PACKAGE ACCEPTANCE FORM</h2>
                 <p style="font-size:11px;font-weight:700;color:${branding.accentColor};margin-top:4px;">Admission: ${admission.admission_id}</p>
-                <p style="font-size:10px;color:#6b7280;">Date: ${new Date().toLocaleDateString('en-IN')}</p>
+                <p style="font-size:10px;color:#6b7280;">Date: ${new Date().toLocaleDateString('en-GB')}</p>
             </div>
         </div>
 

@@ -107,7 +107,7 @@ export default function EmployeeDetailPage() {
         { key: 'shifts' as const, label: 'Shift History', icon: Calendar },
     ];
 
-    const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString() : '-';
+    const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-GB') : '-';
     const formatTime = (d: string | null) => d ? new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-';
 
     if (loading) {

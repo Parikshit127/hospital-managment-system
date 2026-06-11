@@ -555,7 +555,7 @@ export default function IpdBillingPage() {
                                                             {items.map((item: any) => (
                                                                 <tr key={item.id} className="border-b">
                                                                     <td className="p-2">{item.description}</td>
-                                                                    <td className="p-2 text-gray-400">{new Date(item.created_at).toLocaleDateString('en-IN')}</td>
+                                                                    <td className="p-2 text-gray-400">{new Date(item.created_at).toLocaleDateString('en-GB')}</td>
                                                                     <td className="p-2 text-right">{item.quantity}</td>
                                                                     <td className="p-2 text-right">₹{item.unit_price?.toLocaleString('en-IN')}</td>
                                                                     <td className="p-2 text-right">{item.tax_rate}%</td>
@@ -587,7 +587,7 @@ export default function IpdBillingPage() {
                                                         <td className="p-2">{p.payment_method}</td>
                                                         <td className="p-2">{p.payment_type}</td>
                                                         <td className="p-2 text-right">₹{p.amount?.toLocaleString('en-IN')}</td>
-                                                        <td className="p-2">{new Date(p.created_at).toLocaleDateString('en-IN')}</td>
+                                                        <td className="p-2">{new Date(p.created_at).toLocaleDateString('en-GB')}</td>
                                                     </tr>
                                                 ))}
                                                 {(billData.payments || []).length === 0 && (
@@ -687,7 +687,7 @@ export default function IpdBillingPage() {
                         {billData && (
                             <div className="bg-white rounded-lg shadow p-4 text-xs space-y-1">
                                 <p><span className="text-gray-500">Invoice:</span> {billData.invoice.invoice_number}</p>
-                                <p><span className="text-gray-500">Admitted:</span> {new Date(billData.admission.admission_date).toLocaleDateString('en-IN')}</p>
+                                <p><span className="text-gray-500">Admitted:</span> {new Date(billData.admission.admission_date).toLocaleDateString('en-GB')}</p>
                                 <p><span className="text-gray-500">Items:</span> {billData.items?.length || 0}</p>
                             </div>
                         )}
@@ -1004,8 +1004,8 @@ export default function IpdBillingPage() {
                                 <div className="text-right">
                                     <p className="text-xs font-black uppercase tracking-widest" style={{ color: branding?.accentColor || '#1e3a6e' }}>Interim Bill</p>
                                     <p className="text-xs font-mono text-gray-600 mt-0.5">{billData.invoice.invoice_number}</p>
-                                    <p className="text-xs text-gray-500">Admitted: {new Date(billData.admission.admission_date).toLocaleDateString('en-IN')}</p>
-                                    <p className="text-xs text-gray-500">Printed: {new Date().toLocaleDateString('en-IN')}</p>
+                                    <p className="text-xs text-gray-500">Admitted: {new Date(billData.admission.admission_date).toLocaleDateString('en-GB')}</p>
+                                    <p className="text-xs text-gray-500">Printed: {new Date().toLocaleDateString('en-GB')}</p>
                                 </div>
                             </div>
 
@@ -1140,7 +1140,7 @@ export default function IpdBillingPage() {
                                 <div className="text-xs text-gray-500 space-y-1">
                                     <p className="font-bold text-gray-600">This is an INTERIM bill.</p>
                                     <p>Final bill will be generated at discharge.</p>
-                                    <p>Admitted: {new Date(billData.admission.admission_date).toLocaleDateString('en-IN')}</p>
+                                    <p>Admitted: {new Date(billData.admission.admission_date).toLocaleDateString('en-GB')}</p>
                                 </div>
                                 <div className="text-center">
                                     <div className="border-t border-gray-400 w-40 mb-1" />

@@ -209,7 +209,7 @@ export default function CollectionsPage() {
                                                     </td>
                                                     <td className="px-5 py-3 text-sm text-gray-600">{inv.status}</td>
                                                     <td className="px-5 py-3 text-sm text-gray-500">{inv.patient?.phone || '—'}</td>
-                                                    <td className="px-5 py-3 text-sm text-gray-500">{new Date(inv.created_at).toLocaleDateString('en-IN')}</td>
+                                                    <td className="px-5 py-3 text-sm text-gray-500">{new Date(inv.created_at).toLocaleDateString('en-GB')}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -277,7 +277,7 @@ export default function CollectionsPage() {
                                             <tr><td colSpan={4} className="py-16 text-center text-gray-400 text-sm">No dunning actions recorded yet</td></tr>
                                         ) : logs.map(log => (
                                             <tr key={log.id} className="hover:bg-gray-50">
-                                                <td className="px-5 py-3 text-sm text-gray-600">{new Date(log.created_at).toLocaleDateString('en-IN')}</td>
+                                                <td className="px-5 py-3 text-sm text-gray-600">{new Date(log.created_at).toLocaleDateString('en-GB')}</td>
                                                 <td className="px-5 py-3 text-sm text-gray-600">{log.patient_id}</td>
                                                 <td className="px-5 py-3 text-sm text-gray-900 max-w-[300px] truncate">{log.action_taken}</td>
                                                 <td className="px-5 py-3 text-center">

@@ -793,7 +793,7 @@ export default function DoctorSchedule() {
                   <p className="text-sm font-medium text-gray-700 mt-1">
                     {new Date(
                       selectedAppointment.appointment_date,
-                    ).toLocaleDateString()}
+                    ).toLocaleDateString('en-GB')}
                   </p>
                 </div>
                 <div>

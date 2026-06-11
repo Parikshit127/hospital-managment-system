@@ -211,7 +211,7 @@ export default async function PatientLabsPage() {
                                 <div>
                                     <p className="font-semibold text-gray-900 text-sm">{lab.test_type}</p>
                                     <p className="text-xs text-gray-500 mt-1">
-                                        Ordered: {new Date(lab.created_at).toLocaleDateString()}
+                                        Ordered: {new Date(lab.created_at).toLocaleDateString('en-GB')}
                                         {lab.barcode && <span className="ml-2 font-mono bg-gray-100 px-1.5 py-0.5 rounded text-[10px]">#{lab.barcode}</span>}
                                     </p>
                                 </div>
@@ -275,7 +275,7 @@ export default async function PatientLabsPage() {
                                                 )}
                                             </div>
                                             <p className="text-xs text-gray-500">
-                                                {new Date(lab.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                {new Date(lab.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: '2-digit', year: 'numeric' })}
                                                 {lab.barcode && (
                                                     <span className="ml-2 font-mono bg-white/60 px-1.5 py-0.5 rounded text-[10px]">
                                                         #{lab.barcode}

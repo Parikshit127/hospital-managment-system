@@ -216,8 +216,8 @@ export default function HRLeavePage() {
                                                 <p className="text-[10px] text-gray-400">{req.employee?.employee_code}</p>
                                             </td>
                                             <td className="px-4 py-3 text-gray-600 font-medium">{req.leave_type?.name || 'N/A'}</td>
-                                            <td className="px-4 py-3 text-gray-600">{new Date(req.from_date).toLocaleDateString()}</td>
-                                            <td className="px-4 py-3 text-gray-600">{new Date(req.to_date).toLocaleDateString()}</td>
+                                            <td className="px-4 py-3 text-gray-600">{new Date(req.from_date).toLocaleDateString('en-GB')}</td>
+                                            <td className="px-4 py-3 text-gray-600">{new Date(req.to_date).toLocaleDateString('en-GB')}</td>
                                             <td className="px-4 py-3 text-center font-black text-gray-900">{days}</td>
                                             <td className="px-4 py-3 text-gray-500 max-w-[200px] truncate">{req.reason || '-'}</td>
                                             <td className="px-4 py-3 text-center">

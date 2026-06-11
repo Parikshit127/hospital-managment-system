@@ -65,7 +65,7 @@ export function HistorySidebar({ notes }: { notes: any[] }) {
                                         <h4 className="text-sm font-bold text-gray-800">{note.note_type}</h4>
                                         <div className="text-right shrink-0">
                                             <p className="text-[10px] font-bold text-gray-400">
-                                                {isToday ? 'Today' : date.toLocaleDateString()}
+                                                {isToday ? 'Today' : date.toLocaleDateString('en-GB')}
                                             </p>
                                             <p className="text-[9px] font-black text-gray-500 tracking-wider">
                                                 {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

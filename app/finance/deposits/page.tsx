@@ -245,7 +245,7 @@ export default function DepositsPage() {
                                                         {d.status}
                                                     </span>
                                                 </td>
-                                                <td className="px-5 py-3 text-sm text-gray-500">{new Date(d.created_at).toLocaleDateString('en-IN')}</td>
+                                                <td className="px-5 py-3 text-sm text-gray-500">{new Date(d.created_at).toLocaleDateString('en-GB')}</td>
                                                 <td className="px-5 py-3 text-center">
                                                     <div className="flex items-center justify-center gap-1">
                                                         <button

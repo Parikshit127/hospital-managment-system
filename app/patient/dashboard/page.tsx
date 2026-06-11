@@ -47,7 +47,7 @@ function VideoCallStatus() {
                     <h3 className="font-black text-gray-900">{active.status === 'Accepted' ? 'Video Call Accepted' : 'Call Request Pending'}</h3>
                     <p className="text-sm text-gray-600 font-medium">
                         {active.status === 'Accepted' 
-                            ? `Scheduled for: ${new Date(active.scheduled_at!).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}` 
+                            ? `Scheduled for: ${new Date(active.scheduled_at!).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: '2-digit', day: 'numeric' })}` 
                             : 'Waiting for your doctor to respond...'}
                     </p>
                 </div>
@@ -191,7 +191,7 @@ export default function PatientDashboard() {
                                 <p className="text-emerald-100 font-medium mt-1">{nextAppt.department || 'General'}</p>
                             </div>
                             <div className="sm:text-right">
-                                <p className="text-lg font-black">{new Date(nextAppt.appointment_date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</p>
+                                <p className="text-lg font-black">{new Date(nextAppt.appointment_date).toLocaleDateString(undefined, { weekday: 'short', month: '2-digit', day: 'numeric' })}</p>
                                 <p className="text-emerald-200 font-bold text-sm">{daysUntil(nextAppt.appointment_date)}</p>
                             </div>
                         </div>
@@ -302,7 +302,7 @@ export default function PatientDashboard() {
                 <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="font-bold text-gray-900 flex items-center gap-2"><Heart className="h-5 w-5 text-rose-500" /> Health Snapshot</h3>
-                        <p className="text-xs text-gray-400 font-medium">Last recorded: {new Date(vitals.recorded_at).toLocaleDateString()}</p>
+                        <p className="text-xs text-gray-400 font-medium">Last recorded: {new Date(vitals.recorded_at).toLocaleDateString('en-GB')}</p>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <div className="bg-rose-50 rounded-xl p-3 text-center">
@@ -340,7 +340,7 @@ export default function PatientDashboard() {
                         {data.upcomingAppointments?.length > 0 ? data.upcomingAppointments.map((app: any) => (
                             <div key={app.id || app.appointment_id} className="p-3 rounded-xl border border-gray-100 bg-gray-50 flex justify-between items-center">
                                 <div>
-                                    <p className="text-sm font-bold text-gray-900">{new Date(app.appointment_date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</p>
+                                    <p className="text-sm font-bold text-gray-900">{new Date(app.appointment_date).toLocaleDateString(undefined, { weekday: 'short', month: '2-digit', day: 'numeric' })}</p>
                                     <p className="text-xs text-indigo-600 font-bold mt-0.5">{formatDoctorName(app.doctor_name || app.doctor_id)} &middot; {app.department || 'General'}</p>
                                 </div>
                                 <span className="text-xs font-bold text-gray-500 bg-white px-2 py-1 rounded-lg border border-gray-200">
@@ -361,7 +361,7 @@ export default function PatientDashboard() {
                     <div className="space-y-3">
                         {data.activePrescriptions?.length > 0 ? data.activePrescriptions.map((rx: any) => (
                             <div key={rx.id} className="p-3 rounded-xl border border-gray-100 bg-gray-50 hover:border-purple-200 transition-colors">
-                                <p className="text-xs font-bold text-gray-500 mb-1">{new Date(rx.created_at).toLocaleDateString()}</p>
+                                <p className="text-xs font-bold text-gray-500 mb-1">{new Date(rx.created_at).toLocaleDateString('en-GB')}</p>
                                 <p className="text-sm font-bold text-gray-900">
                                     {rx.items?.map((item: any) => item.medicine_name).join(', ') || 'Medication order'}
                                 </p>

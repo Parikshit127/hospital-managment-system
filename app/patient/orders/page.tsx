@@ -106,7 +106,7 @@ export default function OrdersPage() {
                                         </span>
                                         <span className="text-[10px] text-gray-400 flex items-center gap-1">
                                             <Clock className="w-3 h-3" />
-                                            {new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                            {new Date(order.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: '2-digit', year: 'numeric' })}
                                         </span>
                                     </div>
                                 </div>

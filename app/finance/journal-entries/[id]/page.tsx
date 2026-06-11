@@ -54,7 +54,7 @@ function formatAmount(amount: number): string {
 
 function formatDate(date: Date | string): string {
     const d = new Date(date);
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 export default function JournalEntryDetailPage() {

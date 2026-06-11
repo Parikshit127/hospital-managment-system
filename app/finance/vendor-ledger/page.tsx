@@ -350,7 +350,7 @@ export default function VendorLedgerPage() {
                         </span>
                       </td>
                       <td className="px-4 py-2 text-gray-500 text-xs">
-                        {new Date(e.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {new Date(e.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })}
                       </td>
                     </tr>
                   ))}

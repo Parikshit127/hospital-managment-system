@@ -467,7 +467,7 @@ export default function InsuranceDashboard() {
                                                         </span>
                                                     </td>
                                                     <td className="px-5 py-3.5 text-center text-[10px] text-gray-500">
-                                                        {new Date(auth.submitted_at).toLocaleDateString('en-IN')}
+                                                        {new Date(auth.submitted_at).toLocaleDateString('en-GB')}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -600,7 +600,7 @@ export default function InsuranceDashboard() {
                                                         </span>
                                                     </td>
                                                     <td className="px-5 py-3.5 text-center text-[10px] text-gray-500">
-                                                        {pol.valid_until ? new Date(pol.valid_until).toLocaleDateString('en-IN') : '-'}
+                                                        {pol.valid_until ? new Date(pol.valid_until).toLocaleDateString('en-GB') : '-'}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -655,7 +655,7 @@ export default function InsuranceDashboard() {
                                                             <span className="text-[10px] font-black px-2 py-0.5 rounded bg-gray-100 text-gray-500">{inv.status}</span>
                                                         </td>
                                                         <td className="px-5 py-3.5 text-center text-[10px] text-gray-500">
-                                                            {new Date(inv.created_at).toLocaleDateString('en-IN')}
+                                                            {new Date(inv.created_at).toLocaleDateString('en-GB')}
                                                         </td>
                                                         <td className="px-5 py-3.5 text-center">
                                                             <button onClick={() => handleAutoSubmit(inv.id)} disabled={autoSubmitting === inv.id}

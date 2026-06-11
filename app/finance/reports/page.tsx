@@ -231,7 +231,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                     <ExportButton data={payments.map((p: any) => ({
                         receipt: p.receipt_number, patient: p.invoice?.patient?.full_name || '-',
                         invoice: p.invoice?.invoice_number, method: p.payment_method, amount: Number(p.amount),
-                        date: new Date(p.created_at).toLocaleDateString('en-IN'),
+                        date: new Date(p.created_at).toLocaleDateString('en-GB'),
                     }))} filename={`collections-${from}-${to}`} columns={[
                         { key: 'receipt', label: 'Receipt #' }, { key: 'patient', label: 'Patient' },
                         { key: 'invoice', label: 'Invoice #' }, { key: 'method', label: 'Method' },
@@ -257,7 +257,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                                     <td className="px-6 py-3 text-sm text-gray-900">{p.invoice?.patient?.full_name || '-'}</td>
                                     <td className="px-6 py-3 text-sm text-gray-600">{p.payment_method}</td>
                                     <td className="px-6 py-3 text-sm font-semibold text-gray-900 text-right">{fmt(Number(p.amount))}</td>
-                                    <td className="px-6 py-3 text-sm text-gray-500">{new Date(p.created_at).toLocaleDateString('en-IN')}</td>
+                                    <td className="px-6 py-3 text-sm text-gray-500">{new Date(p.created_at).toLocaleDateString('en-GB')}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -431,7 +431,7 @@ function CashFlowReport({ data, fmt, from, to }: { data: any; fmt: (n: number) =
                 <h3 className="font-semibold text-gray-900 mb-4">Daily Cash Flow</h3>
                 {daily.length > 0 ? (
                     <ReportChart type="bar"
-                        labels={daily.map((d: any) => new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }))}
+                        labels={daily.map((d: any) => new Date(d.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }))}
                         datasets={[
                             { label: 'Inflow', data: daily.map((d: any) => d.inflow) },
                             { label: 'Outflow', data: daily.map((d: any) => d.outflow) },
@@ -454,7 +454,7 @@ function CashFlowReport({ data, fmt, from, to }: { data: any; fmt: (n: number) =
                     <tbody className="divide-y divide-gray-100">
                         {daily.map((d: any) => (
                             <tr key={d.date} className="hover:bg-gray-50">
-                                <td className="px-6 py-3 text-sm text-gray-700">{new Date(d.date).toLocaleDateString('en-IN')}</td>
+                                <td className="px-6 py-3 text-sm text-gray-700">{new Date(d.date).toLocaleDateString('en-GB')}</td>
                                 <td className="px-6 py-3 text-sm text-emerald-600 text-right font-medium">{fmt(d.inflow)}</td>
                                 <td className="px-6 py-3 text-sm text-red-600 text-right font-medium">{fmt(d.outflow)}</td>
                                 <td className={`px-6 py-3 text-sm text-right font-semibold ${d.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{fmt(d.net)}</td>
@@ -683,7 +683,7 @@ function IncomeRow({ r, fmt, onViewVoucher }: { r: any; fmt: (n: number) => stri
                         </button>
                     ) : null}
                 </td>
-                <td className="px-3 py-2 text-gray-500">{new Date(r.date).toLocaleDateString('en-IN')}</td>
+                <td className="px-3 py-2 text-gray-500">{new Date(r.date).toLocaleDateString('en-GB')}</td>
                 <td className="px-3 py-2 text-gray-900">{r.patient_name}</td>
                 <td className="px-3 py-2 font-mono text-gray-600">
                     {r.invoice_id ? (
@@ -780,7 +780,7 @@ function DrillPanel({ loading, data, fmt, kind, onViewVoucher }: { loading: bool
                             ? rows.map((r: any) => <IncomeRow key={r.id} r={r} fmt={fmt} onViewVoucher={onViewVoucher} />)
                             : rows.map((r: any) => (
                                 <tr key={r.id} className="hover:bg-white">
-                                    <td className="px-3 py-2 text-gray-500">{new Date(r.date).toLocaleDateString('en-IN')}</td>
+                                    <td className="px-3 py-2 text-gray-500">{new Date(r.date).toLocaleDateString('en-GB')}</td>
                                     <td className="px-3 py-2 font-mono text-gray-600">{r.expense_number}</td>
                                     <td className="px-3 py-2 text-gray-900">{r.vendor}</td>
                                     <td className="px-3 py-2 text-gray-700">{r.description}</td>

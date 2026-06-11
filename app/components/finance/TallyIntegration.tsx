@@ -157,7 +157,7 @@ export function TallyIntegration() {
                 <StatCard label="Vouchers Synced" value={`${dash?.vouchers_synced ?? 0}/${dash?.vouchers_total ?? 0}`} tone="indigo" icon={ListChecks} />
                 <StatCard label="Failed Syncs" value={dash?.failed ?? 0} tone="rose" icon={AlertTriangle} />
                 <StatCard label="Pending Syncs" value={dash?.pending ?? 0} tone="amber" icon={Clock} />
-                <StatCard label="Last Sync" value={dash?.last_sync ? new Date(dash.last_sync).toLocaleDateString('en-IN') : '—'} tone="gray" icon={Clock} />
+                <StatCard label="Last Sync" value={dash?.last_sync ? new Date(dash.last_sync).toLocaleDateString('en-GB') : '—'} tone="gray" icon={Clock} />
             </div>
 
             {/* Reconciliation strip */}
@@ -275,7 +275,7 @@ export function TallyIntegration() {
                                             <td className="px-3 py-2 text-right font-bold">{fmtMoney(v.amount)}</td>
                                             <td className="px-3 py-2 text-gray-500">{v.status}</td>
                                             <td className="px-3 py-2"><SyncBadge status={v.sync_status} /></td>
-                                            <td className="px-3 py-2 text-gray-500">{v.created_at ? new Date(v.created_at).toLocaleDateString('en-IN') : '—'}</td>
+                                            <td className="px-3 py-2 text-gray-500">{v.created_at ? new Date(v.created_at).toLocaleDateString('en-GB') : '—'}</td>
                                             <td className="px-3 py-2 text-right">
                                                 <button
                                                     disabled={!!busy || rowBusy === v.id}

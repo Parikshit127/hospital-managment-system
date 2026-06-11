@@ -201,7 +201,7 @@ export default function BankReconPage() {
                                         </td></tr>
                                     ) : filtered.map(t => (
                                         <tr key={t.id} className="hover:bg-gray-50">
-                                            <td className="px-5 py-3 text-sm text-gray-600">{new Date(t.transaction_date).toLocaleDateString('en-IN')}</td>
+                                            <td className="px-5 py-3 text-sm text-gray-600">{new Date(t.transaction_date).toLocaleDateString('en-GB')}</td>
                                             <td className="px-5 py-3 text-sm text-gray-900 max-w-[250px] truncate">{t.description}</td>
                                             <td className="px-5 py-3 text-sm text-gray-500">{t.reference || '—'}</td>
                                             <td className="px-5 py-3 text-sm font-semibold text-red-600 text-right">

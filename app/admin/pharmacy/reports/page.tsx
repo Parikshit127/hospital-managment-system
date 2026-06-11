@@ -169,7 +169,7 @@ export default function PharmacyReportsPage() {
                                                 <td className="px-5 py-3 text-sm font-bold text-gray-700">{batch.medicine?.brand_name}</td>
                                                 <td className="px-5 py-3"><span className="font-mono text-xs text-gray-500 bg-gray-50 px-2 py-0.5 rounded border border-gray-200">{batch.batch_no}</span></td>
                                                 <td className="px-5 py-3 text-sm font-bold text-gray-700">{batch.current_stock}</td>
-                                                <td className="px-5 py-3 text-xs text-gray-500">{new Date(batch.expiry_date).toLocaleDateString('en-IN')}</td>
+                                                <td className="px-5 py-3 text-xs text-gray-500">{new Date(batch.expiry_date).toLocaleDateString('en-GB')}</td>
                                                 <td className="px-5 py-3"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${badge.cls}`}>{badge.label}</span></td>
                                                 <td className="px-5 py-3 text-sm font-bold text-red-600">₹{Math.round(atRisk).toLocaleString('en-IN')}</td>
                                             </tr>

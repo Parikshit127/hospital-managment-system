@@ -233,8 +233,8 @@ export async function bookAppointment(
                 where: { patient_id: session.id },
                 select: { email: true, phone: true },
             });
-            const formattedDate = appointmentDate.toLocaleDateString('en-IN', {
-                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+            const formattedDate = appointmentDate.toLocaleDateString('en-GB', {
+                weekday: 'long', year: 'numeric', month: '2-digit', day: 'numeric',
             });
             const formattedTime = appointmentDate.toLocaleTimeString('en-IN', {
                 hour: '2-digit', minute: '2-digit', hour12: true,

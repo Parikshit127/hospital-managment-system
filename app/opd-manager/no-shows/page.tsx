@@ -186,7 +186,7 @@ export default function NoShowsPage() {
                                         <div>
                                             <p className="font-bold text-gray-900 text-sm">{record.patientName}</p>
                                             <p className="text-xs text-gray-500">
-                                                {new Date(record.date).toLocaleDateString('en-IN')}
+                                                {new Date(record.date).toLocaleDateString('en-GB')}
                                                 {record.doctorName && ` · Dr. ${record.doctorName}`}
                                                 {record.department && ` · ${record.department}`}
                                             </p>

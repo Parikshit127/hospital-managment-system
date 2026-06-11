@@ -127,7 +127,7 @@ export default function SuppliersPage() {
                                     <span className="text-xs font-mono">{sup.drug_license_number}</span>
                                     {sup.drug_license_expiry && (
                                         <span className={`text-[10px] px-1.5 py-0.5 rounded ${new Date(sup.drug_license_expiry) < new Date() ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                                            {new Date(sup.drug_license_expiry) < new Date() ? 'Expired' : `Valid till ${new Date(sup.drug_license_expiry).toLocaleDateString('en-IN')}`}
+                                            {new Date(sup.drug_license_expiry) < new Date() ? 'Expired' : `Valid till ${new Date(sup.drug_license_expiry).toLocaleDateString('en-GB')}`}
                                         </span>
                                     )}
                                 </div>

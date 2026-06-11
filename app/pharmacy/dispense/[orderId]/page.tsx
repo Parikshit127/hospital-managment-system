@@ -139,7 +139,7 @@ export default function DispensePage() {
                                             <option value="">Select Batch</option>
                                             {item.available_batches.map((b: any) => (
                                                 <option key={b.batch_no} value={b.batch_no}>
-                                                    {b.batch_no} (Stock: {b.stock}, Exp: {new Date(b.expiry).toLocaleDateString('en-IN')})
+                                                    {b.batch_no} (Stock: {b.stock}, Exp: {new Date(b.expiry).toLocaleDateString('en-GB')})
                                                 </option>
                                             ))}
                                         </select>

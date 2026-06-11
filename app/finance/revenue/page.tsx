@@ -100,7 +100,7 @@ export default function RevenuePage() {
                             {dailyData.length > 0 ? (
                                 <ReportChart
                                     type="line"
-                                    labels={dailyData.map(d => new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }))}
+                                    labels={dailyData.map(d => new Date(d.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }))}
                                     datasets={[{ label: 'Collections', data: dailyData.map(d => d.total) }]}
                                     height={280}
                                 />

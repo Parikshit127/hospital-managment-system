@@ -249,7 +249,7 @@ export default function AdminDashboard() {
                         <div>
                             <h1 className="text-2xl font-black" style={{ color: 'var(--admin-text)' }}>Dashboard</h1>
                             <p className="text-xs font-medium mt-1" style={{ color: 'var(--admin-text-muted)' }}>
-                                {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                                {new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: '2-digit', day: 'numeric' })}
                                 {' · '}
                                 {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                             </p>
@@ -559,7 +559,7 @@ export default function AdminDashboard() {
                                                     <span className="text-[10px] font-mono" style={{ color: 'var(--admin-text-muted)' }}>{item.batchNo}</span>
                                                 </div>
                                                 <span className="text-[10px] font-bold text-amber-500">
-                                                    {new Date(item.expiryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                                    {new Date(item.expiryDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })}
                                                 </span>
                                             </div>
                                         ))}

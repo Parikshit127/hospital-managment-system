@@ -123,7 +123,7 @@ export default function ImportHistoryPage() {
                                             <td className="px-4 py-3 text-right text-gray-600">{job.total_rows.toLocaleString()}</td>
                                             <td className="px-4 py-3 text-right text-emerald-600 font-medium">{job.successful_rows.toLocaleString()}</td>
                                             <td className="px-4 py-3 text-right text-red-600">{job.failed_rows.toLocaleString()}</td>
-                                            <td className="px-4 py-3 text-gray-500 text-xs">{new Date(job.created_at).toLocaleDateString()}</td>
+                                            <td className="px-4 py-3 text-gray-500 text-xs">{new Date(job.created_at).toLocaleDateString('en-GB')}</td>
                                             <td className="px-4 py-3 text-gray-600">{job.created_by}</td>
                                         </tr>
                                     );

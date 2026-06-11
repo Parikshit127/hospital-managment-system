@@ -211,7 +211,7 @@ export default function LabPage() {
                                             <td className="px-6 py-5 pl-8 text-sm font-bold text-gray-700 font-mono">#{String(order.order_id).slice(0, 8)}</td>
                                             <td className="px-6 py-5">
                                                 <div className="font-bold text-gray-700">{order.patient_name}</div>
-                                                <div className="text-[10px] text-gray-400 font-medium">{new Date(order.created_at).toLocaleDateString()}</div>
+                                                <div className="text-[10px] text-gray-400 font-medium">{new Date(order.created_at).toLocaleDateString('en-GB')}</div>
                                             </td>
                                             <td className="px-6 py-5">
                                                 <span className="bg-gray-100 text-gray-500 px-3 py-1 rounded-lg text-xs font-bold border border-gray-200">{order.test_type}</span>

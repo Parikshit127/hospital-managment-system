@@ -128,7 +128,7 @@ export default function CallLogsPage() {
                 {filtered.map((log) => (
                   <tr key={log.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-3 text-gray-700">
-                      {new Date(log.created_at).toLocaleDateString('en-IN')}{' '}
+                      {new Date(log.created_at).toLocaleDateString('en-GB')}{' '}
                       {new Date(log.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                     </td>
                     <td className="px-4 py-3 text-gray-600">{log.agent_id}</td>

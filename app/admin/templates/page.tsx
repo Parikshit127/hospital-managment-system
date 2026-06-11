@@ -194,9 +194,9 @@ export default function TemplatesPage() {
 
     const formatDate = (dateStr: string) => {
         try {
-            return new Date(dateStr).toLocaleDateString('en-IN', {
+            return new Date(dateStr).toLocaleDateString('en-GB', {
                 day: '2-digit',
-                month: 'short',
+                month: '2-digit',
                 year: 'numeric',
             });
         } catch {

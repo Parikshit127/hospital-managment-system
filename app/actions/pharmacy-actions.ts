@@ -2029,7 +2029,7 @@ export async function getPharmacyAnalytics() {
                 return created >= dayStart && created < dayEnd;
             });
             revenueByDay.push({
-                date: dayStart.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric' }),
+                date: dayStart.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' }),
                 revenue: dayOrders.reduce((s: number, o: any) => s + Number(o.total_amount), 0),
                 orders: dayOrders.length,
             });
@@ -2338,7 +2338,7 @@ export async function getPharmacyRevenueReport(filters?: {
             const opd = activeChannels.includes('opd') ? e.opd : 0;
             const ipd = activeChannels.includes('ipd') ? e.ipd : 0;
             revenueByDay.push({
-                date: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+                date: d.toLocaleDateString('en-GB', { day: 'numeric', month: '2-digit' }),
                 counter, opd, ipd, revenue: counter + opd + ipd,
             });
         }

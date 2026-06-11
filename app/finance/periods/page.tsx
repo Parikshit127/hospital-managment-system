@@ -159,8 +159,8 @@ export default function PeriodsPage() {
                                         <tr key={p.id} className="hover:bg-gray-50">
                                             <td className="px-5 py-3 text-sm font-medium text-gray-900">{p.period_name}</td>
                                             <td className="px-5 py-3 text-sm text-gray-600">{p.period_type}</td>
-                                            <td className="px-5 py-3 text-sm text-gray-600">{new Date(p.start_date).toLocaleDateString('en-IN')}</td>
-                                            <td className="px-5 py-3 text-sm text-gray-600">{new Date(p.end_date).toLocaleDateString('en-IN')}</td>
+                                            <td className="px-5 py-3 text-sm text-gray-600">{new Date(p.start_date).toLocaleDateString('en-GB')}</td>
+                                            <td className="px-5 py-3 text-sm text-gray-600">{new Date(p.end_date).toLocaleDateString('en-GB')}</td>
                                             <td className="px-5 py-3 text-sm font-semibold text-emerald-600 text-right">
                                                 {p.total_revenue != null ? fmt(Number(p.total_revenue)) : '—'}
                                             </td>

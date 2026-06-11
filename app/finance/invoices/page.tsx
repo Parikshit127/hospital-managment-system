@@ -108,7 +108,7 @@ export default function InvoicesPage() {
                                         <FileText className="h-4 w-4 text-indigo-400 group-hover:text-indigo-600 transition-colors" />
                                         <span className="text-gray-900 tracking-tight text-[13px]">{inv.invoice_number}</span>
                                     </td>
-                                    <td className="px-3 py-4 font-medium text-gray-500 text-[13px]">{new Date(inv.created_at).toLocaleDateString()}</td>
+                                    <td className="px-3 py-4 font-medium text-gray-500 text-[13px]">{new Date(inv.created_at).toLocaleDateString('en-GB')}</td>
                                     <td className="px-3 py-4">
                                         <div className="flex items-center gap-2">
                                             <p className="font-extrabold text-gray-900 leading-tight text-[13px]">{inv.patient?.full_name}</p>

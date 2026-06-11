@@ -14,7 +14,7 @@ const fmtNum = (n: number) => {
     if (!n || n === 0) return '-';
     return Number(n).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 };
-const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
 
 // All 30 MIS columns definition
 const MIS_COLUMNS: { key: string; label: string; type: 'text' | 'currency' | 'date'; width: string }[] = [
@@ -43,9 +43,9 @@ const MIS_COLUMNS: { key: string; label: string; type: 'text' | 'currency' | 'da
     { key: 'nursing_income', label: 'Nursing', type: 'currency', width: '100px' },
     { key: 'consumables_income', label: 'Consumables', type: 'currency', width: '100px' },
     { key: 'implant_income', label: 'Implant / Stent', type: 'currency', width: '110px' },
-    { key: 'discount', label: 'Discount', type: 'currency', width: '100px' },
     { key: 'credit_note', label: 'Credit Note', type: 'currency', width: '100px' },
     { key: 'gross_amount', label: 'Gross Amount', type: 'currency', width: '110px' },
+    { key: 'discount', label: 'Discount', type: 'currency', width: '100px' },
     { key: 'net_amount', label: 'Net Amount', type: 'currency', width: '110px' },
     { key: 'gross_net_diff', label: 'Gross − Net Diff', type: 'currency', width: '110px' },
     { key: 'received_amount', label: 'Received', type: 'currency', width: '110px' },
@@ -105,7 +105,7 @@ export default function MISReportPage() {
                 const row: Record<string, any> = {};
                 MIS_COLUMNS.forEach(col => {
                     if (col.type === 'date') {
-                        row[col.label] = r[col.key] ? new Date(r[col.key]).toLocaleDateString('en-IN') : '';
+                        row[col.label] = r[col.key] ? new Date(r[col.key]).toLocaleDateString('en-GB') : '';
                     } else if (col.type === 'currency') {
                         row[col.label] = Number(r[col.key] || 0);
                     } else {

@@ -48,7 +48,7 @@ export default async function PharmacyInvoiceViewPage({ params }: { params: Prom
     const dateSource: Date = (isIpd && items.length > 0)
         ? new Date((items[items.length - 1] as any).created_at || invoice.created_at)
         : new Date(invoice.created_at);
-    const date    = dateSource.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const date    = dateSource.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const time    = dateSource.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
     // ─── words helper ───────────────────────────────────────────────────────────

@@ -881,7 +881,7 @@ export default function AnalyticsSLAPage() {
                                             <tr key={breach.id} className={`${getSlaRowBg(breach.status)} hover:bg-gray-50/80 transition-colors`}>
                                                 <td className="px-5 py-3.5">
                                                     <span className="text-[11px] font-medium text-gray-500">
-                                                        {new Date(breach.timestamp).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                                        {new Date(breach.timestamp).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })}
                                                         {' '}
                                                         {new Date(breach.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                                                     </span>

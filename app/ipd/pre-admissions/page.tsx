@@ -127,7 +127,7 @@ export default function PreAdmissionsPage() {
                 <tr key={b.id} className="hover:bg-gray-50">
                   <td className="px-5 py-3 font-mono text-xs font-bold text-gray-700">{b.booking_number}</td>
                   <td className="px-5 py-3 text-gray-700">{b.patient_id}</td>
-                  <td className="px-5 py-3 text-gray-600">{b.expected_date ? new Date(b.expected_date).toLocaleDateString('en-IN') : '—'}</td>
+                  <td className="px-5 py-3 text-gray-600">{b.expected_date ? new Date(b.expected_date).toLocaleDateString('en-GB') : '—'}</td>
                   <td className="px-5 py-3">
                     <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-xs font-bold">{b.bed_category}</span>
                   </td>

@@ -192,7 +192,7 @@ export default function CRMDashboardPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-gray-400 text-xs">
-                        {lead.last_contacted ? new Date(lead.last_contacted).toLocaleDateString('en-IN') : '—'}
+                        {lead.last_contacted ? new Date(lead.last_contacted).toLocaleDateString('en-GB') : '—'}
                       </td>
                       <td className="px-4 py-3">
                         <Link href={`/crm/leads/${lead.id}`} className="text-xs font-bold text-orange-600 hover:text-orange-700">

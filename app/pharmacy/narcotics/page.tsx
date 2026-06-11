@@ -154,7 +154,7 @@ export default function NarcoticsRegisterPage() {
                 entries.map((entry) => (
                   <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 text-gray-500 text-xs font-medium">
-                      {new Date(entry.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      {new Date(entry.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </td>
                     <td className="px-6 py-4 text-gray-900 font-bold">{entry.drug_name}</td>
                     <td className="px-6 py-4 text-gray-700 font-medium">{entry.patient_name || '-'}</td>

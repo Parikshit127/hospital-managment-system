@@ -49,8 +49,8 @@ export function getTodayRange(timezone: string = DEFAULT_TIMEZONE): { start: Dat
  * Get the offset in ms between a timezone and UTC at a given instant.
  */
 function getTimezoneOffsetMs(timezone: string, date: Date): number {
-    const utcStr = date.toLocaleString('en-US', { timeZone: 'UTC' });
-    const tzStr = date.toLocaleString('en-US', { timeZone: timezone });
+    const utcStr = date.toLocaleString('en-GB', { timeZone: 'UTC' });
+    const tzStr = date.toLocaleString('en-GB', { timeZone: timezone });
     return new Date(tzStr).getTime() - new Date(utcStr).getTime();
 }
 
@@ -62,7 +62,7 @@ export function formatDateTime(date: Date | string, timezone: string = DEFAULT_T
     return d.toLocaleString('en-IN', {
         timeZone: timezone,
         day: '2-digit',
-        month: 'short',
+        month: '2-digit',
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
@@ -75,10 +75,10 @@ export function formatDateTime(date: Date | string, timezone: string = DEFAULT_T
  */
 export function formatDateShort(date: Date | string, timezone: string = DEFAULT_TIMEZONE): string {
     const d = typeof date === 'string' ? new Date(date) : date;
-    return d.toLocaleDateString('en-IN', {
+    return d.toLocaleDateString('en-GB', {
         timeZone: timezone,
         day: '2-digit',
-        month: 'short',
+        month: '2-digit',
         year: 'numeric',
     });
 }
