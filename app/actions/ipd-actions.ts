@@ -1253,7 +1253,21 @@ export async function getAdmissionFullDetails(admissionId: string) {
     const admission = await db.admissions.findUnique({
       where: { admission_id: admissionId },
       include: {
-        patient: true,
+        patient: {
+          include: {
+            corporate: { select: { company_name: true, company_code: true } },
+            insurance_policies: {
+              where: { status: "Active" },
+              orderBy: { created_at: "desc" },
+              take: 1,
+              select: {
+                policy_number: true,
+                plan_name: true,
+                provider: { select: { provider_name: true } },
+              },
+            },
+          },
+        },
         bed: { include: { wards: true } },
         medical_notes: { orderBy: { created_at: "desc" } },
         diet_plans: { orderBy: { created_at: "desc" } },

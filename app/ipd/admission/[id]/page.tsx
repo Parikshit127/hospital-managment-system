@@ -533,6 +533,17 @@ export default function AdmissionDetailPage() {
     ));
     const wardCostPerDay = Number(data.bed?.wards?.cost_per_day || 0);
     const estimatedBedCost = daysAdmitted * wardCostPerDay;
+
+    // Billing category — Cash / TPA (which TPA) / Corporate (which company)
+    const patientType = data.patient?.patient_type || 'cash';
+    const tpaProviderName = data.patient?.insurance_policies?.[0]?.provider?.provider_name;
+    const corporateName = data.patient?.corporate?.company_name;
+    const billingCategory =
+        patientType === 'tpa_insurance'
+            ? { label: tpaProviderName ? `TPA · ${tpaProviderName}` : 'TPA / Insurance', cls: 'bg-purple-50 text-purple-700' }
+            : patientType === 'corporate'
+            ? { label: corporateName ? `Corporate · ${corporateName}` : 'Corporate', cls: 'bg-amber-50 text-amber-700' }
+            : { label: 'Cash / Self-Pay', cls: 'bg-slate-100 text-slate-600' };
     const activeDiet = data.diet_plans?.find((d: any) => d.is_active);
 
     // Timeline merged and sorted
@@ -580,6 +591,9 @@ export default function AdmissionDetailPage() {
                                         <CalendarDays className="h-3 w-3" /> Day {daysAdmitted}
                                     </span>
                                 )}
+                                <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1 ${billingCategory.cls}`}>
+                                    <CreditCard className="h-3 w-3" /> {billingCategory.label}
+                                </span>
                                 {data.news_score_latest != null && (
                                     <NEWSScoreBadge score={data.news_score_latest} size="sm" />
                                 )}
