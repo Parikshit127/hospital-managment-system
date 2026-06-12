@@ -209,8 +209,14 @@ export function deriveInvoiceTotals(invoice: any) {
         : Number(invoice?.total_tax || 0);
     const net = gross - discount + tax;
     const paid = Number(invoice?.paid_amount || 0);
-    const balance = net - paid;
-    return { gross, discount, tax, net, paid, balance };
+    // Approved/Applied credit notes reduce what the patient owes. They are stored as a
+    // relation on the invoice (not as line items or payments), so the balance must
+    // subtract them here — otherwise the bill keeps showing the charge as pending even
+    // though the app's outstanding (driven off balance_due) has already gone to zero.
+    const creditNotes: any[] = invoice?.credit_notes || [];
+    const creditNoteTotal = creditNotes.reduce((s, c) => s + Number(c?.total_amount || 0), 0);
+    const balance = net - creditNoteTotal - paid;
+    return { gross, discount, tax, net, paid, creditNoteTotal, balance };
 }
 
 // ─── Utility ─────────────────────────────────────────────────────────────────

@@ -36,7 +36,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             include: {
                 items: true,
                 payments: { where: { status: { not: 'Reversed' } } },
-                credit_notes: { where: { status: 'Approved' }, orderBy: { created_at: 'desc' } },
+                credit_notes: { where: { status: { in: ['Approved', 'Applied'] } }, orderBy: { created_at: 'desc' } },
             },
             orderBy: { created_at: 'desc' },
         });
