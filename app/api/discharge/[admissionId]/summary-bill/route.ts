@@ -67,7 +67,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 }
 
 function numberToWords(n: number): string {
-    if (n === 0) return 'Zero';
+    const rupees = Math.abs(Math.floor(n || 0));
+    if (rupees === 0) return 'Zero';
     const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
         'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
     const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
@@ -79,7 +80,7 @@ function numberToWords(n: number): string {
         if (num < 10000000) return convert(Math.floor(num / 100000)) + ' Lakh' + (num % 100000 ? ' ' + convert(num % 100000) : '');
         return convert(Math.floor(num / 10000000)) + ' Crore' + (num % 10000000 ? ' ' + convert(num % 10000000) : '');
     }
-    return 'Rupees ' + convert(Math.floor(n)) + ' Only';
+    return (n < 0 ? 'Minus ' : '') + 'Rupees ' + convert(rupees) + ' Only';
 }
 
 function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any) {
@@ -89,9 +90,8 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
     const gstin = branding.gstin;
 
     const admissionDate = fmtBillDate(admission.admission_date);
-    const dischargeDate = admission.discharge_date
-        ? fmtBillDate(admission.discharge_date)
-        : fmtBillDate(new Date());
+    // Only a real discharge date — never default to today for a still-admitted patient.
+    const dischargeDate = admission.discharge_date ? fmtBillDate(admission.discharge_date) : '';
     const los = Math.max(
         1,
         Math.ceil(
@@ -186,7 +186,7 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                                 <p style="font-size:11px;"><strong>Doctor:</strong> ${formatDoctorName(admission.doctor_name) || '-'}</p>
                                 <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_id || '-'}</p>
                                 <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
-                                <p style="font-size:11px;"><strong>Discharged:</strong> ${isFinal ? dischargeDate : 'N/A'}</p>
+                                <p style="font-size:11px;"><strong>Discharged:</strong> ${isFinal && dischargeDate ? dischargeDate : 'Not discharged (interim bill)'}</p>
                                 <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
                                 <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
                             </div>
@@ -220,7 +220,11 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                                 ${creditNoteTotal > 0 ? `<tr><td style="padding:5px 12px;font-size:12px;color:#0891b2;">Credit Notes Applied</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#0891b2;">-${creditNoteTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
                                 ${depositTotal > 0 ? `<tr><td style="padding:5px 12px;font-size:12px;color:#7c3aed;">Deposits Applied</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#7c3aed;">-${depositTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
                                 <tr><td style="padding:5px 12px;font-size:12px;color:#059669;">Total Paid</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#059669;">${paid.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
-                                ${balance > 0 ? `<tr style="background:#fef2f2;"><td style="padding:7px 12px;font-size:13px;font-weight:800;color:#dc2626;">Balance Due</td><td style="padding:7px 12px;font-size:13px;text-align:right;font-weight:800;color:#dc2626;">${balance.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : `<tr style="background:#f0fdf4;"><td style="padding:7px 12px;font-size:13px;font-weight:800;color:#059669;">FULLY PAID</td><td style="padding:7px 12px;font-size:13px;text-align:right;font-weight:800;color:#059669;">&#10003;</td></tr>`}
+                                ${balance > 0
+                                    ? `<tr style="background:#fef2f2;"><td style="padding:7px 12px;font-size:13px;font-weight:800;color:#dc2626;">Balance Due</td><td style="padding:7px 12px;font-size:13px;text-align:right;font-weight:800;color:#dc2626;">${balance.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`
+                                    : balance < 0
+                                        ? `<tr style="background:#eff6ff;"><td style="padding:7px 12px;font-size:13px;font-weight:800;color:#1d4ed8;">Advance / Credit Balance</td><td style="padding:7px 12px;font-size:13px;text-align:right;font-weight:800;color:#1d4ed8;">${Math.abs(balance).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`
+                                        : `<tr style="background:#f0fdf4;"><td style="padding:7px 12px;font-size:13px;font-weight:800;color:#059669;">FULLY PAID</td><td style="padding:7px 12px;font-size:13px;text-align:right;font-weight:800;color:#059669;">&#10003;</td></tr>`}
                             </table>
                         </div>
 

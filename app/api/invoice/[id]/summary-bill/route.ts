@@ -105,7 +105,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 function numberToWords(n: number): string {
-    if (n === 0) return 'Zero';
+    const rupees = Math.abs(Math.floor(n || 0));
+    if (rupees === 0) return 'Zero';
     const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
         'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
     const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
@@ -117,7 +118,7 @@ function numberToWords(n: number): string {
         if (num < 10000000) return convert(Math.floor(num / 100000)) + ' Lakh' + (num % 100000 ? ' ' + convert(num % 100000) : '');
         return convert(Math.floor(num / 10000000)) + ' Crore' + (num % 10000000 ? ' ' + convert(num % 10000000) : '');
     }
-    return 'Rupees ' + convert(Math.floor(n)) + ' Only';
+    return (n < 0 ? 'Minus ' : '') + 'Rupees ' + convert(rupees) + ' Only';
 }
 
 function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[], branding: BillBranding, sections: any, opdDoctor: string = '', tpaProviderName: string = '', detailed: boolean = false) {
@@ -126,7 +127,11 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
 
     const gstin = branding.gstin;
     const isIPD = !!admission;
-    const isFinal = invoice.status === 'Paid' || invoice.status === 'Final' || admission?.status === 'Discharged';
+    // An IPD bill is only a FINAL summary once the patient is actually discharged —
+    // a paid deposit does NOT make an in-house patient's bill final. (Driving this off
+    // invoice="Paid" wrongly stamped admitted patients as discharged with today's date.)
+    const isDischarged = !!admission?.discharge_date;
+    const isFinal = isIPD ? isDischarged : (invoice.status === 'Paid' || invoice.status === 'Final');
     const billType = isIPD ? (isFinal ? 'SUMMARY BILL' : 'INTERIM SUMMARY') : 'TAX INVOICE';
     const billColor = isFinal ? branding.accentColor : '#f97316';
     const invoiceDate = fmtBillDate(invoice.created_at);
@@ -137,9 +142,9 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     const fmtDateTime = fmtBillDateTime;
     if (admission) {
         admissionDate = fmtDateTime(admission.admission_date);
-        dischargeDate = admission.discharge_date
-            ? fmtDateTime(admission.discharge_date)
-            : fmtDateTime(new Date());
+        // Only show a discharge date when one actually exists — never default to "now",
+        // which made interim bills for still-admitted patients show a fake discharge.
+        dischargeDate = admission.discharge_date ? fmtDateTime(admission.discharge_date) : '';
         los = Math.max(1, Math.ceil(
             (new Date(admission.discharge_date || new Date()).getTime() -
                 new Date(admission.admission_date).getTime()) / (1000 * 60 * 60 * 24)
@@ -219,7 +224,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
             <p style="font-size:11px;"><strong>Doctor:</strong> ${formatDoctorName(admission.doctor_name) || '-'}</p>
             <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_id || '-'}</p>
             <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
-            <p style="font-size:11px;"><strong>Discharged:</strong> ${isFinal ? dischargeDate : 'N/A'}</p>
+            <p style="font-size:11px;"><strong>Discharged:</strong> ${isDischarged ? dischargeDate : 'Not discharged (interim bill)'}</p>
             <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
             <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
         `;
@@ -311,7 +316,9 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
                     ${totalDiscount > 0 ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Discount :</td><td style="font-size:11px;">${totalDiscount.toFixed(2)}</td></tr>` : ''}
                     <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Net Amount :</td><td style="font-size:11px;">${net.toFixed(2)} - ${numberToWords(net)}</td></tr>
                     <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Paid Amount :</td><td style="font-size:11px;">${paid.toFixed(2)} - ${numberToWords(paid)}</td></tr>
-                    <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Balance :</td><td style="font-size:11px;">${balance.toFixed(2)} - ${numberToWords(balance)}</td></tr>
+                    ${balance < 0
+                        ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;color:#1d4ed8;">Advance / Credit :</td><td style="font-size:11px;color:#1d4ed8;">${Math.abs(balance).toFixed(2)} - ${numberToWords(Math.abs(balance))}</td></tr>`
+                        : `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Balance :</td><td style="font-size:11px;">${balance.toFixed(2)} - ${numberToWords(balance)}</td></tr>`}
                 </table>
                 <p style="font-size:10px;text-align:right;color:#666;margin-bottom:10px;">(All figures are in Rupees (INR) only)</p>
                 ${sections.showFooter ? billFooterHtml(branding) : ''}

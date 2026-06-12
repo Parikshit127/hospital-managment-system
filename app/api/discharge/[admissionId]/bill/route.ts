@@ -106,7 +106,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 }
 
 function numberToWords(n: number): string {
-    if (n === 0) return 'Zero';
+    const abs = Math.abs(n || 0);
+    const rupees = Math.floor(abs);
+    const paise = Math.round((abs - rupees) * 100);
+    if (rupees === 0 && paise === 0) return 'Zero';
     const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
         'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
     const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
@@ -118,11 +121,9 @@ function numberToWords(n: number): string {
         if (num < 10000000) return convert(Math.floor(num / 100000)) + ' Lakh' + (num % 100000 ? ' ' + convert(num % 100000) : '');
         return convert(Math.floor(num / 10000000)) + ' Crore' + (num % 10000000 ? ' ' + convert(num % 10000000) : '');
     }
-    const rupees = Math.floor(n);
-    const paise = Math.round((n - rupees) * 100);
     let result = 'Rupees ' + convert(rupees);
     if (paise > 0) result += ' and ' + convert(paise) + ' Paise';
-    return result + ' Only';
+    return (n < 0 ? 'Minus ' : '') + result + ' Only';
 }
 
 function generateDischargeBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any, tpaProviderName: string = '', policyNumber: string = '', isInsuranceBill: boolean = false) {
@@ -136,7 +137,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
     const billColor = isFinal ? branding.accentColor : '#f97316';
 
     const admissionDate = fmtBillDate(admission.admission_date);
-    const dischargeDate = admission.discharge_date ? fmtBillDate(admission.discharge_date) : fmtBillDate(new Date());
+    const dischargeDate = admission.discharge_date ? fmtBillDate(admission.discharge_date) : '';
     const los = Math.max(1, Math.ceil((new Date(admission.discharge_date || new Date()).getTime() - new Date(admission.admission_date).getTime()) / (1000 * 60 * 60 * 24)));
 
     // Derive gross/discount/tax/net from the line items so the summary always matches
@@ -288,7 +289,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 <p style="font-size:11px;"><strong>Doctor:</strong> ${formatDoctorName(admission.doctor_name) || '-'}</p>
                                 <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_id || '-'}</p>
                                 <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
-                                <p style="font-size:11px;"><strong>Discharged:</strong> ${isFinal ? dischargeDate : 'N/A'}</p>
+                                <p style="font-size:11px;"><strong>Discharged:</strong> ${isFinal && dischargeDate ? dischargeDate : 'Not discharged (interim bill)'}</p>
                                 <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
                                 <p style="font-size:11px;"><strong>Category:</strong> ${(() => {
                                     const inv = String(invoice.billing_patient_type || '').toLowerCase();

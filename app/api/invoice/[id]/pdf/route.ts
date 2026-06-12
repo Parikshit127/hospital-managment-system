@@ -134,7 +134,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 function numberToWords(n: number): string {
-    if (n === 0) return 'Zero';
+    const abs = Math.abs(n || 0);
+    if (Math.floor(abs) === 0 && Math.round((abs - Math.floor(abs)) * 100) === 0) return 'Zero';
     const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
         'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
     const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
@@ -148,11 +149,11 @@ function numberToWords(n: number): string {
         return convert(Math.floor(num / 10000000)) + ' Crore' + (num % 10000000 ? ' ' + convert(num % 10000000) : '');
     }
 
-    const rupees = Math.floor(n);
-    const paise = Math.round((n - rupees) * 100);
+    const rupees = Math.floor(abs);
+    const paise = Math.round((abs - rupees) * 100);
     let result = 'Rupees ' + convert(rupees);
     if (paise > 0) result += ' and ' + convert(paise) + ' Paise';
-    return result + ' Only';
+    return (n < 0 ? 'Minus ' : '') + result + ' Only';
 }
 
 function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { name: string; division: string; address: string; gstin: string }, sections: any, opdDoctor: string = '', tpaProviderName: string = '') {
@@ -382,7 +383,9 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
                     ${totalDiscount > 0 ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Discount :</td><td style="font-size:11px;">${totalDiscount.toFixed(2)}</td></tr>` : ''}
                     <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Net Amount :</td><td style="font-size:11px;">${net.toFixed(2)} - ${numberToWords(net)}</td></tr>
                     <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Paid Amount :</td><td style="font-size:11px;">${paid.toFixed(2)} - ${numberToWords(paid)}</td></tr>
-                    <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Balance :</td><td style="font-size:11px;">${balance.toFixed(2)} - ${numberToWords(balance)}</td></tr>
+                    ${balance < 0
+                        ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;color:#1d4ed8;">Advance / Credit :</td><td style="font-size:11px;color:#1d4ed8;">${Math.abs(balance).toFixed(2)} - ${numberToWords(Math.abs(balance))}</td></tr>`
+                        : `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Balance :</td><td style="font-size:11px;">${balance.toFixed(2)} - ${numberToWords(balance)}</td></tr>`}
                 </table>
 
                 <p style="font-size:10px;text-align:right;color:#666;margin-bottom:8px;">(All figures are in Rupees (INR) only)</p>
