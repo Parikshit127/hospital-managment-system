@@ -17,6 +17,7 @@ import {
     updateAdmissionDiagnosis, updateAdmissionBasicDetails
 } from '@/app/actions/ipd-actions';
 import { generateInterimBill, postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
+import { removeInvoiceItem } from '@/app/actions/finance-actions';
 import {
     searchDoctorsForIPD,
     getIPDServiceCatalog,
@@ -130,6 +131,7 @@ export default function AdmissionDetailPage() {
     const [chargeRate, setChargeRate] = useState('');
     const [chargeCategory, setChargeCategory] = useState('Miscellaneous');
     const [postingCharge, setPostingCharge] = useState(false);
+    const [removingItemId, setRemovingItemId] = useState<number | null>(null);
     const [chargeMode, setChargeMode] = useState<'service' | 'package'>('service');
     const [packages, setPackages] = useState<any[]>([]);
     const [pkgSearch, setPkgSearch] = useState('');
@@ -491,6 +493,21 @@ export default function AdmissionDetailPage() {
             loadBill();
         } else {
             toast.error(res.error || 'Failed');
+        }
+    };
+
+    const handleRemoveBillCharge = async (item: any) => {
+        if (!bill?.invoice?.id) return;
+        if (!confirm(`Remove "${item.description || 'this charge'}" from the bill?`)) return;
+        setRemovingItemId(item.id);
+        const res = await removeInvoiceItem(item.id, bill.invoice.id);
+        setRemovingItemId(null);
+        if (res.success) {
+            toast.success('Charge removed from bill');
+            setBill(null); // reset bill cache so it reloads
+            loadBill();
+        } else {
+            toast.error(res.error || 'Failed to remove charge');
         }
     };
 
@@ -1614,6 +1631,16 @@ export default function AdmissionDetailPage() {
                                                                         </p>
                                                                     </div>
                                                                     <p className="font-black text-gray-900 ml-4">₹{item.net_price.toLocaleString()}</p>
+                                                                    {data.status === 'Admitted' && (
+                                                                        <button
+                                                                            onClick={() => handleRemoveBillCharge(item)}
+                                                                            disabled={removingItemId === item.id}
+                                                                            title="Remove this charge from the bill"
+                                                                            className="ml-3 shrink-0 text-gray-300 hover:text-rose-600 disabled:opacity-40 text-base leading-none font-bold transition-colors"
+                                                                        >
+                                                                            {removingItemId === item.id ? '…' : '×'}
+                                                                        </button>
+                                                                    )}
                                                                 </div>
                                                             ))}
                                                         </div>
