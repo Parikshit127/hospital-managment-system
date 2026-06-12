@@ -15,6 +15,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ pati
 
         const patient = await prisma.oPD_REG.findFirst({
             where: { patient_id: patientId, organizationId },
+            include: { corporate: { select: { company_name: true } } },
         });
         if (!patient) return NextResponse.json({ error: 'Patient not found' }, { status: 404 });
 
@@ -31,9 +32,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ pati
             select: { doctor_name: true, department: true },
         });
 
+        // Resolve the payer "Category" shown on the sticker (e.g. MEDI ASSIST / a corporate / CASH).
+        const policy = await prisma.insurance_policies.findFirst({
+            where: { patient_id: patientId, organizationId },
+            orderBy: [{ status: 'asc' }, { created_at: 'desc' }],
+            include: { provider: { select: { provider_name: true } } },
+        });
+        const ptype = String((patient as any).patient_type || '').toLowerCase();
+        let category = 'CASH';
+        if (['tpa_insurance', 'insurance', 'tpa'].includes(ptype) || policy) {
+            category = ((policy as any)?.provider?.provider_name || (policy as any)?.corporate_name || 'TPA / INSURANCE');
+        } else if (ptype === 'corporate' || (patient as any).corporate) {
+            category = ((patient as any).corporate?.company_name || 'CORPORATE');
+        }
+        category = category.toUpperCase();
+
         const branding = await getBillBranding(organizationId);
 
-        const html = generateStickerHTML(patient, admission, latestAppointment, branding);
+        const html = generateStickerHTML(patient, admission, latestAppointment, branding, category);
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
         });
@@ -43,19 +59,25 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ pati
     }
 }
 
-function generateStickerHTML(patient: any, admission: any, appointment: any, branding: any) {
+function generateStickerHTML(patient: any, admission: any, appointment: any, branding: any, category: string = 'CASH') {
     const name = (patient.title ? patient.title + ' ' : '') + (patient.full_name || '-');
     const uhid = patient.patient_id || '-';
     const age = patient.age || '-';
     const gender = (patient.gender || '-').charAt(0).toUpperCase();
     const phone = patient.phone || '-';
-    const category = 'PAYING';
     const isIPD = !!admission;
 
+    // dd-mm-yyyy hh:mm AM/PM (IST). hourCycle h12 so the noon hour shows 12, not 00.
+    const fmtDateTime = (d: any) => {
+        const dt = new Date(d);
+        const date = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
+        const time = dt.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hourCycle: 'h12' }).toUpperCase();
+        return `${date} ${time}`;
+    };
+
     const admDate = isIPD && admission.admission_date
-        ? new Date(admission.admission_date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
-        + ' ' + new Date(admission.admission_date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-        : new Date(patient.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        ? fmtDateTime(admission.admission_date)
+        : new Date(patient.created_at).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
 
     const ipdNo = isIPD ? admission.admission_id : '';
     const doctorName = isIPD
@@ -68,12 +90,13 @@ function generateStickerHTML(patient: any, admission: any, appointment: any, bra
     // ST-24 format: 64mm x 34mm, 3 columns x 8 rows = 24 stickers per A4
     const stickerHtml = `
         <div class="sticker">
-            <div style="font-size:8px;font-weight:900;line-height:1.1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${name}</div>
-            <div style="font-size:7px;margin-top:1px;">MRN : ${uhid} <span style="float:right;">${age} Y /${gender}</span></div>
-            <div style="font-size:7px;">${dateLabel}: ${admDate}</div>
-            ${isIPD ? `<div style="font-size:7px;">IP No.: ${ipdNo}</div>` : ''}
-            <div style="font-size:7px;">Doctor: ${doctorName}</div>
-            <div style="font-size:7px;">Category: ${category} <span style="float:right;">P.No:${phone}</span></div>
+            <div class="st-name">${name}</div>
+            <div class="st-row">MRN : ${uhid}</div>
+            <div class="st-row">${dateLabel}: ${admDate} <span class="st-age">${age} Y /${gender}</span></div>
+            ${isIPD ? `<div class="st-row">IP No.: ${ipdNo}</div>` : ''}
+            <div class="st-row">Doctor: ${doctorName}</div>
+            <div class="st-row">Category: ${category}</div>
+            <div class="st-row">P.No:${phone}</div>
             <div class="barcode-container">
                 <svg></svg>
             </div>
@@ -115,14 +138,18 @@ function generateStickerHTML(patient: any, admission: any, appointment: any, bra
             justify-content: flex-start;
         }
 
+        .st-name { font-size: 9.5px; font-weight: 900; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 0.5px; }
+        .st-row { font-size: 7.5px; line-height: 1.32; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .st-age { float: right; font-weight: 700; }
+
         .barcode-container {
             margin-top: auto;
             text-align: center;
         }
 
         .barcode-container svg {
-            height: 16px;
-            width: 90%;
+            height: 22px;
+            width: 95%;
         }
 
         @media screen {
@@ -154,8 +181,8 @@ function generateStickerHTML(patient: any, admission: any, appointment: any, bra
                     try {
                         JsBarcode('#' + svgId, '${barcodeValue}', {
                             format: 'CODE128',
-                            width: 1,
-                            height: 16,
+                            width: 1.4,
+                            height: 22,
                             displayValue: false,
                             margin: 0,
                         });
