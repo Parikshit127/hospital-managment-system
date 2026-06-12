@@ -32,11 +32,27 @@ export async function collectDeposit(data: {
 }) {
     try {
         const { db, session, organizationId } = await requireTenantContext();
+
+        // The deposit form takes a free-typed UHID, so normalize and validate it before
+        // saving. Trim stray whitespace (a trailing tab once broke the receipt's name
+        // lookup) and reject anything that isn't a real patient — invoice/deposit numbers
+        // were being saved into patient_id, leaving receipts with an ID but no name.
+        const patientId = (data.patient_id || '').trim();
+        const admissionId = (data.admission_id || '').trim() || null;
+        if (!patientId) return { success: false, error: 'Patient UHID is required' };
+        const patient = await db.OPD_REG.findFirst({
+            where: { patient_id: patientId, organizationId },
+            select: { patient_id: true },
+        });
+        if (!patient) {
+            return { success: false, error: `No patient found with UHID "${patientId}". Enter a valid patient UHID (e.g. AVS-2026-00001).` };
+        }
+
         const deposit = await db.patientDeposit.create({
             data: {
                 deposit_number: await genDepNum(organizationId, db),
-                patient_id: data.patient_id,
-                admission_id: data.admission_id || null,
+                patient_id: patientId,
+                admission_id: admissionId,
                 amount: data.amount,
                 payment_method: data.payment_method,
                 payment_ref: data.payment_ref || null,
@@ -52,7 +68,7 @@ export async function collectDeposit(data: {
                 module: 'finance',
                 entity_type: 'deposit',
                 entity_id: deposit.deposit_number,
-                details: JSON.stringify({ patient_id: data.patient_id, amount: data.amount }),
+                details: JSON.stringify({ patient_id: patientId, amount: data.amount }),
                 organizationId,
             },
         });
