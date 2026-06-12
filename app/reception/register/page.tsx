@@ -90,7 +90,8 @@ export default function ReceptionPage() {
     const [duplicates, setDuplicates] = useState<DuplicatePatient[]>([]);
     const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
     const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
-    const [dobValue, setDobValue] = useState('');
+    const [dobValue, setDobValue] = useState('');      // ISO yyyy-mm-dd (submitted)
+    const [dobText, setDobText] = useState('');         // dd/mm/yyyy (what the user sees)
     const [ageValue, setAgeValue] = useState('');
     // Phase 1 — Patient Type
     const [patientType, setPatientType] = useState<'cash' | 'corporate' | 'tpa_insurance'>('cash');
@@ -241,10 +242,27 @@ export default function ReceptionPage() {
     }, [checkDuplicatePatient]);
 
     // DOB → Age auto-calc
+    // DOB is typed as dd/mm/yyyy (browser-independent). Auto-insert slashes, then derive
+    // the ISO value (for submission) + age once a full valid date is entered.
     const handleDobChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const dob = e.target.value;
-        setDobValue(dob);
-        setAgeValue(calculateAge(dob));
+        const digits = e.target.value.replace(/\D/g, '').slice(0, 8); // ddmmyyyy
+        let formatted = digits;
+        if (digits.length > 4) formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+        else if (digits.length > 2) formatted = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+        setDobText(formatted);
+
+        if (digits.length === 8) {
+            const dd = digits.slice(0, 2), mm = digits.slice(2, 4), yyyy = digits.slice(4);
+            const iso = `${yyyy}-${mm}-${dd}`;
+            const d = new Date(iso);
+            const valid = !isNaN(d.getTime()) && Number(mm) >= 1 && Number(mm) <= 12 && Number(dd) >= 1 && Number(dd) <= 31 && d <= new Date();
+            if (valid) {
+                setDobValue(iso);
+                setAgeValue(calculateAge(iso));
+                return;
+            }
+        }
+        setDobValue('');
     }, []);
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -269,6 +287,7 @@ export default function ReceptionPage() {
             setAllowDuplicate(false);
             (event.target as HTMLFormElement).reset();
             setDobValue('');
+            setDobText('');
             setAgeValue('');
             setPatientType('cash');
             setSelectedCorporate(null);
@@ -476,13 +495,16 @@ export default function ReceptionPage() {
                                             <div className="relative">
                                                 <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
                                                 <input
-                                                    name="date_of_birth"
-                                                    type="date"
-                                                    value={dobValue}
-                                                    max={new Date().toISOString().split('T')[0]}
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    placeholder="dd/mm/yyyy"
+                                                    value={dobText}
+                                                    maxLength={10}
                                                     onChange={handleDobChange}
                                                     className={inputWithIconClass}
                                                 />
+                                                {/* Submitted as ISO yyyy-mm-dd so nothing downstream changes */}
+                                                <input type="hidden" name="date_of_birth" value={dobValue} />
                                             </div>
                                         </div>
 
