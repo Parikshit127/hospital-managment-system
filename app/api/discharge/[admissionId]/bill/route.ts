@@ -50,13 +50,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 
         if (!invoice) return NextResponse.json({ error: 'No invoice found' }, { status: 404 });
 
-        // "Include medicines" toggle — drop pharmacy items from list + totals when ?meds=0
+        // "Show medicine names" toggle — when ?meds=0 the pharmacy AMOUNT stays in the
+        // bill; only the individual medicine names/rows are collapsed (items not removed).
         const includeMeds = new URL(req.url).searchParams.get('meds') !== '0';
         const isMedicineItem = (i: any) => String(i.service_category || i.department || '').toLowerCase() === 'pharmacy';
         const medsAvailable = (invoice.items || []).some(isMedicineItem);
-        if (medsAvailable && !includeMeds) {
-            invoice.items = (invoice.items || []).filter((i: any) => !isMedicineItem(i));
-        }
 
         // Fetch TPA provider name + policy number if applicable.
         // Treat the bill as insurance/TPA when EITHER the invoice OR the patient master says so.
@@ -103,7 +101,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 
         const isFinal = admission.status === 'Discharged';
         const medsToggle = medsToggleHtml(req.url, medsAvailable, includeMeds);
-        const html = generateDischargeBillHTML(admission, invoice, org, deposits, isFinal, branding, sections, tpaProviderName, policyNumber, isInsuranceBill, medsToggle);
+        const html = generateDischargeBillHTML(admission, invoice, org, deposits, isFinal, branding, sections, tpaProviderName, policyNumber, isInsuranceBill, medsToggle, includeMeds);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -135,7 +133,7 @@ function numberToWords(n: number): string {
     return (n < 0 ? 'Minus ' : '') + result + ' Only';
 }
 
-function generateDischargeBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any, tpaProviderName: string = '', policyNumber: string = '', isInsuranceBill: boolean = false, medsToggle: string = '') {
+function generateDischargeBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any, tpaProviderName: string = '', policyNumber: string = '', isInsuranceBill: boolean = false, medsToggle: string = '', includeMeds: boolean = true) {
     const patient = admission.patient || {};
     const items = invoice.items || [];
     const payments = invoice.payments || [];
@@ -208,6 +206,10 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
     let itemRows = '';
     for (const [cat, data] of Object.entries(categoryMap)) {
         itemRows += `<tr style="background:#f0fdf4;"><td colspan="7" style="padding:5px 12px;font-size:11px;font-weight:700;color:#059669;">${cat} — ${data.total.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`;
+        // Medicine-name toggle: when off, keep the Pharmacy total line but hide the
+        // individual medicine rows. The amount stays in the totals (items not removed).
+        const isBulkPharmacy = cat.toLowerCase() === 'pharmacy';
+        if (isBulkPharmacy && !includeMeds) continue;
         for (const item of data.items) {
             itemRows += `<tr>
                 <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;">${item.description}</td>

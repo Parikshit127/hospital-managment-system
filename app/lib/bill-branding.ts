@@ -168,10 +168,11 @@ export function printButtonHtml(b: BillBranding, subtitle = ''): string {
 }
 
 /**
- * "Include medicines" toggle for bills — rendered as a plain <a> link (no JS), so it
+ * "Show medicine names" toggle for bills — rendered as a plain <a> link (no JS), so it
  * always works (inline onchange handlers were unreliable). Clicking flips the ?meds
- * param: when medicines are currently shown the link removes them (meds=0), and vice
- * versa. Returns '' when the bill has no medicine items. `currentUrl` is req.url.
+ * param. IMPORTANT: this does NOT change the bill amount — the pharmacy total always
+ * stays in the totals. It only shows/hides the individual medicine names/rows under the
+ * Pharmacy category. Returns '' when the bill has no medicine items. `currentUrl` = req.url.
  */
 export function medsToggleHtml(currentUrl: string, medsAvailable: boolean, includeMeds: boolean): string {
     if (!medsAvailable) return '';
@@ -185,9 +186,9 @@ export function medsToggleHtml(currentUrl: string, medsAvailable: boolean, inclu
     return `<div class="no-print" style="background:#f3f4f6;padding:0 12px 12px;text-align:center;">
         <a href="${href}" style="font-size:12px;color:#374151;text-decoration:none;display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
             <input type="checkbox" ${includeMeds ? 'checked' : ''} readonly style="pointer-events:none;margin:0;" />
-            Include medicines on this bill
+            Show individual medicine names
         </a>
-        <span style="margin-left:8px;font-size:11px;color:#6b7280;">(click to ${includeMeds ? 'remove' : 'add'})</span>
+        <span style="margin-left:8px;font-size:11px;color:#6b7280;">(amount stays; click to ${includeMeds ? 'hide names' : 'show names'})</span>
     </div>`;
 }
 

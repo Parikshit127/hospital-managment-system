@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { ensureIPDRoomChargesAccrued } from '@/app/actions/ipd-billing-helpers';
-import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, deriveInvoiceTotals, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding';
+import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, deriveInvoiceTotals, type BillBranding } from '@/app/lib/bill-branding';
 import { getBillSections } from '@/app/lib/bill-sections';
 import { formatDoctorName } from '@/app/lib/format-name';
 
@@ -41,14 +41,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             orderBy: { created_at: 'desc' },
         });
         if (!invoice) return NextResponse.json({ error: 'No invoice found' }, { status: 404 });
-
-        // "Include medicines" toggle — drop pharmacy items from list + totals when ?meds=0
-        const includeMeds = new URL(req.url).searchParams.get('meds') !== '0';
-        const isMedicineItem = (i: any) => String(i.service_category || i.department || '').toLowerCase() === 'pharmacy';
-        const medsAvailable = (invoice.items || []).some(isMedicineItem);
-        if (medsAvailable && !includeMeds) {
-            invoice.items = (invoice.items || []).filter((i: any) => !isMedicineItem(i));
-        }
+        // Note: this is a category-LEVEL summary (totals per category, no item names), so
+        // there are no individual medicine names to hide — the medicine-name toggle lives
+        // on the detailed bills, not here.
 
         const org = await prisma.organization.findUnique({
             where: { id: auth.context.organizationId },
@@ -63,8 +58,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         });
 
         const isFinal = admission.status === 'Discharged';
-        const medsToggle = medsToggleHtml(req.url, medsAvailable, includeMeds);
-        const html = generateSummaryBillHTML(admission, invoice, org, deposits, isFinal, branding, sections, medsToggle);
+        const html = generateSummaryBillHTML(admission, invoice, org, deposits, isFinal, branding, sections);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -92,7 +86,7 @@ function numberToWords(n: number): string {
     return (n < 0 ? 'Minus ' : '') + 'Rupees ' + convert(rupees) + ' Only';
 }
 
-function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any, medsToggle: string = '') {
+function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any) {
     const patient = admission.patient || {};
     const items = invoice.items || [];
 
@@ -162,7 +156,6 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
     <div class="watermark">${isFinal ? 'FINAL' : 'INTERIM'} SUMMARY</div>
 
     ${printButtonHtml(branding, 'This is a category-level summary. For line-by-line details, see the Detailed Bill.')}
-    ${medsToggle}
 
     <table class="print-layout-table">
         <thead>

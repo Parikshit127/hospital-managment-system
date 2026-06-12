@@ -122,19 +122,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const pharmacy = getPharmacyBranding(organizationId!);
         const sections = await getBillSections(organizationId!, 'invoice');
 
-        // "Include medicines" toggle. When ?meds=0 is passed, drop the pharmacy /
-        // medicine line items from the detailed bill so they're excluded from both the
-        // printed list and the recomputed totals (deriveInvoiceTotals reads invoice.items).
+        // "Show medicine names" toggle. When ?meds=0 the pharmacy AMOUNT stays in the
+        // bill (category total + grand total); only the individual medicine names/rows are
+        // collapsed. Items are NOT removed, so totals are unchanged.
         const includeMeds = req.nextUrl.searchParams.get('meds') !== '0';
         const isMedicineItem = (i: any) => String(i.service_category || i.department || '').toLowerCase() === 'pharmacy';
         const isPharmacyInvoice = invoice.invoice_type === 'PHARMACY';
         const medsAvailable = !isPharmacyInvoice && (invoice.items || []).some(isMedicineItem);
-        if (medsAvailable && !includeMeds) {
-            invoice.items = (invoice.items || []).filter((i: any) => !isMedicineItem(i));
-        }
 
         const medsToggle = medsToggleHtml(req.url, medsAvailable, includeMeds)
-        const html = generateInvoiceHTML(invoice, branding, pharmacy, sections, opdDoctor, tpaProviderName, medsToggle)
+        const html = generateInvoiceHTML(invoice, branding, pharmacy, sections, opdDoctor, tpaProviderName, medsToggle, includeMeds)
 
         // Return HTML for browser viewing (works for both API key and regular auth)
         return new NextResponse(html, {
@@ -169,7 +166,7 @@ function numberToWords(n: number): string {
     return (n < 0 ? 'Minus ' : '') + result + ' Only';
 }
 
-function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { name: string; division: string; address: string; gstin: string }, sections: any, opdDoctor: string = '', tpaProviderName: string = '', medsToggle: string = '') {
+function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { name: string; division: string; address: string; gstin: string }, sections: any, opdDoctor: string = '', tpaProviderName: string = '', medsToggle: string = '', includeMeds: boolean = true) {
     const items = invoice.items || []
     const payments = invoice.payments || []
     const creditNotes = (invoice as any).credit_notes || []
@@ -218,17 +215,22 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
             <td colspan="5" style="padding:6px 8px;font-size:11px;font-weight:700;">${cat}</td>
             <td style="padding:6px 8px;font-size:11px;font-weight:700;text-align:right;">Total Rs. ${catTotal.toFixed(2)}/-</td>
         </tr>`
-        for (const item of catItems) {
-            sno++
-            const itemDate = fmtDate(item.created_at)
-            detailRows += `<tr>
-                <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;">${itemDate}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;">${item.description}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:right;">${Number(item.unit_price).toFixed(2)}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:center;">${item.quantity}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:right;">${Number(item.discount || 0).toFixed(2)}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:right;">${Number(item.net_price).toFixed(2)}</td>
-            </tr>`
+        // Medicine-name toggle: when off, keep the Pharmacy total line but hide the
+        // individual medicine rows. The amount stays in the totals (items not removed).
+        const isBulkPharmacy = cat.toLowerCase() === 'pharmacy'
+        if (!isBulkPharmacy || includeMeds) {
+            for (const item of catItems) {
+                sno++
+                const itemDate = fmtDate(item.created_at)
+                detailRows += `<tr>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;">${itemDate}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;">${item.description}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:right;">${Number(item.unit_price).toFixed(2)}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:center;">${item.quantity}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:right;">${Number(item.discount || 0).toFixed(2)}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:right;">${Number(item.net_price).toFixed(2)}</td>
+                </tr>`
+            }
         }
     }
 

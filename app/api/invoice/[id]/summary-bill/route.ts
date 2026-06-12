@@ -36,12 +36,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         });
         if (!invoice) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
 
-        // "Include medicines" toggle — drop pharmacy items from list + totals when ?meds=0
+        // "Show medicine names" toggle — when ?meds=0 the pharmacy AMOUNT stays in the
+        // bill (category total + grand total), but the individual medicine names/rows are
+        // collapsed away. Items are NOT removed, so totals are unchanged.
         const isMedicineItem = (i: any) => String(i.service_category || i.department || '').toLowerCase() === 'pharmacy';
         const medsAvailable = invoice.invoice_type !== 'PHARMACY' && (invoice.items || []).some(isMedicineItem);
-        if (medsAvailable && !includeMeds) {
-            invoice.items = (invoice.items || []).filter((i: any) => !isMedicineItem(i));
-        }
 
         let admission: any = null;
         if (invoice.admission_id) {
@@ -102,8 +101,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             })
             : [];
 
-        const medsToggle = medsToggleHtml(req.url, medsAvailable, includeMeds);
-        const html = generateSummaryBillHTML(invoice, admission, org, deposits, branding, sections, opdDoctor, tpaProviderName, detailed, medsToggle);
+        // The medicine-name toggle only matters in detailed mode (summary mode already
+        // collapses pharmacy to a single total).
+        const medsToggle = medsToggleHtml(req.url, medsAvailable && detailed, includeMeds);
+        const html = generateSummaryBillHTML(invoice, admission, org, deposits, branding, sections, opdDoctor, tpaProviderName, detailed, medsToggle, includeMeds);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -131,7 +132,7 @@ function numberToWords(n: number): string {
     return (n < 0 ? 'Minus ' : '') + 'Rupees ' + convert(rupees) + ' Only';
 }
 
-function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[], branding: BillBranding, sections: any, opdDoctor: string = '', tpaProviderName: string = '', detailed: boolean = false, medsToggle: string = '') {
+function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[], branding: BillBranding, sections: any, opdDoctor: string = '', tpaProviderName: string = '', detailed: boolean = false, medsToggle: string = '', includeMeds: boolean = true) {
     const patient = invoice.patient || {};
     const items = invoice.items || [];
 
@@ -192,8 +193,10 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
         // every other category (Packages, consultations, procedures, lab, services)
         // stays itemized so the actual services are always named on the bill.
         // Detailed mode (?detailed=true) lists everything, including medications.
+        // Pharmacy rows are itemized in detailed mode — but when medicine names are
+        // toggled off (includeMeds=false) we keep only the category total line.
         const isBulkPharmacy = cat.toLowerCase() === 'pharmacy';
-        if (detailed || !isBulkPharmacy) {
+        if (!isBulkPharmacy || (detailed && includeMeds)) {
             for (const item of catItems) {
                 detailRows += `<tr>
                     <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;">${fmtDate(item.created_at)}</td>
