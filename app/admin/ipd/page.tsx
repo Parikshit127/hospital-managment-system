@@ -187,7 +187,7 @@ export default function AdminIPDHub() {
                                     ) : admissions.map((adm: any) => (
                                         <tr key={adm.admission_id} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-4 py-3">
-                                                <span className="font-medium text-gray-900">{adm.patient?.full_name || 'Unknown'}</span>
+                                                <Link href={`/ipd/admission/${adm.admission_id}`} className="font-medium text-gray-900 hover:text-orange-600 hover:underline">{adm.patient?.full_name || 'Unknown'}</Link>
                                                 <span className="block text-[10px] font-mono text-gray-400">{adm.patient?.patient_id || adm.patient_id}</span>
                                             </td>
                                             <td className="px-4 py-3 text-gray-500">
