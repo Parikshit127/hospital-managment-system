@@ -46,10 +46,10 @@ export default function PurchaseOrdersPage() {
         if (poItems.find(i => i.medicine_id === med.medicine_id)) return;
         setPoItems([...poItems, {
             medicine_id: med.medicine_id,
-            name: med.brand_name,
+            name: med.medicine?.brand_name,
             quantity: 1,
-            unit_price: Number(med.price_per_unit || 0),
-            gst_rate: Number(med.gst_percent || 0),
+            unit_price: Number(med.medicine?.selling_price || med.medicine?.price_per_unit || 0),
+            gst_rate: Number(med.medicine?.gst_percent || 0),
         }]);
         setMedicineSearch('');
         setShowMedDropdown(false);
@@ -108,9 +108,11 @@ export default function PurchaseOrdersPage() {
         }
     };
 
-    const filteredMeds = medicines.filter(m =>
-        m.brand_name?.toLowerCase().includes(medicineSearch.toLowerCase()) &&
-        !poItems.find(i => i.medicine_id === m.medicine_id)
+    const filteredMeds = medicines.filter((m, idx) =>
+        m.medicine?.brand_name?.toLowerCase().includes(medicineSearch.toLowerCase()) &&
+        !poItems.find(i => i.medicine_id === m.medicine_id) &&
+        // dedupe: getInventory returns one row per batch, keep first per medicine
+        medicines.findIndex(x => x.medicine_id === m.medicine_id) === idx
     ).slice(0, 15);
 
     const poTotal = poItems.reduce((s, i) => s + i.quantity * i.unit_price, 0);
@@ -253,8 +255,8 @@ export default function PurchaseOrdersPage() {
                                             ) : filteredMeds.map((m: any) => (
                                                 <div key={m.medicine_id} onMouseDown={() => addMedicineToOrder(m)}
                                                     className="px-3 py-2 text-sm hover:bg-teal-50 cursor-pointer flex justify-between">
-                                                    <span>{m.brand_name}</span>
-                                                    <span className="text-gray-400 text-xs">₹{Number(m.price_per_unit || 0).toLocaleString('en-IN')}</span>
+                                                    <span>{m.medicine?.brand_name}</span>
+                                                    <span className="text-gray-400 text-xs">₹{Number(m.medicine?.selling_price || m.medicine?.price_per_unit || 0).toLocaleString('en-IN')}</span>
                                                 </div>
                                             ))}
                                         </div>
