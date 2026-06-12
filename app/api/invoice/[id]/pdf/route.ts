@@ -175,7 +175,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
     const isInterState = invoice.is_inter_state || false
 
     const fmtDate = fmtBillDate
-    const fmtTime = (d: any) => d ? new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : ''
+    const fmtTime = (d: any) => d ? new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h12' }) : ''
     const invoiceDate = fmtDate(invoice.created_at)
     const isIPD = !!admission
     const billType = isIPD ? 'Bill' : 'Bill'

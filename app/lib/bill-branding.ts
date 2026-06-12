@@ -183,7 +183,8 @@ export function fmtBillDateTime(d: any): string {
     if (!d) return '-';
     const dt = new Date(d);
     if (isNaN(dt.getTime())) return '-';
-    return dt.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+    // hourCycle:'h12' (not hour12:true) — en-GB + hour12 renders the noon hour as "00:30 pm"; h12 gives "12:30 pm".
+    return dt.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h12' });
 }
 
 // ─── Invoice totals (single source of truth for every bill/receipt) ──────────
