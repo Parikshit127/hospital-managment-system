@@ -22,6 +22,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         // ?detailed=true lists individual line items (medications) under each
         // category; default shows only per-category totals + grand total.
         const detailed = new URL(req.url).searchParams.get('detailed') === 'true';
+        // ?meds=0 excludes medicine/pharmacy items from the bill (list + totals).
+        const includeMeds = new URL(req.url).searchParams.get('meds') !== '0';
 
         const invoice = await prisma.invoices.findFirst({
             where: { id: invoiceId, organizationId: auth.context.organizationId },
@@ -33,6 +35,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             },
         });
         if (!invoice) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
+
+        // "Include medicines" toggle — drop pharmacy items from list + totals when ?meds=0
+        const isMedicineItem = (i: any) => String(i.service_category || i.department || '').toLowerCase() === 'pharmacy';
+        const medsAvailable = invoice.invoice_type !== 'PHARMACY' && (invoice.items || []).some(isMedicineItem);
+        if (medsAvailable && !includeMeds) {
+            invoice.items = (invoice.items || []).filter((i: any) => !isMedicineItem(i));
+        }
 
         let admission: any = null;
         if (invoice.admission_id) {
@@ -93,7 +102,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             })
             : [];
 
-        const html = generateSummaryBillHTML(invoice, admission, org, deposits, branding, sections, opdDoctor, tpaProviderName, detailed);
+        const html = generateSummaryBillHTML(invoice, admission, org, deposits, branding, sections, opdDoctor, tpaProviderName, detailed, medsAvailable, includeMeds);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -121,7 +130,7 @@ function numberToWords(n: number): string {
     return (n < 0 ? 'Minus ' : '') + 'Rupees ' + convert(rupees) + ' Only';
 }
 
-function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[], branding: BillBranding, sections: any, opdDoctor: string = '', tpaProviderName: string = '', detailed: boolean = false) {
+function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[], branding: BillBranding, sections: any, opdDoctor: string = '', tpaProviderName: string = '', detailed: boolean = false, medsAvailable: boolean = false, includeMeds: boolean = true) {
     const patient = invoice.patient || {};
     const items = invoice.items || [];
 
@@ -246,6 +255,12 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     ${letterheadBackgroundHtml(branding)}
     <div class="watermark">${billType}</div>
     ${printButtonHtml(branding, 'Category-level summary bill for ' + invoice.invoice_number)}
+    ${medsAvailable ? `<div class="no-print" style="background:#f3f4f6;padding:0 12px 12px;text-align:center;">
+        <label style="font-size:12px;color:#374151;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+            <input type="checkbox" ${includeMeds ? 'checked' : ''} onchange="var u=new URL(location.href); if(this.checked){u.searchParams.delete('meds');}else{u.searchParams.set('meds','0');} location.href=u.toString();" />
+            Include medicines on this bill
+        </label>
+    </div>` : ''}
     <table class="print-layout-table">
         <thead><tr><td class="print-layout-header-spacer"></td></tr></thead>
         <tbody><tr><td>

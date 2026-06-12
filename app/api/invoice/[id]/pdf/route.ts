@@ -121,7 +121,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const branding = await getBillBranding(organizationId!);
         const pharmacy = getPharmacyBranding(organizationId!);
         const sections = await getBillSections(organizationId!, 'invoice');
-        const html = generateInvoiceHTML(invoice, branding, pharmacy, sections, opdDoctor, tpaProviderName)
+
+        // "Include medicines" toggle. When ?meds=0 is passed, drop the pharmacy /
+        // medicine line items from the detailed bill so they're excluded from both the
+        // printed list and the recomputed totals (deriveInvoiceTotals reads invoice.items).
+        const includeMeds = req.nextUrl.searchParams.get('meds') !== '0';
+        const isMedicineItem = (i: any) => String(i.service_category || i.department || '').toLowerCase() === 'pharmacy';
+        const isPharmacyInvoice = invoice.invoice_type === 'PHARMACY';
+        const medsAvailable = !isPharmacyInvoice && (invoice.items || []).some(isMedicineItem);
+        if (medsAvailable && !includeMeds) {
+            invoice.items = (invoice.items || []).filter((i: any) => !isMedicineItem(i));
+        }
+
+        const html = generateInvoiceHTML(invoice, branding, pharmacy, sections, opdDoctor, tpaProviderName, medsAvailable, includeMeds)
 
         // Return HTML for browser viewing (works for both API key and regular auth)
         return new NextResponse(html, {
@@ -156,7 +168,7 @@ function numberToWords(n: number): string {
     return (n < 0 ? 'Minus ' : '') + result + ' Only';
 }
 
-function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { name: string; division: string; address: string; gstin: string }, sections: any, opdDoctor: string = '', tpaProviderName: string = '') {
+function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { name: string; division: string; address: string; gstin: string }, sections: any, opdDoctor: string = '', tpaProviderName: string = '', medsAvailable: boolean = false, includeMeds: boolean = true) {
     const items = invoice.items || []
     const payments = invoice.payments || []
     const creditNotes = (invoice as any).credit_notes || []
@@ -273,6 +285,12 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
 <body>
     ${isPharmacyBill ? '' : letterheadBackgroundHtml(branding)}
     ${printButtonHtml(branding, 'Detailed bill for ' + invoice.invoice_number)}
+    ${medsAvailable ? `<div class="no-print" style="background:#f3f4f6;padding:0 12px 12px;text-align:center;">
+        <label style="font-size:12px;color:#374151;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+            <input type="checkbox" ${includeMeds ? 'checked' : ''} onchange="var u=new URL(location.href); if(this.checked){u.searchParams.delete('meds');}else{u.searchParams.set('meds','0');} location.href=u.toString();" />
+            Include medicines on this bill
+        </label>
+    </div>` : ''}
 
     ${isPharmacyBill ? '<div>' : '<table class="print-layout-table"><thead><tr><td class="print-layout-header-spacer"></td></tr></thead><tbody><tr><td>'}
             <div class="bill-container">
