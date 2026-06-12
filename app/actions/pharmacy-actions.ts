@@ -306,9 +306,9 @@ export async function generateInvoice(
 
         // 2.5 IPD AUTO-LINK: if this patient is currently admitted, post the
         // dispensed medicines as line items on their active IPD bill.
-        // If paymentMethod is 'Credit', also create a standalone Pharmacy invoice
-        // linked to the admission so reception can track the pending amount.
-        // For Cash/Card/UPI, just post to IPD bill silently (existing behaviour).
+        // For ALL payment methods (Cash/Card/UPI/Credit), post to the IPD bill.
+        // The IPD invoice already tracks balance_due and is visible at reception.
+        // No separate PHM invoice is created for IPD patients.
         if (patientId !== 'WALKIN') {
             const activeAdmission = await db.admissions.findFirst({
                 where: { patient_id: patientId, status: 'Admitted', organizationId },
@@ -331,93 +331,10 @@ export async function generateInvoice(
                     });
                 }
 
-                // Credit mode: create a trackable pharmacy invoice linked to the admission
-                // so reception can see it and collect payment at discharge.
-                if (paymentMethod === 'Credit') {
-                    const netAmount = totalAmount + totalTax;
-                    const cgst = totalTax / 2;
-                    const sgst = totalTax / 2;
+                const netAmount = totalAmount + totalTax;
 
-                    const creditInvoice = await db.invoices.create({
-                        data: {
-                            invoice_number: await generateSequentialNumber(organizationId, 'PHM', db),
-                            patient_id: patientId,
-                            admission_id: activeAdmission.admission_id,
-                            invoice_type: 'Pharmacy',
-                            status: 'Final',          // unpaid — pending collection
-                            total_amount: totalAmount,
-                            total_discount: 0,
-                            net_amount: netAmount,
-                            paid_amount: 0,
-                            balance_due: netAmount,   // full amount pending
-                            total_tax: totalTax,
-                            cgst_amount: cgst,
-                            sgst_amount: sgst,
-                            igst_amount: 0,
-                            is_inter_state: false,
-                            notes: `Credit pharmacy bill — to be collected at discharge`,
-                            organizationId,
-                            ...(backdatedAt ? { created_at: backdatedAt } : {}),
-                            ...(options.doctorId ? { doctor_id: options.doctorId } : {}),
-                            ...(options.doctorName ? { doctor_name: options.doctorName } : {}),
-                        },
-                    });
-
-                    for (const item of invoiceItems) {
-                        await db.invoice_items.create({
-                            data: {
-                                invoice_id: creditInvoice.id,
-                                department: 'Pharmacy',
-                                description: `${item.medicine_name} (Batch: ${item.batch_no})`,
-                                quantity: item.qty,
-                                unit_price: item.unit_price,
-                                total_price: item.unit_price * item.qty,
-                                discount: 0,
-                                net_price: item.net_price,
-                                tax_rate: item.tax_rate,
-                                tax_amount: item.tax_amount,
-                                hsn_sac_code: item.hsn_sac_code,
-                                service_category: 'Pharmacy',
-                                organizationId,
-                            },
-                        });
-                    }
-
-                    await logAudit({
-                        action: 'PHARMACY_CREDIT_BILL_CREATED',
-                        module: 'Pharmacy',
-                        entity_type: 'invoice',
-                        entity_id: creditInvoice.invoice_number,
-                        details: JSON.stringify({
-                            patientId,
-                            admission_id: activeAdmission.admission_id,
-                            invoice_number: creditInvoice.invoice_number,
-                            total: netAmount,
-                        }),
-                    });
-
-                    revalidatePath('/pharmacy/billing');
-                    revalidatePath('/reception/ipd');
-                    return {
-                        success: true,
-                        total: netAmount,
-                        subtotal: totalAmount,
-                        tax: totalTax,
-                        cgst,
-                        sgst,
-                        invoice_id: creditInvoice.id,
-                        invoice_number: creditInvoice.invoice_number,
-                        ipd_admission_id: activeAdmission.admission_id,
-                        ipd_posted: true,
-                        credit_bill: true,
-                        items: invoiceItems,
-                        message: `Credit bill created and posted to IPD admission ${activeAdmission.admission_id}. Payment pending at discharge.`,
-                    };
-                }
-
-                // Cash/Card/UPI for IPD — post silently, no separate invoice
                 await logAudit({
-                    action: 'PHARMACY_POSTED_TO_IPD',
+                    action: paymentMethod === 'Credit' ? 'PHARMACY_CREDIT_POSTED_TO_IPD' : 'PHARMACY_POSTED_TO_IPD',
                     module: 'Pharmacy',
                     entity_type: 'admission',
                     entity_id: activeAdmission.admission_id,
@@ -425,23 +342,27 @@ export async function generateInvoice(
                         patientId,
                         admission_id: activeAdmission.admission_id,
                         itemCount: invoiceItems.length,
-                        total: totalAmount + totalTax,
+                        total: netAmount,
                         paymentMethod,
                     }),
                 });
 
                 revalidatePath('/pharmacy/billing');
+                revalidatePath('/reception/ipd');
                 return {
                     success: true,
-                    total: totalAmount + totalTax,
+                    total: netAmount,
                     subtotal: totalAmount,
                     tax: totalTax,
                     cgst: totalTax / 2,
                     sgst: totalTax / 2,
                     ipd_admission_id: activeAdmission.admission_id,
                     ipd_posted: true,
+                    credit_bill: paymentMethod === 'Credit',
                     items: invoiceItems,
-                    message: `Posted to IPD bill of admission ${activeAdmission.admission_id} — no separate pharmacy invoice created.`,
+                    message: paymentMethod === 'Credit'
+                        ? `Posted to IPD bill (${activeAdmission.admission_id}) as credit — collect at discharge.`
+                        : `Posted to IPD bill of admission ${activeAdmission.admission_id}.`,
                 };
             }
         }
