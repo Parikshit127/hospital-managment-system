@@ -71,9 +71,16 @@ export async function createInvoice(data: {
     // Consulting doctor (OPD bills) — captured at billing time so the bill header shows it
     doctor_name?: string;
     doctor_id?: string;
+    // When set (Master Billing OPD counter), a consulting doctor MUST be provided so the
+    // bill header + MIS always show a doctor. Other callers (ER/reception) leave it off.
+    require_doctor?: boolean;
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
+
+        if (data.require_doctor && !data.doctor_id && !(data.doctor_name || '').trim()) {
+            return { success: false, error: 'Consulting doctor is required for this bill.' };
+        }
 
         // Phase 4: Period Locking
         await checkPeriodLock(db);

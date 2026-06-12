@@ -178,6 +178,7 @@ export default function ReceptionGenerateBillPage() {
 
     const handleGenerateBill = async () => {
         if (!selectedPatient) return toast.error('Please select a patient');
+        if (!selectedDoctorId) return toast.error('Please select the Consulting Doctor');
         if (items.length === 0) return toast.error('Please add at least one item');
         if (preAuthBlocked) return toast.error('Pre-authorization required. Obtain TPA approval before billing.');
 
@@ -195,6 +196,7 @@ export default function ReceptionGenerateBillPage() {
                 notes: 'Generated from Reception Billing',
                 doctor_id: selectedDoctorId || undefined,
                 doctor_name: selectedDoctor?.name || undefined,
+                require_doctor: true,
                 billing_patient_type: patientType,
                 corporate_id: patientType === 'corporate' ? selectedPatient.corporate_id : undefined,
                 tpa_provider_id: patientType === 'tpa_insurance' ? activePolicy?.provider?.id : undefined,
@@ -368,21 +370,24 @@ export default function ReceptionGenerateBillPage() {
                                         >Change Patient</button>
                                     </div>
 
-                                    {/* Consulting doctor — saved on the bill so the printed bill header shows it */}
+                                    {/* Consulting doctor — required, saved on the bill so the printed bill header + MIS show it */}
                                     <div className="mt-3">
-                                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Consulting Doctor</label>
+                                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Consulting Doctor <span className="text-red-500">*</span></label>
                                         <select
                                             value={selectedDoctorId}
                                             onChange={e => setSelectedDoctorId(e.target.value)}
-                                            className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+                                            className={`w-full px-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-orange-500 ${selectedDoctorId ? 'border-gray-300 focus:border-orange-500' : 'border-red-300 focus:border-red-500'}`}
                                         >
-                                            <option value="">— Select consulting doctor —</option>
+                                            <option value="">— Select consulting doctor (required) —</option>
                                             {doctors.map(d => (
                                                 <option key={d.id} value={d.id}>
                                                     {d.name}{d.specialty ? ` · ${d.specialty}` : ''}
                                                 </option>
                                             ))}
                                         </select>
+                                        {!selectedDoctorId && (
+                                            <p className="text-[10px] text-red-500 mt-1">Doctor is required to generate the bill.</p>
+                                        )}
                                     </div>
                                     {/* Pre-auth blocking warning */}
                                     {preAuthBlocked && (
@@ -708,7 +713,7 @@ export default function ReceptionGenerateBillPage() {
                             <div className="p-6 pt-0">
                                 <button
                                     onClick={handleGenerateBill}
-                                    disabled={!selectedPatient || items.length === 0 || isSaving || preAuthBlocked}
+                                    disabled={!selectedPatient || !selectedDoctorId || items.length === 0 || isSaving || preAuthBlocked}
                                     className="w-full py-4 bg-orange-500 hover:bg-teal-400 text-slate-900 font-black uppercase tracking-wider rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
                                     {isSaving && <Loader2 className="h-5 w-5 animate-spin" />}
