@@ -234,6 +234,7 @@ export default function PharmacyPage() {
                 billDateTime: billDateTime || undefined,
                 doctorId: doctorId || undefined,
                 doctorName: doctorName || undefined,
+                paymentMethod: paymentMethod,
             });
             if (res.success) {
                 setInvoiceResult(res);

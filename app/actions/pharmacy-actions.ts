@@ -115,7 +115,7 @@ export async function getInventory() {
 export async function generateInvoice(
     patientId: string,
     items: any[],
-    optionsOrWalkInName?: string | { walkInName?: string; billDateTime?: string; doctorId?: string; doctorName?: string }
+    optionsOrWalkInName?: string | { walkInName?: string; billDateTime?: string; doctorId?: string; doctorName?: string; paymentMethod?: string }
 ) {
     try {
         const { db, organizationId } = await requireTenantContext();
@@ -129,6 +129,7 @@ export async function generateInvoice(
             doctorName: rawOptions.doctorName?.trim() || 'Self',
         };
         const walkInName = options.walkInName;
+        const paymentMethod = options.paymentMethod || 'Cash';
         // For walk-in/OTC sales the patient name (if the cashier entered one) is
         // stored on the invoice itself, since all walk-ins share one OPD_REG record.
         const walkInLabel = patientId === 'WALKIN' ? (walkInName || '').trim() : '';
@@ -367,12 +368,12 @@ export async function generateInvoice(
                 invoice_number: await generateSequentialNumber(organizationId, 'PHM', db),
                 patient_id: patientId,
                 invoice_type: 'Pharmacy',
-                status: 'Final',
+                status: 'Paid',
                 total_amount: totalAmount,
                 total_discount: 0,
                 net_amount: netAmount,
-                paid_amount: 0,
-                balance_due: netAmount,
+                paid_amount: netAmount,
+                balance_due: 0,
                 total_tax: totalTax,
                 cgst_amount: cgst,
                 sgst_amount: sgst,
@@ -407,12 +408,30 @@ export async function generateInvoice(
             });
         }
 
+        // Record a Payment record immediately since OPD pharmacy collects payment on generate
+        const payment = await db.payments.create({
+            data: {
+                receipt_number: await genRcpNum(organizationId, db),
+                invoice_id: invoice.id,
+                amount: netAmount,
+                payment_method: paymentMethod,
+                payment_type: 'Full',
+                status: 'Completed',
+                organizationId,
+                ...(backdatedAt ? { created_at: backdatedAt } : {}),
+            }
+        });
+
         // 4. Post to GL and GST register
         await postInvoiceToGL(invoice.id).catch(err =>
             console.error('GL posting failed for pharmacy invoice:', invoice.id, err)
         );
         await syncInvoiceToGSTRegister(invoice.id).catch(err =>
             console.error('GST sync failed for pharmacy invoice:', invoice.id, err)
+        );
+        const { postPaymentToGL } = await import('@/app/actions/gl-actions');
+        postPaymentToGL(payment.id).catch(err =>
+            console.error('GL payment posting failed for pharmacy invoice:', payment.id, err)
         );
 
         // 5. Audit log
@@ -429,6 +448,7 @@ export async function generateInvoice(
                 billDateTime: backdatedAt ? backdatedAt.toISOString() : undefined,
                 doctorId: options.doctorId || undefined,
                 doctorName: options.doctorName || undefined,
+                paymentMethod,
             }),
         });
 
@@ -505,7 +525,7 @@ export async function processDoctorOrder(orderId: number, paymentMethod: string 
         if (!dispenseRes.success) return dispenseRes;
 
         // 4. Mark as paid if it's an OPD patient (IPD is handled by dispenseMedicine → postChargeToIpdBill)
-        if (!order.is_ipd_linked) {
+        if (!dispenseRes.ipd_posted) {
             await markOrderAsPaid(orderId, paymentMethod);
         }
 
@@ -928,13 +948,21 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
             include: { items: true },
         });
 
+        const activeAdmission = order?.patient_id ? await db.admissions.findFirst({
+            where: { patient_id: order.patient_id, status: 'Admitted', organizationId },
+            select: { admission_id: true },
+        }) : null;
+
+        const isIpdPatient = !!(order?.is_ipd_linked || order?.admission_id || activeAdmission);
+        const targetAdmissionId = order?.admission_id || activeAdmission?.admission_id;
+
         let invoiceId: number | null = null;
 
-        if (order?.admission_id && order?.is_ipd_linked) {
+        if (isIpdPatient && targetAdmissionId) {
             // IPD path: post charges to IPD bill
             for (const detail of dispensedDetails) {
                 await postChargeToIpdBill({
-                    admission_id: order.admission_id!,
+                    admission_id: targetAdmissionId,
                     source_module: 'pharmacy',
                     source_ref_id: `PHARM-${orderId}-${detail.medicine_id}`,
                     description: `Pharmacy: ${detail.medicine_name} x${detail.quantity}`,
@@ -1015,7 +1043,7 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
             subtotal: totalAmount,
             tax: totalTax,
             invoice_id: invoiceId,
-            ipd_posted: !!(order?.admission_id && order?.is_ipd_linked),
+            ipd_posted: isIpdPatient && !!targetAdmissionId,
         };
     } catch (error: any) {
         return { success: false, error: error.message };

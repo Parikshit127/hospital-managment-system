@@ -282,7 +282,11 @@ export async function getInvoices(filters?: {
             const where: any = {};
             if (filters?.status) where.status = filters.status;
             if (filters?.patient_id) where.patient_id = filters.patient_id;
-            if (filters?.invoice_type) where.invoice_type = filters.invoice_type;
+            if (filters?.invoice_type) {
+                where.invoice_type = filters.invoice_type;
+            } else if (excludePharmacy) {
+                where.invoice_type = { not: 'Pharmacy' };
+            }
             if (filters?.mobile_number) {
                 where.patient = { phone: { contains: filters.mobile_number } };
             }
