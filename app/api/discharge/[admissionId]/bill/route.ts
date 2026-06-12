@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { ensureIPDRoomChargesAccrued } from '@/app/actions/ipd-billing-helpers'
-import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, type BillBranding } from '@/app/lib/bill-branding';
+import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, deriveInvoiceTotals, type BillBranding } from '@/app/lib/bill-branding';
 import { getBillSections } from '@/app/lib/bill-sections';
 import { formatDoctorName } from '@/app/lib/format-name';
 
@@ -139,13 +139,9 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
     const dischargeDate = admission.discharge_date ? fmtBillDate(admission.discharge_date) : fmtBillDate(new Date());
     const los = Math.max(1, Math.ceil((new Date(admission.discharge_date || new Date()).getTime() - new Date(admission.admission_date).getTime()) / (1000 * 60 * 60 * 24)));
 
-    const total = Number(invoice.total_amount || 0);
-    const totalDiscount = Number(invoice.total_discount || 0);
-    const totalTax = Number(invoice.total_tax || 0);
-    // Net = gross − discount + tax (live), so it always reflects the current discount.
-    const net = total - totalDiscount + totalTax;
-    const paid = Number(invoice.paid_amount || 0);
-    const balance = net - paid;
+    // Derive gross/discount/tax/net from the line items so the summary always matches
+    // the charges shown above it (stored header totals can drift). See deriveInvoiceTotals.
+    const { gross: total, discount: totalDiscount, tax: totalTax, net, paid, balance } = deriveInvoiceTotals(invoice);
 
     // Consolidate per-day Room + Nursing rows into single summary rows
     const consolidatedItems: any[] = [];
@@ -336,7 +332,11 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 ${creditNoteTotal > 0 ? `<tr><td style="padding:4px 12px;font-size:11px;color:#0891b2;">Credit Notes Applied</td><td style="padding:4px 12px;font-size:11px;text-align:right;color:#0891b2;">-${creditNoteTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
                                 ${depositTotal > 0 ? `<tr><td style="padding:4px 12px;font-size:11px;color:#7c3aed;">Deposits Applied</td><td style="padding:4px 12px;font-size:11px;text-align:right;color:#7c3aed;">-${depositTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
                                 <tr><td style="padding:4px 12px;font-size:11px;color:#059669;">Total Paid</td><td style="padding:4px 12px;font-size:11px;text-align:right;color:#059669;">${paid.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
-                                ${balance > 0 ? `<tr style="background:#fef2f2;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#dc2626;">Balance Due</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#dc2626;">${balance.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : `<tr style="background:#f0fdf4;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#059669;">FULLY PAID</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#059669;">&#10003;</td></tr>`}
+                                ${balance > 0
+                                    ? `<tr style="background:#fef2f2;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#dc2626;">Balance Due</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#dc2626;">${balance.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`
+                                    : balance < 0
+                                        ? `<tr style="background:#eff6ff;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#1d4ed8;">Advance / Credit Balance</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#1d4ed8;">${Math.abs(balance).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`
+                                        : `<tr style="background:#f0fdf4;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#059669;">FULLY PAID</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#059669;">&#10003;</td></tr>`}
                             </table>
                         </div>
 

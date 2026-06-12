@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
-import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, fmtBillDateTime, type BillBranding } from '@/app/lib/bill-branding';
+import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, fmtBillDateTime, deriveInvoiceTotals, type BillBranding } from '@/app/lib/bill-branding';
 import { getBillSections } from '@/app/lib/bill-sections';
 import { formatDoctorName } from '@/app/lib/format-name';
 
@@ -152,15 +152,9 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     if (billingType === 'tpa_insurance') patientCategory = 'TPA / Insurance';
     else if (billingType === 'corporate') patientCategory = 'Corporate';
 
-    const total = Number(invoice.total_amount || 0);
-    const totalDiscount = Number(invoice.total_discount || 0);
-    const totalTax = Number(invoice.total_tax || 0);
-    // Net = gross − discount + tax (the definition), computed live so it always
-    // reflects the current discount. The stored net_amount can go stale when a
-    // discount/package is applied without the invoice header being recalculated.
-    const net = total - totalDiscount + totalTax;
-    const paid = Number(invoice.paid_amount || 0);
-    const balance = net - paid;
+    // Derive totals from line items so the summary always matches the charges shown
+    // (stored header totals can drift). See deriveInvoiceTotals.
+    const { gross: total, discount: totalDiscount, tax: totalTax, net, paid, balance } = deriveInvoiceTotals(invoice);
 
     // Group items by service_category for MEDNET-style detail rows
     const fmtDate = fmtBillDate;

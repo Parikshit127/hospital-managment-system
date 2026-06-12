@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { validateZealthixApiKey } from '@/app/lib/zealthix/auth'
-import { getBillBranding, inlineHeaderHtml, billFooterHtml, letterheadBackgroundHtml, letterheadCss, printButtonHtml, fmtBillDate, type BillBranding } from '@/app/lib/bill-branding'
+import { getBillBranding, inlineHeaderHtml, billFooterHtml, letterheadBackgroundHtml, letterheadCss, printButtonHtml, fmtBillDate, deriveInvoiceTotals, type BillBranding } from '@/app/lib/bill-branding'
 import { getPharmacyBranding } from '@/app/lib/pharmacy-branding'
 import { getBillSections } from '@/app/lib/bill-sections'
 import { formatDoctorName } from '@/app/lib/format-name'
@@ -168,14 +168,9 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
         ? invoice.notes.trim()
         : (patient.full_name || '-')
     const admission = invoice.admission || null
-    const total = Number(invoice.total_amount || 0)
-    const totalDiscount = Number(invoice.total_discount || 0)
-    const totalTax = Number(invoice.total_tax || 0)
-    // Net = gross − discount + tax (live), so it always reflects the current
-    // discount even if the stored net_amount wasn't recalculated.
-    const net = total - totalDiscount + totalTax
-    const paid = Number(invoice.paid_amount || 0)
-    const balance = net - paid
+    // Derive totals from line items so the summary always matches the charges shown
+    // (stored header totals can drift). See deriveInvoiceTotals.
+    const { gross: total, discount: totalDiscount, tax: totalTax, net, paid, balance } = deriveInvoiceTotals(invoice)
     const isInterState = invoice.is_inter_state || false
 
     const fmtDate = fmtBillDate

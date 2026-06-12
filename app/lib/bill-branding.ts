@@ -186,6 +186,32 @@ export function fmtBillDateTime(d: any): string {
     return dt.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
+// ─── Invoice totals (single source of truth for every bill/receipt) ──────────
+// Bills must be internally consistent: the summary (Gross − Discount + Tax = Net)
+// has to match the line items shown above it. The stored invoice header can drift
+// (e.g. total_amount saved as the net, or a line discount applied without recalc),
+// so we ALWAYS recompute from the line items when they exist and only fall back to
+// the stored header for item-less invoices (e.g. a deposit-only interim bill).
+export function deriveInvoiceTotals(invoice: any) {
+    const items: any[] = invoice?.items || [];
+    const hasItems = items.length > 0;
+    // Gross = sum of line totals (pre-discount). Reliable from items; fall back to header.
+    const gross = hasItems
+        ? items.reduce((s, i) => s + Number(i.total_price || 0), 0)
+        : Number(invoice?.total_amount || 0);
+    // Discount may be line-level (stored on items) and/or bill-level (stored only on the
+    // header via requestDiscount). Take the larger so neither kind is dropped.
+    const itemDiscount = items.reduce((s, i) => s + Number(i.discount || 0), 0);
+    const discount = Math.max(itemDiscount, Number(invoice?.total_discount || 0));
+    const tax = hasItems
+        ? items.reduce((s, i) => s + Number(i.tax_amount || 0), 0)
+        : Number(invoice?.total_tax || 0);
+    const net = gross - discount + tax;
+    const paid = Number(invoice?.paid_amount || 0);
+    const balance = net - paid;
+    return { gross, discount, tax, net, paid, balance };
+}
+
 // ─── Utility ─────────────────────────────────────────────────────────────────
 
 function escHtml(s: string): string {
