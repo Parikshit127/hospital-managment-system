@@ -4,6 +4,7 @@ import React, { useRef } from 'react';
 import { Printer, X } from 'lucide-react';
 import { PrintLetterhead, LETTERHEAD_PRINT_CSS, letterheadHtml } from '@/app/components/print/PrintLetterhead';
 import type { BillBranding } from '@/app/lib/bill-branding';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 export type PrescriptionData = {
     patient: {
@@ -47,7 +48,7 @@ export function PrescriptionPrint({ data, onClose, branding }: PrescriptionPrint
 
         const doctorRightHtml = `
             <div style="font-family:Arial,sans-serif;">
-                <div style="font-size:15px;font-weight:bold;color:#1e3a6e;">Dr. ${data.doctor.name}</div>
+                <div style="font-size:15px;font-weight:bold;color:#1e3a6e;">${formatDoctorName(data.doctor.name)}</div>
                 ${data.doctor.specialty ? `<div style="font-size:11px;color:#555;margin-top:2px;">${data.doctor.specialty}</div>` : ''}
                 ${data.doctor.reg_number ? `<div style="font-size:10px;color:#888;margin-top:1px;">Reg: ${data.doctor.reg_number}</div>` : ''}
             </div>
@@ -81,7 +82,7 @@ export function PrescriptionPrint({ data, onClose, branding }: PrescriptionPrint
             <body>
                 <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
                     <div style="font-family:Arial,sans-serif;text-align:right;">
-                        <div style="font-size:15px;font-weight:bold;color:#1e3a6e;">Dr. ${data.doctor.name}</div>
+                        <div style="font-size:15px;font-weight:bold;color:#1e3a6e;">${formatDoctorName(data.doctor.name)}</div>
                         ${data.doctor.specialty ? `<div style="font-size:11px;color:#555;margin-top:2px;">${data.doctor.specialty}</div>` : ''}
                         ${data.doctor.reg_number ? `<div style="font-size:10px;color:#888;margin-top:1px;">Reg: ${data.doctor.reg_number}</div>` : ''}
                     </div>
@@ -121,7 +122,7 @@ export function PrescriptionPrint({ data, onClose, branding }: PrescriptionPrint
                         branding={branding}
                         rightSlot={
                             <div>
-                                <p className="font-bold text-sm" style={{ color: '#1e3a6e' }}>Dr. {data.doctor.name}</p>
+                                <p className="font-bold text-sm" style={{ color: '#1e3a6e' }}>{formatDoctorName(data.doctor.name)}</p>
                                 {data.doctor.specialty && <p className="text-xs text-gray-500">{data.doctor.specialty}</p>}
                                 {data.doctor.reg_number && <p className="text-xs text-gray-400">Reg: {data.doctor.reg_number}</p>}
                             </div>
@@ -197,7 +198,7 @@ export function PrescriptionPrint({ data, onClose, branding }: PrescriptionPrint
                         <div className="flex justify-end mt-10 pt-3 border-t border-gray-300">
                             <div className="text-center">
                                 <div className="w-44 border-t border-gray-900 mt-10 pt-1">
-                                    <p className="text-xs font-bold">Dr. {data.doctor.name}</p>
+                                    <p className="text-xs font-bold">{formatDoctorName(data.doctor.name)}</p>
                                     <p className="text-[10px] text-gray-400">Signature</p>
                                 </div>
                             </div>

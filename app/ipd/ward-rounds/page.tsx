@@ -5,6 +5,7 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { Users, Search, ClipboardEdit } from 'lucide-react';
 import { getIPDAdmissions, recordWardRound } from '@/app/actions/ipd-actions';
 import { useToast } from '@/app/components/ui/Toast';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 export default function WardRoundsPage() {
     const toast = useToast();
@@ -90,7 +91,7 @@ export default function WardRoundsPage() {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 font-black text-gray-900">{a.patient?.full_name}</td>
-                                    <td className="px-6 py-4 text-gray-500">Dr. {a.doctor_name}</td>
+                                    <td className="px-6 py-4 text-gray-500">{formatDoctorName(a.doctor_name)}</td>
                                     <td className="px-6 py-4 font-bold text-gray-700">{a.daysAdmitted} Days</td>
                                     <td className="px-6 py-4 text-right">
                                         <button onClick={() => { setSelectedAd(a); setModalOpen(true); }} className="text-orange-700 bg-orange-50 border border-teal-100 hover:bg-orange-100 hover:border-orange-200 px-3 py-1.5 rounded-lg font-bold text-xs inline-flex items-center gap-2 transition-all">

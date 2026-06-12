@@ -9,6 +9,7 @@ import {
 import {
     getWardPatients, getWardsList, getNursingNotes, addNursingNote
 } from '@/app/actions/nurse-actions';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 export default function NursePatientsPage() {
     const [nurseId, setNurseId] = useState('');
@@ -149,7 +150,7 @@ export default function NursePatientsPage() {
                                     {selectedPatient.patientName}
                                 </h3>
                                 <p className="text-xs text-gray-400 mt-0.5">
-                                    {selectedPatient.wardName} &middot; Bed #{selectedPatient.bedId || 'N/A'} &middot; Dr. {selectedPatient.doctorName || 'Unassigned'}
+                                    {selectedPatient.wardName} &middot; Bed #{selectedPatient.bedId || 'N/A'} &middot; {formatDoctorName(selectedPatient.doctorName) || 'Unassigned'}
                                 </p>
                             </div>
                             <button

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, UserRound, BedDouble, Activity, Bell, Maximize2, Minimize2, Clock, CalendarDays } from 'lucide-react';
 import { HistorySidebar } from './HistorySidebar';
 import { QuickEntryConsole } from './QuickEntryConsole';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 export function NursingActionWorkspace({ admission }: { admission: any }) {
     return (
@@ -38,7 +39,7 @@ export function NursingActionWorkspace({ admission }: { admission: any }) {
                 <div className="flex items-center gap-4">
                     <div className="hidden md:flex items-center gap-2 bg-rose-50 px-3 py-1.5 rounded-lg text-rose-600 border border-rose-100">
                         <Activity className="h-4 w-4" />
-                        <span className="text-xs font-bold">Dr. {admission.doctor_name || 'Unassigned'}</span>
+                        <span className="text-xs font-bold">{admission.doctor_name ? formatDoctorName(admission.doctor_name) : 'Dr. Unassigned'}</span>
                     </div>
                     <button className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-full transition-colors relative">
                         <Bell className="h-5 w-5" />

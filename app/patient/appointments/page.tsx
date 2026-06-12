@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { formatDoctorName } from '@/app/lib/format-name';
 import {
     Calendar,
     Clock,
@@ -273,7 +274,7 @@ export default function MyAppointmentsPage() {
                                     </div>
                                     <div>
                                         <p className="font-bold text-gray-900">
-                                            Dr. {appt.doctor_name || 'Unassigned'}
+                                            {formatDoctorName(appt.doctor_name) || 'Unassigned'}
                                         </p>
                                         <p className="text-sm text-gray-500 mt-0.5">
                                             {appt.department || 'General'}
@@ -352,7 +353,7 @@ export default function MyAppointmentsPage() {
                             <h3 className="text-lg font-bold text-gray-900">Cancel Appointment</h3>
                             <p className="text-sm text-gray-500 mt-1">
                                 Are you sure you want to cancel your appointment with{' '}
-                                <span className="font-bold">Dr. {cancelTarget.doctor_name}</span> on{' '}
+                                <span className="font-bold">{formatDoctorName(cancelTarget.doctor_name)}</span> on{' '}
                                 {new Date(cancelTarget.appointment_date).toLocaleDateString(undefined, {
                                     weekday: 'long',
                                     month: 'long',
@@ -413,7 +414,7 @@ export default function MyAppointmentsPage() {
                             </h3>
                             <p className="text-sm text-gray-500 mt-1">
                                 Pick a new date for your appointment with{' '}
-                                <span className="font-bold">Dr. {rescheduleTarget.doctor_name}</span>
+                                <span className="font-bold">{formatDoctorName(rescheduleTarget.doctor_name)}</span>
                             </p>
                         </div>
 

@@ -2590,7 +2590,7 @@ export default function DoctorDashboard() {
                   <div>
                     <h3 className="text-sm font-black text-teal-800 flex items-center gap-2">
                       <Activity className="h-4 w-4" />
-                      Good morning, Dr. {doctorName.split(' ')[0]} — Here&apos;s your day
+                      Good morning, Dr. {doctorName.replace(/^\s*(dr\.?|doctor)\s+/i, '').split(' ')[0]} — Here&apos;s your day
                     </h3>
                     <p className="text-xs text-orange-600 mt-0.5">
                       {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}

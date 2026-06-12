@@ -7,6 +7,7 @@ import { notifyPatient } from '@/app/lib/notify-patient';
 import { sendWhatsAppMessage, sendWhatsAppTemplate, formatPhoneNumber } from '@/app/lib/whatsapp';
 import { appointmentConfirmationMsg, appointmentCancellationMsg } from '@/app/lib/whatsapp-templates';
 import { resolveOPDConfig } from '@/app/lib/opd-config';
+import { formatDoctorName } from '@/app/lib/format-name';
 import type {
     ActionResponse,
     PaginatedResponse,
@@ -410,7 +411,7 @@ export async function checkInPatient(appointmentId: string) {
         if (appointment.patient?.phone) {
             await sendWhatsAppMessage({
                 to: formatPhoneNumber(appointment.patient.phone),
-                message: `*${orgName} — Queue Token*\n\nDear ${appointment.patient.full_name},\n\nYour token number is *#${tokenNumber}*.\nDoctor: *Dr. ${appointment.doctor_name || 'Doctor'}*\nQueue position: *${aheadCount + 1}*\nEstimated wait: *~${estimatedWait} min*\n\nYou will be notified when it's your turn.`
+                message: `*${orgName} — Queue Token*\n\nDear ${appointment.patient.full_name},\n\nYour token number is *#${tokenNumber}*.\nDoctor: *${formatDoctorName(appointment.doctor_name) || 'Dr. Doctor'}*\nQueue position: *${aheadCount + 1}*\nEstimated wait: *~${estimatedWait} min*\n\nYou will be notified when it's your turn.`
             }).catch(err => console.warn('[WhatsApp] Queue token failed:', err));
         }
 
@@ -483,7 +484,7 @@ export async function callNextPatient(doctorId: string) {
         if (next.patient?.phone) {
             await sendWhatsAppMessage({
                 to: formatPhoneNumber(next.patient.phone),
-                message: `*${orgName} — Your Turn!*\n\nDear ${next.patient.full_name},\n\nPlease proceed to *Dr. ${next.doctor_name || 'Doctor'}*'s consultation room.\n\nThank you for your patience.`
+                message: `*${orgName} — Your Turn!*\n\nDear ${next.patient.full_name},\n\nPlease proceed to *${formatDoctorName(next.doctor_name) || 'Dr. Doctor'}*'s consultation room.\n\nThank you for your patience.`
             }).catch(err => console.warn('[WhatsApp] Your turn alert failed:', err));
         }
 

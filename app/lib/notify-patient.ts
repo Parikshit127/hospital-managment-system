@@ -5,6 +5,7 @@
  * Non-blocking — errors are logged but never thrown.
  */
 
+import { formatDoctorName } from './format-name';
 import {
     sendAppointmentConfirmationEmail,
     sendPrescriptionEmail,
@@ -235,11 +236,11 @@ async function sendWhatsAppForEvent(phone: string, event: NotifyEvent, hospitalN
             break;
 
         case 'prescription':
-            customBody = `Your clinical summary and prescription by Dr. ${event.doctorName} are now available.\n\nDiagnosis: *${event.summaryText}*`;
+            customBody = `Your clinical summary and prescription by ${formatDoctorName(event.doctorName)} are now available.\n\nDiagnosis: *${event.summaryText}*`;
             break;
 
         case 'admission':
-            customBody = `Your admission process is complete.\nAdmitting Doctor: Dr. ${event.doctorName}\nBed/Ward: ${event.bedDetails}`;
+            customBody = `Your admission process is complete.\nAdmitting Doctor: ${formatDoctorName(event.doctorName)}\nBed/Ward: ${event.bedDetails}`;
             break;
     }
 
@@ -271,7 +272,7 @@ async function sendSMSForEvent(phone: string, event: NotifyEvent, hospitalName: 
 
     switch (event.type) {
         case 'appointment':
-            messageText = `Dear ${event.patientName}, your appointment at ${hospitalName} is confirmed for ${event.date} at ${event.time} under Dr. ${event.doctorName}. Thank you.`;
+            messageText = `Dear ${event.patientName}, your appointment at ${hospitalName} is confirmed for ${event.date} at ${event.time} under ${formatDoctorName(event.doctorName)}. Thank you.`;
             break;
 
         case 'pill_reminder':
@@ -291,11 +292,11 @@ async function sendSMSForEvent(phone: string, event: NotifyEvent, hospitalName: 
             break;
 
         case 'prescription':
-            messageText = `Dear ${event.patientName}, your prescription summary by Dr. ${event.doctorName} has been added to your record at ${hospitalName}. Details: ${event.summaryText}`;
+            messageText = `Dear ${event.patientName}, your prescription summary by ${formatDoctorName(event.doctorName)} has been added to your record at ${hospitalName}. Details: ${event.summaryText}`;
             break;
 
         case 'admission':
-            messageText = `Dear ${event.patientName}, your admission process at ${hospitalName} is complete under Dr. ${event.doctorName}. Bed/Ward: ${event.bedDetails}.`;
+            messageText = `Dear ${event.patientName}, your admission process at ${hospitalName} is complete under ${formatDoctorName(event.doctorName)}. Bed/Ward: ${event.bedDetails}.`;
             break;
     }
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { generateInterimBill, settleAndDischarge } from '@/app/actions/ipd-finance-actions';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 export default function DischargeSettlementPage() {
     const params = useParams();
@@ -141,7 +142,7 @@ export default function DischargeSettlementPage() {
                                 UHID: {billData.admission.patient_id} | Admission: {billData.admission.admission_id}
                             </p>
                             <p className="text-sm text-gray-500">
-                                Dr. {billData.admission.doctor_name} | {billData.admission.ward_name} | Bed: {billData.admission.bed_id}
+                                {formatDoctorName(billData.admission.doctor_name)} | {billData.admission.ward_name} | Bed: {billData.admission.bed_id}
                             </p>
                             <p className="text-xs text-gray-400">
                                 Admitted: {new Date(billData.admission.admission_date).toLocaleDateString('en-GB')} |

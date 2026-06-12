@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { recordVitals, getPatientVitals, getWardPatients } from '@/app/actions/nurse-actions';
 import { useToast } from '@/app/components/ui/Toast';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 export default function NurseVitalsPage() {
     const toast = useToast();
@@ -211,7 +212,7 @@ export default function NurseVitalsPage() {
                                     <div>
                                         <p className="text-sm font-bold text-orange-700">{selectedPatient.patientName}</p>
                                         <p className="text-[10px] text-orange-500">
-                                            {selectedPatient.wardName} &middot; Bed {selectedPatient.bedId || 'N/A'} &middot; Dr. {selectedPatient.doctorName || 'Unassigned'}
+                                            {selectedPatient.wardName} &middot; Bed {selectedPatient.bedId || 'N/A'} &middot; {formatDoctorName(selectedPatient.doctorName) || 'Unassigned'}
                                         </p>
                                     </div>
                                 </div>

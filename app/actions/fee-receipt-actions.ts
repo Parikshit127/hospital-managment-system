@@ -3,6 +3,7 @@
 import { requireTenantContext } from "@/backend/tenant";
 import { revalidatePath } from "next/cache";
 import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 export async function searchPatientsForReceipt(query: string) {
     try {
@@ -57,7 +58,7 @@ export async function getAvailableServicesList() {
         dbDoctors.forEach((doc: any) => {
             if (doc.consultation_fee) {
                 services.push({
-                    label: `Consultation - Dr. ${doc.name} (${doc.specialty || "Gen"})`,
+                    label: `Consultation - ${formatDoctorName(doc.name)} (${doc.specialty || "Gen"})`,
                     price: Number(doc.consultation_fee),
                     type: "Doctors",
                     doctor_id: doc.id,
@@ -66,7 +67,7 @@ export async function getAvailableServicesList() {
             }
             if (doc.follow_up_fee) {
                 services.push({
-                    label: `Follow-up - Dr. ${doc.name} (${doc.specialty || "Gen"})`,
+                    label: `Follow-up - ${formatDoctorName(doc.name)} (${doc.specialty || "Gen"})`,
                     price: Number(doc.follow_up_fee),
                     type: "Doctors",
                     doctor_id: doc.id,

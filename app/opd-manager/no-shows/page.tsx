@@ -11,6 +11,7 @@ import {
     getNoShowReport,
     markNoShow,
 } from '@/app/actions/opd-manager-actions';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 type PendingAppt = {
     appointment_id: string;
@@ -145,7 +146,7 @@ export default function NoShowsPage() {
                                                             <Phone className="h-3 w-3" /> {appt.patient.phone}
                                                         </span>
                                                     )}
-                                                    {appt.doctor_name && <span>Dr. {appt.doctor_name}</span>}
+                                                    {appt.doctor_name && <span>{formatDoctorName(appt.doctor_name)}</span>}
                                                     {appt.department && <span>{appt.department}</span>}
                                                 </div>
                                             </div>
@@ -187,7 +188,7 @@ export default function NoShowsPage() {
                                             <p className="font-bold text-gray-900 text-sm">{record.patientName}</p>
                                             <p className="text-xs text-gray-500">
                                                 {new Date(record.date).toLocaleDateString('en-GB')}
-                                                {record.doctorName && ` · Dr. ${record.doctorName}`}
+                                                {record.doctorName && ` · ${formatDoctorName(record.doctorName)}`}
                                                 {record.department && ` · ${record.department}`}
                                             </p>
                                         </div>

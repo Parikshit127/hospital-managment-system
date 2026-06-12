@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 // Called daily (e.g. 18:00) to send 24h reminders for tomorrow's appointments.
 // Secure with CRON_SECRET env var in production.
@@ -43,7 +44,7 @@ export async function GET(request: Request) {
             try {
                 await sendWhatsAppMessage({
                     to: formatPhoneNumber(appt.patient.phone),
-                    message: `*${appt.organization?.name || 'Hospital'} — Appointment Reminder*\n\nDear ${appt.patient.full_name},\n\nThis is a reminder for your appointment *tomorrow* at *${apptTime}*.\nDoctor: *Dr. ${appt.doctor_name || 'your doctor'}*\nDepartment: ${appt.department || 'OPD'}\n\nPlease arrive 10 minutes early for check-in.\n\nReply CANCEL to cancel your appointment.`,
+                    message: `*${appt.organization?.name || 'Hospital'} — Appointment Reminder*\n\nDear ${appt.patient.full_name},\n\nThis is a reminder for your appointment *tomorrow* at *${apptTime}*.\nDoctor: *${formatDoctorName(appt.doctor_name) || 'Dr. your doctor'}*\nDepartment: ${appt.department || 'OPD'}\n\nPlease arrive 10 minutes early for check-in.\n\nReply CANCEL to cancel your appointment.`,
                 });
 
                 await prisma.appointments.update({

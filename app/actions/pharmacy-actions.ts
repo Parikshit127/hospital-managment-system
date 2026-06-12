@@ -9,6 +9,7 @@ import { postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
 import { postInvoiceToGL } from '@/app/actions/gl-actions';
 import { syncInvoiceToGSTRegister } from '@/app/actions/gst-compliance-actions';
 import { generateSequentialNumber, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 // Helper: post a GL journal entry using account codes (resolves to account IDs)
 async function postPharmacyJournal(db: any, organizationId: string, data: {
@@ -313,7 +314,7 @@ export async function generateInvoice(
                 select: { admission_id: true },
             });
             if (activeAdmission) {
-                const doctorSuffix = options.doctorName ? ` — Dr. ${options.doctorName}` : '';
+                const doctorSuffix = options.doctorName ? ` — ${formatDoctorName(options.doctorName)}` : '';
                 for (const item of invoiceItems) {
                     await postChargeToIpdBill({
                         admission_id: activeAdmission.admission_id,

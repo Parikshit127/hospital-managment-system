@@ -11,6 +11,7 @@ import { getIpdServices } from '@/app/actions/ipd-master-actions';
 import { DepositTracker } from '@/app/components/ipd/DepositTracker';
 import { fetchBillBranding } from '@/app/actions/branding-actions';
 import type { BillBranding } from '@/app/lib/bill-branding';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 export default function IpdBillingPage() {
     const [admissions, setAdmissions] = useState<any[]>([]);
@@ -340,7 +341,7 @@ export default function IpdBillingPage() {
                                         <div>
                                             <h2 className="text-lg font-semibold">{billData.admission.patient_name}</h2>
                                             <p className="text-sm text-gray-500">
-                                                {billData.admission.admission_id} | Dr. {billData.admission.doctor_name}
+                                                {billData.admission.admission_id} | {formatDoctorName(billData.admission.doctor_name)}
                                             </p>
                                             <p className="text-xs text-gray-400">
                                                 {billData.admission.ward_name} | Bed: {billData.admission.bed_id} |
@@ -995,7 +996,7 @@ export default function IpdBillingPage() {
                             <div className="flex justify-between items-start border-b-2 pb-3" style={{ borderColor: branding?.accentColor || '#1e3a6e' }}>
                                 <div>
                                     <p className="text-lg font-black text-gray-900">{billData.admission.patient_name}</p>
-                                    <p className="text-xs text-gray-500 mt-0.5">{billData.admission.admission_id} | Dr. {billData.admission.doctor_name}</p>
+                                    <p className="text-xs text-gray-500 mt-0.5">{billData.admission.admission_id} | {formatDoctorName(billData.admission.doctor_name)}</p>
                                     <p className="text-xs text-gray-400">{billData.admission.ward_name} | Bed: {billData.admission.bed_id} | Day {billData.admission.days_admitted}</p>
                                     {billData.admission.diagnosis && (
                                         <p className="text-xs text-gray-400">Dx: {billData.admission.diagnosis}</p>

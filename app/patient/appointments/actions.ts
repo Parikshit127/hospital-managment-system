@@ -7,6 +7,7 @@ import { getOrCreateDailySlots } from "@/app/actions/doctor-actions";
 import { logPatientAudit } from "@/app/lib/audit";
 import { notifyPatient } from "@/app/lib/notify-patient";
 import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 export async function getAvailableDoctors() {
     try {
@@ -165,7 +166,7 @@ export async function bookAppointment(
                         items: {
                             create: [{
                                 department: doctor.specialty || 'OPD',
-                                description: `Consultation Fee - Dr. ${doctor.name}`,
+                                description: `Consultation Fee - ${formatDoctorName(doctor.name)}`,
                                 quantity: 1,
                                 unit_price: doctorFee,
                                 total_price: doctorFee,
@@ -204,7 +205,7 @@ export async function bookAppointment(
                         items: {
                             create: [{
                                 department: doctor.specialty || 'OPD',
-                                description: `Consultation Fee - Dr. ${doctor.name} (Pay at Visit)`,
+                                description: `Consultation Fee - ${formatDoctorName(doctor.name)} (Pay at Visit)`,
                                 quantity: 1,
                                 unit_price: doctorFee,
                                 total_price: doctorFee,

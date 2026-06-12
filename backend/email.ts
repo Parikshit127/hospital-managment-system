@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { getOrganizationIntegrationConfig } from '@/app/lib/secure-config';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 function escapeHtml(str: string): string {
     return str
@@ -150,7 +151,7 @@ export async function sendPrescriptionEmail(to: string, patientName: string, doc
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
             <h2 style="color: #1aab74;">New Clinical Summary Added</h2>
             <p>Dear ${escapeHtml(patientName)},</p>
-            <p>Dr. ${escapeHtml(doctorName)} has added a new clinical summary and prescription to your record.</p>
+            <p>${escapeHtml(formatDoctorName(doctorName))} has added a new clinical summary and prescription to your record.</p>
 
             <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #eee;">
                 ${summaryHtml}
@@ -172,7 +173,7 @@ export async function sendAdmissionEmail(to: string, patientName: string, bedDet
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
             <h2 style="color: #1aab74;">Admission Confirmation</h2>
             <p>Dear ${escapeHtml(patientName)},</p>
-            <p>This email confirms your admission at ${hospitalName} under the care of Dr. ${escapeHtml(doctorName)}.</p>
+            <p>This email confirms your admission at ${hospitalName} under the care of ${escapeHtml(formatDoctorName(doctorName))}.</p>
 
             <div style="background: #f0faf6; padding: 15px; border-radius: 8px; margin: 20px 0;">
                 <p style="margin: 0; font-weight: bold; color: #0f8f5e;">Your bed assignment is confirmed as:</p>
@@ -216,7 +217,7 @@ export async function sendAppointmentConfirmationEmail({
             <p>Your appointment at <strong>${escapeHtml(hospitalName)}</strong> has been successfully booked. Here are the details:</p>
 
             <div style="background: #f0faf6; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                <p style="margin: 0;"><strong>Doctor:</strong> Dr. ${escapeHtml(doctorName)}</p>
+                <p style="margin: 0;"><strong>Doctor:</strong> ${escapeHtml(formatDoctorName(doctorName))}</p>
                 <p style="margin: 8px 0 0 0;"><strong>Department:</strong> ${escapeHtml(department)}</p>
                 <p style="margin: 8px 0 0 0;"><strong>Date:</strong> ${escapeHtml(date)}</p>
                 <p style="margin: 8px 0 0 0;"><strong>Time:</strong> ${escapeHtml(time)}</p>
@@ -307,7 +308,7 @@ export async function sendDischargeEmail(to: string, patientName: string, doctor
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
             <h2 style="color: #1aab74;">Discharge Summary Ready</h2>
             <p>Dear ${escapeHtml(patientName)},</p>
-            <p>Your discharge summary has been prepared by Dr. ${escapeHtml(doctorName)} at ${escapeHtml(hospitalName)}.</p>
+            <p>Your discharge summary has been prepared by ${escapeHtml(formatDoctorName(doctorName))} at ${escapeHtml(hospitalName)}.</p>
 
             <div style="background: #f0faf6; padding: 15px; border-radius: 8px; margin: 20px 0;">
                 <p style="margin: 0; font-weight: bold; color: #0f8f5e;">Your discharge summary and follow-up instructions are available online.</p>

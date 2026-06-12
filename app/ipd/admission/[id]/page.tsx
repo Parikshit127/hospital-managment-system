@@ -35,6 +35,7 @@ import {
 } from '@/app/actions/ipd-nursing-actions';
 import { NEWSScoreBadge } from '@/app/components/ipd/NEWSScoreBadge';
 import { PreDischargeChecklist } from '@/app/components/ipd/PreDischargeChecklist';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 const TABS = [
     { id: 'overview', label: 'Overview', icon: Activity },
@@ -370,7 +371,7 @@ export default function AdmissionDetailPage() {
         const res = await changeAdmissionDoctor(data.admission_id, trimmed);
         setSavingDoctor(false);
         if (res.success) {
-            toast.success(`Doctor changed to Dr. ${trimmed}`);
+            toast.success(`Doctor changed to ${formatDoctorName(trimmed)}`);
             setShowDoctorForm(false);
             setNewDoctorName('');
             loadData();
@@ -583,7 +584,7 @@ export default function AdmissionDetailPage() {
                                 </span>
                                 <span className="flex items-center gap-1.5">
                                     <Stethoscope className="h-3.5 w-3.5 text-violet-400" />
-                                    Dr. {data.doctor_name}
+                                    {formatDoctorName(data.doctor_name)}
                                     {data.status === 'Admitted' && !showDoctorForm && (
                                         <button
                                             onClick={() => { setNewDoctorName(data.doctor_name || ''); setShowDoctorForm(true); }}
@@ -667,7 +668,7 @@ export default function AdmissionDetailPage() {
                                                 }}
                                                 className="w-full text-left px-3 py-2 hover:bg-orange-50 border-b border-gray-100 last:border-b-0"
                                             >
-                                                <p className="text-xs font-bold text-gray-800">Dr. {d.name}</p>
+                                                <p className="text-xs font-bold text-gray-800">{formatDoctorName(d.name)}</p>
                                                 <p className="text-[10px] text-gray-500">
                                                     {d.specialty || 'General'}
                                                     {d.consultation_fee != null && <> · ₹{d.consultation_fee}</>}
@@ -1352,7 +1353,7 @@ export default function AdmissionDetailPage() {
                                         ) : consultants.map((c: any) => (
                                             <div key={c.id} className="px-5 py-3 flex items-center justify-between">
                                                 <div>
-                                                    <p className="text-sm font-bold text-gray-900">Dr. {c.doctor_name}</p>
+                                                    <p className="text-sm font-bold text-gray-900">{formatDoctorName(c.doctor_name)}</p>
                                                     <p className="text-xs text-gray-400">{c.specialty ?? 'General'} · {new Date(c.consulted_at).toLocaleDateString('en-GB')}</p>
                                                     {c.notes && <p className="text-xs text-gray-500 mt-0.5 italic">{c.notes}</p>}
                                                 </div>

@@ -7,6 +7,7 @@ import {
     AlertTriangle, QrCode, Phone
 } from 'lucide-react';
 import { getTodayCheckInList, checkInPatient } from '@/app/actions/reception-actions';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 type Appointment = {
     appointment_id: string;
@@ -194,7 +195,7 @@ export default function CheckInPage() {
                                                     </span>
                                                 )}
                                                 {appt.doctor_name && (
-                                                    <span>Dr. {appt.doctor_name}</span>
+                                                    <span>{formatDoctorName(appt.doctor_name)}</span>
                                                 )}
                                                 {checkedInTime && (
                                                     <span className="flex items-center gap-1 text-orange-600">

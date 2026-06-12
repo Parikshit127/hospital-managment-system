@@ -3,6 +3,8 @@
  * Used for session messages (direct text) - NOT for campaign templates
  */
 
+import { formatDoctorName } from './format-name';
+
 export function appointmentConfirmationMsg(data: {
   patientName: string;
   doctorName: string;
@@ -11,7 +13,7 @@ export function appointmentConfirmationMsg(data: {
   time: string;
   hospitalName: string;
 }): string {
-  return `*${data.hospitalName} — Appointment Confirmed*\n\nDear ${data.patientName},\n\nYour appointment with *Dr. ${data.doctorName}* (${data.department}) is confirmed.\n\n📅 Date: *${data.date}*\n🕐 Time: *${data.time}*\n\nPlease arrive 10 minutes early with your Patient ID.\n\nThank you!`;
+  return `*${data.hospitalName} — Appointment Confirmed*\n\nDear ${data.patientName},\n\nYour appointment with *${formatDoctorName(data.doctorName)}* (${data.department}) is confirmed.\n\n📅 Date: *${data.date}*\n🕐 Time: *${data.time}*\n\nPlease arrive 10 minutes early with your Patient ID.\n\nThank you!`;
 }
 
 export function appointmentReminderMsg(data: {
@@ -20,7 +22,7 @@ export function appointmentReminderMsg(data: {
   time: string;
   hospitalName: string;
 }): string {
-  return `*${data.hospitalName} — Reminder*\n\nDear ${data.patientName},\n\nYour appointment with *Dr. ${data.doctorName}* is in *${data.time}*.\n\nPlease bring your Patient ID card.\n\nFor queries, call reception.`;
+  return `*${data.hospitalName} — Reminder*\n\nDear ${data.patientName},\n\nYour appointment with *${formatDoctorName(data.doctorName)}* is in *${data.time}*.\n\nPlease bring your Patient ID card.\n\nFor queries, call reception.`;
 }
 
 export function appointmentCancellationMsg(data: {
@@ -29,7 +31,7 @@ export function appointmentCancellationMsg(data: {
   date: string;
   hospitalName: string;
 }): string {
-  return `*${data.hospitalName} — Appointment Cancelled*\n\nDear ${data.patientName},\n\nYour appointment with *Dr. ${data.doctorName}* on *${data.date}* has been cancelled.\n\nPlease contact reception to reschedule.\n\nWe apologize for the inconvenience.`;
+  return `*${data.hospitalName} — Appointment Cancelled*\n\nDear ${data.patientName},\n\nYour appointment with *${formatDoctorName(data.doctorName)}* on *${data.date}* has been cancelled.\n\nPlease contact reception to reschedule.\n\nWe apologize for the inconvenience.`;
 }
 
 export function prescriptionReadyMsg(data: {
@@ -38,7 +40,7 @@ export function prescriptionReadyMsg(data: {
   diagnosis: string;
   hospitalName: string;
 }): string {
-  return `*${data.hospitalName} — Prescription Ready*\n\nDear ${data.patientName},\n\nDr. ${data.doctorName} has added a new prescription to your record.\n\n*Diagnosis:* ${data.diagnosis}\n\nView details in your Patient Portal.`;
+  return `*${data.hospitalName} — Prescription Ready*\n\nDear ${data.patientName},\n\n${formatDoctorName(data.doctorName)} has added a new prescription to your record.\n\n*Diagnosis:* ${data.diagnosis}\n\nView details in your Patient Portal.`;
 }
 
 export function admissionConfirmedMsg(data: {
@@ -47,7 +49,7 @@ export function admissionConfirmedMsg(data: {
   bedDetails: string;
   hospitalName: string;
 }): string {
-  return `*${data.hospitalName} — Admission Confirmed*\n\nDear ${data.patientName},\n\nYou have been admitted under the care of *Dr. ${data.doctorName}*.\n\n🛏 Bed: *${data.bedDetails}*\n\nTrack your status in the Patient Portal.\n\nWishing you a speedy recovery!`;
+  return `*${data.hospitalName} — Admission Confirmed*\n\nDear ${data.patientName},\n\nYou have been admitted under the care of *${formatDoctorName(data.doctorName)}*.\n\n🛏 Bed: *${data.bedDetails}*\n\nTrack your status in the Patient Portal.\n\nWishing you a speedy recovery!`;
 }
 
 export function labReportReadyMsg(data: {
@@ -113,5 +115,5 @@ export function newPatientCardMsg(data: {
   tokenNumber: string;
   uhid: string;
 }): string {
-  return `*New Patient Assigned*\n\nDr. ${data.doctorName},\n\nA new patient has been assigned to you:\n\n👤 *${data.patientName}*\n📋 Age: ${data.age} | Gender: ${data.gender}\n🆔 UHID: ${data.uhid}\n🔢 Token: ${data.tokenNumber}\n💬 Chief Complaint: ${data.chiefComplaint}\n\nPlease check your dashboard.`;
+  return `*New Patient Assigned*\n\n${formatDoctorName(data.doctorName)},\n\nA new patient has been assigned to you:\n\n👤 *${data.patientName}*\n📋 Age: ${data.age} | Gender: ${data.gender}\n🆔 UHID: ${data.uhid}\n🔢 Token: ${data.tokenNumber}\n💬 Chief Complaint: ${data.chiefComplaint}\n\nPlease check your dashboard.`;
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getPatientSession } from '@/app/lib/session';
 import { getTenantPrisma } from '@/backend/db';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 export async function GET() {
     const session = await getPatientSession();
@@ -31,7 +32,7 @@ export async function GET() {
             id: a.appointment_id,
             type: 'appointment' as const,
             title: `Appointment — ${a.department || 'General'}`,
-            subtitle: a.doctor_name ? `Dr. ${a.doctor_name}` : 'Doctor TBD',
+            subtitle: a.doctor_name ? formatDoctorName(a.doctor_name) : 'Doctor TBD',
             status: a.status,
             created_at: a.appointment_date,
         })),

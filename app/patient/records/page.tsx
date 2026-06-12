@@ -6,6 +6,7 @@ import {
     Download, Bed, Plus, X, Trash2, Upload, ExternalLink, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { getPatientRecords, getPatientIPDHistory, getExternalRecords, saveExternalRecord, deleteExternalRecord } from '@/app/actions/patient-actions';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 export default function MedicalRecordsPage() {
     const [data, setData] = useState<any>(null);
@@ -132,7 +133,7 @@ export default function MedicalRecordsPage() {
                                                 </span>
                                             </div>
                                             <p className="text-xs text-gray-500 mt-1">
-                                                {fmtDate(adm.admission_date)} — {adm.discharge_date ? fmtDate(adm.discharge_date) : 'Ongoing'} &bull; {days} day{days > 1 ? 's' : ''} &bull; {adm.ward?.ward_name || 'N/A'} &bull; Dr. {adm.doctor_name || 'N/A'}
+                                                {fmtDate(adm.admission_date)} — {adm.discharge_date ? fmtDate(adm.discharge_date) : 'Ongoing'} &bull; {days} day{days > 1 ? 's' : ''} &bull; {adm.ward?.ward_name || 'N/A'} &bull; {formatDoctorName(adm.doctor_name) || 'N/A'}
                                             </p>
                                         </div>
                                         {isOpen ? <ChevronUp className="h-4 w-4 text-gray-400 shrink-0" /> : <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />}
@@ -157,7 +158,7 @@ export default function MedicalRecordsPage() {
                                                     {adm.ward_rounds.map((wr: any, i: number) => (
                                                         <div key={i} className="bg-gray-50 rounded-xl p-3 mb-2 text-sm text-gray-700">
                                                             <p className="font-semibold">{wr.observations || 'No observations'}</p>
-                                                            <p className="text-xs text-gray-400 mt-1">{fmtDate(wr.created_at)} &bull; Dr. {wr.doctor_name || 'N/A'}</p>
+                                                            <p className="text-xs text-gray-400 mt-1">{fmtDate(wr.created_at)} &bull; {formatDoctorName(wr.doctor_name) || 'N/A'}</p>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -219,7 +220,7 @@ export default function MedicalRecordsPage() {
                         <div key={diag.id} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
                             <div className="flex justify-between items-center mb-2">
                                 <p className="text-xs font-bold text-gray-400 uppercase">{fmtDate(diag.created_at)}</p>
-                                {diag.doctor_name && <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">Dr. {diag.doctor_name}</span>}
+                                {diag.doctor_name && <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">{formatDoctorName(diag.doctor_name)}</span>}
                             </div>
                             {diag.diagnosis && <p className="font-bold text-gray-900 mb-2">Diagnosis: {diag.diagnosis}</p>}
                             {diag.doctor_notes && (

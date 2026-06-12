@@ -6,6 +6,7 @@ import { getInvoiceDetail, addInvoiceItem, removeInvoiceItem, finalizeInvoice, c
 import { getAuditLogs } from '@/app/actions/audit-actions';
 import { getIpdServices } from '@/app/actions/ipd-master-actions';
 import { useToast } from '@/app/components/ui/Toast';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 export default function InvoiceDetailPage() {
     const params = useParams();
@@ -184,7 +185,7 @@ export default function InvoiceDetailPage() {
                             </p>
                             {invoice.admission && (
                                 <p className="text-sm text-gray-500">
-                                    Dr. {invoice.admission.doctor_name || 'N/A'} | {invoice.admission.ward_name || 'N/A'} | Bed: {invoice.admission.bed_id || 'N/A'}
+                                    {formatDoctorName(invoice.admission.doctor_name) || 'N/A'} | {invoice.admission.ward_name || 'N/A'} | Bed: {invoice.admission.bed_id || 'N/A'}
                                 </p>
                             )}
                             <p className="text-xs text-gray-400">

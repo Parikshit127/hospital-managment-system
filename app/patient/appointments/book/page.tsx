@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { formatDoctorName } from "@/app/lib/format-name";
 import {
   Stethoscope,
   CalendarDays,
@@ -456,7 +457,7 @@ function BookAppointmentContent() {
                       </div>
                       <div>
                         <p className="font-bold text-gray-900">
-                          Dr. {doc.name}
+                          {formatDoctorName(doc.name)}
                         </p>
                         <p className="text-sm text-gray-500">{doc.specialty}</p>
                       </div>
@@ -499,7 +500,7 @@ function BookAppointmentContent() {
                 </div>
                 <div>
                   <p className="font-bold text-emerald-900">
-                    Dr. {selectedDoctor.name}
+                    {formatDoctorName(selectedDoctor.name)}
                   </p>
                   <p className="text-sm text-emerald-700">
                     {selectedDoctor.specialty}
@@ -635,7 +636,7 @@ function BookAppointmentContent() {
                     Doctor
                   </p>
                   <p className="font-bold text-gray-900 mt-0.5">
-                    Dr. {selectedDoctor?.name}
+                    {formatDoctorName(selectedDoctor?.name)}
                   </p>
                   <p className="text-sm text-gray-500">
                     {selectedDoctor?.specialty}
@@ -831,7 +832,7 @@ function BookAppointmentContent() {
               <div className="flex justify-between">
                 <span className="text-gray-600">Doctor:</span>
                 <span className="font-bold text-gray-900">
-                  Dr. {selectedDoctor?.name}
+                  {formatDoctorName(selectedDoctor?.name)}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -912,7 +913,7 @@ function BookAppointmentContent() {
                 Doctor
               </p>
               <p className="font-bold text-gray-900">
-                Dr. {selectedDoctor?.name}{" "}
+                {formatDoctorName(selectedDoctor?.name)}{" "}
                 <span className="text-gray-500 font-normal">
                   ({selectedDoctor?.specialty})
                 </span>

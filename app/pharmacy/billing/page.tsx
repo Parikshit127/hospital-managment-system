@@ -13,6 +13,7 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { fetchBillBranding, fetchPharmacyBranding } from '@/app/actions/branding-actions';
 import type { BillBranding } from '@/app/lib/bill-branding';
 import type { PharmacyBranding } from '@/app/lib/pharmacy-branding';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 type InventoryItem = {
     batch_id: string;
@@ -266,7 +267,7 @@ export default function PharmacyPage() {
     const billPatientLabel = isWalkIn ? (walkInName.trim() || 'Walk-in / OTC') : patientId;
     const billDisplayDate = billDateTime ? new Date(billDateTime) : new Date();
     const billDisplayDateStr = billDisplayDate.toLocaleDateString('en-GB');
-    const billDoctorLabel = `Dr. ${doctorName?.trim() || 'Self'}`;
+    const billDoctorLabel = formatDoctorName(doctorName) || 'Dr. Self';
 
     const uniqueMedicines = Array.from(new Set(inventory.map(i => JSON.stringify({ id: i.medicine_id, name: i.medicine_name }))))
         .map(s => JSON.parse(s));
@@ -689,7 +690,7 @@ export default function PharmacyPage() {
                                 >
                                     <option value="">— None —</option>
                                     {doctorOptions.map(d => (
-                                        <option key={d.id} value={d.id}>Dr. {d.name}</option>
+                                        <option key={d.id} value={d.id}>{formatDoctorName(d.name)}</option>
                                     ))}
                                 </select>
                             </div>
