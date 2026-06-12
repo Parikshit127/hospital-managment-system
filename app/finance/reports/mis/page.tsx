@@ -47,7 +47,6 @@ const MIS_COLUMNS: { key: string; label: string; type: 'text' | 'currency' | 'da
     { key: 'gross_amount', label: 'Gross Amount', type: 'currency', width: '110px' },
     { key: 'discount', label: 'Discount', type: 'currency', width: '100px' },
     { key: 'net_amount', label: 'Net Amount', type: 'currency', width: '110px' },
-    { key: 'gross_net_diff', label: 'Gross − Net Diff', type: 'currency', width: '110px' },
     { key: 'received_amount', label: 'Received', type: 'currency', width: '110px' },
     { key: 'outstanding_amount', label: 'Outstanding', type: 'currency', width: '110px' },
     { key: 'patient_receipt', label: 'Patient Receipt', type: 'currency', width: '110px' },
