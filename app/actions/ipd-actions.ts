@@ -857,6 +857,77 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
   }
 }
 
+// Reverse a discharge — bring a Discharged patient back to Admitted. Admin/Finance only.
+export async function undischargeAdmission(admissionId: string, reason?: string) {
+  try {
+    const { db, session } = await requireTenantContext();
+    if (!["admin", "finance"].includes(session.role)) {
+      return { success: false, error: "Only Admin or Finance can undischarge a patient." };
+    }
+
+    const admission = await db.admissions.findUnique({ where: { admission_id: admissionId } });
+    if (!admission) return { success: false, error: "Admission not found" };
+    if (admission.status !== "Discharged") {
+      return { success: false, error: `Patient is not discharged (current status: ${admission.status}).` };
+    }
+
+    // Re-occupy the original bed only if it is still free; if another patient now holds
+    // it, re-admit without a bed and tell the caller to reassign one.
+    let bedNote = "";
+    if (admission.bed_id) {
+      const heldByOther = await db.admissions.findFirst({
+        where: { bed_id: admission.bed_id, status: "Admitted", NOT: { admission_id: admissionId } },
+        select: { admission_id: true },
+      });
+      if (heldByOther) {
+        bedNote = `Bed ${admission.bed_id} is now occupied by another patient — re-admitted without a bed. Assign a bed via IPD → Transfer.`;
+      } else {
+        await db.beds.update({ where: { bed_id: admission.bed_id }, data: { status: "Occupied" } });
+      }
+    }
+
+    // Reopen the admission.
+    await db.admissions.update({
+      where: { admission_id: admissionId },
+      data: {
+        status: "Admitted",
+        discharge_date: null,
+        discharge_type: null,
+        fit_for_discharge_at: null,
+        fit_for_discharge_by: null,
+      },
+    });
+
+    // Reopen any finalized invoice so billing can continue (payments are preserved).
+    await db.invoices.updateMany({
+      where: { admission_id: admissionId, status: { in: ["Final", "Paid"] } },
+      data: { status: "Draft", finalized_at: null },
+    });
+
+    await db.system_audit_logs.create({
+      data: {
+        action: "UNDISCHARGE_IPD",
+        module: "ipd",
+        entity_type: "admission",
+        entity_id: admissionId,
+        details: JSON.stringify({
+          patient_id: admission.patient_id,
+          by_role: session.role,
+          reason: reason || null,
+          bedNote: bedNote || null,
+        }),
+      },
+    });
+
+    revalidatePath(`/ipd/admission/${admissionId}`);
+    revalidatePath("/ipd");
+    return { success: true, data: { bedNote } };
+  } catch (error: any) {
+    console.error("undischargeAdmission error:", error);
+    return { success: false, error: error.message };
+  }
+}
+
 // Add medical note during admission
 export async function addMedicalNote(
   admissionId: string,
@@ -1249,7 +1320,7 @@ export async function getIPDCensus() {
 
 export async function getAdmissionFullDetails(admissionId: string) {
   try {
-    const { db } = await requireTenantContext();
+    const { db, session } = await requireTenantContext();
     const admission = await db.admissions.findUnique({
       where: { admission_id: admissionId },
       include: {
@@ -1290,6 +1361,7 @@ export async function getAdmissionFullDetails(admissionId: string) {
         ...admission,
         cancellation_reason:
           cancellationReasons.get(admission.admission_id) || null,
+        viewer_role: session.role,
       }),
     };
   } catch (error: any) {

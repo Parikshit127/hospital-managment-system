@@ -9,12 +9,12 @@ import {
     FileText, CheckCircle2, Pencil, Receipt, AlertTriangle,
     Loader2, Plus, X, DollarSign, Activity, LogOut, HeartPulse,
     ArrowLeftRight, CreditCard, TrendingUp, CalendarDays,
-    ShieldAlert, Info, ChevronRight
+    ShieldAlert, Info, ChevronRight, RotateCcw
 } from 'lucide-react';
 import {
     getAdmissionFullDetails, createNursingTask, changeAdmissionDoctor,
     recordWardRound, assignDietPlan, addMedicalNote, getWardsWithBeds, transferPatient,
-    updateAdmissionDiagnosis, updateAdmissionBasicDetails
+    updateAdmissionDiagnosis, updateAdmissionBasicDetails, undischargeAdmission
 } from '@/app/actions/ipd-actions';
 import { generateInterimBill, postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
 import { removeInvoiceItem } from '@/app/actions/finance-actions';
@@ -142,6 +142,7 @@ export default function AdmissionDetailPage() {
     const [showTransfer, setShowTransfer] = useState(false);
     const [availableWards, setAvailableWards] = useState<any[]>([]);
     const [loadingWards, setLoadingWards] = useState(false);
+    const [undischarging, setUndischarging] = useState(false);
     const [transferWard, setTransferWard] = useState('');
     const [transferBed, setTransferBed] = useState('');
     const [transferReason, setTransferReason] = useState('');
@@ -363,6 +364,20 @@ export default function AdmissionDetailPage() {
             loadData();
         } else {
             toast.error(res.error || 'Transfer failed');
+        }
+    };
+
+    const handleUndischarge = async () => {
+        if (!window.confirm(`Undischarge ${data?.patient?.full_name || 'this patient'}? This re-admits the patient and reopens the bill for editing.`)) return;
+        setUndischarging(true);
+        const res = await undischargeAdmission(data.admission_id);
+        setUndischarging(false);
+        if (res.success) {
+            toast.success('Patient undischarged — back to Admitted');
+            if (res.data?.bedNote) toast.error(res.data.bedNote);
+            loadData();
+        } else {
+            toast.error(res.error || 'Undischarge failed');
         }
     };
 
@@ -648,6 +663,16 @@ export default function AdmissionDetailPage() {
                                         </button>
                                     </Link>
                                 </>
+                            )}
+                            {data.status === 'Discharged' && (data.viewer_role === 'admin' || data.viewer_role === 'finance') && (
+                                <button
+                                    onClick={handleUndischarge}
+                                    disabled={undischarging}
+                                    title="Reverse the discharge — re-admit the patient (Admin/Finance only)"
+                                    className="flex items-center gap-1.5 px-3 py-2 border border-amber-300 bg-amber-50 text-amber-700 text-xs font-bold rounded-xl hover:bg-amber-100 transition-colors disabled:opacity-50"
+                                >
+                                    <RotateCcw className="h-3.5 w-3.5" /> {undischarging ? 'Undischarging…' : 'Undischarge'}
+                                </button>
                             )}
                         </div>
                     </div>
