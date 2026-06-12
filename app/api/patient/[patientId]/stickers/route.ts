@@ -59,6 +59,50 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ pati
     }
 }
 
+// Code128-B barcode rendered as a self-contained SVG (no CDN / client JS), so it
+// always prints — including on offline label PCs where the old JsBarcode CDN failed.
+const CODE128_PATTERNS = [
+    '212222', '222122', '222221', '121223', '121322', '131222', '122213', '122312', '132212', '221213',
+    '221312', '231212', '112232', '122132', '122231', '113222', '123122', '123221', '223211', '221132',
+    '221231', '213212', '223112', '312131', '311222', '321122', '321221', '312212', '322112', '322211',
+    '212123', '212321', '232121', '111323', '131123', '131321', '112313', '132113', '132311', '211313',
+    '231113', '231311', '112133', '112331', '132131', '113123', '113321', '133121', '313121', '211331',
+    '231131', '213113', '213311', '213131', '311123', '311321', '331121', '312113', '312311', '332111',
+    '314111', '221411', '431111', '111224', '111422', '121124', '121421', '141122', '141221', '112214',
+    '112412', '122114', '122411', '142112', '142211', '241211', '221114', '413111', '241112', '134111',
+    '111242', '121142', '121241', '114212', '124112', '124211', '411212', '421112', '421211', '212141',
+    '214121', '412121', '111143', '111341', '131141', '114113', '114311', '411113', '411311', '113141',
+    '114131', '311141', '411131', '211412', '211214', '211232', '2331112',
+];
+
+function code128Svg(value: string, height = 22, moduleWidth = 1.4): string {
+    const START_B = 104, STOP = 106;
+    const codes = [START_B];
+    let checksum = START_B;
+    for (let i = 0; i < value.length; i++) {
+        const v = value.charCodeAt(i) - 32; // Code-B: printable ASCII 32..126
+        if (v < 0 || v > 94) continue;      // skip anything outside the set
+        codes.push(v);
+        checksum += v * (i + 1);
+    }
+    codes.push(checksum % 103);
+    codes.push(STOP);
+
+    let x = 0;
+    let rects = '';
+    for (const code of codes) {
+        const pat = CODE128_PATTERNS[code];
+        let bar = true;
+        for (const ch of pat) {
+            const w = parseInt(ch, 10) * moduleWidth;
+            if (bar) rects += `<rect x="${x.toFixed(2)}" y="0" width="${w.toFixed(2)}" height="${height}"/>`;
+            x += w;
+            bar = !bar;
+        }
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${x.toFixed(1)}" height="${height}" viewBox="0 0 ${x.toFixed(1)} ${height}" preserveAspectRatio="none" shape-rendering="crispEdges"><g fill="#000">${rects}</g></svg>`;
+}
+
 function generateStickerHTML(patient: any, admission: any, appointment: any, branding: any, category: string = 'CASH') {
     const name = (patient.title ? patient.title + ' ' : '') + (patient.full_name || '-');
     const uhid = patient.patient_id || '-';
@@ -86,6 +130,7 @@ function generateStickerHTML(patient: any, admission: any, appointment: any, bra
     const dateLabel = isIPD ? 'DOA' : 'Date';
 
     const barcodeValue = uhid;
+    const barcodeSvg = code128Svg(barcodeValue);
 
     // ST-24 format: 64mm x 34mm, 3 columns x 8 rows = 24 stickers per A4
     const stickerHtml = `
@@ -98,7 +143,8 @@ function generateStickerHTML(patient: any, admission: any, appointment: any, bra
             <div class="st-row">Category: ${category}</div>
             <div class="st-row">P.No:${phone}</div>
             <div class="barcode-container">
-                <svg></svg>
+                ${barcodeSvg}
+                <div class="st-barcode-val">${barcodeValue}</div>
             </div>
         </div>`;
 
@@ -109,7 +155,6 @@ function generateStickerHTML(patient: any, admission: any, appointment: any, bra
 <head>
     <meta charset="utf-8">
     <title>Stickers - ${uhid}</title>
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; color: #000; background: #fff; }
@@ -150,7 +195,10 @@ function generateStickerHTML(patient: any, admission: any, appointment: any, bra
         .barcode-container svg {
             height: 22px;
             width: 95%;
+            display: block;
+            margin: 0 auto;
         }
+        .st-barcode-val { font-size: 6.5px; letter-spacing: 0.5px; line-height: 1.1; }
 
         @media screen {
             .sticker { border: 0.5px dashed #ddd; }
@@ -171,28 +219,6 @@ function generateStickerHTML(patient: any, admission: any, appointment: any, bra
     <div class="sticker-grid">
         ${stickers}
     </div>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('.sticker').forEach(function(sticker, i) {
-                var container = sticker.querySelector('.barcode-container');
-                if (container) {
-                    var svgId = 'bc-' + i;
-                    container.innerHTML = '<svg id="' + svgId + '"></svg>';
-                    try {
-                        JsBarcode('#' + svgId, '${barcodeValue}', {
-                            format: 'CODE128',
-                            width: 1.4,
-                            height: 22,
-                            displayValue: false,
-                            margin: 0,
-                        });
-                    } catch(e) {
-                        container.innerHTML = '<div style="font-size:7px;font-family:monospace;">${barcodeValue}</div>';
-                    }
-                }
-            });
-        });
-    <\/script>
 </body>
 </html>`;
 }
