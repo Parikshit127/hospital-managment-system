@@ -36,6 +36,13 @@ const PAYMENT_METHODS = [
     { id: 'UPI', label: 'UPI', icon: Smartphone },
 ];
 
+const IPD_PAYMENT_METHODS = [
+    { id: 'Cash', label: 'Cash', icon: Banknote },
+    { id: 'Card', label: 'Card', icon: CreditCard },
+    { id: 'UPI', label: 'UPI', icon: Smartphone },
+    { id: 'Credit', label: 'Credit (Add to IPD Bill)', icon: Clock },
+];
+
 function getExpiryStatus(expiry: Date | null) {
     if (!expiry) return { label: 'Catalog', color: 'bg-indigo-50 text-indigo-600 border border-indigo-200', urgent: false };
     const now = new Date();
@@ -696,10 +703,35 @@ export default function PharmacyPage() {
                             </div>
                         </div>
 
-                        {/* IPD notice — hide payment method for admitted patients */}
+                        {/* Payment Method — show Credit option for IPD patients */}
                         {selectedPatient?.is_admitted ? (
-                            <div className="mb-3 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 font-medium">
-                                🏥 <strong>IPD Patient</strong> — medicines will be posted directly to the IPD bill. No separate pharmacy invoice will be created.
+                            <div className="mb-3 space-y-2">
+                                <div className="flex flex-wrap gap-1.5">
+                                    {IPD_PAYMENT_METHODS.map(m => (
+                                        <button
+                                            key={m.id}
+                                            onClick={() => setPaymentMethod(m.id)}
+                                            className={`flex-1 min-w-[70px] py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${
+                                                paymentMethod === m.id
+                                                    ? m.id === 'Credit'
+                                                        ? 'bg-amber-50 border-amber-400 text-amber-700'
+                                                        : 'bg-orange-50 border-teal-300 text-orange-700'
+                                                    : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                                            }`}
+                                        >
+                                            <m.icon className="h-3.5 w-3.5" /> {m.id === 'Credit' ? 'Credit' : m.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                {paymentMethod === 'Credit' ? (
+                                    <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium">
+                                        🏥 <strong>Credit:</strong> Medicines posted to IPD bill. Payment pending — tracked under patient&apos;s admission.
+                                    </div>
+                                ) : (
+                                    <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 font-medium">
+                                        🏥 <strong>IPD Patient</strong> — medicines will also be posted to the IPD bill.
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             /* Payment Method */
@@ -719,9 +751,12 @@ export default function PharmacyPage() {
                         <button
                             onClick={handleCheckout}
                             disabled={cart.length === 0 || (!isWalkIn && !patientId)}
-                            className={`w-full font-bold py-3.5 rounded-xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98] ${selectedPatient?.is_admitted ? 'bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white shadow-blue-500/20' : 'bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white shadow-teal-500/20'}`}
+                            className={`w-full font-bold py-3.5 rounded-xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98] ${selectedPatient?.is_admitted ? (paymentMethod === 'Credit' ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white shadow-amber-500/20' : 'bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white shadow-blue-500/20') : 'bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white shadow-teal-500/20'}`}
                         >
-                            <Receipt className="h-5 w-5" /> {selectedPatient?.is_admitted ? 'Post to IPD Bill' : 'Generate Invoice'}
+                            <Receipt className="h-5 w-5" />
+                            {selectedPatient?.is_admitted
+                                ? (paymentMethod === 'Credit' ? 'Add to IPD Bill (Credit)' : 'Post to IPD Bill')
+                                : 'Generate Invoice'}
                         </button>
                     </div>
                 </aside>
@@ -814,8 +849,15 @@ export default function PharmacyPage() {
                                     <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
                                         <div className="flex items-center justify-center gap-2 text-emerald-700 text-sm font-bold">
                                             <FileText className="h-4 w-4" />
-                                            Posted to GL & GST Register
+                                            {invoiceResult.credit_bill
+                                                ? 'Credit Bill Created — Pending at Reception'
+                                                : 'Posted to GL & GST Register'}
                                         </div>
+                                        {invoiceResult.credit_bill && (
+                                            <p className="text-xs text-amber-700 mt-1 font-medium">
+                                                Bill #{invoiceResult.invoice_number} added to IPD admission. Collect payment at discharge.
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="p-5 bg-gray-50 border-t border-gray-200 flex gap-3 no-print">
@@ -861,13 +903,22 @@ export default function PharmacyPage() {
                                         </div>
                                     </div>
                                     <div className="flex gap-2 pt-2">
-                                        {PAYMENT_METHODS.map(m => (
+                                        {(selectedPatient?.is_admitted ? IPD_PAYMENT_METHODS : PAYMENT_METHODS).map(m => (
                                             <button key={m.id} onClick={() => setPaymentMethod(m.id)}
-                                                className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${paymentMethod === m.id ? 'bg-orange-50 border-teal-300 text-orange-700' : 'bg-white border-gray-200 text-gray-500'}`}>
-                                                <m.icon className="h-3.5 w-3.5" /> {m.label}
+                                                className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${
+                                                    paymentMethod === m.id
+                                                        ? m.id === 'Credit' ? 'bg-amber-50 border-amber-400 text-amber-700' : 'bg-orange-50 border-teal-300 text-orange-700'
+                                                        : 'bg-white border-gray-200 text-gray-500'
+                                                }`}>
+                                                <m.icon className="h-3.5 w-3.5" /> {m.id === 'Credit' ? 'Credit' : m.label}
                                             </button>
                                         ))}
                                     </div>
+                                    {paymentMethod === 'Credit' && (
+                                        <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                                            Payment will be tracked as pending under the patient&apos;s IPD admission. Collect at discharge.
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="p-5 bg-gray-50 border-t border-gray-200 flex gap-3 no-print">
                                     <button onClick={() => setShowInvoiceModal(false)} className="flex-1 py-3 font-bold text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all">Cancel</button>

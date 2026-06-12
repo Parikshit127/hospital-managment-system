@@ -292,7 +292,15 @@ export async function getInvoices(filters?: {
             if (filters?.invoice_type) {
                 where.invoice_type = filters.invoice_type;
             } else if (excludePharmacy) {
-                where.invoice_type = { not: 'Pharmacy' };
+                // Exclude standalone OPD pharmacy invoices (no admission_id).
+                // IPD credit pharmacy bills (admission_id set) must still show
+                // so reception can see and collect them at discharge.
+                where.NOT = {
+                    AND: [
+                        { invoice_type: 'Pharmacy' },
+                        { admission_id: null },
+                    ],
+                };
             }
             if (filters?.mobile_number) {
                 where.patient = { phone: { contains: filters.mobile_number } };
@@ -434,7 +442,11 @@ export async function getInvoices(filters?: {
                 balance_due: inv.balance_due,
                 status: inv.status,
                 created_at: inv.created_at,
-                source: inv.invoice_type
+                admission_id: inv.admission_id || null,
+                // Credit pharmacy bills (Pharmacy type + admission_id) show as IPD-PHARMACY
+                source: (inv.invoice_type === 'Pharmacy' && inv.admission_id)
+                    ? 'IPD-PHARMACY'
+                    : inv.invoice_type,
             })),
             ...labOrders.map((lab: any) => {
                 const p = patientMap.get(lab.patient_id);
