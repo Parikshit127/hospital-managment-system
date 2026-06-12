@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from "@/app/components/layout/AppShell";
 import {
     FileText,
@@ -687,8 +688,7 @@ function ReceiptHistory() {
                         </div>
                         <div>
                             <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">From</label>
-                            <input
-                                type="date"
+                            <DateField
                                 value={from}
                                 onChange={e => { setFrom(e.target.value); setPage(1); }}
                                 className="w-full mt-1 px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
@@ -696,8 +696,7 @@ function ReceiptHistory() {
                         </div>
                         <div>
                             <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">To</label>
-                            <input
-                                type="date"
+                            <DateField
                                 value={to}
                                 onChange={e => { setTo(e.target.value); setPage(1); }}
                                 className="w-full mt-1 px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     BarChart3, TrendingUp, AlertTriangle, IndianRupee, Package,
@@ -135,10 +136,10 @@ export default function PharmacyReportsPage() {
 
                 {preset === 'custom' && (
                     <div className="flex items-center gap-2">
-                        <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                        <DateField value={customFrom} onChange={e => setCustomFrom(e.target.value)}
                             className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg" />
                         <span className="text-gray-400 text-xs">→</span>
-                        <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                        <DateField value={customTo} onChange={e => setCustomTo(e.target.value)}
                             className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg" />
                     </div>
                 )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { DateField } from '@/app/components/ui/DateField';
 import Link from "next/link";
 import {
   Users,
@@ -301,8 +302,7 @@ export default function AdminPatientsPage() {
               <option value="month">This Month</option>
             </select>
 
-            <input
-              type="date"
+            <DateField
               value={selectedDate}
               onChange={(e) => {
                 setSelectedDate(e.target.value);

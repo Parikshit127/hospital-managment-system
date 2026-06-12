@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import {
     DollarSign, FileText, CreditCard, TrendingUp, Clock,
     AlertTriangle, Loader2, Search,
@@ -219,10 +220,10 @@ export default function FinanceDashboard() {
                                     </div>
                                     {datePreset === 'custom' && (
                                         <div className="flex items-center gap-2 ml-2">
-                                            <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
+                                            <DateField value={customStart} onChange={e => setCustomStart(e.target.value)}
                                                 className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs text-gray-700 focus:border-emerald-500/50 focus:outline-none" />
                                             <span className="text-xs text-gray-400 font-bold">to</span>
-                                            <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
+                                            <DateField value={customEnd} onChange={e => setCustomEnd(e.target.value)}
                                                 className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs text-gray-700 focus:border-emerald-500/50 focus:outline-none" />
                                         </div>
                                     )}

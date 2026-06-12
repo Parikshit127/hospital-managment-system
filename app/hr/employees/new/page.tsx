@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { UserPlus, Loader2, ArrowLeft } from 'lucide-react';
@@ -93,7 +94,7 @@ export default function NewEmployeePage() {
                         </div>
                         <div>
                             <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Date of Joining *</label>
-                            <input type="date" required value={form.dateOfJoining}
+                            <DateField required value={form.dateOfJoining}
                                 onChange={e => setForm({ ...form, dateOfJoining: e.target.value })}
                                 className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                         </div>

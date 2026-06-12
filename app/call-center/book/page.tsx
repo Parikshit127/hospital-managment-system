@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { CalendarPlus, Search, User, Phone, AlertCircle, CheckCircle } from 'lucide-react';
 import { useToast } from '@/app/components/ui/Toast';
@@ -200,8 +201,7 @@ export default function CallCenterBookPage() {
                 </div>
                 <div>
                   <label className="block text-sm text-gray-600 mb-1">Preferred Date</label>
-                  <input
-                    type="date"
+                  <DateField
                     value={preferredDate}
                     onChange={(e) => setPreferredDate(e.target.value)}
                     min={new Date().toISOString().split('T')[0]}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useActionState } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { createOrganization } from '@/app/actions/superadmin-actions';
 import { useRouter } from 'next/navigation';
 import {
@@ -330,7 +331,7 @@ export default function OnboardingWizard() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className={labelClass}>Accreditation Expiry</label>
-                                    <input type="date" value={formValues.accreditation_expiry} onChange={e => updateField('accreditation_expiry', e.target.value)} className={inputClass} />
+                                    <DateField value={formValues.accreditation_expiry} onChange={e => updateField('accreditation_expiry', e.target.value)} className={inputClass} />
                                 </div>
                                 <div>
                                     <label className={labelClass}>Established Year</label>

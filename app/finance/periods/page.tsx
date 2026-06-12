@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import {
     getFinancialPeriods, createFinancialPeriod,
     closeFinancialPeriod, lockFinancialPeriod, getPeriodPreview,
@@ -238,12 +239,12 @@ export default function PeriodsPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
-                                    <input type="date" value={createForm.start_date} onChange={e => setCreateForm({ ...createForm, start_date: e.target.value })}
+                                    <DateField value={createForm.start_date} onChange={e => setCreateForm({ ...createForm, start_date: e.target.value })}
                                         className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
-                                    <input type="date" value={createForm.end_date} onChange={e => setCreateForm({ ...createForm, end_date: e.target.value })}
+                                    <DateField value={createForm.end_date} onChange={e => setCreateForm({ ...createForm, end_date: e.target.value })}
                                         className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500" />
                                 </div>
                             </div>

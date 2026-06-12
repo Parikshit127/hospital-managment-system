@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { getMISReport } from '@/app/actions/report-actions';
 import {
@@ -166,12 +167,12 @@ export default function MISReportPage() {
                         <div className="flex flex-col sm:flex-row gap-3 flex-1">
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 mb-1">From Date</label>
-                                <input type="date" value={from} onChange={e => setFrom(e.target.value)}
+                                <DateField value={from} onChange={e => setFrom(e.target.value)}
                                     className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 mb-1">To Date</label>
-                                <input type="date" value={to} onChange={e => setTo(e.target.value)}
+                                <DateField value={to} onChange={e => setTo(e.target.value)}
                                     className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" />
                             </div>
                             <div>

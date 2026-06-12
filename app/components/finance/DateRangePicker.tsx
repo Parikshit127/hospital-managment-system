@@ -1,6 +1,7 @@
 'use client';
 
 import { Calendar } from 'lucide-react';
+import { DateField } from '@/app/components/ui/DateField';
 
 interface DateRangePickerProps {
     from: string;
@@ -34,10 +35,10 @@ export function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
         <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
                 <Calendar className="h-4 w-4 text-gray-400" />
-                <input type="date" value={from} max={to} onChange={e => onChange(e.target.value, to)}
+                <DateField value={from} max={to} onChange={e => onChange(e.target.value, to)}
                     className="text-sm text-gray-700 border-none focus:ring-0 p-0 w-[130px]" />
                 <span className="text-gray-300">to</span>
-                <input type="date" value={to} min={from} onChange={e => onChange(from, e.target.value)}
+                <DateField value={to} min={from} onChange={e => onChange(from, e.target.value)}
                     className="text-sm text-gray-700 border-none focus:ring-0 p-0 w-[130px]" />
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">

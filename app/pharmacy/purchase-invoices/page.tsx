@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     FileText, Plus, X, Loader2, CheckCircle, Eye, CreditCard,
@@ -366,11 +367,11 @@ export default function PurchaseInvoicesPage() {
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase">Invoice Date</label>
-                                    <input type="date" value={form.invoice_date} onChange={e => setForm({ ...form, invoice_date: e.target.value })} className="w-full p-3 border border-gray-300 rounded-xl text-sm" />
+                                    <DateField value={form.invoice_date} onChange={e => setForm({ ...form, invoice_date: e.target.value })} className="w-full p-3 border border-gray-300 rounded-xl text-sm" />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase">Due Date</label>
-                                    <input type="date" value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })} className="w-full p-3 border border-gray-300 rounded-xl text-sm" />
+                                    <DateField value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })} className="w-full p-3 border border-gray-300 rounded-xl text-sm" />
                                 </div>
                             </div>
 

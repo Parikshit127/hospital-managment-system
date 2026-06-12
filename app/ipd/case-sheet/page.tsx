@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import {
     Activity, Pill, FlaskConical, ClipboardList, Stethoscope,
     FileText, Users, Heart, Utensils, BarChart2, ChevronRight,
@@ -117,8 +118,7 @@ export default function CaseSheetPage() {
                         <div className="flex items-center gap-3">
                             <div className="flex items-center gap-2 text-sm text-gray-600">
                                 <Calendar className="w-4 h-4" />
-                                <input
-                                    type="date"
+                                <DateField
                                     value={selectedDate}
                                     onChange={e => setSelectedDate(e.target.value)}
                                     className="border border-gray-300 rounded-lg px-2 py-1 text-sm"

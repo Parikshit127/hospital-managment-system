@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { DateField } from '@/app/components/ui/DateField';
 import { Sidebar } from "@/app/components/layout/Sidebar";
 import { getPatientQueue } from "@/app/actions/doctor-actions";
 import { Activity, CalendarDays, Clock3, Search, Users } from "lucide-react";
@@ -268,8 +269,7 @@ export default function DoctorOverviewDashboard() {
                 <label className="mb-1 block text-xs font-semibold text-gray-600">
                   Search by Appointment Booking Date
                 </label>
-                <input
-                  type="date"
+                <DateField
                   value={comingDate}
                   onChange={(event) => setComingDate(event.target.value)}
                   className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"

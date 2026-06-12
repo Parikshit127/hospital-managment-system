@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import {
   User,
   Phone,
@@ -79,6 +80,13 @@ function EditableField({
           onChange={(e) => handle(e.target.value)}
           placeholder={placeholder}
           rows={2}
+          className="w-full text-sm font-semibold text-gray-800 bg-white border border-gray-200 rounded-md px-2 py-1"
+        />
+      ) : type === 'date' ? (
+        <DateField
+          value={v}
+          onChange={(e) => handle(e.target.value)}
+          placeholder={placeholder}
           className="w-full text-sm font-semibold text-gray-800 bg-white border border-gray-200 rounded-md px-2 py-1"
         />
       ) : (
@@ -582,8 +590,7 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Valid From *</label>
-                  <input
-                    type="date"
+                  <DateField
                     value={policyForm.valid_from}
                     onChange={e => setPolicyForm({ ...policyForm, valid_from: e.target.value })}
                     className="w-full text-sm bg-white border border-gray-200 rounded-md px-2 py-1"
@@ -591,8 +598,7 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Valid Until *</label>
-                  <input
-                    type="date"
+                  <DateField
                     value={policyForm.valid_until}
                     onChange={e => setPolicyForm({ ...policyForm, valid_until: e.target.value })}
                     className="w-full text-sm bg-white border border-gray-200 rounded-md px-2 py-1"

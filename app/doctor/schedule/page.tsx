@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { DateField } from '@/app/components/ui/DateField';
 import {
   Calendar,
   Clock,
@@ -563,8 +564,7 @@ export default function DoctorSchedule() {
                     >
                       <ChevronLeft className="h-4 w-4 text-gray-500" />
                     </button>
-                    <input
-                      type="date"
+                    <DateField
                       value={slotDate}
                       onChange={(e) => setSlotDate(e.target.value)}
                       className="text-sm font-bold text-gray-900 border-none focus:outline-none bg-transparent"
@@ -655,8 +655,7 @@ export default function DoctorSchedule() {
                 <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">
                   Date
                 </label>
-                <input
-                  type="date"
+                <DateField
                   value={blockDate}
                   onChange={(e) => setBlockDate(e.target.value)}
                   className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500"

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -1264,7 +1265,7 @@ export default function AdmissionDetailPage() {
                                                 : 'Not set — set within 24h of admission'}
                                         </p>
                                     </div>
-                                    <input type="date" value={eddValue} onChange={e => setEddValue(e.target.value)}
+                                    <DateField value={eddValue} onChange={e => setEddValue(e.target.value)}
                                         className="border border-violet-300 rounded-xl px-3 py-2 text-sm outline-none focus:border-violet-500 bg-white" />
                                     <button onClick={handleSaveEdd} disabled={savingEdd || !eddValue}
                                         className="px-4 py-2 bg-violet-600 text-white text-sm font-bold rounded-xl hover:bg-violet-700 disabled:opacity-50 transition-colors">

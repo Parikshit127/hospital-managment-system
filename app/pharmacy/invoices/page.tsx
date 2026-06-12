@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { FileText, Search, Eye, CreditCard, X, Pencil, Plus, Trash2, IndianRupee, Receipt, TrendingDown, ShoppingBag } from 'lucide-react';
 import { getInvoices, addInvoiceItem, recordPayment } from '@/app/actions/finance-actions';
@@ -291,10 +292,10 @@ export default function PharmacyInvoicesPage() {
                         {/* Custom date pickers */}
                         {datePreset === 'custom' && (
                             <div className="flex items-center gap-2">
-                                <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                                <DateField value={customFrom} onChange={e => setCustomFrom(e.target.value)}
                                     className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 outline-none" />
                                 <span className="text-xs text-gray-400">to</span>
-                                <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                                <DateField value={customTo} onChange={e => setCustomTo(e.target.value)}
                                     className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-orange-500 outline-none" />
                             </div>
                         )}

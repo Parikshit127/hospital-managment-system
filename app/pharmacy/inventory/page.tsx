@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Package, Search, Plus, Edit2, AlertTriangle, FileBox } from 'lucide-react';
 import { getLowStockAlerts, searchMedicine, addInventoryBatch } from '@/app/actions/pharmacy-actions';
@@ -124,7 +125,7 @@ export default function PharmacyInventoryPage() {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <input required type="number" placeholder="Unit Price" className="w-full p-2 border rounded-lg text-sm" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} />
-                                <input required type="date" className="w-full p-2 border rounded-lg text-sm text-gray-500" value={form.expiry} onChange={e => setForm({ ...form, expiry: e.target.value })} />
+                                <DateField required className="w-full p-2 border rounded-lg text-sm text-gray-500" value={form.expiry} onChange={e => setForm({ ...form, expiry: e.target.value })} />
                             </div>
                             <button type="submit" className="w-full bg-orange-600 text-white font-bold p-2 rounded-lg">Save Item</button>
                         </div>

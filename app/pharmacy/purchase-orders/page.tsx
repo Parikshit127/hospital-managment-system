@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Truck, Plus, CheckCircle, PackageOpen, X, Search, AlertTriangle, ListChecks } from 'lucide-react';
 import { getPurchaseOrders, receivePurchaseOrder, createPurchaseOrder, getSuppliers, getInventory } from '@/app/actions/pharmacy-actions';
@@ -275,7 +276,7 @@ export default function PurchaseOrdersPage() {
                                     </div>
                                     <div className="col-span-12 md:col-span-3">
                                         <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Expiry Date</label>
-                                        <input type="date" required value={item.expiry} onChange={e => { const nd = [...receiveData]; nd[idx].expiry = e.target.value; setReceiveData(nd); }} className="w-full p-2 border border-gray-200 rounded-lg text-sm text-gray-600 bg-white" />
+                                        <DateField required value={item.expiry} onChange={e => { const nd = [...receiveData]; nd[idx].expiry = e.target.value; setReceiveData(nd); }} className="w-full p-2 border border-gray-200 rounded-lg text-sm text-gray-600 bg-white" />
                                     </div>
                                 </div>
                             ))}

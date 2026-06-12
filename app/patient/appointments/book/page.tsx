@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, Suspense } from "react";
+import { DateField } from '@/app/components/ui/DateField';
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { formatDoctorName } from "@/app/lib/format-name";
@@ -523,8 +524,7 @@ function BookAppointmentContent() {
               <CalendarDays className="h-4 w-4 inline mr-1.5 text-emerald-500" />
               Select Date
             </label>
-            <input
-              type="date"
+            <DateField
               value={selectedDate}
               min={today}
               max={maxDate}

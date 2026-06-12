@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import {
     FileText, FlaskConical, Stethoscope, Search, RefreshCw,
     Download, Bed, Plus, X, Trash2, Upload, ExternalLink, ChevronDown, ChevronUp
@@ -302,7 +303,7 @@ export default function MedicalRecordsPage() {
                             </div>
                             <div>
                                 <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Date</label>
-                                <input type="date" value={form.record_date} onChange={e => setForm(f => ({ ...f, record_date: e.target.value }))}
+                                <DateField value={form.record_date} onChange={e => setForm(f => ({ ...f, record_date: e.target.value }))}
                                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-violet-500" />
                             </div>
                             <div>

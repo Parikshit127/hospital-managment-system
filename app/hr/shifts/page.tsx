@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     Timer, Loader2, Plus, X, Calendar, Clock, Users
@@ -166,13 +167,13 @@ export default function HRShiftsPage() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                             <div>
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Start Date *</label>
-                                <input type="date" value={assignForm.startDate}
+                                <DateField value={assignForm.startDate}
                                     onChange={e => setAssignForm({ ...assignForm, startDate: e.target.value })}
                                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                             </div>
                             <div>
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">End Date *</label>
-                                <input type="date" value={assignForm.endDate}
+                                <DateField value={assignForm.endDate}
                                     onChange={e => setAssignForm({ ...assignForm, endDate: e.target.value })}
                                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                             </div>
@@ -218,7 +219,7 @@ export default function HRShiftsPage() {
                 <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
                     <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                         <h3 className="text-sm font-black text-gray-900">Shift Roster</h3>
-                        <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                        <DateField value={date} onChange={e => setDate(e.target.value)}
                             className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-orange-500" />
                     </div>
                     <div className="overflow-x-auto">

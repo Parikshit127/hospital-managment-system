@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { DateField } from '@/app/components/ui/DateField';
 import { useEffect, useState } from "react";
 import { BookOpen, Building2, ChevronDown, ChevronRight, Loader2, ExternalLink, Calendar, Filter } from "lucide-react";
 import { AppShell } from "@/app/components/layout/AppShell";
@@ -151,10 +152,10 @@ export default function VendorLedgerPage() {
             </div>
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-gray-400" />
-              <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
+              <DateField value={fromDate} onChange={(e) => setFromDate(e.target.value)}
                 className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               <span className="text-xs text-gray-400">to</span>
-              <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)}
+              <DateField value={toDate} onChange={(e) => setToDate(e.target.value)}
                 className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               <button onClick={load}
                 className="px-3 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-100 transition">

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Users, Plus, Mail, Phone, Hash, X, Loader2, Pencil, CheckCircle, Shield } from 'lucide-react';
 import { getSuppliers, createSupplier, updateSupplier } from '@/app/actions/pharmacy-actions';
@@ -217,7 +218,7 @@ export default function SuppliersPage() {
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">License Expiry</label>
-                                    <input type="date" value={form.drug_license_expiry} onChange={e => setForm({ ...form, drug_license_expiry: e.target.value })}
+                                    <DateField value={form.drug_license_expiry} onChange={e => setForm({ ...form, drug_license_expiry: e.target.value })}
                                         className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-medium text-gray-900" />
                                 </div>
                             </div>

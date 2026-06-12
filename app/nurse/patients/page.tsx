@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     Users, Search, X, FileText, Loader2, Clock, User,
@@ -316,10 +317,10 @@ export default function NursePatientsPage() {
                         {/* Admission date range */}
                         <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-xl px-2.5 py-1.5">
                             <Calendar className="h-4 w-4 text-gray-400 shrink-0" />
-                            <input type="date" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} title="Admitted from"
+                            <DateField value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} title="Admitted from"
                                 className="bg-transparent text-xs font-medium text-gray-700 focus:outline-none w-[110px]" />
                             <span className="text-gray-300 text-xs">–</span>
-                            <input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} title="Admitted up to"
+                            <DateField value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} title="Admitted up to"
                                 className="bg-transparent text-xs font-medium text-gray-700 focus:outline-none w-[110px]" />
                             {(fromDate || toDate) && (
                                 <button onClick={() => { setFromDate(''); setToDate(''); }} title="Clear dates" className="text-gray-400 hover:text-rose-500 shrink-0">

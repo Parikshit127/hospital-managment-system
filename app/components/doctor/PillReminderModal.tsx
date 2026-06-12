@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { X, Pill, Clock, Calendar, Check, Search, User, Info, Loader2 } from 'lucide-react';
 import { schedulePillReminder, searchPatients } from '@/app/actions/pill-actions';
 import { toast } from 'react-hot-toast';
@@ -260,9 +261,8 @@ export default function PillReminderModal({ isOpen, onClose, patients: initialPa
             {/* Start Date */}
             <div className="space-y-2">
               <label className="text-sm font-semibold text-gray-700">Start Date</label>
-              <input
+              <DateField
                 required
-                type="date"
                 value={medData.start_date}
                 onChange={(e) => setMedData(prev => ({ ...prev, start_date: e.target.value }))}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500/20"
@@ -271,9 +271,8 @@ export default function PillReminderModal({ isOpen, onClose, patients: initialPa
             {/* End Date */}
             <div className="space-y-2">
               <label className="text-sm font-semibold text-gray-700">End Date</label>
-              <input
+              <DateField
                 required
-                type="date"
                 value={medData.end_date}
                 onChange={(e) => setMedData(prev => ({ ...prev, end_date: e.target.value }))}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500/20"

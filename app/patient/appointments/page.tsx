@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import Link from 'next/link';
 import { formatDoctorName } from '@/app/lib/format-name';
 import {
@@ -420,9 +421,8 @@ export default function MyAppointmentsPage() {
 
                         <div className="mb-4">
                             <label htmlFor="reschedule-date" className="text-sm font-bold text-gray-700 block mb-1.5">New Date</label>
-                            <input
+                            <DateField
                                 id="reschedule-date"
-                                type="date"
                                 value={rescheduleDate}
                                 onChange={(e) => handleDateChangeForReschedule(e.target.value)}
                                 min={new Date().toISOString().split('T')[0]}

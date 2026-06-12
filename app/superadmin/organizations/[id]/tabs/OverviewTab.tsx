@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { updateOrganizationProfile } from '@/app/actions/superadmin-actions';
 import { Save, AlertCircle, CheckCircle, X } from 'lucide-react';
 
@@ -185,7 +186,7 @@ export default function OverviewTab({ org, onUpdate }: OverviewTabProps) {
                     </div>
                     <div>
                         <label className={labelClass}>Accreditation Expiry</label>
-                        <input type="date" value={form.accreditation_expiry} onChange={e => update('accreditation_expiry', e.target.value)} className={fieldClass} />
+                        <DateField value={form.accreditation_expiry} onChange={e => update('accreditation_expiry', e.target.value)} className={fieldClass} />
                     </div>
                 </div>
             </div>

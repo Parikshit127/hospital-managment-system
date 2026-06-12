@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AdminPage } from '@/app/admin/components/AdminPage';
 import { BarChart3, TrendingUp, Users, ShieldAlert, Download, CalendarClock } from 'lucide-react';
 import { generateAdminReport } from '@/app/actions/admin-actions';
@@ -109,11 +110,11 @@ export default function ReportsHub() {
                             <div className="space-y-4">
                                 <div>
                                     <span className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">Start Date</span>
-                                    <input required type="date" value={dateRange.start} onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 text-sm font-medium outline-none transition-colors" />
+                                    <DateField required value={dateRange.start} onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 text-sm font-medium outline-none transition-colors" />
                                 </div>
                                 <div>
                                     <span className="text-[10px] text-gray-400 font-bold uppercase mb-1 block">End Date (Inclusive)</span>
-                                    <input required type="date" value={dateRange.end} onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 text-sm font-medium outline-none transition-colors" />
+                                    <DateField required value={dateRange.end} onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 text-sm font-medium outline-none transition-colors" />
                                 </div>
                             </div>
                         </div>

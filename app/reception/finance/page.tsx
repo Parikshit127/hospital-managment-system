@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     DollarSign,
@@ -535,11 +536,11 @@ export default function ReceptionFinancePage() {
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Contract Start</label>
-                                    <input type="date" className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500" value={corpForm.contract_start} onChange={e => setCorpForm(f => ({ ...f, contract_start: e.target.value }))} />
+                                    <DateField className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500" value={corpForm.contract_start} onChange={e => setCorpForm(f => ({ ...f, contract_start: e.target.value }))} />
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Contract End</label>
-                                    <input type="date" className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500" value={corpForm.contract_end} onChange={e => setCorpForm(f => ({ ...f, contract_end: e.target.value }))} />
+                                    <DateField className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500" value={corpForm.contract_end} onChange={e => setCorpForm(f => ({ ...f, contract_end: e.target.value }))} />
                                 </div>
                             </div>
                         </div>

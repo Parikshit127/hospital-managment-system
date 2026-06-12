@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     CalendarDays, Loader2, CheckCircle2, XCircle, Filter,
@@ -135,13 +136,13 @@ export default function HRLeavePage() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                             <div>
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">From Date *</label>
-                                <input type="date" value={applyForm.fromDate}
+                                <DateField value={applyForm.fromDate}
                                     onChange={e => setApplyForm({ ...applyForm, fromDate: e.target.value })}
                                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                             </div>
                             <div>
                                 <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">To Date *</label>
-                                <input type="date" value={applyForm.toDate}
+                                <DateField value={applyForm.toDate}
                                     onChange={e => setApplyForm({ ...applyForm, toDate: e.target.value })}
                                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                             </div>

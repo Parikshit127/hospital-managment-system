@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { FileText, Phone } from 'lucide-react';
 
@@ -80,8 +81,7 @@ export default function CallLogsPage() {
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">From Date</label>
-            <input
-              type="date"
+            <DateField
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
               className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -89,8 +89,7 @@ export default function CallLogsPage() {
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">To Date</label>
-            <input
-              type="date"
+            <DateField
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
               className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { Search, Filter, Activity, BedDouble, Calendar, UserRound, ArrowRight, ShieldAlert, CheckCircle2, ArrowLeftRight, X, Loader2, AlertTriangle, HeartPulse, XCircle } from 'lucide-react';
 import { NEWSScoreBadge } from '@/app/components/ipd/NEWSScoreBadge';
 import { Input } from '@/app/components/ui/Input';
@@ -191,8 +192,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                     {/* Admission Date Range Filter */}
                     <div className="shrink-0 flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1.5">
                         <Calendar className="h-4 w-4 text-gray-400 shrink-0" />
-                        <input
-                            type="date"
+                        <DateField
                             value={fromDate}
                             max={toDate || undefined}
                             onChange={(e) => setFromDate(e.target.value)}
@@ -200,8 +200,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                             className="bg-transparent text-xs font-medium text-gray-700 focus:outline-none w-[112px]"
                         />
                         <span className="text-gray-300 text-xs">–</span>
-                        <input
-                            type="date"
+                        <DateField
                             value={toDate}
                             min={fromDate || undefined}
                             onChange={(e) => setToDate(e.target.value)}

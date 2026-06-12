@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AdminPage } from '@/app/admin/components/AdminPage';
 import { CalendarOff, Plus, Trash2, X, Loader2 } from 'lucide-react';
 import { useToast } from '@/app/components/ui/Toast';
@@ -218,8 +219,7 @@ export default function DoctorLeavePage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-600 mb-1">From Date <span className="text-red-500">*</span></label>
-                  <input
-                    type="date"
+                  <DateField
                     value={form.fromDate}
                     onChange={(e) => setForm((f) => ({ ...f, fromDate: e.target.value }))}
                     required
@@ -228,8 +228,7 @@ export default function DoctorLeavePage() {
                 </div>
                 <div>
                   <label className="block text-sm text-gray-600 mb-1">To Date <span className="text-red-500">*</span></label>
-                  <input
-                    type="date"
+                  <DateField
                     value={form.toDate}
                     onChange={(e) => setForm((f) => ({ ...f, toDate: e.target.value }))}
                     required

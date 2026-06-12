@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import {
     UserPlus, CheckCircle, Phone,
     User, MapPin, Shield, Calendar, Loader2, Mail,
@@ -771,11 +772,11 @@ export default function ReceptionPage() {
                                                     </div>
                                                     <div className="space-y-1.5">
                                                         <label className={labelClass}>Validity Start</label>
-                                                        <input type="date" name="insurance_validity_start" className={inputClass} />
+                                                        <DateField name="insurance_validity_start" className={inputClass} />
                                                     </div>
                                                     <div className="space-y-1.5">
                                                         <label className={labelClass}>Validity End</label>
-                                                        <input type="date" name="insurance_validity_end" className={inputClass} />
+                                                        <DateField name="insurance_validity_end" className={inputClass} />
                                                     </div>
                                                 </div>
                                             </div>

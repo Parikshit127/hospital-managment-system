@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { FlaskConical, Search, Plus, AlertTriangle, Edit2, LayoutGrid } from 'lucide-react';
 import { getLabInventory, addLabReagent, updateLabInventory } from '@/app/actions/lab-actions';
@@ -187,7 +188,7 @@ export default function LabInventoryPage() {
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Expiry Date</label>
-                                    <input type="date" value={form.expiry_date} onChange={e => setForm({ ...form, expiry_date: e.target.value })} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 text-sm font-medium" />
+                                    <DateField value={form.expiry_date} onChange={e => setForm({ ...form, expiry_date: e.target.value })} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 text-sm font-medium" />
                                 </div>
                             </div>
                             <div className="pt-4 flex justify-end gap-3">

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import {
     CalendarDays, ChevronLeft, ChevronRight, Plus, Clock, User, Search,
     Loader2, X, Check, AlertCircle, Users, Zap, RotateCcw
@@ -345,7 +346,7 @@ export default function AppointmentsPage() {
                         <button onClick={() => changeDate(-1)} className="p-1 hover:bg-gray-100 rounded-lg">
                             <ChevronLeft className="h-4 w-4 text-gray-500" />
                         </button>
-                        <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
+                        <DateField value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
                             className="text-sm font-medium text-gray-900 border-none focus:outline-none bg-transparent" />
                         <button onClick={() => changeDate(1)} className="p-1 hover:bg-gray-100 rounded-lg">
                             <ChevronRight className="h-4 w-4 text-gray-500" />
@@ -569,7 +570,7 @@ export default function AppointmentsPage() {
                             {/* Date */}
                             <div>
                                 <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Date</label>
-                                <input type="date" value={bookForm.date || selectedDate}
+                                <DateField value={bookForm.date || selectedDate}
                                     onChange={e => setBookForm(f => ({ ...f, date: e.target.value, slotId: '' }))}
                                     className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500" />
                             </div>
@@ -687,12 +688,12 @@ export default function AppointmentsPage() {
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Start Date</label>
-                                    <input type="date" value={bulkForm.startDate} onChange={e => setBulkForm(f => ({ ...f, startDate: e.target.value }))}
+                                    <DateField value={bulkForm.startDate} onChange={e => setBulkForm(f => ({ ...f, startDate: e.target.value }))}
                                         className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500" />
                                 </div>
                                 <div>
                                     <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">End Date</label>
-                                    <input type="date" value={bulkForm.endDate} onChange={e => setBulkForm(f => ({ ...f, endDate: e.target.value }))}
+                                    <DateField value={bulkForm.endDate} onChange={e => setBulkForm(f => ({ ...f, endDate: e.target.value }))}
                                         className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-orange-500" />
                                 </div>
                             </div>
@@ -887,7 +888,7 @@ export default function AppointmentsPage() {
                         <div className="p-6 space-y-4">
                             <div>
                                 <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">New Date</label>
-                                <input type="date" value={rescheduleDate}
+                                <DateField value={rescheduleDate}
                                     onChange={e => { setRescheduleDate(e.target.value); setRescheduleSlotId(''); }}
                                     min={new Date().toISOString().split('T')[0]}
                                     className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-blue-500" />

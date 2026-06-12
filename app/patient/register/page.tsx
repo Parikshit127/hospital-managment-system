@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, Suspense } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { User, Phone, Mail, Calendar, MapPin, Loader2, CheckCircle, ArrowLeft, Building2 } from 'lucide-react';
@@ -181,8 +182,7 @@ function RegisterForm() {
                                 <label className={labelCls}>Date of Birth</label>
                                 <div className="relative">
                                     <Calendar className="absolute left-3 top-3.5 w-4 h-4 text-gray-400" />
-                                    <input
-                                        type="date"
+                                    <DateField
                                         value={form.date_of_birth}
                                         onChange={e => {
                                             const dob = e.target.value;

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import {
     Bed, Search, Loader2, Building2, CalendarCheck, TrendingUp, Printer,
 } from 'lucide-react';
@@ -180,15 +181,13 @@ export default function IPDAdmissionsPage() {
 
                     {/* Date filters */}
                     <div className="flex items-center gap-2">
-                        <input
-                            type="date"
+                        <DateField
                             value={dateFrom}
                             onChange={e => setDateFrom(e.target.value)}
                             className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-emerald-400"
                         />
                         <span className="text-xs text-gray-400">to</span>
-                        <input
-                            type="date"
+                        <DateField
                             value={dateTo}
                             onChange={e => setDateTo(e.target.value)}
                             className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-emerald-400"

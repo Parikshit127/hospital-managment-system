@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { Building2, Plus, Edit2, ToggleLeft, ToggleRight, Loader2, X, Save } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { getAllCorporateMasters, createCorporateMaster, updateCorporateMaster } from '@/app/actions/patient-type-actions';
@@ -224,11 +225,11 @@ export default function CorporatesPage() {
                                 </div>
                                 <div className="space-y-1">
                                     <label className={labelClass}>Contract Start</label>
-                                    <input type="date" className={inputClass} value={form.contract_start} onChange={e => setForm(f => ({ ...f, contract_start: e.target.value }))} />
+                                    <DateField className={inputClass} value={form.contract_start} onChange={e => setForm(f => ({ ...f, contract_start: e.target.value }))} />
                                 </div>
                                 <div className="space-y-1">
                                     <label className={labelClass}>Contract End</label>
-                                    <input type="date" className={inputClass} value={form.contract_end} onChange={e => setForm(f => ({ ...f, contract_end: e.target.value }))} />
+                                    <DateField className={inputClass} value={form.contract_end} onChange={e => setForm(f => ({ ...f, contract_end: e.target.value }))} />
                                 </div>
                             </div>
                         </div>

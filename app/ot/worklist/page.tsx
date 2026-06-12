@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { DateField } from '@/app/components/ui/DateField';
 import Link from "next/link";
 import { ClipboardCheck, Loader2 } from "lucide-react";
 import { AppShell } from "@/app/components/layout/AppShell";
@@ -45,8 +46,7 @@ export default function OTWorklistPage() {
       onRefresh={load}
       refreshing={loading}
       headerActions={
-        <input
-          type="date"
+        <DateField
           value={date}
           onChange={(e) => setDate(e.target.value)}
           className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm"

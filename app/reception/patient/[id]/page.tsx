@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { useParams, useRouter } from 'next/navigation';
 import {
     User, Calendar, Phone, Mail, MapPin, Activity, Loader2,
@@ -49,14 +50,24 @@ function EditableField({
             <div>
                 <span className="text-[10px] font-semibold text-gray-400 uppercase">{label}</span>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                    <input
-                        type={type}
-                        value={editValue}
-                        onChange={e => setEditValue(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
-                        className="flex-1 px-2 py-1 text-sm border border-teal-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white"
-                        autoFocus
-                    />
+                    {type === 'date' ? (
+                        <DateField
+                            value={editValue}
+                            onChange={e => setEditValue(e.target.value)}
+                            onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
+                            className="flex-1 px-2 py-1 text-sm border border-teal-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white"
+                            autoFocus
+                        />
+                    ) : (
+                        <input
+                            type={type}
+                            value={editValue}
+                            onChange={e => setEditValue(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
+                            className="flex-1 px-2 py-1 text-sm border border-teal-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white"
+                            autoFocus
+                        />
+                    )}
                     <button onClick={handleSave} disabled={saving}
                         className="p-1 text-orange-600 hover:bg-orange-50 rounded">
                         {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
@@ -943,7 +954,7 @@ export default function PatientProfilePage() {
                             </div>
                             <div>
                                 <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Date</label>
-                                <input type="date" value={recordForm.record_date} onChange={e => setRecordForm(f => ({ ...f, record_date: e.target.value }))}
+                                <DateField value={recordForm.record_date} onChange={e => setRecordForm(f => ({ ...f, record_date: e.target.value }))}
                                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-violet-500" />
                             </div>
                             <div>

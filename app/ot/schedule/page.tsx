@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { DateField } from '@/app/components/ui/DateField';
 import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense } from "react";
 import { CalendarClock, Loader2, Plus, Trash2 } from "lucide-react";
@@ -120,8 +121,7 @@ function ScheduleSurgeryInner() {
               <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
                 Date *
               </label>
-              <input
-                type="date"
+              <DateField
                 value={form.scheduled_date}
                 onChange={(e) => setForm({ ...form, scheduled_date: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"

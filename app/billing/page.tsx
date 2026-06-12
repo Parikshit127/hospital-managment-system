@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DateField } from '@/app/components/ui/DateField';
 import Link from "next/link";
 import {
   BanknoteArrowDown,
@@ -759,8 +760,7 @@ function FilterRow({
           );
         })}
         {/* Custom range */}
-        <input
-          type="date"
+        <DateField
           value={filter.date_from ?? ""}
           max={filter.date_to || undefined}
           onChange={(e) => setFilter({ date_from: e.target.value || undefined })}
@@ -768,8 +768,7 @@ function FilterRow({
           title="From date (invoice created on/after)"
         />
         <span className="text-[10px] text-gray-400">to</span>
-        <input
-          type="date"
+        <DateField
           value={filter.date_to ?? ""}
           min={filter.date_from || undefined}
           onChange={(e) => setFilter({ date_to: e.target.value || undefined })}

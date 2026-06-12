@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Clock, Plus, X, Play, CheckCircle, Loader2, Receipt } from 'lucide-react';
 import { useToast } from '@/app/components/ui/Toast';
@@ -357,9 +358,8 @@ export default function DaycarePage() {
                 </div>
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Scheduled Date *</label>
-                  <input
+                  <DateField
                     required
-                    type="date"
                     min={new Date().toISOString().slice(0, 10)}
                     value={form.scheduled_date}
                     onChange={e => setForm(f => ({ ...f, scheduled_date: e.target.value }))}

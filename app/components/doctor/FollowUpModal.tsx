@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { X, Calendar, Clock, Check, Search, User, Info, Loader2 } from 'lucide-react';
 import { scheduleFollowUp } from '@/app/actions/doctor-actions';
 import { searchPatients } from '@/app/actions/pill-actions';
@@ -176,9 +177,8 @@ export default function FollowUpModal({ isOpen, onClose, session }: FollowUpModa
             <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
               <Clock className="w-4 h-4 text-amber-500" /> Follow-up Date
             </label>
-            <input
+            <DateField
               required
-              type="date"
               value={formData.scheduledDate}
               onChange={(e) => setFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
               className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500/20"

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import {
     Users, UserPlus, Search, Filter, Shield, Stethoscope, Loader2,
     ChevronLeft, ChevronRight, Pencil, KeyRound, Power, X, Eye, EyeOff,
@@ -314,7 +315,7 @@ export default function StaffManagement() {
                                 <div><FL label="Department" badge="preferred" /><input type="text" value={form.department} onChange={e => set('department', e.target.value)} placeholder="e.g. Cardiology / Lab / Pharmacy" className={inputCls} /></div>
                                 <div><FL label="Designation" badge="preferred" /><input type="text" value={form.designation} onChange={e => set('designation', e.target.value)} placeholder="e.g. Senior Nurse" className={inputCls} /></div>
                                 <div><FL label="Employee Code" badge="preferred" /><input type="text" value={form.employee_code} onChange={e => set('employee_code', e.target.value)} placeholder="EMP-0042" className={inputCls} /></div>
-                                <div><FL label="Date of Joining" badge="preferred" /><input type="date" value={form.date_of_joining} onChange={e => set('date_of_joining', e.target.value)} className={inputCls} /></div>
+                                <div><FL label="Date of Joining" badge="preferred" /><DateField value={form.date_of_joining} onChange={e => set('date_of_joining', e.target.value)} className={inputCls} /></div>
                                 {form.role === 'nurse' && (
                                     <div className="col-span-2"><FL label="Assigned Ward (Nurses only)" badge="preferred" /><select value={form.assigned_ward_id} onChange={e => set('assigned_ward_id', e.target.value)} className={selectCls}><option value="">— Not assigned —</option>{wards.map((w: any) => <option key={w.ward_id} value={w.ward_id}>{w.ward_name} ({w.ward_type})</option>)}</select></div>
                                 )}
@@ -362,7 +363,7 @@ export default function StaffManagement() {
                                 <div><FL label="Department" badge="preferred" /><input type="text" value={form.department} onChange={e => set('department', e.target.value)} placeholder="e.g. Cardiology / Lab" className={inputCls} /></div>
                                 <div><FL label="Designation" badge="preferred" /><input type="text" value={form.designation} onChange={e => set('designation', e.target.value)} placeholder="e.g. Senior Nurse" className={inputCls} /></div>
                                 <div><FL label="Employee Code" badge="preferred" /><input type="text" value={form.employee_code} onChange={e => set('employee_code', e.target.value)} placeholder="EMP-0042" className={inputCls} /></div>
-                                <div><FL label="Date of Joining" badge="preferred" /><input type="date" value={form.date_of_joining} onChange={e => set('date_of_joining', e.target.value)} className={inputCls} /></div>
+                                <div><FL label="Date of Joining" badge="preferred" /><DateField value={form.date_of_joining} onChange={e => set('date_of_joining', e.target.value)} className={inputCls} /></div>
                                 {form.role === 'nurse' && (
                                     <div className="col-span-2"><FL label="Assigned Ward (Nurses only)" badge="preferred" /><select value={form.assigned_ward_id} onChange={e => set('assigned_ward_id', e.target.value)} className={selectCls}><option value="">— Not assigned —</option>{wards.map((w: any) => <option key={w.ward_id} value={w.ward_id}>{w.ward_name} ({w.ward_type})</option>)}</select></div>
                                 )}

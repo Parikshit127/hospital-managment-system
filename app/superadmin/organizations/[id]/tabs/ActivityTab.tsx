@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { getOrganizationAuditLog } from '@/app/actions/superadmin-actions';
 import { Clock, ChevronLeft, ChevronRight, Loader2, Search, Filter } from 'lucide-react';
 
@@ -52,9 +53,9 @@ export default function ActivityTab({ orgId }: ActivityTabProps) {
                         className="w-full pl-10 pr-4 py-2 bg-[#161b22] border border-white/10 rounded-lg text-sm text-white placeholder-gray-500 outline-none focus:ring-2 focus:ring-violet-500"
                     />
                 </div>
-                <input type="date" value={from} onChange={e => { setFrom(e.target.value); setPage(1); }}
+                <DateField value={from} onChange={e => { setFrom(e.target.value); setPage(1); }}
                     className="px-3 py-2 bg-[#161b22] border border-white/10 rounded-lg text-sm text-white outline-none focus:ring-2 focus:ring-violet-500" />
-                <input type="date" value={to} onChange={e => { setTo(e.target.value); setPage(1); }}
+                <DateField value={to} onChange={e => { setTo(e.target.value); setPage(1); }}
                     className="px-3 py-2 bg-[#161b22] border border-white/10 rounded-lg text-sm text-white outline-none focus:ring-2 focus:ring-violet-500" />
                 <span className="text-xs text-gray-500">{total} entries</span>
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     Clock,
@@ -134,8 +135,7 @@ export default function PatientHistoryPage() {
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">From</label>
-                                    <input
-                                        type="date"
+                                    <DateField
                                         value={dateFrom}
                                         onChange={e => setDateFrom(e.target.value)}
                                         className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-blue-400"
@@ -143,8 +143,7 @@ export default function PatientHistoryPage() {
                                 </div>
                                 <div>
                                     <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">To</label>
-                                    <input
-                                        type="date"
+                                    <DateField
                                         value={dateTo}
                                         onChange={e => setDateTo(e.target.value)}
                                         className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-blue-400"

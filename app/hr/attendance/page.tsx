@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     Clock, Loader2, CheckCircle2, XCircle, Users, Calendar
@@ -77,7 +78,7 @@ export default function HRAttendancePage() {
                 <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                     <div className="flex items-center gap-3">
                         <Calendar className="h-4 w-4 text-gray-400" />
-                        <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                        <DateField value={date} onChange={e => setDate(e.target.value)}
                             className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
                     </div>
                     {unmarked > 0 && (

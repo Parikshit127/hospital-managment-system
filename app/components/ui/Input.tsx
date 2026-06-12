@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { DateField } from './DateField';
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
     label?: string;
@@ -9,6 +10,9 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 }
 
 export function Input({ label, icon, error, className = '', ...props }: InputProps) {
+    const inputClass = `w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/15 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-gray-300 ${icon ? 'pl-10' : ''} ${error ? 'border-rose-300 focus:ring-rose-500/15 focus:border-rose-500 hover:border-rose-300' : ''} ${className}`;
+    // Date fields render as browser-independent dd/mm/yyyy via DateField.
+    const isDate = props.type === 'date';
     return (
         <div className="space-y-1.5">
             {label && (
@@ -22,10 +26,9 @@ export function Input({ label, icon, error, className = '', ...props }: InputPro
                         {icon}
                     </div>
                 )}
-                <input
-                    className={`w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/15 focus:border-orange-500 transition-all duration-200 shadow-sm hover:border-gray-300 ${icon ? 'pl-10' : ''} ${error ? 'border-rose-300 focus:ring-rose-500/15 focus:border-rose-500 hover:border-rose-300' : ''} ${className}`}
-                    {...props}
-                />
+                {isDate
+                    ? <DateField {...(props as any)} className={inputClass} />
+                    : <input className={inputClass} {...props} />}
             </div>
             {error && <p className="text-xs text-rose-600 font-medium">{error}</p>}
         </div>
