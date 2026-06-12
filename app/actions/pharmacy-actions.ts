@@ -1329,6 +1329,30 @@ export async function createPurchaseOrder(
         }, 0);
         const poNumber = `PO-${Date.now().toString().slice(-6)}`;
 
+        // supplier_id from UI is actually a Vendor.id (unified vendor table).
+        // PurchaseOrder.supplier_id expects a PharmacySupplier.id.
+        // Find or create a PharmacySupplier that proxies this vendor.
+        const vendorId = supplier_id; // the UI always passes Vendor.id
+        const vendor = await db.vendor.findUnique({ where: { id: vendorId } });
+        if (!vendor) return { success: false, error: `Supplier not found (id=${vendorId})` };
+
+        let pharmSupplier = await db.pharmacySupplier.findFirst({
+            where: { organizationId, name: vendor.vendor_name },
+        });
+        if (!pharmSupplier) {
+            pharmSupplier = await db.pharmacySupplier.create({
+                data: {
+                    name: vendor.vendor_name,
+                    contact_person: vendor.contact_person || null,
+                    phone: vendor.phone || null,
+                    email: vendor.email || null,
+                    gst_no: vendor.gst_number || null,
+                    organizationId,
+                },
+            });
+        }
+        const resolvedSupplierId = pharmSupplier.id;
+
         // Check auto-approve threshold from module config
         let status = 'Draft';
         if (options?.submit) {
@@ -1351,8 +1375,8 @@ export async function createPurchaseOrder(
         const po = await db.purchaseOrder.create({
             data: {
                 po_number: poNumber,
-                supplier_id,
-                vendor_id: options?.vendor_id || null,
+                supplier_id: resolvedSupplierId,
+                vendor_id: vendorId,
                 status,
                 total_amount: totalAmount,
                 gst_amount: gstAmount,
@@ -1376,7 +1400,8 @@ export async function createPurchaseOrder(
         revalidatePath('/pharmacy/purchase-orders');
         return { success: true, data: po };
     } catch (error: any) {
-        return { success: false, error: 'Failed to create PO' };
+        console.error('createPurchaseOrder error:', error.message);
+        return { success: false, error: error.message || 'Failed to create PO' };
     }
 }
 
