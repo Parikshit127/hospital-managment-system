@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { getIPDAdmissions } from '@/app/actions/ipd-actions';
 import { generateInterimBill, postChargeToIpdBill, getGstSummary } from '@/app/actions/ipd-finance-actions';
-import { recordPayment, recordSplitPayment } from '@/app/actions/finance-actions';
+import { recordPayment, recordSplitPayment, removeInvoiceItem } from '@/app/actions/finance-actions';
 import { getCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan } from '@/app/lib/cash-compliance';
 import { collectDeposit, getPatientDeposits, applyDepositToInvoice } from '@/app/actions/deposit-actions';
@@ -53,6 +53,7 @@ export default function IpdBillingPage() {
     const [chargeRate, setChargeRate] = useState('');
     const [chargeCategory, setChargeCategory] = useState('');
     const [chargeTaxRate, setChargeTaxRate] = useState(0);
+    const [removingItemId, setRemovingItemId] = useState<number | null>(null);
 
     // Deposit state
     const [showDepositModal, setShowDepositModal] = useState(false);
@@ -196,6 +197,21 @@ export default function IpdBillingPage() {
             await refreshBill();
         } else {
             showToast(res.error || 'Failed to add charge', 'error');
+        }
+    }
+
+    async function handleRemoveCharge(item: any) {
+        if (!billData?.invoice?.id) return;
+        const label = item.description || 'this charge';
+        if (!confirm(`Remove "${label}" from the bill?`)) return;
+        setRemovingItemId(item.id);
+        const res = await removeInvoiceItem(item.id, billData.invoice.id);
+        setRemovingItemId(null);
+        if (res.success) {
+            showToast('Charge removed from bill');
+            await refreshBill();
+        } else {
+            showToast(res.error || 'Failed to remove charge', 'error');
         }
     }
 
@@ -550,17 +566,28 @@ export default function IpdBillingPage() {
                                                                 <th className="p-2 text-right">Rate</th>
                                                                 <th className="p-2 text-right">GST%</th>
                                                                 <th className="p-2 text-right">Amount</th>
+                                                                <th className="p-2 text-center w-8"></th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
                                                             {items.map((item: any) => (
-                                                                <tr key={item.id} className="border-b">
+                                                                <tr key={item.id} className="border-b group">
                                                                     <td className="p-2">{item.description}</td>
                                                                     <td className="p-2 text-gray-400">{new Date(item.created_at).toLocaleDateString('en-GB')}</td>
                                                                     <td className="p-2 text-right">{item.quantity}</td>
                                                                     <td className="p-2 text-right">₹{item.unit_price?.toLocaleString('en-IN')}</td>
                                                                     <td className="p-2 text-right">{item.tax_rate}%</td>
                                                                     <td className="p-2 text-right">₹{(item.net_price + item.tax_amount)?.toLocaleString('en-IN')}</td>
+                                                                    <td className="p-2 text-center">
+                                                                        <button
+                                                                            onClick={() => handleRemoveCharge(item)}
+                                                                            disabled={removingItemId === item.id}
+                                                                            title="Remove this charge from the bill"
+                                                                            className="text-gray-300 hover:text-red-600 disabled:opacity-40 text-base leading-none font-bold transition-colors"
+                                                                        >
+                                                                            {removingItemId === item.id ? '…' : '×'}
+                                                                        </button>
+                                                                    </td>
                                                                 </tr>
                                                             ))}
                                                         </tbody>
