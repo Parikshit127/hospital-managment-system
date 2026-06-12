@@ -70,11 +70,16 @@ function EditableField({
         );
     }
 
+    // Show dates in Indian DD/MM/YYYY format; keep raw YYYY-MM-DD for the date input.
+    const displayValue = type === 'date' && value
+        ? new Date(value).toLocaleDateString('en-GB')
+        : value;
+
     return (
         <div className="group cursor-pointer" onClick={() => setEditing(true)}>
             <span className="text-[10px] font-semibold text-gray-400 uppercase">{label}</span>
             <p className="text-sm text-gray-900 flex items-center gap-1">
-                {value || <span className="text-gray-300">-</span>}
+                {displayValue || <span className="text-gray-300">-</span>}
                 <Pencil className="h-3 w-3 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
             </p>
         </div>
