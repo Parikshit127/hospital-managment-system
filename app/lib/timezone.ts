@@ -28,7 +28,7 @@ export function getTodayRange(timezone: string = DEFAULT_TIMEZONE): { start: Dat
     const formatter = new Intl.DateTimeFormat('en-CA', {
         timeZone: timezone,
         year: 'numeric',
-        month: 'short',
+        month: '2-digit', // MUST be numeric — produces "2025-03-20"; "short" yields "Jun 12, 2026" → Invalid Date
         day: '2-digit',
     });
     const dateStr = formatter.format(now); // "2025-03-20"
