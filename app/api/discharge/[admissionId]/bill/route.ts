@@ -50,6 +50,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 
         if (!invoice) return NextResponse.json({ error: 'No invoice found' }, { status: 404 });
 
+        // "Include medicines" toggle — drop pharmacy items from list + totals when ?meds=0
+        const includeMeds = new URL(req.url).searchParams.get('meds') !== '0';
+        const isMedicineItem = (i: any) => String(i.service_category || i.department || '').toLowerCase() === 'pharmacy';
+        const medsAvailable = (invoice.items || []).some(isMedicineItem);
+        if (medsAvailable && !includeMeds) {
+            invoice.items = (invoice.items || []).filter((i: any) => !isMedicineItem(i));
+        }
+
         // Fetch TPA provider name + policy number if applicable.
         // Treat the bill as insurance/TPA when EITHER the invoice OR the patient master says so.
         let tpaProviderName = '';
@@ -94,7 +102,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         });
 
         const isFinal = admission.status === 'Discharged';
-        const html = generateDischargeBillHTML(admission, invoice, org, deposits, isFinal, branding, sections, tpaProviderName, policyNumber, isInsuranceBill);
+        const html = generateDischargeBillHTML(admission, invoice, org, deposits, isFinal, branding, sections, tpaProviderName, policyNumber, isInsuranceBill, medsAvailable, includeMeds);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -126,7 +134,7 @@ function numberToWords(n: number): string {
     return (n < 0 ? 'Minus ' : '') + result + ' Only';
 }
 
-function generateDischargeBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any, tpaProviderName: string = '', policyNumber: string = '', isInsuranceBill: boolean = false) {
+function generateDischargeBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any, tpaProviderName: string = '', policyNumber: string = '', isInsuranceBill: boolean = false, medsAvailable: boolean = false, includeMeds: boolean = true) {
     const patient = admission.patient || {};
     const items = invoice.items || [];
     const payments = invoice.payments || [];
@@ -242,6 +250,12 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
     <div class="watermark">${isFinal ? 'FINAL BILL' : 'INTERIM'}</div>
 
     ${printButtonHtml(branding)}
+    ${medsAvailable ? `<div class="no-print" style="background:#f3f4f6;padding:0 12px 12px;text-align:center;">
+        <label style="font-size:12px;color:#374151;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+            <input type="checkbox" ${includeMeds ? 'checked' : ''} onchange="var u=new URL(location.href); if(this.checked){u.searchParams.delete('meds');}else{u.searchParams.set('meds','0');} location.href=u.toString();" />
+            Include medicines on this bill
+        </label>
+    </div>` : ''}
 
     <table class="print-layout-table">
         <thead>

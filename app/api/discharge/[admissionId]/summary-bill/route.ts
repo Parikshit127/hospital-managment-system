@@ -42,6 +42,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         });
         if (!invoice) return NextResponse.json({ error: 'No invoice found' }, { status: 404 });
 
+        // "Include medicines" toggle — drop pharmacy items from list + totals when ?meds=0
+        const includeMeds = new URL(req.url).searchParams.get('meds') !== '0';
+        const isMedicineItem = (i: any) => String(i.service_category || i.department || '').toLowerCase() === 'pharmacy';
+        const medsAvailable = (invoice.items || []).some(isMedicineItem);
+        if (medsAvailable && !includeMeds) {
+            invoice.items = (invoice.items || []).filter((i: any) => !isMedicineItem(i));
+        }
+
         const org = await prisma.organization.findUnique({
             where: { id: auth.context.organizationId },
             include: { branding: true },
@@ -55,7 +63,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         });
 
         const isFinal = admission.status === 'Discharged';
-        const html = generateSummaryBillHTML(admission, invoice, org, deposits, isFinal, branding, sections);
+        const html = generateSummaryBillHTML(admission, invoice, org, deposits, isFinal, branding, sections, medsAvailable, includeMeds);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -83,7 +91,7 @@ function numberToWords(n: number): string {
     return (n < 0 ? 'Minus ' : '') + 'Rupees ' + convert(rupees) + ' Only';
 }
 
-function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any) {
+function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any, medsAvailable: boolean = false, includeMeds: boolean = true) {
     const patient = admission.patient || {};
     const items = invoice.items || [];
 
@@ -153,6 +161,12 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
     <div class="watermark">${isFinal ? 'FINAL' : 'INTERIM'} SUMMARY</div>
 
     ${printButtonHtml(branding, 'This is a category-level summary. For line-by-line details, see the Detailed Bill.')}
+    ${medsAvailable ? `<div class="no-print" style="background:#f3f4f6;padding:0 12px 12px;text-align:center;">
+        <label style="font-size:12px;color:#374151;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+            <input type="checkbox" ${includeMeds ? 'checked' : ''} onchange="var u=new URL(location.href); if(this.checked){u.searchParams.delete('meds');}else{u.searchParams.set('meds','0');} location.href=u.toString();" />
+            Include medicines on this bill
+        </label>
+    </div>` : ''}
 
     <table class="print-layout-table">
         <thead>
