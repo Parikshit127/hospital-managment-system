@@ -167,6 +167,30 @@ export function printButtonHtml(b: BillBranding, subtitle = ''): string {
     </div>`;
 }
 
+/**
+ * "Include medicines" toggle for bills — rendered as a plain <a> link (no JS), so it
+ * always works (inline onchange handlers were unreliable). Clicking flips the ?meds
+ * param: when medicines are currently shown the link removes them (meds=0), and vice
+ * versa. Returns '' when the bill has no medicine items. `currentUrl` is req.url.
+ */
+export function medsToggleHtml(currentUrl: string, medsAvailable: boolean, includeMeds: boolean): string {
+    if (!medsAvailable) return '';
+    let href = '?';
+    try {
+        const u = new URL(currentUrl);
+        if (includeMeds) u.searchParams.set('meds', '0'); else u.searchParams.delete('meds');
+        const qs = u.searchParams.toString();
+        href = u.pathname + (qs ? `?${qs}` : '');
+    } catch { /* fall back to '?' */ }
+    return `<div class="no-print" style="background:#f3f4f6;padding:0 12px 12px;text-align:center;">
+        <a href="${href}" style="font-size:12px;color:#374151;text-decoration:none;display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" ${includeMeds ? 'checked' : ''} readonly style="pointer-events:none;margin:0;" />
+            Include medicines on this bill
+        </a>
+        <span style="margin-left:8px;font-size:11px;color:#6b7280;">(click to ${includeMeds ? 'remove' : 'add'})</span>
+    </div>`;
+}
+
 // ─── Date helpers (single source of truth for bill/receipt dates) ────────────
 // All bills/receipts use dd/mm/yyyy, rendered in IST so the day is correct.
 

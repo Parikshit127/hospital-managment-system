@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
-import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, fmtBillDateTime, deriveInvoiceTotals, type BillBranding } from '@/app/lib/bill-branding';
+import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, fmtBillDateTime, deriveInvoiceTotals, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding';
 import { getBillSections } from '@/app/lib/bill-sections';
 import { formatDoctorName } from '@/app/lib/format-name';
 
@@ -102,7 +102,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             })
             : [];
 
-        const html = generateSummaryBillHTML(invoice, admission, org, deposits, branding, sections, opdDoctor, tpaProviderName, detailed, medsAvailable, includeMeds);
+        const medsToggle = medsToggleHtml(req.url, medsAvailable, includeMeds);
+        const html = generateSummaryBillHTML(invoice, admission, org, deposits, branding, sections, opdDoctor, tpaProviderName, detailed, medsToggle);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -130,7 +131,7 @@ function numberToWords(n: number): string {
     return (n < 0 ? 'Minus ' : '') + 'Rupees ' + convert(rupees) + ' Only';
 }
 
-function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[], branding: BillBranding, sections: any, opdDoctor: string = '', tpaProviderName: string = '', detailed: boolean = false, medsAvailable: boolean = false, includeMeds: boolean = true) {
+function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[], branding: BillBranding, sections: any, opdDoctor: string = '', tpaProviderName: string = '', detailed: boolean = false, medsToggle: string = '') {
     const patient = invoice.patient || {};
     const items = invoice.items || [];
 
@@ -255,12 +256,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     ${letterheadBackgroundHtml(branding)}
     <div class="watermark">${billType}</div>
     ${printButtonHtml(branding, 'Category-level summary bill for ' + invoice.invoice_number)}
-    ${medsAvailable ? `<div class="no-print" style="background:#f3f4f6;padding:0 12px 12px;text-align:center;">
-        <label style="font-size:12px;color:#374151;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
-            <input type="checkbox" ${includeMeds ? 'checked' : ''} onchange="var u=new URL(location.href); if(this.checked){u.searchParams.delete('meds');}else{u.searchParams.set('meds','0');} location.href=u.toString();" />
-            Include medicines on this bill
-        </label>
-    </div>` : ''}
+    ${medsToggle}
     <table class="print-layout-table">
         <thead><tr><td class="print-layout-header-spacer"></td></tr></thead>
         <tbody><tr><td>

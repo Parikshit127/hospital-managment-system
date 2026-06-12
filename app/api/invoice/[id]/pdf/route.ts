@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { validateZealthixApiKey } from '@/app/lib/zealthix/auth'
-import { getBillBranding, inlineHeaderHtml, billFooterHtml, letterheadBackgroundHtml, letterheadCss, printButtonHtml, fmtBillDate, deriveInvoiceTotals, type BillBranding } from '@/app/lib/bill-branding'
+import { getBillBranding, inlineHeaderHtml, billFooterHtml, letterheadBackgroundHtml, letterheadCss, printButtonHtml, fmtBillDate, deriveInvoiceTotals, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding'
 import { getPharmacyBranding } from '@/app/lib/pharmacy-branding'
 import { getBillSections } from '@/app/lib/bill-sections'
 import { formatDoctorName } from '@/app/lib/format-name'
@@ -133,7 +133,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             invoice.items = (invoice.items || []).filter((i: any) => !isMedicineItem(i));
         }
 
-        const html = generateInvoiceHTML(invoice, branding, pharmacy, sections, opdDoctor, tpaProviderName, medsAvailable, includeMeds)
+        const medsToggle = medsToggleHtml(req.url, medsAvailable, includeMeds)
+        const html = generateInvoiceHTML(invoice, branding, pharmacy, sections, opdDoctor, tpaProviderName, medsToggle)
 
         // Return HTML for browser viewing (works for both API key and regular auth)
         return new NextResponse(html, {
@@ -168,7 +169,7 @@ function numberToWords(n: number): string {
     return (n < 0 ? 'Minus ' : '') + result + ' Only';
 }
 
-function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { name: string; division: string; address: string; gstin: string }, sections: any, opdDoctor: string = '', tpaProviderName: string = '', medsAvailable: boolean = false, includeMeds: boolean = true) {
+function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { name: string; division: string; address: string; gstin: string }, sections: any, opdDoctor: string = '', tpaProviderName: string = '', medsToggle: string = '') {
     const items = invoice.items || []
     const payments = invoice.payments || []
     const creditNotes = (invoice as any).credit_notes || []
@@ -285,12 +286,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
 <body>
     ${isPharmacyBill ? '' : letterheadBackgroundHtml(branding)}
     ${printButtonHtml(branding, 'Detailed bill for ' + invoice.invoice_number)}
-    ${medsAvailable ? `<div class="no-print" style="background:#f3f4f6;padding:0 12px 12px;text-align:center;">
-        <label style="font-size:12px;color:#374151;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
-            <input type="checkbox" ${includeMeds ? 'checked' : ''} onchange="var u=new URL(location.href); if(this.checked){u.searchParams.delete('meds');}else{u.searchParams.set('meds','0');} location.href=u.toString();" />
-            Include medicines on this bill
-        </label>
-    </div>` : ''}
+    ${medsToggle}
 
     ${isPharmacyBill ? '<div>' : '<table class="print-layout-table"><thead><tr><td class="print-layout-header-spacer"></td></tr></thead><tbody><tr><td>'}
             <div class="bill-container">
