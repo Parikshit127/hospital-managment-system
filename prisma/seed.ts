@@ -61,7 +61,7 @@ async function main() {
             portal_subtitle: 'A Unit of TAH Global Healthcare Pvt. Ltd.',
             primary_color: '#1e3a6e',
             secondary_color: '#1e3a6e',
-            logo_url: 'https://i.imgur.com/axten-logo.png',
+            logo_url: null, // null = render built-in Axten SVG logo (avoids broken placeholder)
             footer_text: '© 2026 Axten Hospitals. A Unit of TAH Global Healthcare Pvt. Ltd. All rights reserved.',
         },
     });

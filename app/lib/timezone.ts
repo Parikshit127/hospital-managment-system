@@ -25,20 +25,29 @@ export async function getOrgTimezone(): Promise<string> {
  */
 export function getTodayRange(timezone: string = DEFAULT_TIMEZONE): { start: Date; end: Date } {
     const now = new Date();
+
+    // Guard against an invalid/garbage tz string in config — fall back to default.
+    let tz = timezone;
+    try {
+        new Intl.DateTimeFormat('en-CA', { timeZone: tz });
+    } catch {
+        tz = DEFAULT_TIMEZONE;
+    }
+
     const formatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone: timezone,
+        timeZone: tz,
         year: 'numeric',
         month: '2-digit', // MUST be numeric — produces "2025-03-20"; "short" yields "Jun 12, 2026" → Invalid Date
         day: '2-digit',
     });
     const dateStr = formatter.format(now); // "2025-03-20"
 
-    // Build midnight in that timezone by parsing the local date
-    const start = new Date(`${dateStr}T00:00:00`);
-    const end = new Date(`${dateStr}T23:59:59.999`);
+    // Build midnight as a UTC instant (explicit "Z"), then shift by the tz offset
+    // so the range represents local midnight..end-of-day in `tz`.
+    const start = new Date(`${dateStr}T00:00:00.000Z`);
+    const end = new Date(`${dateStr}T23:59:59.999Z`);
 
-    // Convert from timezone-local to UTC
-    const offsetMs = getTimezoneOffsetMs(timezone, now);
+    const offsetMs = getTimezoneOffsetMs(tz, now);
     start.setTime(start.getTime() - offsetMs);
     end.setTime(end.getTime() - offsetMs);
 
@@ -46,12 +55,25 @@ export function getTodayRange(timezone: string = DEFAULT_TIMEZONE): { start: Dat
 }
 
 /**
- * Get the offset in ms between a timezone and UTC at a given instant.
+ * Offset in ms between a timezone and UTC at a given instant (positive when the
+ * timezone is ahead of UTC). Uses formatToParts so it never depends on locale
+ * date-string parsing (e.g. "13/06/2026" → Invalid Date in V8).
  */
 function getTimezoneOffsetMs(timezone: string, date: Date): number {
-    const utcStr = date.toLocaleString('en-GB', { timeZone: 'UTC' });
-    const tzStr = date.toLocaleString('en-GB', { timeZone: timezone });
-    return new Date(tzStr).getTime() - new Date(utcStr).getTime();
+    const dtf = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        hourCycle: 'h23',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+    });
+    const p: Record<string, string> = {};
+    for (const part of dtf.formatToParts(date)) p[part.type] = part.value;
+    const asIfUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+    return asIfUtc - date.getTime();
 }
 
 /**
