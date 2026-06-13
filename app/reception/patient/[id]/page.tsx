@@ -412,6 +412,9 @@ export default function PatientProfilePage() {
                             <EditableField label="Blood Group" value={patient.blood_group || ''} field="blood_group" patientId={patientId} onSave={loadData} />
                             <EditableField label="Date of Birth" value={patient.date_of_birth || ''} field="date_of_birth" patientId={patientId} onSave={loadData} type="date" />
                             <EditableField label="Address" value={patient.address || ''} field="address" patientId={patientId} onSave={loadData} />
+                            <EditableField label="Nationality" value={patient.nationality || ''} field="nationality" patientId={patientId} onSave={loadData} />
+                            <EditableField label="Govt Proof Type" value={patient.govt_id_type || ''} field="govt_id_type" patientId={patientId} onSave={loadData} />
+                            <EditableField label="Govt Proof Number" value={patient.govt_id_number || ''} field="govt_id_number" patientId={patientId} onSave={loadData} />
                             <EditableField label="Emergency Contact" value={patient.emergency_contact_name || ''} field="emergency_contact_name" patientId={patientId} onSave={loadData} />
                             <EditableField label="Emergency Phone" value={patient.emergency_contact_phone || ''} field="emergency_contact_phone" patientId={patientId} onSave={loadData} type="tel" />
                             <div>

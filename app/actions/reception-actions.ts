@@ -248,6 +248,7 @@ export async function updatePatientField(patientId: string, field: string, value
             'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relation',
             // Identity documents
             'aadhar_card', 'abha_number', 'pan_number',
+            'nationality', 'govt_id_type', 'govt_id_number',
             // Medical
             'allergies', 'chronic_conditions',
         ];
@@ -310,6 +311,7 @@ export async function updatePatient(patientId: string, payload: Record<string, s
             'department', 'blood_group', 'date_of_birth',
             'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relation',
             'aadhar_card', 'abha_number', 'pan_number',
+            'nationality', 'govt_id_type', 'govt_id_number',
             'allergies', 'chronic_conditions',
             // Billing / payer
             'patient_type', 'corporate_id', 'corporate_card_number', 'employee_id',

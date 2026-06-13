@@ -277,6 +277,9 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
             <F label="Aadhar Card" field="aadhar_card" value={patient.aadhar_card || 'N/A'} placeholder="XXXX-XXXX-XXXX" />
             <F label="ABHA Number" field="abha_number" value={patient.abha_number || 'N/A'} placeholder="14-digit ABHA" />
             <F label="PAN Number" field="pan_number" value={patient.pan_number || 'N/A'} placeholder="ABCDE1234F" />
+            <F label="Nationality" field="nationality" value={patient.nationality || 'N/A'} placeholder="e.g. Indian" />
+            <F label="Govt Proof Type" field="govt_id_type" value={patient.govt_id_type || 'N/A'} type="select" options={['Aadhaar', 'PAN', 'Passport', 'Voter ID', 'Driving License']} />
+            <F label="Govt Proof Number" field="govt_id_number" value={patient.govt_id_number || 'N/A'} placeholder="ID number" />
             {/* Registration date is system-generated — always read-only */}
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Registration Date</p>
