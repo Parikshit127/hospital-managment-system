@@ -507,6 +507,9 @@ model OPD_REG {
   address                    String?
   department                 String?
   aadhar_card                String?
+  nationality                String?   // e.g. Indian
+  govt_id_type               String?   // Aadhaar | PAN | Passport | Voter ID | Driving License
+  govt_id_number             String?
   emergency_contact_name     String?
   emergency_contact_phone    String?
   emergency_contact_relation String?

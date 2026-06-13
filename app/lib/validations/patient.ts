@@ -48,6 +48,21 @@ export const patientRegistrationSchema = z.object({
         })
         .optional()
         .or(z.literal('')),
+    nationality: z
+        .string()
+        .max(60, 'Nationality must be under 60 characters')
+        .optional()
+        .or(z.literal('')),
+    govt_id_type: z
+        .string()
+        .max(40)
+        .optional()
+        .or(z.literal('')),
+    govt_id_number: z
+        .string()
+        .max(40, 'ID number must be under 40 characters')
+        .optional()
+        .or(z.literal('')),
     date_of_birth: z
         .string()
         .optional()

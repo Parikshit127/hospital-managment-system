@@ -591,6 +591,39 @@ export default function ReceptionPage() {
                                             </div>
                                         </div>
 
+                                        {/* Nationality */}
+                                        <div className="space-y-1.5">
+                                            <label className={labelClass}>Nationality</label>
+                                            <input
+                                                name="nationality"
+                                                defaultValue="Indian"
+                                                className={inputClass}
+                                                placeholder="e.g. Indian"
+                                                maxLength={60}
+                                            />
+                                        </div>
+
+                                        {/* Government Proof */}
+                                        <div className="space-y-1.5">
+                                            <label className={labelClass}>Government Proof (Optional)</label>
+                                            <div className="grid grid-cols-5 gap-2">
+                                                <select name="govt_id_type" defaultValue="" className={`${selectClass} col-span-2`}>
+                                                    <option value="">ID Type</option>
+                                                    <option value="Aadhaar">Aadhaar</option>
+                                                    <option value="PAN">PAN</option>
+                                                    <option value="Passport">Passport</option>
+                                                    <option value="Voter ID">Voter ID</option>
+                                                    <option value="Driving License">Driving License</option>
+                                                </select>
+                                                <input
+                                                    name="govt_id_number"
+                                                    className={`${inputClass} col-span-3`}
+                                                    placeholder="ID number"
+                                                    maxLength={40}
+                                                />
+                                            </div>
+                                        </div>
+
                                         {/* Email */}
                                         <div className="md:col-span-2 space-y-1.5">
                                             <label className={labelClass}>Email (Optional)</label>
