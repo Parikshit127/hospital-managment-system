@@ -26,54 +26,63 @@ export async function getOrgTimezone(): Promise<string> {
 export function getTodayRange(timezone: string = DEFAULT_TIMEZONE): { start: Date; end: Date } {
     const now = new Date();
 
-    // Guard against an invalid/garbage tz string in config — fall back to default.
-    let tz = timezone;
-    try {
-        new Intl.DateTimeFormat('en-CA', { timeZone: tz });
-    } catch {
-        tz = DEFAULT_TIMEZONE;
-    }
-
+    // Get today's date string in the target timezone (YYYY-MM-DD)
     const formatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone: tz,
+        timeZone: timezone,
         year: 'numeric',
-        month: '2-digit', // MUST be numeric — produces "2025-03-20"; "short" yields "Jun 12, 2026" → Invalid Date
+        month: '2-digit',
         day: '2-digit',
     });
     const dateStr = formatter.format(now); // "2025-03-20"
 
-    // Build midnight as a UTC instant (explicit "Z"), then shift by the tz offset
-    // so the range represents local midnight..end-of-day in `tz`.
-    const start = new Date(`${dateStr}T00:00:00.000Z`);
-    const end = new Date(`${dateStr}T23:59:59.999Z`);
+    // Use Intl to get exact midnight and end-of-day in UTC for that timezone
+    const startLocal = new Date(`${dateStr}T00:00:00`);
+    const endLocal = new Date(`${dateStr}T23:59:59.999`);
 
-    const offsetMs = getTimezoneOffsetMs(tz, now);
-    start.setTime(start.getTime() - offsetMs);
-    end.setTime(end.getTime() - offsetMs);
+    // Get timezone offset using a reliable method
+    const offsetMs = getTimezoneOffsetMs(timezone, now);
+    const start = new Date(startLocal.getTime() - offsetMs);
+    const end = new Date(endLocal.getTime() - offsetMs);
+
+    // Safety check
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        // Fallback: plain UTC today
+        const utcStr = now.toISOString().slice(0, 10);
+        return {
+            start: new Date(`${utcStr}T00:00:00.000Z`),
+            end: new Date(`${utcStr}T23:59:59.999Z`),
+        };
+    }
 
     return { start, end };
 }
 
 /**
- * Offset in ms between a timezone and UTC at a given instant (positive when the
- * timezone is ahead of UTC). Uses formatToParts so it never depends on locale
- * date-string parsing (e.g. "13/06/2026" → Invalid Date in V8).
+ * Get the offset in ms between a timezone and UTC at a given instant.
  */
 function getTimezoneOffsetMs(timezone: string, date: Date): number {
-    const dtf = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        hourCycle: 'h23',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-    });
-    const p: Record<string, string> = {};
-    for (const part of dtf.formatToParts(date)) p[part.type] = part.value;
-    const asIfUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
-    return asIfUtc - date.getTime();
+    try {
+        // Use Intl.DateTimeFormat parts for reliable parsing
+        const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezone,
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            hour12: false,
+        }).formatToParts(date);
+
+        const get = (type: string) => parts.find(p => p.type === type)?.value ?? '0';
+        const tzDate = new Date(Date.UTC(
+            Number(get('year')),
+            Number(get('month')) - 1,
+            Number(get('day')),
+            Number(get('hour')) % 24,
+            Number(get('minute')),
+            Number(get('second')),
+        ));
+        return tzDate.getTime() - date.getTime();
+    } catch {
+        return 0;
+    }
 }
 
 /**
