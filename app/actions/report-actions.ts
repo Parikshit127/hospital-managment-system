@@ -17,7 +17,7 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
         const fromDate = new Date(filters.from + 'T00:00:00+05:30');
         const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
         const where: any = {
-            status: 'Completed',
+            status: { in: ['Completed', 'Reversed'] },
             created_at: { gte: fromDate, lte: toDate },
         };
         if (filters.method && filters.method !== 'others') {
@@ -91,9 +91,11 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
         });
 
         const totals = enrichedPayments.reduce((acc: any, p: any) => {
-            const method = p.payment_method;
-            acc[method] = (acc[method] || 0) + Number(p.amount);
-            acc.total = (acc.total || 0) + Number(p.amount);
+            if (p.status === 'Completed') {
+                const method = p.payment_method;
+                acc[method] = (acc[method] || 0) + Number(p.amount);
+                acc.total = (acc.total || 0) + Number(p.amount);
+            }
             return acc;
         }, {});
 
@@ -134,13 +136,34 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
             return acc;
         }, {});
 
+        // Fetch refunds from Refund table
+        const refundRows = await db.refund.findMany({
+            where: {
+                created_at: { gte: fromDate, lte: toDate },
+                status: { in: ['Approved', 'Processed'] }
+            },
+            select: { id: true, invoice_id: true, amount: true, processed_by: true, created_at: true },
+            orderBy: { created_at: 'asc' }
+        });
+
+        const enrichedRefunds = refundRows.map((r: any) => {
+            const username = String(r.processed_by || 'system');
+            const fullName = userMap.get(username.toLowerCase()) || username;
+            return {
+                ...r,
+                cashier_username: username,
+                cashier_name: fullName
+            };
+        });
+
         return {
             success: true,
             data: {
                 payments: serialize(enrichedPayments),
                 totals,
                 depositsCollected: serialize(depositsCollectedMap),
-                depositsList: serialize(enrichedDeposits)
+                depositsList: serialize(enrichedDeposits),
+                refunds: serialize(enrichedRefunds)
             }
         };
     } catch (error: any) {

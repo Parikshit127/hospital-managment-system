@@ -159,7 +159,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
     methodFilter: string; setMethodFilter: (v: string) => void;
 }) {
     const methods = Object.entries(data?.totals || {}).filter(([k]) => k !== 'total');
-    const payments = data?.payments || [];
+    const payments = (data?.payments || []).filter((p: any) => p.status === 'Completed');
     // "Deposit" payments are advances applied to bills, not a tender type — label clearly.
     const methodLabel = (m: string) => (m === 'Deposit' ? 'Deposit Applied' : m);
     const depositsCollected = data?.depositsCollected || {};
@@ -175,25 +175,14 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
 
             const depts = ['Advance', 'OP/ER', 'IPD', 'Walkin', 'Pharmacy', 'Voucher'];
             const allModesSet = new Set<string>();
-            
+            const cashierList = new Set<string>();
+
             const paymentsList = data?.payments || [];
             const depositsList = data?.depositsList || [];
+            const refundsList = data?.refunds || [];
 
-            paymentsList.forEach((p: any) => {
-                if (p.payment_method !== 'Deposit') {
-                    allModesSet.add(p.payment_method);
-                }
-            });
-            depositsList.forEach((d: any) => {
-                allModesSet.add(d.payment_method);
-            });
-
-            if (allModesSet.size === 0) {
-                allModesSet.add('Cash');
-                allModesSet.add('UPI');
-            }
-
-            const modes = Array.from(allModesSet);
+            const itemsList: any[] = [];
+            let sr = 1;
 
             function getDept(invoiceType: string) {
                 const t = (invoiceType || '').toUpperCase();
@@ -204,49 +193,153 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                 return 'OP/ER';
             }
 
-            const matrixReceipts: Record<string, Record<string, number>> = {};
-            const matrixRefunds: Record<string, Record<string, number>> = {};
+            // Process Completed & Reversed payments
+            paymentsList.forEach((p: any) => {
+                if (p.payment_method === 'Deposit') return; // Skip deposits applied to bills
 
-            modes.forEach(m => {
-                matrixReceipts[m] = {};
-                matrixRefunds[m] = {};
-                depts.forEach(d => {
-                    matrixReceipts[m][d] = 0;
-                    matrixRefunds[m][d] = 0;
+                const cashierUser = p.cashier_username || 'system';
+                const cashierName = p.cashier_name || cashierUser;
+                const patientName = p.invoice?.patient?.full_name || '-';
+                const patientId = p.invoice?.patient?.patient_id || '-';
+                const dept = getDept(p.invoice?.invoice_type || 'OPD');
+                const mode = p.payment_method || 'Unknown';
+                allModesSet.add(mode);
+                cashierList.add(cashierUser);
+
+                const dt = new Date(p.created_at);
+                const dateStr = dt.toLocaleDateString('en-GB');
+                const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+                if (p.status === 'Completed') {
+                    itemsList.push({
+                        srNo: sr++,
+                        type: 'Receipt',
+                        receiptNo: p.receipt_number,
+                        invoiceNo: p.invoice?.invoice_number || '-',
+                        patientName,
+                        mrn: patientId,
+                        mode,
+                        date: dateStr,
+                        time: timeStr,
+                        amount: Number(p.amount),
+                        cashier: cashierName,
+                        cashierUsername: cashierUser,
+                        counter: 'MAIN CASH COUNTER',
+                        department: dept
+                    });
+                } else if (p.status === 'Reversed') {
+                    itemsList.push({
+                        srNo: sr++,
+                        type: 'Refund',
+                        receiptNo: p.receipt_number,
+                        invoiceNo: p.invoice?.invoice_number || '-',
+                        patientName,
+                        mrn: patientId,
+                        mode,
+                        date: dateStr,
+                        time: timeStr,
+                        amount: Number(p.amount),
+                        cashier: cashierName,
+                        cashierUsername: cashierUser,
+                        counter: 'MAIN CASH COUNTER',
+                        department: dept
+                    });
+                }
+            });
+
+            // Process deposits collected (Advances)
+            depositsList.forEach((d: any) => {
+                const cashierUser = d.cashier_username || 'system';
+                const cashierName = d.cashier_name || cashierUser;
+                const patientName = d.patient_name || '-';
+                const patientId = d.patient_id;
+                const mode = d.payment_method || 'Unknown';
+                allModesSet.add(mode);
+                cashierList.add(cashierUser);
+
+                const dt = new Date(d.created_at);
+                const dateStr = dt.toLocaleDateString('en-GB');
+                const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+                itemsList.push({
+                    srNo: sr++,
+                    type: 'Receipt',
+                    receiptNo: d.deposit_number,
+                    invoiceNo: '-',
+                    patientName,
+                    mrn: patientId,
+                    mode,
+                    date: dateStr,
+                    time: timeStr,
+                    amount: Number(d.amount),
+                    cashier: cashierName,
+                    cashierUsername: cashierUser,
+                    counter: 'MAIN CASH COUNTER',
+                    department: 'Advance'
                 });
             });
 
-            paymentsList.forEach((p: any) => {
-                if (p.payment_method === 'Deposit') return;
-                const mode = p.payment_method || 'Unknown';
-                const dept = getDept(p.invoice?.invoice_type || 'OPD');
-                const amt = Number(p.amount || 0);
+            // Process refunds table
+            refundsList.forEach((r: any) => {
+                const cashierUser = r.cashier_username || 'system';
+                const cashierName = r.cashier_name || cashierUser;
+                const mode = 'Cash'; // Default to cash for refunds
+                allModesSet.add(mode);
+                cashierList.add(cashierUser);
 
-                if (!matrixReceipts[mode]) {
-                    matrixReceipts[mode] = {};
-                    matrixRefunds[mode] = {};
-                    depts.forEach(d => { matrixReceipts[mode][d] = 0; matrixRefunds[mode][d] = 0; });
-                }
+                const dt = new Date(r.created_at);
+                const dateStr = dt.toLocaleDateString('en-GB');
+                const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-                if (p.status === 'Completed') {
-                    matrixReceipts[mode][dept] += amt;
-                } else if (p.status === 'Reversed') {
-                    matrixRefunds[mode][dept] += amt;
-                }
+                itemsList.push({
+                    srNo: sr++,
+                    type: 'Refund',
+                    receiptNo: `RF-${r.id}`,
+                    invoiceNo: r.invoice_id ? String(r.invoice_id) : '-',
+                    patientName: 'Refund Payout',
+                    mrn: '-',
+                    mode,
+                    date: dateStr,
+                    time: timeStr,
+                    amount: Number(r.amount),
+                    cashier: cashierName,
+                    cashierUsername: cashierUser,
+                    counter: 'MAIN CASH COUNTER',
+                    department: 'OP/ER' // Default refund to OP/ER if unknown
+                });
             });
 
-            depositsList.forEach((d: any) => {
-                const mode = d.payment_method || 'Unknown';
-                const amt = Number(d.amount || 0);
+            if (allModesSet.size === 0) {
+                allModesSet.add('Cash');
+                allModesSet.add('UPI');
+            }
 
-                if (!matrixReceipts[mode]) {
-                    matrixReceipts[mode] = {};
-                    matrixRefunds[mode] = {};
-                    depts.forEach(dep => { matrixReceipts[mode][dep] = 0; matrixRefunds[mode][dep] = 0; });
-                }
+            const modes = Array.from(allModesSet);
 
-                matrixReceipts[mode]['Advance'] += amt;
-            });
+            function buildSummaryMatrix(filteredItems: any[]) {
+                const receipts: Record<string, Record<string, number>> = {};
+                const refunds: Record<string, Record<string, number>> = {};
+
+                modes.forEach(m => {
+                    receipts[m] = {};
+                    refunds[m] = {};
+                    depts.forEach(d => {
+                        receipts[m][d] = 0;
+                        refunds[m][d] = 0;
+                    });
+                });
+
+                filteredItems.forEach(item => {
+                    const target = item.type === 'Receipt' ? receipts : refunds;
+                    if (target[item.mode] === undefined) {
+                        target[item.mode] = {};
+                        depts.forEach(d => { target[item.mode][d] = 0; });
+                    }
+                    target[item.mode][item.department] = (target[item.mode][item.department] || 0) + item.amount;
+                });
+
+                return { receipts, refunds };
+            }
 
             const summaryRows: any[] = [];
             summaryRows.push({ 'Payment Mode': '1. SUMMARY', 'Advance': '', 'OP/ER': '', 'IPD': '', 'Walkin': '', 'Pharmacy': '', 'Voucher': '', 'Total Collection': '' });
@@ -255,9 +348,9 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
             const summaryHeaders = ['Payment Mode', 'Advance', 'OP/ER', 'IPD', 'Walkin', 'Pharmacy', 'Voucher', 'Total Collection'];
             summaryRows.push(summaryHeaders.reduce((acc, h) => ({ ...acc, [h]: h }), {}));
 
-            function addMatrixRows(receiptsMap: typeof matrixReceipts, refundsMap: typeof matrixRefunds, rowsArray: any[]) {
+            function addMatrixRows(matrix: { receipts: Record<string, Record<string, number>>; refunds: Record<string, Record<string, number>> }, rowsArray: any[]) {
                 modes.forEach(m => {
-                    const row = receiptsMap[m] || {};
+                    const row = matrix.receipts[m] || {};
                     let rowSum = 0;
                     depts.forEach(d => { rowSum += row[d] || 0; });
                     if (rowSum === 0) return;
@@ -273,7 +366,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                 depts.forEach(d => { deptTotals[d] = 0; });
                 modes.forEach(m => {
                     depts.forEach(d => {
-                        const val = receiptsMap[m]?.[d] || 0;
+                        const val = matrix.receipts[m]?.[d] || 0;
                         deptTotals[d] += val;
                         totalReceiptSum += val;
                     });
@@ -285,7 +378,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                 rowsArray.push(totalReceiptObj);
 
                 modes.forEach(m => {
-                    const row = refundsMap[m] || {};
+                    const row = matrix.refunds[m] || {};
                     let rowSum = 0;
                     depts.forEach(d => { rowSum += row[d] || 0; });
                     if (rowSum === 0) return;
@@ -301,7 +394,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                 depts.forEach(d => { deptRefundTotals[d] = 0; });
                 modes.forEach(m => {
                     depts.forEach(d => {
-                        const val = refundsMap[m]?.[d] || 0;
+                        const val = matrix.refunds[m]?.[d] || 0;
                         deptRefundTotals[d] += val;
                         totalRefundSum += val;
                     });
@@ -323,55 +416,92 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                 rowsArray.push(netObj);
             }
 
-            addMatrixRows(matrixReceipts, matrixRefunds, summaryRows);
+            const overallMatrix = buildSummaryMatrix(itemsList);
+            addMatrixRows(overallMatrix, summaryRows);
+
+            // Add Mini Table Count helper
+            summaryRows.push({});
+            summaryRows.push({ 'Payment Mode': `No Of Receipt : ${itemsList.filter(i => i.type === 'Receipt').length}     No Of Refund : ${itemsList.filter(i => i.type === 'Refund').length}` });
+            summaryRows.push({});
+
+            // Mini summary matrix
+            summaryRows.push({ 'Payment Mode': 'Type', 'Advance': 'Receipt', 'OP/ER': 'Refund', 'IPD': 'Total' });
+            let totalReceiptSum = 0;
+            let totalRefundSum = 0;
+            modes.forEach(m => {
+                let receiptSum = 0;
+                let refundSum = 0;
+                depts.forEach(d => {
+                    receiptSum += overallMatrix.receipts[m]?.[d] || 0;
+                    refundSum += overallMatrix.refunds[m]?.[d] || 0;
+                });
+                if (receiptSum === 0 && refundSum === 0) return;
+                totalReceiptSum += receiptSum;
+                totalRefundSum += refundSum;
+                summaryRows.push({
+                    'Payment Mode': m,
+                    'Advance': receiptSum,
+                    'OP/ER': refundSum,
+                    'IPD': receiptSum - refundSum
+                });
+            });
+            summaryRows.push({
+                'Payment Mode': 'Net Total',
+                'Advance': totalReceiptSum,
+                'OP/ER': totalRefundSum,
+                'IPD': totalReceiptSum - totalRefundSum
+            });
 
             summaryRows.push({});
             summaryRows.push({});
             summaryRows.push({ 'Payment Mode': '2. CASHIER WISE SUMMARY' });
             summaryRows.push({});
 
-            const cashiers = Array.from(new Set([
-                ...paymentsList.map((p: any) => p.cashier_username || 'system'),
-                ...depositsList.map((d: any) => d.cashier_username || 'system')
-            ])).sort();
+            const cashiersSorted = Array.from(cashierList).sort();
+            cashiersSorted.forEach(cUser => {
+                const cItems = itemsList.filter(item => item.cashierUsername === cUser);
+                if (cItems.length === 0) return;
 
-            cashiers.forEach((cUser: string) => {
-                const cPayments = paymentsList.filter((p: any) => (p.cashier_username || 'system') === cUser);
-                const cDeposits = depositsList.filter((d: any) => (d.cashier_username || 'system') === cUser);
-                
-                const sampleP = cPayments[0] || cDeposits[0];
-                const cashierName = sampleP ? (sampleP.cashier_name || cUser) : cUser;
+                const sampleItem = cItems[0];
+                const cashierName = sampleItem.cashier || cUser;
 
                 summaryRows.push({ 'Payment Mode': `Cashier : ${cashierName.toUpperCase()} [${cUser}]` });
                 summaryRows.push(summaryHeaders.reduce((acc, h) => ({ ...acc, [h]: h }), {}));
 
-                const cReceipts: Record<string, Record<string, number>> = {};
-                const cRefunds: Record<string, Record<string, number>> = {};
+                const cMatrix = buildSummaryMatrix(cItems);
+                addMatrixRows(cMatrix, summaryRows);
+
+                // Add Cashier Mini Table
+                summaryRows.push({});
+                summaryRows.push({ 'Payment Mode': `No Of Receipt : ${cItems.filter(i => i.type === 'Receipt').length}     No Of Refund : ${cItems.filter(i => i.type === 'Refund').length}` });
+                summaryRows.push({});
+                summaryRows.push({ 'Payment Mode': 'Type', 'Advance': 'Receipt', 'OP/ER': 'Refund', 'IPD': 'Total' });
+                let cTotalReceiptSum = 0;
+                let cTotalRefundSum = 0;
                 modes.forEach(m => {
-                    cReceipts[m] = {};
-                    cRefunds[m] = {};
-                    depts.forEach(d => { cReceipts[m][d] = 0; cRefunds[m][d] = 0; });
+                    let receiptSum = 0;
+                    let refundSum = 0;
+                    depts.forEach(d => {
+                        receiptSum += cMatrix.receipts[m]?.[d] || 0;
+                        refundSum += cMatrix.refunds[m]?.[d] || 0;
+                    });
+                    if (receiptSum === 0 && refundSum === 0) return;
+                    cTotalReceiptSum += receiptSum;
+                    cTotalRefundSum += refundSum;
+                    summaryRows.push({
+                        'Payment Mode': m,
+                        'Advance': receiptSum,
+                        'OP/ER': refundSum,
+                        'IPD': receiptSum - refundSum
+                    });
+                });
+                summaryRows.push({
+                    'Payment Mode': 'Net Total',
+                    'Advance': cTotalReceiptSum,
+                    'OP/ER': cTotalRefundSum,
+                    'IPD': cTotalReceiptSum - cTotalRefundSum
                 });
 
-                cPayments.forEach((p: any) => {
-                    if (p.payment_method === 'Deposit') return;
-                    const mode = p.payment_method || 'Unknown';
-                    const dept = getDept(p.invoice?.invoice_type || 'OPD');
-                    const amt = Number(p.amount || 0);
-                    if (p.status === 'Completed') {
-                        cReceipts[mode][dept] += amt;
-                    } else if (p.status === 'Reversed') {
-                        cRefunds[mode][dept] += amt;
-                    }
-                });
-
-                cDeposits.forEach((d: any) => {
-                    const mode = d.payment_method || 'Unknown';
-                    const amt = Number(d.amount || 0);
-                    cReceipts[mode]['Advance'] += amt;
-                });
-
-                addMatrixRows(cReceipts, cRefunds, summaryRows);
                 summaryRows.push({});
                 summaryRows.push({});
             });
@@ -380,60 +510,47 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
             let detailSr = 1;
 
             depts.forEach(dept => {
-                const deptPayments = paymentsList.filter((p: any) => p.payment_method !== 'Deposit' && getDept(p.invoice?.invoice_type || 'OPD') === dept);
-                const deptDeposits = dept === 'Advance' ? depositsList : [];
+                const deptItems = itemsList.filter(item => item.department === dept);
+                if (deptItems.length === 0) return;
 
-                if (deptPayments.length === 0 && deptDeposits.length === 0) return;
+                let deptReceiptAmt = 0;
+                let deptRefundAmt = 0;
+                deptItems.forEach(item => {
+                    if (item.type === 'Receipt') deptReceiptAmt += item.amount;
+                    else deptRefundAmt += item.amount;
+                });
+                const deptNetAmt = deptReceiptAmt - deptRefundAmt;
 
                 detailRows.push({ 'Sr. No.': `${dept.toUpperCase()} COLLECTION` });
+                detailRows.push({
+                    'Sr. No.': '',
+                    'Receipt No.': `Receipt Amount: ${deptReceiptAmt.toFixed(2)}`,
+                    'Invoice No.': `Refund Amount: ${deptRefundAmt.toFixed(2)}`,
+                    'Patient Name': `Net Amount: ${deptNetAmt.toFixed(2)}`
+                });
 
                 const detailHeaders = ['Sr. No.', 'Receipt No.', 'Invoice No.', 'Patient Name', 'MRN (Patient ID)', 'Payment Mode', 'Date', 'Time', 'Receipt Amt', 'Refund Amt', 'Deleted Amt', 'Cashier', 'Counter'];
                 detailRows.push(detailHeaders.reduce((acc, h) => ({ ...acc, [h]: h }), {}));
 
-                deptPayments.forEach((p: any) => {
-                    const dt = new Date(p.created_at);
-                    const dateStr = dt.toLocaleDateString('en-GB');
-                    const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-
+                deptItems.forEach((item, idx) => {
                     detailRows.push({
-                        'Sr. No.': detailSr++,
-                        'Receipt No.': p.receipt_number,
-                        'Invoice No.': p.invoice?.invoice_number || '-',
-                        'Patient Name': p.invoice?.patient?.full_name || '-',
-                        'MRN (Patient ID)': p.invoice?.patient?.patient_id || '-',
-                        'Payment Mode': p.payment_method,
-                        'Date': dateStr,
-                        'Time': timeStr,
-                        'Receipt Amt': p.status === 'Completed' ? Number(p.amount) : 0,
-                        'Refund Amt': p.status === 'Reversed' ? Number(p.amount) : 0,
-                        'Deleted Amt': 0,
-                        'Cashier': p.cashier_name || 'system',
-                        'Counter': 'MAIN CASH COUNTER'
+                        'Sr. No.': idx + 1,
+                        'Receipt No.': item.receiptNo,
+                        'Invoice No.': item.invoiceNo,
+                        'Patient Name': item.patientName,
+                        'MRN (Patient ID)': item.mrn,
+                        'Payment Mode': item.mode,
+                        'Date': item.date,
+                        'Time': item.time,
+                        'Receipt Amt': item.type === 'Receipt' ? item.amount : '-',
+                        'Refund Amt': item.type === 'Refund' ? item.amount : '-',
+                        'Deleted Amt': '-',
+                        'Cashier': item.cashier,
+                        'Counter': item.counter
                     });
                 });
 
-                deptDeposits.forEach((d: any) => {
-                    const dt = new Date(d.created_at);
-                    const dateStr = dt.toLocaleDateString('en-GB');
-                    const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-
-                    detailRows.push({
-                        'Sr. No.': detailSr++,
-                        'Receipt No.': d.deposit_number,
-                        'Invoice No.': '-',
-                        'Patient Name': d.patient_name || '-',
-                        'MRN (Patient ID)': d.patient_id || '-',
-                        'Payment Mode': d.payment_method,
-                        'Date': dateStr,
-                        'Time': timeStr,
-                        'Receipt Amt': Number(d.amount),
-                        'Refund Amt': 0,
-                        'Deleted Amt': 0,
-                        'Cashier': d.cashier_name || 'system',
-                        'Counter': 'MAIN CASH COUNTER'
-                    });
-                });
-
+                detailRows.push({});
                 detailRows.push({});
             });
 
