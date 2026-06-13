@@ -706,7 +706,7 @@ export async function recordPayment(data: {
     notes?: string;
 }) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, session, organizationId } = await requireTenantContext();
 
         // Phase 4: Period Locking
         await checkPeriodLock(db);
@@ -777,6 +777,9 @@ export async function recordPayment(data: {
 
         await db.system_audit_logs.create({
             data: {
+                user_id: session?.id,
+                username: session?.username || session?.name,
+                role: session?.role,
                 action: 'RECORD_PAYMENT',
                 module: 'finance',
                 entity_type: 'payment',
@@ -835,7 +838,7 @@ export async function recordSplitPayment(data: {
     notes?: string;
 }) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, session, organizationId } = await requireTenantContext();
 
         // Phase 4: Period Locking
         await checkPeriodLock(db);
@@ -927,6 +930,9 @@ export async function recordSplitPayment(data: {
 
         await db.system_audit_logs.create({
             data: {
+                user_id: session?.id,
+                username: session?.username || session?.name,
+                role: session?.role,
                 action: 'SPLIT_PAYMENT',
                 module: 'finance',
                 entity_type: 'payment',

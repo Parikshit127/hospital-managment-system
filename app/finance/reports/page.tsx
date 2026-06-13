@@ -164,6 +164,296 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
     const methodLabel = (m: string) => (m === 'Deposit' ? 'Deposit Applied' : m);
     const depositsCollected = data?.depositsCollected || {};
     const depositModes = Object.entries(depositsCollected).filter(([k]) => k !== 'total');
+
+    const [excelExporting, setExcelExporting] = useState(false);
+
+    async function handleCollectionsExcelExport() {
+        setExcelExporting(true);
+        try {
+            const xlsxModule = await import('xlsx');
+            const XLSX = xlsxModule.default ?? xlsxModule;
+
+            const depts = ['Advance', 'OP/ER', 'IPD', 'Walkin', 'Pharmacy', 'Voucher'];
+            const allModesSet = new Set<string>();
+            
+            const paymentsList = data?.payments || [];
+            const depositsList = data?.depositsList || [];
+
+            paymentsList.forEach((p: any) => {
+                if (p.payment_method !== 'Deposit') {
+                    allModesSet.add(p.payment_method);
+                }
+            });
+            depositsList.forEach((d: any) => {
+                allModesSet.add(d.payment_method);
+            });
+
+            if (allModesSet.size === 0) {
+                allModesSet.add('Cash');
+                allModesSet.add('UPI');
+            }
+
+            const modes = Array.from(allModesSet);
+
+            function getDept(invoiceType: string) {
+                const t = (invoiceType || '').toUpperCase();
+                if (t === 'IPD') return 'IPD';
+                if (t === 'PHARMACY' || t === 'Pharmacy') return 'Pharmacy';
+                if (t === 'LAB' || t === 'Walkin') return 'Walkin';
+                if (t === 'Voucher') return 'Voucher';
+                return 'OP/ER';
+            }
+
+            const matrixReceipts: Record<string, Record<string, number>> = {};
+            const matrixRefunds: Record<string, Record<string, number>> = {};
+
+            modes.forEach(m => {
+                matrixReceipts[m] = {};
+                matrixRefunds[m] = {};
+                depts.forEach(d => {
+                    matrixReceipts[m][d] = 0;
+                    matrixRefunds[m][d] = 0;
+                });
+            });
+
+            paymentsList.forEach((p: any) => {
+                if (p.payment_method === 'Deposit') return;
+                const mode = p.payment_method || 'Unknown';
+                const dept = getDept(p.invoice?.invoice_type || 'OPD');
+                const amt = Number(p.amount || 0);
+
+                if (!matrixReceipts[mode]) {
+                    matrixReceipts[mode] = {};
+                    matrixRefunds[mode] = {};
+                    depts.forEach(d => { matrixReceipts[mode][d] = 0; matrixRefunds[mode][d] = 0; });
+                }
+
+                if (p.status === 'Completed') {
+                    matrixReceipts[mode][dept] += amt;
+                } else if (p.status === 'Reversed') {
+                    matrixRefunds[mode][dept] += amt;
+                }
+            });
+
+            depositsList.forEach((d: any) => {
+                const mode = d.payment_method || 'Unknown';
+                const amt = Number(d.amount || 0);
+
+                if (!matrixReceipts[mode]) {
+                    matrixReceipts[mode] = {};
+                    matrixRefunds[mode] = {};
+                    depts.forEach(dep => { matrixReceipts[mode][dep] = 0; matrixRefunds[mode][dep] = 0; });
+                }
+
+                matrixReceipts[mode]['Advance'] += amt;
+            });
+
+            const summaryRows: any[] = [];
+            summaryRows.push({ 'Payment Mode': '1. SUMMARY', 'Advance': '', 'OP/ER': '', 'IPD': '', 'Walkin': '', 'Pharmacy': '', 'Voucher': '', 'Total Collection': '' });
+            summaryRows.push({});
+
+            const summaryHeaders = ['Payment Mode', 'Advance', 'OP/ER', 'IPD', 'Walkin', 'Pharmacy', 'Voucher', 'Total Collection'];
+            summaryRows.push(summaryHeaders.reduce((acc, h) => ({ ...acc, [h]: h }), {}));
+
+            function addMatrixRows(receiptsMap: typeof matrixReceipts, refundsMap: typeof matrixRefunds, rowsArray: any[]) {
+                modes.forEach(m => {
+                    const row = receiptsMap[m] || {};
+                    let rowSum = 0;
+                    depts.forEach(d => { rowSum += row[d] || 0; });
+                    if (rowSum === 0) return;
+
+                    const rowObj: any = { 'Payment Mode': `Receipt ${m}` };
+                    depts.forEach(d => { rowObj[d] = row[d] || 0; });
+                    rowObj['Total Collection'] = rowSum;
+                    rowsArray.push(rowObj);
+                });
+
+                let totalReceiptSum = 0;
+                const deptTotals: Record<string, number> = {};
+                depts.forEach(d => { deptTotals[d] = 0; });
+                modes.forEach(m => {
+                    depts.forEach(d => {
+                        const val = receiptsMap[m]?.[d] || 0;
+                        deptTotals[d] += val;
+                        totalReceiptSum += val;
+                    });
+                });
+
+                const totalReceiptObj: any = { 'Payment Mode': 'Total Receipt' };
+                depts.forEach(d => { totalReceiptObj[d] = deptTotals[d]; });
+                totalReceiptObj['Total Collection'] = totalReceiptSum;
+                rowsArray.push(totalReceiptObj);
+
+                modes.forEach(m => {
+                    const row = refundsMap[m] || {};
+                    let rowSum = 0;
+                    depts.forEach(d => { rowSum += row[d] || 0; });
+                    if (rowSum === 0) return;
+
+                    const rowObj: any = { 'Payment Mode': `Refund/Payment ${m}` };
+                    depts.forEach(d => { rowObj[d] = row[d] || 0; });
+                    rowObj['Total Collection'] = rowSum;
+                    rowsArray.push(rowObj);
+                });
+
+                let totalRefundSum = 0;
+                const deptRefundTotals: Record<string, number> = {};
+                depts.forEach(d => { deptRefundTotals[d] = 0; });
+                modes.forEach(m => {
+                    depts.forEach(d => {
+                        const val = refundsMap[m]?.[d] || 0;
+                        deptRefundTotals[d] += val;
+                        totalRefundSum += val;
+                    });
+                });
+
+                const totalRefundObj: any = { 'Payment Mode': 'Total Refund' };
+                depts.forEach(d => { totalRefundObj[d] = deptRefundTotals[d]; });
+                totalRefundObj['Total Collection'] = totalRefundSum;
+                rowsArray.push(totalRefundObj);
+
+                const netObj: any = { 'Payment Mode': 'Net Amount' };
+                let overallNet = 0;
+                depts.forEach(d => {
+                    const netVal = deptTotals[d] - deptRefundTotals[d];
+                    netObj[d] = netVal;
+                    overallNet += netVal;
+                });
+                netObj['Total Collection'] = overallNet;
+                rowsArray.push(netObj);
+            }
+
+            addMatrixRows(matrixReceipts, matrixRefunds, summaryRows);
+
+            summaryRows.push({});
+            summaryRows.push({});
+            summaryRows.push({ 'Payment Mode': '2. CASHIER WISE SUMMARY' });
+            summaryRows.push({});
+
+            const cashiers = Array.from(new Set([
+                ...paymentsList.map((p: any) => p.cashier_username || 'system'),
+                ...depositsList.map((d: any) => d.cashier_username || 'system')
+            ])).sort();
+
+            cashiers.forEach((cUser: string) => {
+                const cPayments = paymentsList.filter((p: any) => (p.cashier_username || 'system') === cUser);
+                const cDeposits = depositsList.filter((d: any) => (d.cashier_username || 'system') === cUser);
+                
+                const sampleP = cPayments[0] || cDeposits[0];
+                const cashierName = sampleP ? (sampleP.cashier_name || cUser) : cUser;
+
+                summaryRows.push({ 'Payment Mode': `Cashier : ${cashierName.toUpperCase()} [${cUser}]` });
+                summaryRows.push(summaryHeaders.reduce((acc, h) => ({ ...acc, [h]: h }), {}));
+
+                const cReceipts: Record<string, Record<string, number>> = {};
+                const cRefunds: Record<string, Record<string, number>> = {};
+                modes.forEach(m => {
+                    cReceipts[m] = {};
+                    cRefunds[m] = {};
+                    depts.forEach(d => { cReceipts[m][d] = 0; cRefunds[m][d] = 0; });
+                });
+
+                cPayments.forEach((p: any) => {
+                    if (p.payment_method === 'Deposit') return;
+                    const mode = p.payment_method || 'Unknown';
+                    const dept = getDept(p.invoice?.invoice_type || 'OPD');
+                    const amt = Number(p.amount || 0);
+                    if (p.status === 'Completed') {
+                        cReceipts[mode][dept] += amt;
+                    } else if (p.status === 'Reversed') {
+                        cRefunds[mode][dept] += amt;
+                    }
+                });
+
+                cDeposits.forEach((d: any) => {
+                    const mode = d.payment_method || 'Unknown';
+                    const amt = Number(d.amount || 0);
+                    cReceipts[mode]['Advance'] += amt;
+                });
+
+                addMatrixRows(cReceipts, cRefunds, summaryRows);
+                summaryRows.push({});
+                summaryRows.push({});
+            });
+
+            const detailRows: any[] = [];
+            let detailSr = 1;
+
+            depts.forEach(dept => {
+                const deptPayments = paymentsList.filter((p: any) => p.payment_method !== 'Deposit' && getDept(p.invoice?.invoice_type || 'OPD') === dept);
+                const deptDeposits = dept === 'Advance' ? depositsList : [];
+
+                if (deptPayments.length === 0 && deptDeposits.length === 0) return;
+
+                detailRows.push({ 'Sr. No.': `${dept.toUpperCase()} COLLECTION` });
+
+                const detailHeaders = ['Sr. No.', 'Receipt No.', 'Invoice No.', 'Patient Name', 'MRN (Patient ID)', 'Payment Mode', 'Date', 'Time', 'Receipt Amt', 'Refund Amt', 'Deleted Amt', 'Cashier', 'Counter'];
+                detailRows.push(detailHeaders.reduce((acc, h) => ({ ...acc, [h]: h }), {}));
+
+                deptPayments.forEach((p: any) => {
+                    const dt = new Date(p.created_at);
+                    const dateStr = dt.toLocaleDateString('en-GB');
+                    const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+                    detailRows.push({
+                        'Sr. No.': detailSr++,
+                        'Receipt No.': p.receipt_number,
+                        'Invoice No.': p.invoice?.invoice_number || '-',
+                        'Patient Name': p.invoice?.patient?.full_name || '-',
+                        'MRN (Patient ID)': p.invoice?.patient?.patient_id || '-',
+                        'Payment Mode': p.payment_method,
+                        'Date': dateStr,
+                        'Time': timeStr,
+                        'Receipt Amt': p.status === 'Completed' ? Number(p.amount) : 0,
+                        'Refund Amt': p.status === 'Reversed' ? Number(p.amount) : 0,
+                        'Deleted Amt': 0,
+                        'Cashier': p.cashier_name || 'system',
+                        'Counter': 'MAIN CASH COUNTER'
+                    });
+                });
+
+                deptDeposits.forEach((d: any) => {
+                    const dt = new Date(d.created_at);
+                    const dateStr = dt.toLocaleDateString('en-GB');
+                    const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+                    detailRows.push({
+                        'Sr. No.': detailSr++,
+                        'Receipt No.': d.deposit_number,
+                        'Invoice No.': '-',
+                        'Patient Name': d.patient_name || '-',
+                        'MRN (Patient ID)': d.patient_id || '-',
+                        'Payment Mode': d.payment_method,
+                        'Date': dateStr,
+                        'Time': timeStr,
+                        'Receipt Amt': Number(d.amount),
+                        'Refund Amt': 0,
+                        'Deleted Amt': 0,
+                        'Cashier': d.cashier_name || 'system',
+                        'Counter': 'MAIN CASH COUNTER'
+                    });
+                });
+
+                detailRows.push({});
+            });
+
+            const wb = XLSX.utils.book_new();
+            const wsSummary = XLSX.utils.json_to_sheet(summaryRows, { skipHeader: true });
+            XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+
+            const wsDetails = XLSX.utils.json_to_sheet(detailRows, { skipHeader: true });
+            XLSX.utils.book_append_sheet(wb, wsDetails, 'Payment Details');
+
+            XLSX.writeFile(wb, `collections-detail-${from}-${to}.xlsx`);
+
+        } catch (err) {
+            console.error('Excel export failed:', err);
+            alert('Export failed. Please try again.');
+        } finally {
+            setExcelExporting(false);
+        }
+    }
+
     return (
         <>
             {/* Payment Method Filter Bar */}
@@ -177,7 +467,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                                 quickFilter === f && methodFilter === 'all'
                                     ? 'bg-emerald-500/20 text-emerald-700 border border-emerald-500/30'
                                     : 'bg-gray-100 text-gray-500 border border-gray-200 hover:text-gray-800'
-                            }`}>
+                             }`}>
                             {f === 'all' ? 'All' : f === 'others' ? 'All Others' : f.toUpperCase()}
                         </button>
                     ))}
@@ -228,15 +518,29 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                     <h3 className="font-semibold text-gray-900">Payment Details ({payments.length})</h3>
-                    <ExportButton data={payments.map((p: any) => ({
-                        receipt: p.receipt_number, patient: p.invoice?.patient?.full_name || '-',
-                        invoice: p.invoice?.invoice_number, method: p.payment_method, amount: Number(p.amount),
-                        date: new Date(p.created_at).toLocaleDateString('en-GB'),
-                    }))} filename={`collections-${from}-${to}`} columns={[
-                        { key: 'receipt', label: 'Receipt #' }, { key: 'patient', label: 'Patient' },
-                        { key: 'invoice', label: 'Invoice #' }, { key: 'method', label: 'Method' },
-                        { key: 'amount', label: 'Amount' }, { key: 'date', label: 'Date' },
-                    ]} />
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleCollectionsExcelExport}
+                            disabled={excelExporting || !payments || payments.length === 0}
+                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {excelExporting ? (
+                                <><Loader2 className="h-4 w-4 animate-spin" /> Exporting...</>
+                            ) : (
+                                <><FileSpreadsheet className="h-4 w-4 text-emerald-600" /> Export Excel</>
+                            )}
+                        </button>
+                        <button
+                            onClick={() => {
+                                const methodVal = methodFilter !== 'all' ? methodFilter : quickFilter !== 'all' ? (quickFilter === 'cash' ? 'Cash' : quickFilter === 'upi' ? 'UPI' : 'others') : '';
+                                window.open(`/api/reports/collections/pdf?from=${from}&to=${to}${methodVal ? `&method=${methodVal}` : ''}`, '_blank');
+                            }}
+                            disabled={!payments || payments.length === 0}
+                            className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 flex items-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <FileText className="h-4 w-4" /> Export PDF
+                        </button>
+                    </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full">

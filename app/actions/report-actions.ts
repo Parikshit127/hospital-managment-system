@@ -14,9 +14,11 @@ function serialize<T>(data: T): T {
 export async function getCollectionsReport(filters: { from: string; to: string; method?: string; invoiceType?: string; admissionStatus?: string }) {
     try {
         const { db } = await requireTenantContext();
+        const fromDate = new Date(filters.from + 'T00:00:00+05:30');
+        const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
         const where: any = {
             status: 'Completed',
-            created_at: { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') },
+            created_at: { gte: fromDate, lte: toDate },
         };
         if (filters.method && filters.method !== 'others') {
             where.payment_method = filters.method;
@@ -34,11 +36,61 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
 
         const payments = await db.payments.findMany({
             where,
-            include: { invoice: { select: { invoice_number: true, patient: { select: { full_name: true } } } } },
+            include: {
+                invoice: {
+                    select: {
+                        invoice_number: true,
+                        invoice_type: true,
+                        patient: {
+                            select: {
+                                full_name: true,
+                                patient_id: true
+                            }
+                        }
+                    }
+                }
+            },
             orderBy: { created_at: 'desc' },
         });
 
-        const totals = payments.reduce((acc: any, p: any) => {
+        // Resolve cashier usernames from system audit logs
+        const receiptNumbers = payments.map((p: any) => p.receipt_number);
+        const auditLogs = receiptNumbers.length
+            ? await db.system_audit_logs.findMany({
+                where: {
+                    action: { in: ['RECORD_PAYMENT', 'SPLIT_PAYMENT'] },
+                    entity_id: { in: receiptNumbers }
+                },
+                select: { entity_id: true, username: true }
+            })
+            : [];
+        const cashierMap = new Map<string, string>(
+            auditLogs
+                .filter((log: any) => log.entity_id && log.username)
+                .map((log: any) => [log.entity_id as string, log.username as string])
+        );
+
+        // Fetch user full names
+        const users = await db.user.findMany({
+            select: { username: true, name: true }
+        });
+        const userMap = new Map<string, string>(
+            users
+                .filter((u: any) => u.username && u.name)
+                .map((u: any) => [u.username.toLowerCase(), u.name])
+        );
+
+        const enrichedPayments = payments.map((p: any) => {
+            const username = String(cashierMap.get(p.receipt_number) || 'system');
+            const fullName = userMap.get(username.toLowerCase()) || username;
+            return {
+                ...p,
+                cashier_username: username,
+                cashier_name: fullName
+            };
+        });
+
+        const totals = enrichedPayments.reduce((acc: any, p: any) => {
             const method = p.payment_method;
             acc[method] = (acc[method] || 0) + Number(p.amount);
             acc.total = (acc.total || 0) + Number(p.amount);
@@ -50,17 +102,47 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
         // above, which represents deposits *applied* to bills. Always computed
         // across all tenders regardless of the payments method filter.
         const depositRows = await db.patientDeposit.findMany({
-            where: { created_at: { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') } },
-            select: { amount: true, payment_method: true },
+            where: { created_at: { gte: fromDate, lte: toDate } },
+            select: { id: true, deposit_number: true, patient_id: true, amount: true, payment_method: true, collected_by: true, created_at: true },
         });
-        const depositsCollected = depositRows.reduce((acc: any, d: any) => {
+
+        // Resolve patient names for deposits
+        const depositPatientIds = [...new Set(depositRows.map((d: any) => d.patient_id))];
+        const depositPatients = depositPatientIds.length
+            ? await db.oPD_REG.findMany({
+                where: { patient_id: { in: depositPatientIds } },
+                select: { patient_id: true, full_name: true }
+            })
+            : [];
+        const depPatientMap = new Map(depositPatients.map((p: any) => [p.patient_id, p.full_name]));
+
+        const enrichedDeposits = depositRows.map((d: any) => {
+            const username = String(d.collected_by || 'system');
+            const fullName = userMap.get(username.toLowerCase()) || username;
+            return {
+                ...d,
+                patient_name: depPatientMap.get(d.patient_id) || '-',
+                cashier_username: username,
+                cashier_name: fullName
+            };
+        });
+
+        const depositsCollectedMap = enrichedDeposits.reduce((acc: any, d: any) => {
             const method = d.payment_method || 'Unknown';
             acc[method] = (acc[method] || 0) + Number(d.amount);
             acc.total = (acc.total || 0) + Number(d.amount);
             return acc;
         }, {});
 
-        return { success: true, data: { payments: serialize(payments), totals, depositsCollected } };
+        return {
+            success: true,
+            data: {
+                payments: serialize(enrichedPayments),
+                totals,
+                depositsCollected: serialize(depositsCollectedMap),
+                depositsList: serialize(enrichedDeposits)
+            }
+        };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
@@ -102,7 +184,9 @@ export async function getARAgingReport(filters?: { invoiceType?: string; admissi
 export async function getCashFlowReport(filters: { from: string; to: string; invoiceType?: string; admissionStatus?: string }) {
     try {
         const { db } = await requireTenantContext();
-        const dateFilter = { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') };
+        const fromDate = new Date(filters.from + 'T00:00:00+05:30');
+        const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
+        const dateFilter = { gte: fromDate, lte: toDate };
         // Inflows can be split by IPD/OPD via the payment's invoice; expenses are
         // org-wide and not attributable to a bill type, so they stay unfiltered.
         const inflowWhere: any = { status: 'Completed', created_at: dateFilter };
@@ -124,15 +208,15 @@ export async function getCashFlowReport(filters: { from: string; to: string; inv
             }),
         ]);
 
-        // Group by date
+        // Group by date (IST)
         const dailyMap: Record<string, { inflow: number; outflow: number }> = {};
         inflows.forEach((p: any) => {
-            const day = new Date(p.created_at).toISOString().slice(0, 10);
+            const day = new Date(p.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
             if (!dailyMap[day]) dailyMap[day] = { inflow: 0, outflow: 0 };
             dailyMap[day].inflow += Number(p.amount);
         });
         outflows.forEach((e: any) => {
-            const day = new Date(e.created_at).toISOString().slice(0, 10);
+            const day = new Date(e.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
             if (!dailyMap[day]) dailyMap[day] = { inflow: 0, outflow: 0 };
             dailyMap[day].outflow += Number(e.total_amount);
         });
@@ -153,7 +237,9 @@ export async function getCashFlowReport(filters: { from: string; to: string; inv
 export async function getProfitLossReport(filters: { from: string; to: string; invoiceType?: string; admissionStatus?: string }) {
     try {
         const { db } = await requireTenantContext();
-        const dateFilter = { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') };
+        const fromDate = new Date(filters.from + 'T00:00:00+05:30');
+        const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
+        const dateFilter = { gte: fromDate, lte: toDate };
         // Income (invoice items) can be split by IPD/OPD or admit/discharge; expenses are org-wide.
         const itemWhere: any = { created_at: dateFilter };
         if (filters.invoiceType || filters.admissionStatus) {
@@ -209,7 +295,9 @@ export async function getPnLIncomeBreakdown(filters: {
 }) {
     try {
         const { db } = await requireTenantContext();
-        const dateFilter = { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') };
+        const fromDate = new Date(filters.from + 'T00:00:00+05:30');
+        const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
+        const dateFilter = { gte: fromDate, lte: toDate };
 
         const items = await db.invoice_items.findMany({
             where: { department: filters.department, created_at: dateFilter },
@@ -412,7 +500,9 @@ export async function getPnLExpenseBreakdown(filters: {
 }) {
     try {
         const { db } = await requireTenantContext();
-        const dateFilter = { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') };
+        const fromDate = new Date(filters.from + 'T00:00:00+05:30');
+        const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
+        const dateFilter = { gte: fromDate, lte: toDate };
 
         // Resolve category by name (label) → id
         const category = await db.expenseCategory.findFirst({
@@ -453,7 +543,9 @@ export async function getPnLExpenseBreakdown(filters: {
 export async function getRevenueByDepartment(filters: { from: string; to: string; invoiceType?: string; admissionStatus?: string }) {
     try {
         const { db } = await requireTenantContext();
-        const dateFilter = { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') };
+        const fromDate = new Date(filters.from + 'T00:00:00+05:30');
+        const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
+        const dateFilter = { gte: fromDate, lte: toDate };
         const itemWhere: any = { created_at: dateFilter };
         if (filters.invoiceType || filters.admissionStatus) {
             itemWhere.invoice = {
@@ -503,7 +595,9 @@ export async function getRevenueByDepartment(filters: { from: string; to: string
 export async function getInsuranceCollectionReport(filters: { from: string; to: string; invoiceType?: string; admissionStatus?: string }) {
     try {
         const { db } = await requireTenantContext();
-        const dateFilter = { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') };
+        const fromDate = new Date(filters.from + 'T00:00:00+05:30');
+        const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
+        const dateFilter = { gte: fromDate, lte: toDate };
         const claimWhere: any = { submitted_at: dateFilter };
         if (filters.invoiceType || filters.admissionStatus) {
             claimWhere.invoice = {
@@ -543,8 +637,8 @@ export async function getInsuranceCollectionReport(filters: { from: string; to: 
 export async function getDailyActivityReport(filters: { from: string; to: string }) {
     try {
         const { db } = await requireTenantContext();
-        const start = new Date(filters.from);
-        const end = new Date(filters.to + 'T23:59:59');
+        const start = new Date(filters.from + 'T00:00:00+05:30');
+        const end = new Date(filters.to + 'T23:59:59.999+05:30');
         const istDay = (d: any) => new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
 
         const [opdInvoices, admits, discharges, payments] = await Promise.all([
@@ -578,17 +672,19 @@ export async function getDailyActivityReport(filters: { from: string; to: string
 export async function getDailyCollectionSummary(filters: { from: string; to: string }) {
     try {
         const { db } = await requireTenantContext();
+        const fromDate = new Date(filters.from + 'T00:00:00+05:30');
+        const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
         const payments = await db.payments.findMany({
             where: {
                 status: 'Completed',
-                created_at: { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') },
+                created_at: { gte: fromDate, lte: toDate },
             },
             select: { amount: true, payment_method: true, created_at: true },
         });
 
         const dailyMap: Record<string, Record<string, number>> = {};
         payments.forEach((p: any) => {
-            const day = new Date(p.created_at).toISOString().slice(0, 10);
+            const day = new Date(p.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
             if (!dailyMap[day]) dailyMap[day] = { Cash: 0, Card: 0, UPI: 0, BankTransfer: 0, Razorpay: 0, total: 0 };
             dailyMap[day][p.payment_method] = (dailyMap[day][p.payment_method] || 0) + Number(p.amount);
             dailyMap[day].total += Number(p.amount);
@@ -627,8 +723,10 @@ export async function getMISReport(filters: { from: string; to: string; billType
     try {
         const { db } = await requireTenantContext();
 
+        const fromDate = new Date(filters.from + 'T00:00:00+05:30');
+        const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
         const where: any = {
-            created_at: { gte: new Date(filters.from), lte: new Date(filters.to + 'T23:59:59') },
+            created_at: { gte: fromDate, lte: toDate },
             status: { notIn: ['Cancelled'] },
             is_archived: false,
         };
