@@ -1237,17 +1237,47 @@ export async function updateSupplier(id: number, data: {
 
 export async function createPurchaseOrder(
     supplier_id: number,
-    items: { medicine_id: number, quantity: number, unit_price: number, gst_rate?: number, hsn_code?: string }[],
+    items: {
+        medicine_id: number,
+        quantity: number,
+        unit_price: number,
+        gst_rate?: number,
+        hsn_code?: string,
+        pack?: string,
+        batch_no?: string,
+        expiry?: string,
+        mrp?: number,
+        discount_pct?: number,
+        cgst_rate?: number,
+        sgst_rate?: number,
+    }[],
     options?: { vendor_id?: number; notes?: string; submit?: boolean }
 ) {
     try {
         const { db, organizationId } = await requireTenantContext();
 
-        const totalAmount = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
-        const gstAmount = items.reduce((sum, item) => {
-            const rate = item.gst_rate || 0;
-            return sum + (item.quantity * item.unit_price * rate / 100);
-        }, 0);
+        // Per-line amount is GST auto-calculated from rate, qty, discount and CGST/SGST:
+        //   taxable = qty * rate * (1 - discount/100)
+        //   gst     = taxable * (cgst% + sgst%) / 100
+        //   amount  = taxable + gst   (GST-inclusive line total, like a supplier invoice)
+        const computed = items.map(item => {
+            const qty = Number(item.quantity) || 0;
+            const rate = Number(item.unit_price) || 0;
+            const discount = Number(item.discount_pct) || 0;
+            // Prefer explicit CGST/SGST split; fall back to a flat gst_rate (split in half).
+            const flat = Number(item.gst_rate) || 0;
+            const cgst = item.cgst_rate != null ? Number(item.cgst_rate) : flat / 2;
+            const sgst = item.sgst_rate != null ? Number(item.sgst_rate) : flat / 2;
+            const totalGstRate = cgst + sgst;
+
+            const taxable = qty * rate * (1 - discount / 100);
+            const gst = taxable * totalGstRate / 100;
+            const amount = taxable + gst;
+            return { item, qty, rate, discount, cgst, sgst, totalGstRate, taxable, gst, amount };
+        });
+
+        const totalAmount = computed.reduce((sum, c) => sum + c.amount, 0);
+        const gstAmount = computed.reduce((sum, c) => sum + c.gst, 0);
         const poNumber = `PO-${Date.now().toString().slice(-6)}`;
 
         // supplier_id from UI is actually a Vendor.id (unified vendor table).
@@ -1306,12 +1336,20 @@ export async function createPurchaseOrder(
                 notes: options?.notes || null,
                 organizationId,
                 items: {
-                    create: items.map(item => ({
-                        medicine_id: item.medicine_id,
-                        quantity_ordered: item.quantity,
-                        unit_price: item.unit_price,
-                        gst_rate: item.gst_rate || 0,
-                        hsn_code: item.hsn_code || null,
+                    create: computed.map(c => ({
+                        medicine_id: c.item.medicine_id,
+                        quantity_ordered: c.qty,
+                        unit_price: c.rate,
+                        gst_rate: c.totalGstRate,
+                        hsn_code: c.item.hsn_code || null,
+                        pack: c.item.pack || null,
+                        batch_no: c.item.batch_no || null,
+                        expiry: c.item.expiry || null,
+                        mrp: c.item.mrp != null ? Number(c.item.mrp) : 0,
+                        discount_pct: c.discount,
+                        cgst_rate: c.cgst,
+                        sgst_rate: c.sgst,
+                        amount: c.amount,
                         quantity_received: 0
                     }))
                 }

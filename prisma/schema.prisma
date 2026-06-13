@@ -1839,9 +1839,18 @@ model PurchaseOrderItem {
   medicine_id       Int
   quantity_ordered  Int
   quantity_received Int    @default(0)
-  unit_price        Float
-  gst_rate          Float  @default(0)
+  unit_price        Float                        // Rate (per pack/unit, pre-tax)
+  gst_rate          Float  @default(0)           // Total GST % (= cgst_rate + sgst_rate)
   hsn_code          String?
+  // Invoice-style line fields (mirrors a supplier tax invoice)
+  pack              String?                       // Pack size e.g. "1*5", "1*30ML"
+  batch_no          String?                       // Supplier batch number
+  expiry            String?                       // Expiry as printed on invoice e.g. "04/31"
+  mrp               Float  @default(0)            // Maximum retail price per pack/unit
+  discount_pct      Float  @default(0)            // Line discount %
+  cgst_rate         Float  @default(0)            // CGST %
+  sgst_rate         Float  @default(0)            // SGST %
+  amount            Float  @default(0)            // Auto-computed line total (taxable + GST)
   notes             String?
 
   purchase_order PurchaseOrder @relation(fields: [po_id], references: [id])
