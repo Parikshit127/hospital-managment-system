@@ -230,14 +230,18 @@ async function recalculateInvoice(invoiceId: number) {
     });
 
     const total_amount = items.reduce((sum: any, item: any) => sum + Number(item.total_price), 0);
-    const total_discount = items.reduce((sum: any, item: any) => sum + Number(item.discount), 0);
+    const lineDiscount = items.reduce((sum: any, item: any) => sum + Number(item.discount), 0);
     const net_items = items.reduce((sum: any, item: any) => sum + Number(item.net_price), 0);
     const total_tax = items.reduce((sum: any, item: any) => sum + Number(item.tax_amount || 0), 0);
 
     const invoice = await db.invoices.findUnique({ where: { id: invoiceId } });
     const isInterState = invoice?.is_inter_state || false;
     const paid_amount = Number(invoice?.paid_amount || 0);
-    const net_amount = net_items + total_tax;
+    // Bill-level (final) discount — a flat amount off the whole bill, on top of any
+    // line discounts and WITHOUT editing line prices. Capped so net never goes negative.
+    const billDiscount = Math.min(Math.max(0, Number(invoice?.bill_discount || 0)), net_items + total_tax);
+    const total_discount = lineDiscount + billDiscount;
+    const net_amount = net_items + total_tax - billDiscount;
     const balance_due = net_amount - paid_amount;
 
     await db.invoices.update({
@@ -1983,6 +1987,7 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
     concession_amount?: number;
     concession_reason?: string;
     is_inter_state?: boolean;
+    bill_discount?: number;
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
@@ -2007,12 +2012,13 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
         if (patch.concession_amount !== undefined) data.concession_amount = patch.concession_amount;
         if (patch.concession_reason !== undefined) data.concession_reason = patch.concession_reason;
         if (patch.is_inter_state !== undefined) data.is_inter_state = patch.is_inter_state;
+        if (patch.bill_discount !== undefined) data.bill_discount = Math.max(0, Number(patch.bill_discount) || 0);
         data.version = { increment: 1 };
 
         await db.invoices.update({ where: { id: invoiceId }, data });
 
-        // If tax split toggle changed, the CGST/SGST vs IGST allocation must be refreshed.
-        if (patch.is_inter_state !== undefined) {
+        // Tax-split toggle or the bill-level discount changing both require a totals refresh.
+        if (patch.is_inter_state !== undefined || patch.bill_discount !== undefined) {
             await recalculateInvoice(invoiceId);
             await handleGLRepost(invoiceId, invoice.status);
         }
@@ -2249,6 +2255,7 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
                 if (p.concession_amount !== undefined) h.concession_amount = p.concession_amount;
                 if (p.concession_reason !== undefined) h.concession_reason = p.concession_reason;
                 if (p.is_inter_state !== undefined) h.is_inter_state = p.is_inter_state;
+                if ((p as any).bill_discount !== undefined) h.bill_discount = Math.max(0, Number((p as any).bill_discount) || 0);
                 if (Object.keys(h).length) {
                     await tx.invoices.update({ where: { id: invoiceId }, data: h });
                 }
