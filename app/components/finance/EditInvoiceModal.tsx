@@ -100,6 +100,10 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
     const [header, setHeader] = useState<HeaderState | null>(null);
     const [headerOrig, setHeaderOrig] = useState<HeaderState | null>(null);
 
+    // Overall (whole-bill) discount controls
+    const [discMode, setDiscMode] = useState<'pct' | 'amt'>('pct');
+    const [discInput, setDiscInput] = useState<number>(0);
+
     const load = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -207,6 +211,48 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
 
     function addItem() {
         setItems(prev => [...prev, blankItem()]);
+    }
+
+    // Spread a whole-bill discount (% or flat ₹) across line items by setting each
+    // line's Disc ₹. Only positive-value lines participate; this overwrites any
+    // existing per-item discounts. Totals/GL stay driven by the same line discounts.
+    function applyOverallDiscount() {
+        const round2 = (n: number) => Math.round(n * 100) / 100;
+        const eligible = items
+            .map((it, idx) => ({ it, idx, gross: Number(it.quantity) * Number(it.unit_price) }))
+            .filter(({ it, gross }) => !it._removed && gross > 0);
+        const grossTotal = eligible.reduce((s, e) => s + e.gross, 0);
+        if (eligible.length === 0 || grossTotal <= 0) {
+            toast.error('No positive-value items to discount.');
+            return;
+        }
+
+        const perLine = new Map<number, number>();
+        if (discMode === 'pct') {
+            const pct = Math.min(100, Math.max(0, Number(discInput) || 0));
+            for (const { idx, gross } of eligible) {
+                perLine.set(idx, round2((gross * pct) / 100));
+            }
+        } else {
+            const amt = Math.min(Math.max(0, Number(discInput) || 0), grossTotal);
+            let allocated = 0;
+            eligible.forEach((e, k) => {
+                // Proportional share by line value; last line absorbs rounding remainder.
+                let share = k === eligible.length - 1
+                    ? round2(amt - allocated)
+                    : round2((amt * e.gross) / grossTotal);
+                share = Math.min(Math.max(0, share), e.gross); // never exceed the line value
+                allocated += share;
+                perLine.set(e.idx, share);
+            });
+        }
+
+        setItems(prev => prev.map((it, i) => (perLine.has(i) ? { ...it, discount: perLine.get(i)! } : it)));
+        toast.success(
+            discMode === 'pct'
+                ? `Applied ${Math.min(100, Math.max(0, Number(discInput) || 0))}% discount across items.`
+                : 'Distributed discount across items.',
+        );
     }
 
     function headerDirty(): boolean {
@@ -483,6 +529,42 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+
+                    {/* Overall (whole-bill) discount */}
+                    <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
+                        <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1">
+                                Overall Discount
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                                <select
+                                    value={discMode}
+                                    onChange={e => setDiscMode(e.target.value as 'pct' | 'amt')}
+                                    disabled={readOnly || saving}
+                                    className="px-2 py-1.5 border border-gray-200 rounded text-xs bg-white"
+                                >
+                                    <option value="pct">%</option>
+                                    <option value="amt">₹</option>
+                                </select>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    step="any"
+                                    value={discInput}
+                                    onChange={e => setDiscInput(Number(e.target.value))}
+                                    disabled={readOnly || saving}
+                                    placeholder="0"
+                                    className="w-28 px-2 py-1.5 border border-gray-200 rounded text-xs text-right"
+                                />
+                                <Button variant="secondary" size="sm" onClick={applyOverallDiscount} disabled={readOnly || saving}>
+                                    Apply to all items
+                                </Button>
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-gray-400 leading-snug max-w-[230px]">
+                            Spreads the discount across all line items (overwrites existing per-item discounts). Review, then Save Changes.
+                        </p>
                     </div>
 
                     {/* Live totals */}
