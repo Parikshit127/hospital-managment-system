@@ -6,7 +6,30 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { Truck, Plus, CheckCircle, PackageOpen, X, Search, AlertTriangle, ListChecks } from 'lucide-react';
 import { getPurchaseOrders, receivePurchaseOrder, createPurchaseOrder, getSuppliers, getInventory } from '@/app/actions/pharmacy-actions';
 
-type PoItem = { medicine_id: number; name: string; quantity: number; unit_price: number; gst_rate: number };
+type PoItem = {
+    medicine_id: number;
+    name: string;
+    pack: string;
+    hsn_code: string;
+    batch_no: string;
+    expiry: string;
+    mrp: number;
+    unit_price: number;      // Rate (pre-tax)
+    quantity: number;
+    discount_pct: number;
+    cgst_rate: number;
+    sgst_rate: number;
+};
+
+// GST auto-calculation — mirrors a supplier tax invoice line:
+//   taxable = qty * rate * (1 - discount/100)
+//   gst     = taxable * (cgst% + sgst%) / 100
+//   amount  = taxable + gst
+function calcLine(item: PoItem) {
+    const taxable = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0) * (1 - (Number(item.discount_pct) || 0) / 100);
+    const gst = taxable * ((Number(item.cgst_rate) || 0) + (Number(item.sgst_rate) || 0)) / 100;
+    return { taxable, gst, amount: taxable + gst };
+}
 
 export default function PurchaseOrdersPage() {
     const [orders, setOrders] = useState<any[]>([]);
@@ -55,16 +78,30 @@ export default function PurchaseOrdersPage() {
         if (mRes.success) setMedicines(mRes.data || []);
     };
 
+    // Build a PO line from a medicine/inventory record, prefilling invoice
+    // columns (HSN, MRP, rate, GST split) from the medicine master.
+    const buildPoItem = (m: any): PoItem => {
+        const gst = Number(m.gst_percent ?? m.medicine?.gst_percent ?? 0);
+        return {
+            medicine_id: m.medicine_id ?? m.id,
+            name: m.brand_name || m.medicine?.brand_name || '',
+            pack: '',
+            hsn_code: m.hsn_sac_code || m.medicine?.hsn_sac_code || '',
+            batch_no: '',
+            expiry: '',
+            mrp: Number(m.mrp ?? m.medicine?.mrp ?? 0),
+            unit_price: Number(m.price_per_unit ?? m.medicine?.price_per_unit ?? 0),
+            quantity: 1,
+            discount_pct: 0,
+            cgst_rate: gst / 2,
+            sgst_rate: gst / 2,
+        };
+    };
+
     // ── Single medicine search add ──────────────────────────────────────
     const addMedicineToOrder = (med: any) => {
         if (poItems.find(i => i.medicine_id === med.medicine_id)) return;
-        setPoItems(prev => [...prev, {
-            medicine_id: med.medicine_id,
-            name: med.brand_name || med.medicine?.brand_name,
-            quantity: 1,
-            unit_price: Number(med.price_per_unit || med.medicine?.price_per_unit || 0),
-            gst_rate: Number(med.gst_percent || med.medicine?.gst_percent || 0),
-        }]);
+        setPoItems(prev => [...prev, buildPoItem(med)]);
         setMedicineSearch('');
         setShowMedDropdown(false);
     };
@@ -108,13 +145,7 @@ export default function PurchaseOrdersPage() {
     const applyBulkSelection = () => {
         const toAdd = medicines
             .filter((m: any) => selectedMedIds.has(m.medicine_id) && !poItems.find(i => i.medicine_id === m.medicine_id))
-            .map((m: any) => ({
-                medicine_id: m.medicine_id,
-                name: m.brand_name || m.medicine?.brand_name || '',
-                quantity: 1,
-                unit_price: Number(m.price_per_unit || m.medicine?.price_per_unit || 0),
-                gst_rate: Number(m.gst_percent || m.medicine?.gst_percent || 0),
-            }));
+            .map((m: any) => buildPoItem(m));
         setPoItems(prev => [...prev, ...toAdd]);
         setShowBulkSelect(false);
         setSelectedMedIds(new Set());
@@ -129,21 +160,17 @@ export default function PurchaseOrdersPage() {
             return totalStock <= threshold && !poItems.find(i => i.medicine_id === m.medicine_id);
         });
         if (lowMeds.length === 0) { alert('No low-stock medicines to add.'); return; }
-        setPoItems(prev => [
-            ...prev,
-            ...lowMeds.map((m: any) => ({
-                medicine_id: m.medicine_id,
-                name: m.brand_name || m.medicine?.brand_name || '',
-                quantity: 1,
-                unit_price: Number(m.price_per_unit || m.medicine?.price_per_unit || 0),
-                gst_rate: Number(m.gst_percent || m.medicine?.gst_percent || 0),
-            })),
-        ]);
+        setPoItems(prev => [...prev, ...lowMeds.map((m: any) => buildPoItem(m))]);
     };
 
     // ── Item table helpers ──────────────────────────────────────────────
+    const TEXT_FIELDS = new Set(['pack', 'hsn_code', 'batch_no', 'expiry']);
     const updateItem = (idx: number, field: string, value: any) => {
-        setPoItems(prev => { const u = [...prev]; u[idx] = { ...u[idx], [field]: Number(value) }; return u; });
+        setPoItems(prev => {
+            const u = [...prev];
+            u[idx] = { ...u[idx], [field]: TEXT_FIELDS.has(field) ? value : Number(value) };
+            return u;
+        });
     };
     const removeItem = (idx: number) => setPoItems(prev => prev.filter((_, i) => i !== idx));
 
@@ -152,7 +179,19 @@ export default function PurchaseOrdersPage() {
         setCreating(true);
         const res = await createPurchaseOrder(
             Number(poForm.supplier_id),
-            poItems.map(i => ({ medicine_id: i.medicine_id, quantity: i.quantity, unit_price: i.unit_price, gst_rate: i.gst_rate })),
+            poItems.map(i => ({
+                medicine_id: i.medicine_id,
+                quantity: i.quantity,
+                unit_price: i.unit_price,
+                hsn_code: i.hsn_code || undefined,
+                pack: i.pack || undefined,
+                batch_no: i.batch_no || undefined,
+                expiry: i.expiry || undefined,
+                mrp: i.mrp,
+                discount_pct: i.discount_pct,
+                cgst_rate: i.cgst_rate,
+                sgst_rate: i.sgst_rate,
+            })),
             { notes: poForm.notes || undefined }
         );
         setCreating(false);
@@ -187,7 +226,16 @@ export default function PurchaseOrdersPage() {
         !poItems.find(i => i.medicine_id === m.medicine_id)
     ).slice(0, 15);
 
-    const poTotal = poItems.reduce((s, i) => s + i.quantity * i.unit_price, 0);
+    const poTotals = poItems.reduce(
+        (acc, i) => {
+            const { taxable, gst, amount } = calcLine(i);
+            acc.taxable += taxable; acc.gst += gst; acc.amount += amount;
+            return acc;
+        },
+        { taxable: 0, gst: 0, amount: 0 }
+    );
+    const poTotal = poTotals.amount;
+    const fmt = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const lowStockCount = medicines.filter((m: any) => {
         const totalStock = m.batches ? m.batches.reduce((s: number, b: any) => s + b.current_stock, 0) : Number(m.current_stock || 0);
         return totalStock <= Number(m.min_threshold || m.medicine?.min_threshold || 10);
@@ -292,7 +340,7 @@ export default function PurchaseOrdersPage() {
             {/* ── Create PO Modal ── */}
             {showCreateModal && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
+                    <div className="bg-white rounded-2xl w-full max-w-6xl shadow-2xl flex flex-col max-h-[90vh]">
                         <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
                             <h3 className="font-bold text-gray-900">Create Purchase Order</h3>
                             <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-900"><X className="h-5 w-5" /></button>
@@ -361,54 +409,103 @@ export default function PurchaseOrdersPage() {
                                 </div>
                             </div>
 
-                            {/* Items Table */}
+                            {/* Items Table — full supplier-invoice columns, GST auto-calculated */}
                             {poItems.length > 0 && (
-                                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                                    <table className="w-full text-sm">
-                                        <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                                <div className="border border-gray-200 rounded-lg overflow-x-auto">
+                                    <table className="w-full text-sm whitespace-nowrap">
+                                        <thead className="bg-gray-50 text-[10px] text-gray-500 uppercase tracking-wider">
                                             <tr>
-                                                <th className="px-3 py-2 text-left">Medicine</th>
-                                                <th className="px-3 py-2 text-center">Qty</th>
-                                                <th className="px-3 py-2 text-center">Price (₹)</th>
-                                                <th className="px-3 py-2 text-center">GST %</th>
-                                                <th className="px-3 py-2 text-center">Total</th>
-                                                <th className="px-3 py-2"></th>
+                                                <th className="px-2 py-2 text-center">Sr.</th>
+                                                <th className="px-2 py-2 text-center">Qty</th>
+                                                <th className="px-2 py-2 text-center">Pack</th>
+                                                <th className="px-2 py-2 text-left">Particulars</th>
+                                                <th className="px-2 py-2 text-center">HSN Code</th>
+                                                <th className="px-2 py-2 text-center">Batch No.</th>
+                                                <th className="px-2 py-2 text-center">Exp.</th>
+                                                <th className="px-2 py-2 text-center">MRP</th>
+                                                <th className="px-2 py-2 text-center">Rate</th>
+                                                <th className="px-2 py-2 text-center">Dis%</th>
+                                                <th className="px-2 py-2 text-center">CGST%</th>
+                                                <th className="px-2 py-2 text-center">SGST%</th>
+                                                <th className="px-2 py-2 text-right">Amount</th>
+                                                <th className="px-2 py-2"></th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
-                                            {poItems.map((item, idx) => (
-                                                <tr key={item.medicine_id}>
-                                                    <td className="px-3 py-2 font-medium text-gray-800">{item.name}</td>
-                                                    <td className="px-3 py-2">
-                                                        <input type="number" min="1" value={item.quantity}
-                                                            onChange={e => updateItem(idx, 'quantity', e.target.value)}
-                                                            className="w-16 text-center border border-gray-200 rounded p-1 text-sm" />
-                                                    </td>
-                                                    <td className="px-3 py-2">
-                                                        <input type="number" min="0" value={item.unit_price}
-                                                            onChange={e => updateItem(idx, 'unit_price', e.target.value)}
-                                                            className="w-24 text-center border border-gray-200 rounded p-1 text-sm" />
-                                                    </td>
-                                                    <td className="px-3 py-2">
-                                                        <input type="number" min="0" max="100" value={item.gst_rate}
-                                                            onChange={e => updateItem(idx, 'gst_rate', e.target.value)}
-                                                            className="w-16 text-center border border-gray-200 rounded p-1 text-sm" />
-                                                    </td>
-                                                    <td className="px-3 py-2 text-center font-semibold">
-                                                        ₹{(item.quantity * item.unit_price).toLocaleString('en-IN')}
-                                                    </td>
-                                                    <td className="px-3 py-2 text-center">
-                                                        <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600">
-                                                            <X className="h-4 w-4" />
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {poItems.map((item, idx) => {
+                                                const { amount } = calcLine(item);
+                                                return (
+                                                    <tr key={item.medicine_id}>
+                                                        <td className="px-2 py-2 text-center text-gray-500">{idx + 1}</td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="number" min="1" value={item.quantity}
+                                                                onChange={e => updateItem(idx, 'quantity', e.target.value)}
+                                                                className="w-14 text-center border border-gray-200 rounded p-1 text-sm" />
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="text" value={item.pack} placeholder="1*5"
+                                                                onChange={e => updateItem(idx, 'pack', e.target.value)}
+                                                                className="w-16 text-center border border-gray-200 rounded p-1 text-sm" />
+                                                        </td>
+                                                        <td className="px-2 py-2 font-medium text-gray-800">{item.name}</td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="text" value={item.hsn_code} placeholder="HSN"
+                                                                onChange={e => updateItem(idx, 'hsn_code', e.target.value)}
+                                                                className="w-20 text-center border border-gray-200 rounded p-1 text-sm" />
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="text" value={item.batch_no} placeholder="Batch"
+                                                                onChange={e => updateItem(idx, 'batch_no', e.target.value)}
+                                                                className="w-20 text-center border border-gray-200 rounded p-1 text-sm" />
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="text" value={item.expiry} placeholder="MM/YY"
+                                                                onChange={e => updateItem(idx, 'expiry', e.target.value)}
+                                                                className="w-16 text-center border border-gray-200 rounded p-1 text-sm" />
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="number" min="0" step="0.01" value={item.mrp}
+                                                                onChange={e => updateItem(idx, 'mrp', e.target.value)}
+                                                                className="w-20 text-center border border-gray-200 rounded p-1 text-sm" />
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="number" min="0" step="0.01" value={item.unit_price}
+                                                                onChange={e => updateItem(idx, 'unit_price', e.target.value)}
+                                                                className="w-20 text-center border border-gray-200 rounded p-1 text-sm" />
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="number" min="0" max="100" step="0.01" value={item.discount_pct}
+                                                                onChange={e => updateItem(idx, 'discount_pct', e.target.value)}
+                                                                className="w-14 text-center border border-gray-200 rounded p-1 text-sm" />
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="number" min="0" max="100" step="0.01" value={item.cgst_rate}
+                                                                onChange={e => updateItem(idx, 'cgst_rate', e.target.value)}
+                                                                className="w-14 text-center border border-gray-200 rounded p-1 text-sm" />
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="number" min="0" max="100" step="0.01" value={item.sgst_rate}
+                                                                onChange={e => updateItem(idx, 'sgst_rate', e.target.value)}
+                                                                className="w-14 text-center border border-gray-200 rounded p-1 text-sm" />
+                                                        </td>
+                                                        <td className="px-2 py-2 text-right font-semibold text-gray-900">
+                                                            ₹{fmt(amount)}
+                                                        </td>
+                                                        <td className="px-2 py-2 text-center">
+                                                            <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600">
+                                                                <X className="h-4 w-4" />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                         <tfoot className="bg-gray-50">
                                             <tr>
-                                                <td colSpan={4} className="px-3 py-2 text-right font-bold text-gray-700 text-sm">Total:</td>
-                                                <td className="px-3 py-2 text-center font-black text-gray-900">₹{poTotal.toLocaleString('en-IN')}</td>
+                                                <td colSpan={12} className="px-2 py-2 text-right font-bold text-gray-600 text-xs">
+                                                    Taxable: ₹{fmt(poTotals.taxable)} &nbsp;·&nbsp; GST: ₹{fmt(poTotals.gst)} &nbsp;·&nbsp; Grand Total:
+                                                </td>
+                                                <td className="px-2 py-2 text-right font-black text-gray-900">₹{fmt(poTotal)}</td>
                                                 <td></td>
                                             </tr>
                                         </tfoot>

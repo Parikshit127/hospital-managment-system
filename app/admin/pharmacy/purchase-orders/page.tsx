@@ -7,6 +7,33 @@ import { Truck, Plus, CheckCircle, PackageOpen, Trash2, Loader2 } from 'lucide-r
 import { getPurchaseOrders, receivePurchaseOrder, getSuppliers, createPurchaseOrder } from '@/app/actions/pharmacy-actions';
 import { listMedicines } from '@/app/actions/medicine-master-actions';
 
+type CreateRow = {
+    medicine_id: number | '';
+    pack: string;
+    hsn_code: string;
+    batch_no: string;
+    expiry: string;
+    mrp: number;
+    quantity: number;
+    unit_price: number;      // Rate (pre-tax)
+    discount_pct: number;
+    cgst_rate: number;
+    sgst_rate: number;
+};
+
+const emptyRow = (): CreateRow => ({
+    medicine_id: '', pack: '', hsn_code: '', batch_no: '', expiry: '',
+    mrp: 0, quantity: 1, unit_price: 0, discount_pct: 0, cgst_rate: 0, sgst_rate: 0,
+});
+
+// GST auto-calculation: amount = taxable + GST, where
+//   taxable = qty * rate * (1 - discount/100); gst = taxable * (cgst%+sgst%)/100
+function calcRow(r: CreateRow) {
+    const taxable = (Number(r.quantity) || 0) * (Number(r.unit_price) || 0) * (1 - (Number(r.discount_pct) || 0) / 100);
+    const gst = taxable * ((Number(r.cgst_rate) || 0) + (Number(r.sgst_rate) || 0)) / 100;
+    return { taxable, gst, amount: taxable + gst };
+}
+
 export default function PurchaseOrdersPage() {
     const [orders, setOrders] = useState<any[]>([]);
     const [refreshing, setRefreshing] = useState(false);
@@ -19,9 +46,7 @@ export default function PurchaseOrdersPage() {
     const [suppliers, setSuppliers] = useState<any[]>([]);
     const [medicines, setMedicines] = useState<any[]>([]);
     const [createSupplierId, setCreateSupplierId] = useState<number | ''>('');
-    const [createItems, setCreateItems] = useState<{ medicine_id: number | ''; quantity: number; unit_price: number }[]>([
-        { medicine_id: '', quantity: 1, unit_price: 0 },
-    ]);
+    const [createItems, setCreateItems] = useState<CreateRow[]>([emptyRow()]);
     const [createSubmitting, setCreateSubmitting] = useState(false);
     const [createError, setCreateError] = useState<string>('');
 
@@ -51,7 +76,7 @@ export default function PurchaseOrdersPage() {
 
     const resetCreateForm = () => {
         setCreateSupplierId('');
-        setCreateItems([{ medicine_id: '', quantity: 1, unit_price: 0 }]);
+        setCreateItems([emptyRow()]);
         setCreateError('');
         setCreateSubmitting(false);
     };
@@ -61,30 +86,46 @@ export default function PurchaseOrdersPage() {
         resetCreateForm();
     };
 
-    const handleCreateRowChange = (idx: number, field: 'medicine_id' | 'quantity' | 'unit_price', value: any) => {
+    const TEXT_FIELDS = new Set(['pack', 'hsn_code', 'batch_no', 'expiry']);
+    const handleCreateRowChange = (idx: number, field: keyof CreateRow, value: any) => {
         setCreateItems(prev => prev.map((row, i) => {
             if (i !== idx) return row;
             if (field === 'medicine_id') {
                 const med = medicines.find(m => m.id === Number(value));
+                const gst = Number(med?.gst_percent ?? 0);
                 return {
+                    ...row,
                     medicine_id: value === '' ? '' : Number(value),
-                    quantity: row.quantity,
+                    hsn_code: med?.hsn_sac_code || row.hsn_code,
+                    mrp: med?.mrp != null ? Number(med.mrp) : row.mrp,
                     unit_price: med?.price_per_unit ? Number(med.price_per_unit) : row.unit_price,
+                    cgst_rate: med ? gst / 2 : row.cgst_rate,
+                    sgst_rate: med ? gst / 2 : row.sgst_rate,
                 };
             }
-            return { ...row, [field]: Number(value) || 0 };
+            return { ...row, [field]: TEXT_FIELDS.has(field as string) ? value : (Number(value) || 0) };
         }));
     };
 
     const addItemRow = () => {
-        setCreateItems(prev => [...prev, { medicine_id: '', quantity: 1, unit_price: 0 }]);
+        setCreateItems(prev => [...prev, emptyRow()]);
     };
 
     const removeItemRow = (idx: number) => {
         setCreateItems(prev => prev.filter((_, i) => i !== idx));
     };
 
-    const createTotal = createItems.reduce((sum, r) => sum + ((typeof r.medicine_id === 'number' ? r.quantity * r.unit_price : 0)), 0);
+    const createTotals = createItems.reduce(
+        (acc, r) => {
+            if (typeof r.medicine_id !== 'number') return acc;
+            const { taxable, gst, amount } = calcRow(r);
+            acc.taxable += taxable; acc.gst += gst; acc.amount += amount;
+            return acc;
+        },
+        { taxable: 0, gst: 0, amount: 0 }
+    );
+    const createTotal = createTotals.amount;
+    const fmt = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     const handleCreateSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -96,7 +137,19 @@ export default function PurchaseOrdersPage() {
         setCreateSubmitting(true);
         const res = await createPurchaseOrder(
             Number(createSupplierId),
-            valid.map(r => ({ medicine_id: Number(r.medicine_id), quantity: r.quantity, unit_price: r.unit_price })),
+            valid.map(r => ({
+                medicine_id: Number(r.medicine_id),
+                quantity: r.quantity,
+                unit_price: r.unit_price,
+                hsn_code: r.hsn_code || undefined,
+                pack: r.pack || undefined,
+                batch_no: r.batch_no || undefined,
+                expiry: r.expiry || undefined,
+                mrp: r.mrp,
+                discount_pct: r.discount_pct,
+                cgst_rate: r.cgst_rate,
+                sgst_rate: r.sgst_rate,
+            })),
         );
         setCreateSubmitting(false);
         if (res.success) {
@@ -194,11 +247,11 @@ export default function PurchaseOrdersPage() {
             {/* Create PO Modal */}
             {createOpen && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <form onSubmit={handleCreateSubmit} className="bg-white rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+                    <form onSubmit={handleCreateSubmit} className="bg-white rounded-2xl w-full max-w-6xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
                         <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
                             <div>
                                 <h3 className="font-bold text-gray-900">Create Purchase Order</h3>
-                                <p className="text-xs text-gray-500">Pick a supplier, add medicines with qty & rate, submit. Status starts as Draft.</p>
+                                <p className="text-xs text-gray-500">Pick a supplier, fill the invoice columns — amount is GST auto-calculated. Status starts as Draft.</p>
                             </div>
                             <button type="button" onClick={closeCreateModal} className="text-gray-400 hover:text-gray-900 font-bold text-xl">&times;</button>
                         </div>
@@ -223,7 +276,7 @@ export default function PurchaseOrdersPage() {
                                 )}
                             </div>
 
-                            {/* Items */}
+                            {/* Items — full supplier-invoice columns, GST auto-calculated */}
                             <div>
                                 <div className="flex items-center justify-between mb-2">
                                     <label className="text-[10px] uppercase font-bold text-gray-500">Line Items *</label>
@@ -231,65 +284,115 @@ export default function PurchaseOrdersPage() {
                                         <Plus className="h-3 w-3" /> Add row
                                     </button>
                                 </div>
-                                <div className="space-y-2">
-                                    {createItems.map((row, idx) => (
-                                        <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-gray-50 p-2 rounded-lg">
-                                            <div className="col-span-12 md:col-span-6">
-                                                <select
-                                                    value={row.medicine_id}
-                                                    onChange={(e) => handleCreateRowChange(idx, 'medicine_id', e.target.value)}
-                                                    className="w-full p-2 border border-gray-200 rounded-lg text-sm bg-white"
-                                                >
-                                                    <option value="">— Pick medicine —</option>
-                                                    {medicines.map((m) => (
-                                                        <option key={m.id} value={m.id}>
-                                                            {m.brand_name}{m.generic_name ? ` (${m.generic_name})` : ''}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                            <div className="col-span-4 md:col-span-2">
-                                                <input
-                                                    type="number"
-                                                    min={1}
-                                                    value={row.quantity}
-                                                    onChange={(e) => handleCreateRowChange(idx, 'quantity', e.target.value)}
-                                                    placeholder="Qty"
-                                                    className="w-full p-2 border border-gray-200 rounded-lg text-sm bg-white"
-                                                />
-                                            </div>
-                                            <div className="col-span-6 md:col-span-3">
-                                                <input
-                                                    type="number"
-                                                    min={0}
-                                                    step="0.01"
-                                                    value={row.unit_price}
-                                                    onChange={(e) => handleCreateRowChange(idx, 'unit_price', e.target.value)}
-                                                    placeholder="Rate"
-                                                    className="w-full p-2 border border-gray-200 rounded-lg text-sm bg-white"
-                                                />
-                                            </div>
-                                            <div className="col-span-2 md:col-span-1 text-right">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeItemRow(idx)}
-                                                    disabled={createItems.length === 1}
-                                                    className="text-rose-500 hover:text-rose-700 disabled:opacity-30 disabled:cursor-not-allowed"
-                                                    title="Remove row"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Total */}
-                            <div className="flex justify-end pt-2 border-t">
-                                <div className="text-right">
-                                    <p className="text-[10px] uppercase font-bold text-gray-500">Estimated Total</p>
-                                    <p className="text-xl font-black text-emerald-700">₹{createTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</p>
+                                <div className="border border-gray-200 rounded-lg overflow-x-auto">
+                                    <table className="w-full text-sm whitespace-nowrap">
+                                        <thead className="bg-gray-50 text-[10px] text-gray-500 uppercase tracking-wider">
+                                            <tr>
+                                                <th className="px-2 py-2 text-center">Sr.</th>
+                                                <th className="px-2 py-2 text-center">Qty</th>
+                                                <th className="px-2 py-2 text-center">Pack</th>
+                                                <th className="px-2 py-2 text-left">Particulars</th>
+                                                <th className="px-2 py-2 text-center">HSN Code</th>
+                                                <th className="px-2 py-2 text-center">Batch No.</th>
+                                                <th className="px-2 py-2 text-center">Exp.</th>
+                                                <th className="px-2 py-2 text-center">MRP</th>
+                                                <th className="px-2 py-2 text-center">Rate</th>
+                                                <th className="px-2 py-2 text-center">Dis%</th>
+                                                <th className="px-2 py-2 text-center">CGST%</th>
+                                                <th className="px-2 py-2 text-center">SGST%</th>
+                                                <th className="px-2 py-2 text-right">Amount</th>
+                                                <th className="px-2 py-2"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {createItems.map((row, idx) => {
+                                                const { amount } = calcRow(row);
+                                                return (
+                                                    <tr key={idx}>
+                                                        <td className="px-2 py-2 text-center text-gray-500">{idx + 1}</td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="number" min={1} value={row.quantity}
+                                                                onChange={(e) => handleCreateRowChange(idx, 'quantity', e.target.value)}
+                                                                className="w-14 text-center border border-gray-200 rounded p-1 text-sm bg-white" />
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="text" value={row.pack} placeholder="1*5"
+                                                                onChange={(e) => handleCreateRowChange(idx, 'pack', e.target.value)}
+                                                                className="w-16 text-center border border-gray-200 rounded p-1 text-sm bg-white" />
+                                                        </td>
+                                                        <td className="px-2 py-2 min-w-[180px]">
+                                                            <select value={row.medicine_id}
+                                                                onChange={(e) => handleCreateRowChange(idx, 'medicine_id', e.target.value)}
+                                                                className="w-full p-1.5 border border-gray-200 rounded text-sm bg-white">
+                                                                <option value="">— Pick medicine —</option>
+                                                                {medicines.map((m) => (
+                                                                    <option key={m.id} value={m.id}>
+                                                                        {m.brand_name}{m.generic_name ? ` (${m.generic_name})` : ''}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="text" value={row.hsn_code} placeholder="HSN"
+                                                                onChange={(e) => handleCreateRowChange(idx, 'hsn_code', e.target.value)}
+                                                                className="w-20 text-center border border-gray-200 rounded p-1 text-sm bg-white" />
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="text" value={row.batch_no} placeholder="Batch"
+                                                                onChange={(e) => handleCreateRowChange(idx, 'batch_no', e.target.value)}
+                                                                className="w-20 text-center border border-gray-200 rounded p-1 text-sm bg-white" />
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="text" value={row.expiry} placeholder="MM/YY"
+                                                                onChange={(e) => handleCreateRowChange(idx, 'expiry', e.target.value)}
+                                                                className="w-16 text-center border border-gray-200 rounded p-1 text-sm bg-white" />
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="number" min={0} step="0.01" value={row.mrp}
+                                                                onChange={(e) => handleCreateRowChange(idx, 'mrp', e.target.value)}
+                                                                className="w-20 text-center border border-gray-200 rounded p-1 text-sm bg-white" />
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="number" min={0} step="0.01" value={row.unit_price}
+                                                                onChange={(e) => handleCreateRowChange(idx, 'unit_price', e.target.value)}
+                                                                className="w-20 text-center border border-gray-200 rounded p-1 text-sm bg-white" />
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="number" min={0} max={100} step="0.01" value={row.discount_pct}
+                                                                onChange={(e) => handleCreateRowChange(idx, 'discount_pct', e.target.value)}
+                                                                className="w-14 text-center border border-gray-200 rounded p-1 text-sm bg-white" />
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="number" min={0} max={100} step="0.01" value={row.cgst_rate}
+                                                                onChange={(e) => handleCreateRowChange(idx, 'cgst_rate', e.target.value)}
+                                                                className="w-14 text-center border border-gray-200 rounded p-1 text-sm bg-white" />
+                                                        </td>
+                                                        <td className="px-2 py-2">
+                                                            <input type="number" min={0} max={100} step="0.01" value={row.sgst_rate}
+                                                                onChange={(e) => handleCreateRowChange(idx, 'sgst_rate', e.target.value)}
+                                                                className="w-14 text-center border border-gray-200 rounded p-1 text-sm bg-white" />
+                                                        </td>
+                                                        <td className="px-2 py-2 text-right font-semibold text-gray-900">₹{fmt(amount)}</td>
+                                                        <td className="px-2 py-2 text-center">
+                                                            <button type="button" onClick={() => removeItemRow(idx)} disabled={createItems.length === 1}
+                                                                className="text-rose-500 hover:text-rose-700 disabled:opacity-30 disabled:cursor-not-allowed" title="Remove row">
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                        <tfoot className="bg-gray-50">
+                                            <tr>
+                                                <td colSpan={12} className="px-2 py-2 text-right font-bold text-gray-600 text-xs">
+                                                    Taxable: ₹{fmt(createTotals.taxable)} &nbsp;·&nbsp; GST: ₹{fmt(createTotals.gst)} &nbsp;·&nbsp; Grand Total:
+                                                </td>
+                                                <td className="px-2 py-2 text-right font-black text-emerald-700">₹{fmt(createTotal)}</td>
+                                                <td></td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
                                 </div>
                             </div>
 
