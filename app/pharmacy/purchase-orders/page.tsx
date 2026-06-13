@@ -90,7 +90,7 @@ export default function PurchaseOrdersPage() {
             batch_no: '',
             expiry: '',
             mrp: Number(m.mrp ?? m.medicine?.mrp ?? 0),
-            unit_price: Number(m.price_per_unit ?? m.medicine?.price_per_unit ?? 0),
+            unit_price: Number(m.selling_price ?? m.medicine?.selling_price ?? m.price_per_unit ?? m.medicine?.price_per_unit ?? 0),
             quantity: 1,
             discount_pct: 0,
             cgst_rate: gst / 2,
@@ -221,9 +221,11 @@ export default function PurchaseOrdersPage() {
         else alert('Failed to receive items.');
     };
 
-    const filteredMeds = medicines.filter((m: any) =>
+    const filteredMeds = medicines.filter((m: any, idx: number) =>
         (m.brand_name || m.medicine?.brand_name || '').toLowerCase().includes(medicineSearch.toLowerCase()) &&
-        !poItems.find(i => i.medicine_id === m.medicine_id)
+        !poItems.find(i => i.medicine_id === m.medicine_id) &&
+        // dedupe: getInventory returns one row per batch, keep first per medicine
+        medicines.findIndex((x: any) => x.medicine_id === m.medicine_id) === idx
     ).slice(0, 15);
 
     const poTotals = poItems.reduce(
@@ -401,7 +403,7 @@ export default function PurchaseOrdersPage() {
                                                 <div key={m.medicine_id} onMouseDown={() => addMedicineToOrder(m)}
                                                     className="px-3 py-2 text-sm hover:bg-teal-50 cursor-pointer flex justify-between">
                                                     <span>{m.brand_name || m.medicine?.brand_name}</span>
-                                                    <span className="text-gray-400 text-xs">₹{Number(m.price_per_unit || m.medicine?.price_per_unit || 0).toLocaleString('en-IN')}</span>
+                                                    <span className="text-gray-400 text-xs">₹{Number(m.selling_price || m.medicine?.selling_price || m.price_per_unit || m.medicine?.price_per_unit || 0).toLocaleString('en-IN')}</span>
                                                 </div>
                                             ))}
                                         </div>
