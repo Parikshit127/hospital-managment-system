@@ -8,6 +8,7 @@ import {
   listBatches, addBatch, updateBatch,
 } from '@/app/actions/medicine-master-actions';
 import MasterImportButton from '@/app/components/master/MasterImportButton';
+import { useDebouncedValue } from '@/app/lib/hooks/useDebouncedValue';
 
 const sanitizeMoney = (value: string) => value.replace(/[^\d.]/g, '');
 const sanitizeInteger = (value: string) => value.replace(/\D/g, '');
@@ -40,7 +41,7 @@ export default function MedicineMasterPage() {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const search = useDebouncedValue(searchInput, 350);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -74,10 +75,7 @@ export default function MedicineMasterPage() {
   }, [search, page]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => {
-    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 350);
-    return () => clearTimeout(t);
-  }, [searchInput]);
+  useEffect(() => { setPage(1); }, [search]);
 
   const openCreate = () => { setMedForm(EMPTY_MED); setMedMode('create'); };
   const openEdit = (row: any) => {

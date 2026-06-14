@@ -829,6 +829,9 @@ model pharmacy_medicine_master {
 
   @@unique([brand_name, organizationId])
   @@index([organizationId])
+  @@index([organizationId, is_active, brand_name])
+  @@index([organizationId, generic_name])
+  @@index([organizationId, category])
 }
 
 model pharmacy_batch_inventory {
@@ -853,6 +856,7 @@ model pharmacy_batch_inventory {
   dispense_allocations DispenseAllocation[]
 
   @@unique([medicine_id, batch_no])
+  @@index([medicine_id])
   @@index([grn_id])
   @@index([vendor_id])
   @@index([expiry_date])

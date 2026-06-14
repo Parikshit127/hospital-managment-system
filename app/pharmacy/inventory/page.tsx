@@ -3,44 +3,58 @@
 import React, { useEffect, useState } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { Package, Search, Plus, Edit2, AlertTriangle, FileBox } from 'lucide-react';
+import { Package, Search, Plus } from 'lucide-react';
 import { getLowStockAlerts, searchMedicine, addInventoryBatch } from '@/app/actions/pharmacy-actions';
+import { useDebouncedValue } from '@/app/lib/hooks/useDebouncedValue';
 
 export default function PharmacyInventoryPage() {
     const [medicines, setMedicines] = useState<any[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterLow, setFilterLow] = useState(false);
+    const debouncedQuery = useDebouncedValue(searchQuery, 250);
 
     // Modal
     const [modalOpen, setModalOpen] = useState(false);
     const [form, setForm] = useState({ brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', expiry: '', rack: '' });
 
-    const loadInventory = async (query: string = '') => {
+    const loadInventory = async () => {
         setRefreshing(true);
-        // Fetch everything and filter client-side for immediate responsive search/toggle
-        const res = await searchMedicine(''); 
-        if (res.success) {
-            let filtered = res.data;
+        try {
             if (filterLow) {
-                filtered = filtered.filter((med: any) => {
-                    const total = med.batches.reduce((s: number, b: any) => s + b.current_stock, 0);
-                    return total <= (med.min_threshold || 10);
+                // Low-stock list comes from the SQL aggregate — shape differs from
+                // searchMedicine (no batches), so normalise to the card layout.
+                const res = await getLowStockAlerts();
+                const q = debouncedQuery.trim().toLowerCase();
+                const items = (res.success ? res.data : []) as any[];
+                const filtered = q
+                    ? items.filter((m: any) =>
+                        m.brand_name?.toLowerCase().includes(q) ||
+                        m.generic_name?.toLowerCase().includes(q))
+                    : items;
+                setMedicines(filtered.map((m: any) => ({
+                    id: m.id,
+                    brand_name: m.brand_name,
+                    generic_name: m.generic_name,
+                    min_threshold: m.min_threshold,
+                    total_stock: m.total_stock,
+                    batches: [],
+                    _lowStock: true,
+                })));
+            } else {
+                const res = await searchMedicine({
+                    query: debouncedQuery,
+                    limit: 50,
+                    includeBatches: true,
                 });
+                setMedicines(res.success ? (res.data as any[]) : []);
             }
-            if (query) {
-                const q = query.toLowerCase();
-                filtered = filtered.filter((med: any) => 
-                    med.brand_name.toLowerCase().includes(q) || 
-                    med.generic_name?.toLowerCase().includes(q)
-                );
-            }
-            setMedicines(filtered);
+        } finally {
+            setRefreshing(false);
         }
-        setRefreshing(false);
     };
 
-    useEffect(() => { loadInventory(searchQuery); }, [searchQuery, filterLow]);
+    useEffect(() => { loadInventory(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [debouncedQuery, filterLow]);
 
     const handleSaveBatch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -64,7 +78,7 @@ export default function PharmacyInventoryPage() {
         <AppShell
             pageTitle="Pharmacy Inventory"
             pageIcon={<Package className="h-5 w-5" />}
-            onRefresh={() => loadInventory(searchQuery)}
+            onRefresh={loadInventory}
             refreshing={refreshing}
             headerActions={
                 <button onClick={() => { setForm({ brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', expiry: '', rack: '' }); setModalOpen(true); }} className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white font-bold py-2 px-4 rounded-xl shadow-sm transition-all text-sm">
@@ -93,7 +107,11 @@ export default function PharmacyInventoryPage() {
                             <p className="text-xs text-gray-500 mb-4">{med.generic_name || 'Generic N/A'}</p>
 
                             <div className="space-y-2">
-                                {med.batches?.length > 0 ? med.batches.map((b: any) => (
+                                {med._lowStock ? (
+                                    <div className="p-3 text-center text-xs font-bold text-red-600 bg-red-50 rounded-lg">
+                                        Stock: {med.total_stock} / Threshold: {med.min_threshold}
+                                    </div>
+                                ) : med.batches?.length > 0 ? med.batches.map((b: any) => (
                                     <div key={b.id} className="flex justify-between items-center bg-gray-50 p-2 rounded-lg border border-gray-100">
                                         <div>
                                             <p className="text-xs font-bold text-gray-700 tracking-wider">BATCH: {b.batch_no}</p>
@@ -108,6 +126,9 @@ export default function PharmacyInventoryPage() {
                             </div>
                         </div>
                     ))}
+                    {medicines.length === 0 && !refreshing && (
+                        <div className="col-span-full p-8 text-center text-sm text-gray-500">No medicines found.</div>
+                    )}
                 </div>
             </div>
 

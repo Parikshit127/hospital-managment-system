@@ -1,6 +1,12 @@
 'use server';
 import { requireTenantContext } from '@/backend/tenant';
+import { updateTag } from 'next/cache';
 import { z } from 'zod';
+
+function invalidateCatalog() {
+  updateTag('pharmacy:catalog');
+  updateTag('pharmacy:stock');
+}
 
 function serialize<T>(d: T): T {
   return JSON.parse(JSON.stringify(d, (_, v) =>
@@ -97,6 +103,7 @@ export async function createMedicine(input: unknown) {
         role: session.role,
       },
     });
+    invalidateCatalog();
     return { success: true, data: serialize(row) };
   } catch (e: any) {
     return { success: false, error: e.message };
@@ -124,6 +131,7 @@ export async function updateMedicine(id: number, input: unknown) {
         role: session.role,
       },
     });
+    invalidateCatalog();
     return { success: true, data: serialize(row) };
   } catch (e: any) {
     return { success: false, error: e.message };
@@ -147,6 +155,7 @@ export async function deactivateMedicine(id: number) {
         role: session.role,
       },
     });
+    invalidateCatalog();
     return { success: true, data: serialize(row) };
   } catch (e: any) {
     return { success: false, error: e.message };

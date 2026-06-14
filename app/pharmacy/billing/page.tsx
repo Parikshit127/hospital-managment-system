@@ -7,7 +7,8 @@ import {
     Trash2, AlertTriangle, CheckCircle, Package, Printer, X, Loader2,
     CreditCard, Banknote, Smartphone, Clock, IndianRupee, FileText
 } from 'lucide-react';
-import { getInventory, generateInvoice, getPharmacyQueue, markOrderAsPaid, addInventoryBatch, processDoctorOrder } from '@/app/actions/pharmacy-actions';
+import { getInventoryPage, generateInvoice, getPharmacyQueue, markOrderAsPaid, addInventoryBatch, processDoctorOrder } from '@/app/actions/pharmacy-actions';
+import { useDebouncedValue } from '@/app/lib/hooks/useDebouncedValue';
 import { searchPatientsForBilling } from '@/app/actions/finance-actions';
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
@@ -100,8 +101,10 @@ export default function PharmacyPage() {
         rack: ''
     });
 
-    const loadInventory = useCallback(async () => {
-        const res = await getInventory();
+    const debouncedSearch = useDebouncedValue(search, 250);
+
+    const loadInventory = useCallback(async (query: string = '') => {
+        const res = await getInventoryPage({ search: query, limit: 50 });
         if (res.success) {
             const mappedData = res.data.map((item: any) => ({
                 batch_id: item.batch_no,
@@ -127,11 +130,12 @@ export default function PharmacyPage() {
 
     const loadData = async () => {
         setLoading(true);
-        await Promise.all([loadInventory(), loadQueue()]);
+        await Promise.all([loadInventory(debouncedSearch), loadQueue()]);
     };
 
+    // Initial load + queue polling. Inventory itself is no longer polled —
+    // it's refetched on debounced search keystrokes instead.
     useEffect(() => {
-        loadInventory();
         loadQueue();
         fetchBillBranding().then(r => r.success && r.data && setBranding(r.data));
         fetchPharmacyBranding().then(r => r.success && r.data && setPharmacyBranding(r.data));
@@ -140,10 +144,14 @@ export default function PharmacyPage() {
                 setDoctorOptions(r.data.map((d: any) => ({ id: d.id, name: d.name })));
             }
         });
-        // Poll queue every 15s instead of 5s
         const interval = setInterval(loadQueue, 15000);
         return () => clearInterval(interval);
-    }, [loadInventory, loadQueue]);
+    }, [loadQueue]);
+
+    // Server-side debounced inventory search.
+    useEffect(() => {
+        loadInventory(debouncedSearch);
+    }, [debouncedSearch, loadInventory]);
 
     // Cart Logic
     // Patient search debounce
@@ -309,10 +317,8 @@ export default function PharmacyPage() {
         }
     };
 
-    const filteredInventory = inventory.filter(i =>
-        (i.medicine_name && i.medicine_name.toLowerCase().includes(search.toLowerCase())) ||
-        (i.batch_id && i.batch_id.toString().toLowerCase().includes(search.toLowerCase()))
-    );
+    // Server-filtered. No client-side reduction over thousands of rows.
+    const filteredInventory = inventory;
 
     return (
         <AppShell pageTitle="Pharmacy" pageIcon={<Pill className="h-5 w-5" />} onRefresh={loadData} refreshing={loading}>

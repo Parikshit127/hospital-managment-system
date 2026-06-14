@@ -1,7 +1,18 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
-import { revalidatePath } from 'next/cache';
+import { getTenantPrisma } from '@/backend/db';
+import { revalidatePath, updateTag, unstable_cache } from 'next/cache';
+
+// ── Cache invalidation tags ─────────────────────────────────────────
+// pharmacy:catalog  → fired on medicine create/update/deactivate
+// pharmacy:stock    → fired on batch add, dispense, invoice generation, GRN
+// pharmacy:orders   → fired on pharmacy order changes (queue, completion)
+// updateTag (Next 16) is the server-action invalidation primitive — no
+// cache-life profile required, read-your-own-writes within the same action.
+function invalidatePharmacyTags(tags: ReadonlyArray<'catalog' | 'stock' | 'orders'>) {
+    for (const t of tags) updateTag(`pharmacy:${t}`);
+}
 import { logAudit } from '@/app/lib/audit';
 import { checkDrugInteractions } from '@/app/lib/drug-safety';
 import { getPatientBalances } from '@/app/actions/balance-actions';
@@ -48,51 +59,69 @@ async function postPharmacyJournal(db: any, organizationId: string, data: {
 
 // Invoice and receipt number generation now uses sequential generator from @/app/lib/sequence-generator
 
-export async function getInventory() {
+// Server-paginated, server-searched inventory query.
+// Returns a flat list of "batch-like" rows for billing UI compatibility:
+// - one row per (medicine, batch) for medicines that have in-stock batches
+// - one synthetic catalog row per medicine that has no in-stock batches
+//
+// The previous getInventory() loaded 500 + 1000 rows on every billing
+// page mount and polled every 15s. Use getInventoryPage with a search
+// string instead — the billing combobox calls it on each debounced
+// keystroke.
+export async function getInventoryPage(opts?: {
+    search?: string;
+    cursor?: number;
+    limit?: number;
+    inStockOnly?: boolean;
+}) {
     try {
         const { db } = await requireTenantContext();
+        const search = (opts?.search ?? '').trim();
+        const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 100);
+        const inStockOnly = opts?.inStockOnly ?? false;
 
-        // 1. Batch inventory (items with physical stock)
-        const inventory = await db.pharmacy_batch_inventory.findMany({
-            where: { current_stock: { gt: 0 } },
-            include: {
-                medicine: {
-                    select: {
-                        brand_name: true, generic_name: true, selling_price: true,
-                        price_per_unit: true, mrp: true, gst_percent: true,
-                        tax_rate: true, hsn_sac_code: true, is_active: true,
-                    }
-                }
-            },
-            orderBy: { expiry_date: 'asc' },
-            take: 500,
-        });
+        const medWhere: any = { is_active: true };
+        if (search) {
+            medWhere.OR = [
+                { brand_name: { contains: search, mode: 'insensitive' } },
+                { generic_name: { contains: search, mode: 'insensitive' } },
+            ];
+        }
+        if (opts?.cursor) medWhere.id = { gt: opts.cursor };
 
-        // 2. Medicine catalog — all medicines that have NO batches with stock.
-        //    These appear in the billing search so pharmacists can bill without
-        //    requiring physical stock (price set manually during billing).
-        const batchMedicineIds = [...new Set(inventory.map((b: any) => b.medicine_id))] as number[];
-        const catalogMedicines = await db.pharmacy_medicine_master.findMany({
-            where: {
-                ...(batchMedicineIds.length > 0 ? { id: { notIn: batchMedicineIds } } : {}),
-            },
-            select: {
-                id: true, brand_name: true, generic_name: true,
-                selling_price: true, price_per_unit: true, mrp: true,
-                gst_percent: true, tax_rate: true, hsn_sac_code: true, is_active: true,
-            },
+        const medicines = await db.pharmacy_medicine_master.findMany({
+            where: medWhere,
             orderBy: { brand_name: 'asc' },
-            take: 1000,
+            take: limit,
+            select: {
+                id: true,
+                brand_name: true,
+                generic_name: true,
+                selling_price: true,
+                price_per_unit: true,
+                mrp: true,
+                gst_percent: true,
+                tax_rate: true,
+                hsn_sac_code: true,
+                is_active: true,
+                batches: {
+                    where: { current_stock: { gt: 0 } },
+                    orderBy: { expiry_date: 'asc' },
+                    select: {
+                        id: true,
+                        batch_no: true,
+                        current_stock: true,
+                        expiry_date: true,
+                        mrp: true,
+                        cost_price: true,
+                    },
+                },
+            },
         });
 
-        // Convert catalog medicines to batch-like shape for UI compatibility
-        const catalogItems = catalogMedicines.map((med: any) => ({
-            id: null,
-            batch_no: `CATALOG-${med.id}`,
-            medicine_id: med.id,
-            current_stock: 999999, // no stock limit for catalog items
-            expiry_date: null,
-            medicine: {
+        const flat: any[] = [];
+        for (const med of medicines as any[]) {
+            const medicinePayload = {
                 brand_name: med.brand_name,
                 generic_name: med.generic_name,
                 selling_price: med.selling_price,
@@ -102,15 +131,44 @@ export async function getInventory() {
                 tax_rate: med.tax_rate,
                 hsn_sac_code: med.hsn_sac_code,
                 is_active: med.is_active,
-            },
-            _catalog: true,
-        }));
+            };
+            if (med.batches.length > 0) {
+                for (const b of med.batches) {
+                    flat.push({
+                        id: b.id,
+                        batch_no: b.batch_no,
+                        medicine_id: med.id,
+                        current_stock: b.current_stock,
+                        expiry_date: b.expiry_date,
+                        cost_price: b.cost_price,
+                        mrp: b.mrp ?? med.mrp,
+                        medicine: medicinePayload,
+                    });
+                }
+            } else if (!inStockOnly) {
+                flat.push({
+                    id: null,
+                    batch_no: `CATALOG-${med.id}`,
+                    medicine_id: med.id,
+                    current_stock: 999999,
+                    expiry_date: null,
+                    medicine: medicinePayload,
+                    _catalog: true,
+                });
+            }
+        }
 
-        return { success: true, data: [...inventory, ...catalogItems] };
+        const nextCursor = medicines.length === limit ? (medicines[medicines.length - 1] as any).id : undefined;
+        return { success: true, data: flat, nextCursor };
     } catch (error) {
-        console.error('Inventory Fetch Error:', error);
+        console.error('Inventory Page Fetch Error:', error);
         return { success: false, data: [] };
     }
+}
+
+/** @deprecated Use getInventoryPage with a search string. Kept for callers not yet migrated. */
+export async function getInventory() {
+    return getInventoryPage({ limit: 100 });
 }
 
 export async function generateInvoice(
@@ -462,6 +520,7 @@ export async function generateInvoice(
         });
 
         revalidatePath('/pharmacy/billing');
+        invalidatePharmacyTags(['stock', 'orders']);
         return {
             success: true,
             total: netAmount,
@@ -716,6 +775,7 @@ export async function addInventoryBatch(data: {
         });
 
         revalidatePath('/pharmacy/billing');
+        invalidatePharmacyTags(['stock', 'catalog']);
         return { success: true };
     } catch (error) {
         console.error('Add Inventory Error:', error);
@@ -746,14 +806,14 @@ export async function checkInteractions(drugNames: string[]) {
 // PHASE 1.4 PHARMACY NEW ACTIONS
 // ========================================
 
-export async function getPharmacyDashboardStats() {
-    try {
-        const { db } = await requireTenantContext();
-
+// Cached per (organizationId, midnight bucket). Result is reused for 60s
+// across all requests within the same tenant. Invalidated on writes that tag
+// pharmacy:stock or pharmacy:orders.
+const cachedDashboardStats = (organizationId: string) => unstable_cache(
+    async () => {
+        const db = getTenantPrisma(organizationId);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-
-        // Next 30 days for expiring batches
         const thirtyDaysFromNow = new Date();
         thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
@@ -761,46 +821,51 @@ export async function getPharmacyDashboardStats() {
             pendingOrdersCount,
             expiringBatchesCount,
             todayRevenue,
-            lowStockRaw,
+            lowStockRows,
         ] = await Promise.all([
             db.pharmacy_orders.count({ where: { status: 'Pending' } }),
-
             db.pharmacy_batch_inventory.count({
                 where: {
                     expiry_date: { lte: thirtyDaysFromNow },
                     current_stock: { gt: 0 }
                 }
             }),
-
             db.pharmacy_orders.aggregate({
                 _sum: { total_amount: true },
                 where: { status: 'Completed', created_at: { gte: today } }
             }),
-
-            // Count low-stock medicines efficiently with minimal select
-            db.pharmacy_medicine_master.findMany({
-                select: {
-                    min_threshold: true,
-                    batches: { select: { current_stock: true } }
-                },
-                take: 2000,
-            }),
+            db.$queryRaw<Array<{ count: bigint }>>`
+                SELECT COUNT(*)::bigint AS count FROM (
+                    SELECT m.id
+                    FROM "pharmacy_medicine_master" m
+                    LEFT JOIN "pharmacy_batch_inventory" b ON b.medicine_id = m.id
+                    WHERE m."organizationId" = ${organizationId}
+                      AND m.is_active = true
+                    GROUP BY m.id, m.min_threshold
+                    HAVING COALESCE(SUM(b.current_stock), 0) <= m.min_threshold
+                ) low
+            `,
         ]);
 
-        const lowStockCount = (lowStockRaw as any[]).filter((m: any) => {
-            const total = m.batches.reduce((s: number, b: any) => s + b.current_stock, 0);
-            return total <= m.min_threshold;
-        }).length;
-
         return {
-            success: true,
-            data: {
-                pendingOrders: pendingOrdersCount,
-                lowStockAlerts: lowStockCount,
-                expiringBatches: expiringBatchesCount,
-                todayRevenue: todayRevenue._sum.total_amount || 0
-            }
+            pendingOrders: pendingOrdersCount,
+            lowStockAlerts: Number(lowStockRows[0]?.count ?? 0),
+            expiringBatches: expiringBatchesCount,
+            todayRevenue: Number(todayRevenue._sum.total_amount) || 0,
         };
+    },
+    ['pharmacy:dashboard-stats', organizationId],
+    {
+        revalidate: 60,
+        tags: ['pharmacy:stock', 'pharmacy:orders', `pharmacy:org:${organizationId}`],
+    },
+)();
+
+export async function getPharmacyDashboardStats() {
+    try {
+        const { organizationId } = await requireTenantContext();
+        const data = await cachedDashboardStats(organizationId);
+        return { success: true, data };
     } catch (error) {
         console.error('Stats Error:', error);
         return { success: false, error: 'Failed' };
@@ -1046,6 +1111,7 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
 
         revalidatePath('/pharmacy/orders');
         revalidatePath('/pharmacy/billing');
+        invalidatePharmacyTags(['stock', 'orders']);
         return {
             success: true,
             total: grandTotal,
@@ -1059,23 +1125,80 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
     }
 }
 
-export async function searchMedicine(query: string) {
+export async function searchMedicine(
+    queryOrOpts?: string | {
+        query?: string;
+        limit?: number;
+        cursor?: number;
+        activeOnly?: boolean;
+        includeBatches?: boolean;
+    }
+) {
     try {
         const { db } = await requireTenantContext();
-        if (!query) return { success: true, data: [] };
+
+        const opts = typeof queryOrOpts === 'string'
+            ? { query: queryOrOpts }
+            : (queryOrOpts ?? {});
+        const query = (opts.query ?? '').trim();
+        const limit = Math.min(Math.max(opts.limit ?? 20, 1), 50);
+        const activeOnly = opts.activeOnly ?? true;
+        const includeBatches = opts.includeBatches ?? false;
+
+        const where: any = {};
+        if (activeOnly) where.is_active = true;
+        if (query) {
+            where.OR = [
+                { brand_name: { contains: query, mode: 'insensitive' } },
+                { generic_name: { contains: query, mode: 'insensitive' } },
+            ];
+        }
+        if (opts.cursor) where.id = { gt: opts.cursor };
+
+        const baseSelect = {
+            id: true,
+            brand_name: true,
+            generic_name: true,
+            strength: true,
+            form: true,
+            category: true,
+            mrp: true,
+            selling_price: true,
+            price_per_unit: true,
+            gst_percent: true,
+            tax_rate: true,
+            hsn_sac_code: true,
+            min_threshold: true,
+            is_active: true,
+        };
 
         const meds = await db.pharmacy_medicine_master.findMany({
-            where: {
-                OR: [
-                    { brand_name: { contains: query, mode: 'insensitive' } },
-                    { generic_name: { contains: query, mode: 'insensitive' } }
-                ]
-            },
-            take: 20,
-            include: { batches: { where: { current_stock: { gt: 0 } }, orderBy: { expiry_date: 'asc' } } }
+            where,
+            orderBy: { brand_name: 'asc' },
+            take: limit,
+            ...(includeBatches
+                ? {
+                    include: {
+                        batches: {
+                            where: { current_stock: { gt: 0 } },
+                            orderBy: { expiry_date: 'asc' },
+                            select: {
+                                id: true,
+                                batch_no: true,
+                                current_stock: true,
+                                expiry_date: true,
+                                mrp: true,
+                                cost_price: true,
+                                rack_location: true,
+                            },
+                        },
+                    },
+                }
+                : { select: baseSelect }),
         });
 
-        return { success: true, data: meds };
+        const nextCursor = meds.length === limit ? meds[meds.length - 1].id : undefined;
+        return { success: true, data: meds, nextCursor };
     } catch (error) {
         return { success: false, data: [] };
     }
@@ -1083,28 +1206,32 @@ export async function searchMedicine(query: string) {
 
 export async function getLowStockAlerts() {
     try {
-        const { db } = await requireTenantContext();
-        // Fetch only medicines that have at least one batch with stock <= threshold
-        // Use a limited select to avoid loading unnecessary fields
-        const allMedicines = await db.pharmacy_medicine_master.findMany({
-            select: {
-                id: true, brand_name: true, generic_name: true,
-                category: true, min_threshold: true, is_active: true,
-                batches: {
-                    select: { current_stock: true },
-                }
-            },
-            take: 2000,
-        });
-
-        const lowStock = allMedicines
-            .map((med: any) => ({
-                ...med,
-                total_stock: med.batches.reduce((sum: number, b: any) => sum + b.current_stock, 0)
-            }))
-            .filter((med: any) => med.total_stock <= med.min_threshold);
-
-        return { success: true, data: lowStock };
+        const { db, organizationId } = await requireTenantContext();
+        // Raw queries bypass the tenant $extends middleware — bind organizationId explicitly.
+        const rows = await db.$queryRaw<Array<{
+            id: number;
+            brand_name: string;
+            generic_name: string | null;
+            category: string | null;
+            min_threshold: number;
+            total_stock: number;
+        }>>`
+            SELECT m.id,
+                   m.brand_name,
+                   m.generic_name,
+                   m.category,
+                   m.min_threshold,
+                   COALESCE(SUM(b.current_stock), 0)::int AS total_stock
+            FROM "pharmacy_medicine_master" m
+            LEFT JOIN "pharmacy_batch_inventory" b ON b.medicine_id = m.id
+            WHERE m."organizationId" = ${organizationId}
+              AND m.is_active = true
+            GROUP BY m.id
+            HAVING COALESCE(SUM(b.current_stock), 0) <= m.min_threshold
+            ORDER BY total_stock ASC, m.brand_name ASC
+            LIMIT 200
+        `;
+        return { success: true, data: rows };
     } catch (error) {
         return { success: false, data: [] };
     }
@@ -1577,6 +1704,7 @@ export async function receivePurchaseOrder(
 
         revalidatePath('/pharmacy/purchase-orders');
         revalidatePath('/pharmacy/inventory');
+        invalidatePharmacyTags(['stock']);
         return { success: true, grn_number: grnNumber };
     } catch (error: any) {
         return { success: false, error: error.message || 'Failed to receive PO' };
@@ -2052,46 +2180,98 @@ export async function getGenericAlternatives(genericName: string) {
 
 export async function getPharmacyAnalytics() {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
 
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         const ninetyDays = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+        const exp30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+        const exp60 = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
 
-        // Parallel fetch all data — with limits and minimal selects
         const [
-            allMedicines,
-            allBatches,
+            stockSummaryRows,
+            expirySummaryRows,
+            lowStockListRows,
+            topMoversRows,
             completedOrders30d,
             completedOrdersToday,
             pendingCount,
             returns30d,
             purchaseOrders30d,
         ] = await Promise.all([
-            db.pharmacy_medicine_master.findMany({
-                select: {
-                    id: true, brand_name: true, generic_name: true,
-                    category: true, min_threshold: true,
-                    batches: { select: { current_stock: true } }
-                },
-                take: 2000,
-            }),
-            db.pharmacy_batch_inventory.findMany({
-                select: {
-                    id: true, current_stock: true, expiry_date: true, medicine_id: true,
-                    medicine: { select: { selling_price: true, price_per_unit: true, brand_name: true } }
-                },
-                take: 3000,
-            }),
+            // Total stock value + low/out-of-stock counts in one SQL pass.
+            db.$queryRaw<Array<{ total_stock_value: number; low_stock_count: bigint; out_of_stock_count: bigint }>>`
+                WITH stock AS (
+                    SELECT m.id,
+                           m.min_threshold,
+                           COALESCE(SUM(b.current_stock), 0) AS total_stock,
+                           COALESCE(SUM(b.current_stock * COALESCE(NULLIF(m.selling_price, 0), m.price_per_unit, 0)), 0)::float AS stock_value
+                    FROM "pharmacy_medicine_master" m
+                    LEFT JOIN "pharmacy_batch_inventory" b ON b.medicine_id = m.id
+                    WHERE m."organizationId" = ${organizationId} AND m.is_active = true
+                    GROUP BY m.id, m.min_threshold, m.selling_price, m.price_per_unit
+                )
+                SELECT COALESCE(SUM(stock_value), 0)::float AS total_stock_value,
+                       COUNT(*) FILTER (WHERE total_stock > 0 AND total_stock <= min_threshold)::bigint AS low_stock_count,
+                       COUNT(*) FILTER (WHERE total_stock = 0)::bigint AS out_of_stock_count
+                FROM stock
+            `,
+            // Expiry tier counts + write-off value in one SQL pass.
+            db.$queryRaw<Array<{
+                expired_count: bigint;
+                expiring30_count: bigint;
+                expiring60_count: bigint;
+                expiring90_count: bigint;
+                writeoff_value: number;
+            }>>`
+                SELECT
+                    COUNT(*) FILTER (WHERE b.expiry_date < ${now})::bigint AS expired_count,
+                    COUNT(*) FILTER (WHERE b.expiry_date >= ${now} AND b.expiry_date <= ${exp30})::bigint AS expiring30_count,
+                    COUNT(*) FILTER (WHERE b.expiry_date > ${exp30} AND b.expiry_date <= ${exp60})::bigint AS expiring60_count,
+                    COUNT(*) FILTER (WHERE b.expiry_date > ${exp60} AND b.expiry_date <= ${ninetyDays})::bigint AS expiring90_count,
+                    COALESCE(SUM(
+                        CASE WHEN b.expiry_date < ${now}
+                             THEN b.current_stock * COALESCE(NULLIF(m.selling_price, 0), m.price_per_unit, 0)
+                             ELSE 0 END
+                    ), 0)::float AS writeoff_value
+                FROM "pharmacy_batch_inventory" b
+                JOIN "pharmacy_medicine_master" m ON m.id = b.medicine_id
+                WHERE m."organizationId" = ${organizationId}
+                  AND b.current_stock > 0
+            `,
+            // Low-stock top-10 list for the dashboard card.
+            db.$queryRaw<Array<{ brand_name: string; total_stock: number; min_threshold: number }>>`
+                SELECT m.brand_name,
+                       COALESCE(SUM(b.current_stock), 0)::int AS total_stock,
+                       m.min_threshold
+                FROM "pharmacy_medicine_master" m
+                LEFT JOIN "pharmacy_batch_inventory" b ON b.medicine_id = m.id
+                WHERE m."organizationId" = ${organizationId} AND m.is_active = true
+                GROUP BY m.id, m.brand_name, m.min_threshold
+                HAVING COALESCE(SUM(b.current_stock), 0) > 0
+                   AND COALESCE(SUM(b.current_stock), 0) <= m.min_threshold
+                ORDER BY total_stock ASC
+                LIMIT 10
+            `,
+            // Top movers from completed orders in last 30 days (replaces in-memory Map reduce).
+            db.$queryRaw<Array<{ name: string; qty: bigint; revenue: number }>>`
+                SELECT
+                    i.medicine_name AS name,
+                    SUM(COALESCE(i.quantity_dispensed, i.quantity_requested, 0))::bigint AS qty,
+                    SUM(COALESCE(i.total_price, 0))::float AS revenue
+                FROM "pharmacy_order_items" i
+                JOIN "pharmacy_orders" o ON o.id = i.order_id
+                WHERE o."organizationId" = ${organizationId}
+                  AND o.status = 'Completed'
+                  AND o.created_at >= ${thirtyDaysAgo}
+                GROUP BY i.medicine_name
+                ORDER BY qty DESC
+                LIMIT 10
+            `,
             db.pharmacy_orders.findMany({
                 where: { status: 'Completed', created_at: { gte: thirtyDaysAgo } },
-                select: {
-                    id: true, total_amount: true, created_at: true,
-                    items: { select: { medicine_name: true, quantity_requested: true, quantity_dispensed: true, total_price: true } },
-                },
-                take: 2000,
+                select: { id: true, total_amount: true, created_at: true },
             }),
             db.pharmacy_orders.findMany({
                 where: { status: 'Completed', created_at: { gte: today } },
@@ -2105,10 +2285,7 @@ export async function getPharmacyAnalytics() {
             }),
             db.purchaseOrder.findMany({
                 where: { created_at: { gte: thirtyDaysAgo }, status: 'Received' },
-                select: {
-                    id: true, total_amount: true,
-                    items: { select: { quantity_ordered: true, unit_price: true } },
-                },
+                select: { id: true, total_amount: true },
                 take: 500,
             }),
         ]);
@@ -2118,7 +2295,7 @@ export async function getPharmacyAnalytics() {
         const revenue30d = completedOrders30d.reduce((sum: number, o: any) => sum + Number(o.total_amount), 0);
         const avgDailyRevenue = revenue30d / 30;
 
-        // -- Revenue by day (last 7 days) --
+        // -- Revenue by day (last 7 days) — derived from completedOrders30d.
         const revenueByDay: { date: string; revenue: number; orders: number }[] = [];
         for (let i = 6; i >= 0; i--) {
             const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
@@ -2135,57 +2312,25 @@ export async function getPharmacyAnalytics() {
             });
         }
 
-        // -- Stock metrics --
-        const totalStockValue = allBatches.reduce((sum: number, b: any) => {
-            const price = Number(b.medicine?.selling_price) || Number(b.medicine?.price_per_unit) || 0;
-            return sum + (price * b.current_stock);
-        }, 0);
+        const stockSummary = (stockSummaryRows as any[])[0] ?? {
+            total_stock_value: 0, low_stock_count: BigInt(0), out_of_stock_count: BigInt(0),
+        };
+        const expirySummary = (expirySummaryRows as any[])[0] ?? {
+            expired_count: BigInt(0), expiring30_count: BigInt(0), expiring60_count: BigInt(0),
+            expiring90_count: BigInt(0), writeoff_value: 0,
+        };
 
-        const lowStockMedicines = allMedicines.filter((med: any) => {
-            const totalStock = (med.batches as any[]).reduce((s: number, b: any) => s + b.current_stock, 0);
-            return totalStock > 0 && totalStock <= med.min_threshold;
-        });
+        const topMovers = (topMoversRows as any[]).map((r: any) => ({
+            name: r.name,
+            qty: Number(r.qty),
+            revenue: Number(r.revenue),
+        }));
 
-        const outOfStockMedicines = allMedicines.filter((med: any) => {
-            const totalStock = (med.batches as any[]).reduce((s: number, b: any) => s + b.current_stock, 0);
-            return totalStock === 0;
-        });
-
-        // -- Expiry tiers --
-        const activeBatches = allBatches.filter((b: any) => b.current_stock > 0);
-        const expired = activeBatches.filter((b: any) => new Date(b.expiry_date) < now);
-        const expiring30 = activeBatches.filter((b: any) => {
-            const exp = new Date(b.expiry_date);
-            return exp >= now && exp <= new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-        });
-        const expiring60 = activeBatches.filter((b: any) => {
-            const exp = new Date(b.expiry_date);
-            return exp > new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000) && exp <= new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
-        });
-        const expiring90 = activeBatches.filter((b: any) => {
-            const exp = new Date(b.expiry_date);
-            return exp > new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000) && exp <= ninetyDays;
-        });
-
-        const expiryWriteOffValue = expired.reduce((sum: number, b: any) => {
-            const price = Number(b.medicine?.selling_price) || Number(b.medicine?.price_per_unit) || 0;
-            return sum + (price * b.current_stock);
-        }, 0);
-
-        // -- Top movers (by qty dispensed) --
-        const medSales = new Map<string, { name: string; qty: number; revenue: number }>();
-        for (const order of completedOrders30d) {
-            for (const item of (order as any).items) {
-                const key = item.medicine_name;
-                const existing = medSales.get(key) || { name: key, qty: 0, revenue: 0 };
-                existing.qty += item.quantity_dispensed || item.quantity_requested || 0;
-                existing.revenue += Number(item.total_price) || 0;
-                medSales.set(key, existing);
-            }
-        }
-        const topMovers = Array.from(medSales.values())
-            .sort((a, b) => b.qty - a.qty)
-            .slice(0, 10);
+        const lowStockItems = (lowStockListRows as any[]).map((r: any) => ({
+            name: r.brand_name,
+            stock: Number(r.total_stock),
+            threshold: r.min_threshold,
+        }));
 
         // -- Returns summary --
         const patientReturns = returns30d.filter((r: any) => r.return_type === 'Patient' || r.return_type === 'patient_return');
@@ -2203,24 +2348,20 @@ export async function getPharmacyAnalytics() {
                 revenue30d,
                 avgDailyRevenue,
                 pendingOrders: pendingCount,
-                totalStockValue,
+                totalStockValue: Number(stockSummary.total_stock_value) || 0,
                 grossMarginPct: Math.round(grossMargin * 10) / 10,
 
                 // Stock health
-                lowStockCount: lowStockMedicines.length,
-                outOfStockCount: outOfStockMedicines.length,
-                lowStockItems: lowStockMedicines.map((m: any) => ({
-                    name: m.brand_name,
-                    stock: (m.batches as any[]).reduce((s: number, b: any) => s + b.current_stock, 0),
-                    threshold: m.min_threshold,
-                })).slice(0, 10),
+                lowStockCount: Number(stockSummary.low_stock_count) || 0,
+                outOfStockCount: Number(stockSummary.out_of_stock_count) || 0,
+                lowStockItems,
 
                 // Expiry tiers
-                expiredCount: expired.length,
-                expiring30Count: expiring30.length,
-                expiring60Count: expiring60.length,
-                expiring90Count: expiring90.length,
-                expiryWriteOffValue,
+                expiredCount: Number(expirySummary.expired_count) || 0,
+                expiring30Count: Number(expirySummary.expiring30_count) || 0,
+                expiring60Count: Number(expirySummary.expiring60_count) || 0,
+                expiring90Count: Number(expirySummary.expiring90_count) || 0,
+                expiryWriteOffValue: Number(expirySummary.writeoff_value) || 0,
 
                 // Revenue trend
                 revenueByDay,
