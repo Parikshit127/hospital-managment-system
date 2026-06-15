@@ -826,6 +826,7 @@ model pharmacy_medicine_master {
   ward_stock   WardStock[]
   inventory_movements      PharmacyInventoryMovement[]
   purchase_invoice_lines   PharmacyPurchaseInvoiceLine[]
+  purchase_order_items     PurchaseOrderItem[]
 
   @@unique([brand_name, organizationId])
   @@index([organizationId])
@@ -1864,9 +1865,11 @@ model PurchaseOrderItem {
   amount            Float  @default(0)            // Auto-computed line total (taxable + GST)
   notes             String?
 
-  purchase_order PurchaseOrder @relation(fields: [po_id], references: [id])
+  purchase_order PurchaseOrder              @relation(fields: [po_id], references: [id])
+  medicine       pharmacy_medicine_master   @relation(fields: [medicine_id], references: [id])
 
   @@index([po_id])
+  @@index([medicine_id])
   @@map("purchase_order_items")
 }
 
