@@ -289,8 +289,11 @@ export default function PharmacyPage() {
         .map(s => JSON.parse(s));
 
     const handleAddInventory = async () => {
-        if (!invForm.batch_no || !invForm.stock || !invForm.expiry || !invForm.price) {
-            return alert('Please fill all required fields');
+        if (!invForm.batch_no || !invForm.stock || !invForm.price) {
+            return alert('Please fill Batch No, Stock Qty, and Unit Price');
+        }
+        if (!invForm.expiry) {
+            return alert('Please enter a valid Expiry Date in dd/mm/yyyy format (e.g. 01/12/2026)');
         }
         setIsSubmitting(true);
         try {
@@ -1068,7 +1071,7 @@ export default function PharmacyPage() {
                             <div className="grid grid-cols-2 gap-5">
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Expiry Date</label>
-                                    <DateField value={invForm.expiry} onChange={e => setInvForm({ ...invForm, expiry: e.target.value })} className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-medium text-gray-900" />
+                                    <DateField value={invForm.expiry} onChange={e => setInvForm({ ...invForm, expiry: e.target.value })} className={`w-full p-3.5 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-medium text-gray-900 ${invForm.expiry === '' && invForm.batch_no ? 'border-red-300' : 'border-gray-300'}`} placeholder="dd/mm/yyyy (e.g. 01/12/2026)" />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Unit Price (₹)</label>
