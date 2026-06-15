@@ -40,11 +40,14 @@ async function main() {
   console.log(`\n=== Backfill walk-in pharmacy bill discounts ===`);
   console.log(APPLY ? '*** APPLY MODE — changes WILL be written ***\n' : '--- DRY RUN (no changes) ---\n');
 
+  // No status filter: the buggy build left these as 'Partial' (balance_due > 0),
+  // so filtering on 'Paid' would miss them. The in-loop guards (paid>0, gap>0,
+  // no discount recorded, no credit/line discounts) select the right rows.
   const invoices = await prisma.invoices.findMany({
     where: {
       invoice_type: 'Pharmacy',
       patient_id: 'WALKIN',
-      status: 'Paid',
+      status: { notIn: ['Cancelled', 'Voided', 'Draft'] },
     },
     include: { items: true, credit_notes: true },
   });
