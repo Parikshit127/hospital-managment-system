@@ -87,6 +87,11 @@ export default function AdmissionDetailPage() {
     const [editAdmissionDate, setEditAdmissionDate] = useState('');
     const [savingAdmissionEdit, setSavingAdmissionEdit] = useState(false);
 
+    // Discharge date edit (separate small editor — shown when admission is Discharged)
+    const [showDischargeEdit, setShowDischargeEdit] = useState(false);
+    const [editDischargeDate, setEditDischargeDate] = useState('');
+    const [savingDischargeEdit, setSavingDischargeEdit] = useState(false);
+
     // Clinical classification
     const [showDiagnosisForm, setShowDiagnosisForm] = useState(false);
     const [diagIcd, setDiagIcd] = useState('');
@@ -305,6 +310,7 @@ export default function AdmissionDetailPage() {
 
     const handleSaveAdmissionEdit = async () => {
         setSavingAdmissionEdit(true);
+        const dateChanged = !!editAdmissionDate;
         const res = await updateAdmissionBasicDetails({
             admission_id: data.admission_id,
             diagnosis: editDiagnosis,
@@ -314,11 +320,35 @@ export default function AdmissionDetailPage() {
         });
         setSavingAdmissionEdit(false);
         if (res.success) {
-            toast.success('Admission details updated');
+            toast.success(
+                dateChanged
+                    ? 'Admission details updated. Re-run room charge accrual from the Billing tab to refresh per-day charges.'
+                    : 'Admission details updated',
+            );
             setShowAdmissionEdit(false);
             loadData();
         } else {
             toast.error(res.error || 'Failed to save');
+        }
+    };
+
+    const handleSaveDischargeEdit = async () => {
+        if (!editDischargeDate) {
+            toast.error('Pick a discharge date and time');
+            return;
+        }
+        setSavingDischargeEdit(true);
+        const res = await updateAdmissionBasicDetails({
+            admission_id: data.admission_id,
+            discharge_date: editDischargeDate,
+        });
+        setSavingDischargeEdit(false);
+        if (res.success) {
+            toast.success('Discharge date updated');
+            setShowDischargeEdit(false);
+            loadData();
+        } else {
+            toast.error(res.error || 'Failed to update discharge date');
         }
     };
 
@@ -869,7 +899,54 @@ export default function AdmissionDetailPage() {
                                             </>
                                         )}
                                         {data.surgery_requested && <DetailRow label="Surgery" value={data.surgery_requested} />}
-                                        {data.discharge_date && <DetailRow label="Discharged" value={new Date(data.discharge_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} />}
+                                        {data.discharge_date && (
+                                            <div className="flex items-start justify-between gap-2">
+                                                <div className="flex-1">
+                                                    <DetailRow
+                                                        label="Discharged"
+                                                        value={new Date(data.discharge_date).toLocaleString('en-IN', {
+                                                            timeZone: 'Asia/Kolkata',
+                                                            day: '2-digit', month: 'short', year: 'numeric',
+                                                            hour: '2-digit', minute: '2-digit',
+                                                        })}
+                                                    />
+                                                </div>
+                                                {data.status === 'Discharged' && !showDischargeEdit && (
+                                                    <button
+                                                        onClick={() => {
+                                                            const dUtc = new Date(data.discharge_date);
+                                                            const dIst = new Date(dUtc.getTime() + 5.5 * 60 * 60 * 1000);
+                                                            setEditDischargeDate(dIst.toISOString().slice(0, 16));
+                                                            setShowDischargeEdit(true);
+                                                        }}
+                                                        className="text-[10px] font-bold text-orange-600 hover:text-orange-800 px-2 py-1 rounded-lg hover:bg-orange-50 flex items-center gap-1">
+                                                        <Pencil className="h-3 w-3" /> Edit
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                        {showDischargeEdit && (
+                                            <div className="space-y-2 pt-1 bg-orange-50 border border-orange-200 rounded-xl p-3">
+                                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Discharge Date &amp; Time</label>
+                                                <input
+                                                    type="datetime-local"
+                                                    value={editDischargeDate}
+                                                    onChange={e => setEditDischargeDate(e.target.value)}
+                                                    className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                                />
+                                                <p className="text-[10px] text-gray-500">Must be on or after admission, and not in the future.</p>
+                                                <div className="flex gap-2 pt-1">
+                                                    <button onClick={handleSaveDischargeEdit} disabled={savingDischargeEdit}
+                                                        className="flex-1 py-2 bg-orange-600 text-white text-xs font-bold rounded-lg disabled:opacity-50 hover:bg-orange-700 transition-colors">
+                                                        {savingDischargeEdit ? 'Saving…' : 'Save Discharge Date'}
+                                                    </button>
+                                                    <button onClick={() => setShowDischargeEdit(false)}
+                                                        className="px-4 py-2 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-200 transition-colors">
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="bg-gray-50 rounded-xl border border-gray-200 p-5 space-y-3">
                                         <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Patient Details</h4>

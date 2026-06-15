@@ -715,7 +715,10 @@ export default function IpdBillingPage() {
                         {billData && (
                             <div className="bg-white rounded-lg shadow p-4 text-xs space-y-1">
                                 <p><span className="text-gray-500">Invoice:</span> {billData.invoice.invoice_number}</p>
-                                <p><span className="text-gray-500">Admitted:</span> {new Date(billData.admission.admission_date).toLocaleDateString('en-GB')}</p>
+                                <p><span className="text-gray-500">Admitted:</span> {new Date(billData.admission.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                                {billData.admission.discharge_date && (
+                                    <p><span className="text-gray-500">Discharged:</span> {new Date(billData.admission.discharge_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                                )}
                                 <p><span className="text-gray-500">Items:</span> {billData.items?.length || 0}</p>
                             </div>
                         )}
@@ -1032,7 +1035,10 @@ export default function IpdBillingPage() {
                                 <div className="text-right">
                                     <p className="text-xs font-black uppercase tracking-widest" style={{ color: branding?.accentColor || '#1e3a6e' }}>Interim Bill</p>
                                     <p className="text-xs font-mono text-gray-600 mt-0.5">{billData.invoice.invoice_number}</p>
-                                    <p className="text-xs text-gray-500">Admitted: {new Date(billData.admission.admission_date).toLocaleDateString('en-GB')}</p>
+                                    <p className="text-xs text-gray-500">Admitted: {new Date(billData.admission.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                                    {billData.admission.discharge_date && (
+                                        <p className="text-xs text-gray-500">Discharged: {new Date(billData.admission.discharge_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                                    )}
                                     <p className="text-xs text-gray-500">Printed: {new Date().toLocaleDateString('en-GB')}</p>
                                 </div>
                             </div>
@@ -1168,7 +1174,10 @@ export default function IpdBillingPage() {
                                 <div className="text-xs text-gray-500 space-y-1">
                                     <p className="font-bold text-gray-600">This is an INTERIM bill.</p>
                                     <p>Final bill will be generated at discharge.</p>
-                                    <p>Admitted: {new Date(billData.admission.admission_date).toLocaleDateString('en-GB')}</p>
+                                    <p>Admitted: {new Date(billData.admission.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                                    {billData.admission.discharge_date && (
+                                        <p>Discharged: {new Date(billData.admission.discharge_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                                    )}
                                 </div>
                                 <div className="text-center">
                                     <div className="border-t border-gray-400 w-40 mb-1" />

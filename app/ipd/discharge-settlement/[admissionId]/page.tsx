@@ -154,8 +154,11 @@ export default function DischargeSettlementPage() {
                                 {formatDoctorName(billData.admission.doctor_name)} | {billData.admission.ward_name} | Bed: {billData.admission.bed_id}
                             </p>
                             <p className="text-xs text-gray-400">
-                                Admitted: {new Date(billData.admission.admission_date).toLocaleDateString('en-GB')} |
-                                Days: {billData.admission.days_admitted} |
+                                Admitted: {new Date(billData.admission.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                {billData.admission.discharge_date && (
+                                    <> | Discharged: {new Date(billData.admission.discharge_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</>
+                                )}
+                                {' | '}Days: {billData.admission.days_admitted} |
                                 Diagnosis: {billData.admission.diagnosis || 'N/A'}
                             </p>
                         </div>

@@ -493,6 +493,8 @@ export async function generateInterimBill(admissionId: string) {
                     ward_name: ward?.ward_name || 'N/A',
                     bed_id: admission.bed_id,
                     admission_date: admission.admission_date,
+                    discharge_date: admission.discharge_date,
+                    status: admission.status,
                     days_admitted: daysAdmitted,
                     diagnosis: admission.diagnosis,
                 },

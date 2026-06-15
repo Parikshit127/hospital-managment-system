@@ -4,8 +4,13 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   UserPlus, ArrowLeft, Search, X, Bed, User, Phone,
   Stethoscope, FileText, Loader2, AlertCircle, CheckCircle,
-  ChevronDown, CreditCard, Building2
+  ChevronDown, CreditCard, Building2, CalendarClock
 } from 'lucide-react';
+
+function getLocalDatetimeString(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
@@ -79,6 +84,9 @@ export default function AdmitPatientPage() {
   const [doctorName, setDoctorName] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
   const [admissionType, setAdmissionType] = useState<'Elective' | 'Emergency'>('Elective');
+  const [admissionDateTime, setAdmissionDateTime] = useState<string>(() =>
+    getLocalDatetimeString(new Date()),
+  );
 
   // Deposit
   const [depositAmount, setDepositAmount] = useState<string>('');
@@ -171,6 +179,7 @@ export default function AdmitPatientPage() {
       diagnosis: diagnosis.trim(),
       doctor_name: doctorName.trim(),
       admission_type: admissionType,
+      ...(admissionDateTime && { admission_date: admissionDateTime }),
       ...(depositNum > 0 && {
         deposit_amount: depositNum,
         deposit_payment_method: depositMethod,
@@ -497,6 +506,24 @@ export default function AdmitPatientPage() {
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 </div>
+              </div>
+
+              {/* Admission date & time */}
+              <div className="sm:col-span-2 space-y-1.5">
+                <label className={labelClass}>Admission Date &amp; Time *</label>
+                <div className="relative">
+                  <CalendarClock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="datetime-local"
+                    value={admissionDateTime}
+                    onChange={(e) => setAdmissionDateTime(e.target.value)}
+                    className={`${inputClass} pl-11`}
+                    required
+                  />
+                </div>
+                <p className="text-[10px] text-gray-400 font-medium">
+                  Defaults to current time. Backdate or schedule a planned admission here.
+                </p>
               </div>
 
               {/* Diagnosis */}

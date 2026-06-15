@@ -208,9 +208,20 @@ export async function admitPatientIPD(data: {
   estimate_id?: number;
   admission_type?: string;
   line_of_treatment?: string;
+  admission_date?: string;
 }) {
   try {
     const { db, organizationId } = await requireTenantContext();
+
+    // Parse optional admission_date (datetime-local string, treated as IST)
+    let admissionDate: Date | undefined;
+    if (data.admission_date) {
+      const parsed = new Date(data.admission_date + ':00+05:30');
+      if (Number.isNaN(parsed.getTime())) {
+        return { success: false, error: 'Invalid admission date' };
+      }
+      admissionDate = parsed;
+    }
     
     
     const admission = await db.$transaction(async (tx: any) => {
@@ -266,6 +277,9 @@ export async function admitPatientIPD(data: {
                 status: "Admitted",
                 diagnosis: data.diagnosis,
                 doctor_name: data.doctor_name,
+                admission_type: data.admission_type,
+                line_of_treatment: data.line_of_treatment,
+                ...(admissionDate && { admission_date: admissionDate }),
                 organizationId
             },
         });
@@ -308,6 +322,9 @@ export async function admitPatientIPD(data: {
                     patient_id: data.patient_id,
                     bed_id: data.bed_id,
                     doctor: data.doctor_name,
+                    admission_date: admissionDate
+                        ? admissionDate.toISOString()
+                        : newAdmission.admission_date.toISOString(),
                 }),
                 organizationId
             },
@@ -769,7 +786,7 @@ export async function accrueIPDDailyCharges(admissionId: string) {
 }
 
 // Discharge a patient from IPD
-export async function dischargePatientIPD(admissionId: string, notes?: string) {
+export async function dischargePatientIPD(admissionId: string, notes?: string, dischargeDate?: string) {
   try {
     const { db } = await requireTenantContext();
     const admission = await db.admissions.findUnique({
@@ -779,12 +796,28 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
 
     if (!admission) return { success: false, error: "Admission not found" };
 
+    // Resolve discharge date — caller may pass a datetime-local string (IST).
+    let resolvedDischarge = new Date();
+    if (dischargeDate) {
+      const parsed = new Date(dischargeDate + ':00+05:30');
+      if (Number.isNaN(parsed.getTime())) {
+        return { success: false, error: 'Invalid discharge date' };
+      }
+      resolvedDischarge = parsed;
+    }
+    if (resolvedDischarge.getTime() > Date.now() + 60_000) {
+      return { success: false, error: 'Discharge date cannot be in the future.' };
+    }
+    if (resolvedDischarge.getTime() < new Date(admission.admission_date).getTime()) {
+      return { success: false, error: 'Discharge date must be on or after the admission date.' };
+    }
+
     // Calculate total room charges
     const ward = admission.ward || admission.bed?.wards;
     const daysAdmitted = Math.max(
       1,
       Math.ceil(
-        (new Date().getTime() - new Date(admission.admission_date).getTime()) /
+        (resolvedDischarge.getTime() - new Date(admission.admission_date).getTime()) /
           (1000 * 60 * 60 * 24),
       ),
     );
@@ -794,7 +827,7 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
       where: { admission_id: admissionId },
       data: {
         status: "Discharged",
-        discharge_date: new Date(),
+        discharge_date: resolvedDischarge,
       },
     });
 
@@ -821,6 +854,16 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
       });
     }
 
+    const fmtIst = (d: Date) =>
+      new Date(d).toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
     // Create discharge summary
     await db.discharge_summaries.create({
       data: {
@@ -830,6 +873,8 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
                     <p><strong>Patient:</strong> ${admission.patient?.full_name}</p>
                     <p><strong>Diagnosis:</strong> ${admission.diagnosis || "N/A"}</p>
                     <p><strong>Doctor:</strong> ${admission.doctor_name || "N/A"}</p>
+                    <p><strong>Admitted:</strong> ${fmtIst(admission.admission_date)}</p>
+                    <p><strong>Discharged:</strong> ${fmtIst(resolvedDischarge)}</p>
                     <p><strong>Duration:</strong> ${daysAdmitted} day(s)</p>
                     <p><strong>Ward:</strong> ${ward?.ward_name || "N/A"}</p>
                     <p><strong>Notes:</strong> ${notes || "N/A"}</p>`,
@@ -846,6 +891,7 @@ export async function dischargePatientIPD(admissionId: string, notes?: string) {
           patient_id: admission.patient_id,
           daysAdmitted,
           bedFreed: admission.bed_id,
+          discharge_date: resolvedDischarge.toISOString(),
         }),
       },
     });
@@ -1607,18 +1653,108 @@ export async function updateAdmissionBasicDetails(data: {
   admission_type?: string;
   line_of_treatment?: string;
   admission_date?: string;
+  discharge_date?: string;
 }) {
   try {
-    const { db } = await requireTenantContext();
+    const { db, session } = await requireTenantContext();
+    const allowedRoles = ['reception', 'admin', 'finance'];
+    const role = String(session.role || '').toLowerCase();
+    if (!allowedRoles.includes(role)) {
+      return { success: false, error: 'Only Reception, Admin, or Finance can update admission details.' };
+    }
+
+    const existing = await db.admissions.findUnique({
+      where: { admission_id: data.admission_id },
+      select: { admission_date: true, discharge_date: true, status: true },
+    });
+    if (!existing) return { success: false, error: 'Admission not found' };
+
+    let nextAdmissionDate: Date | undefined;
+    let nextDischargeDate: Date | undefined | null;
+
+    if (data.admission_date) {
+      const parsed = new Date(data.admission_date + ':00+05:30');
+      if (Number.isNaN(parsed.getTime())) {
+        return { success: false, error: 'Invalid admission date' };
+      }
+      nextAdmissionDate = parsed;
+    }
+
+    if (data.discharge_date !== undefined) {
+      if (data.discharge_date === '') {
+        nextDischargeDate = null;
+      } else {
+        const parsed = new Date(data.discharge_date + ':00+05:30');
+        if (Number.isNaN(parsed.getTime())) {
+          return { success: false, error: 'Invalid discharge date' };
+        }
+        nextDischargeDate = parsed;
+      }
+    }
+
+    // Resolve final values for cross-field validation
+    const finalAdmission = nextAdmissionDate ?? new Date(existing.admission_date);
+    const finalDischarge =
+      nextDischargeDate === undefined ? existing.discharge_date : nextDischargeDate;
+
+    if (finalDischarge) {
+      const now = new Date();
+      if (finalDischarge.getTime() > now.getTime() + 60_000) {
+        return { success: false, error: 'Discharge date cannot be in the future.' };
+      }
+      if (finalDischarge.getTime() < finalAdmission.getTime()) {
+        return { success: false, error: 'Discharge date must be on or after the admission date.' };
+      }
+    }
+
     await db.admissions.update({
       where: { admission_id: data.admission_id },
       data: {
         ...(data.diagnosis !== undefined && { diagnosis: data.diagnosis || null }),
         ...(data.admission_type !== undefined && { admission_type: data.admission_type || null }),
         ...(data.line_of_treatment !== undefined && { line_of_treatment: data.line_of_treatment || null }),
-        ...(data.admission_date && { admission_date: new Date(data.admission_date + ':00+05:30') }),
+        ...(nextAdmissionDate && { admission_date: nextAdmissionDate }),
+        ...(nextDischargeDate !== undefined && { discharge_date: nextDischargeDate }),
       },
     });
+
+    if (nextAdmissionDate &&
+        existing.admission_date.getTime() !== nextAdmissionDate.getTime()) {
+      await db.system_audit_logs.create({
+        data: {
+          action: 'EDIT_ADMISSION_DATE',
+          module: 'ipd',
+          entity_type: 'admission',
+          entity_id: data.admission_id,
+          details: JSON.stringify({
+            old: existing.admission_date.toISOString(),
+            new: nextAdmissionDate.toISOString(),
+            by_role: role,
+          }),
+        },
+      });
+    }
+
+    if (nextDischargeDate !== undefined) {
+      const oldIso = existing.discharge_date?.toISOString() ?? null;
+      const newIso = nextDischargeDate?.toISOString() ?? null;
+      if (oldIso !== newIso) {
+        await db.system_audit_logs.create({
+          data: {
+            action: 'EDIT_DISCHARGE_DATE',
+            module: 'ipd',
+            entity_type: 'admission',
+            entity_id: data.admission_id,
+            details: JSON.stringify({
+              old: oldIso,
+              new: newIso,
+              by_role: role,
+            }),
+          },
+        });
+      }
+    }
+
     revalidatePath(`/ipd/admission/${data.admission_id}`);
     return { success: true };
   } catch (error: any) {

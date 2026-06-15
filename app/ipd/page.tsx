@@ -123,6 +123,7 @@ export default function IPDDashboard() {
   // Discharge modal
   const [dischargeModal, setDischargeModal] = useState<any>(null);
   const [dischargeNotes, setDischargeNotes] = useState("");
+  const [dischargeDateTime, setDischargeDateTime] = useState<string>("");
   const [dischargeLoading, setDischargeLoading] = useState(false);
 
   // Search assigned doctor by patient phone
@@ -273,11 +274,15 @@ export default function IPDDashboard() {
       const res = await dischargePatientIPD(
         dischargeModal.admission_id,
         dischargeNotes,
+        dischargeDateTime || undefined,
       );
       if (res.success) {
         setDischargeModal(null);
         setDischargeNotes("");
+        setDischargeDateTime("");
         loadData();
+      } else {
+        alert(res.error || "Failed to discharge.");
       }
     } catch (err) {
       console.error(err);
@@ -1052,7 +1057,14 @@ export default function IPDDashboard() {
                                   </a>
                                   {adm.status === "Admitted" && (
                                     <button
-                                      onClick={() => setDischargeModal(adm)}
+                                      onClick={() => {
+                                        const pad = (n: number) => String(n).padStart(2, "0");
+                                        const d = new Date();
+                                        setDischargeDateTime(
+                                          `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`,
+                                        );
+                                        setDischargeModal(adm);
+                                      }}
                                       className="p-1.5 hover:bg-rose-500/10 rounded-lg"
                                       title="Discharge"
                                     >
@@ -1495,6 +1507,20 @@ export default function IPDDashboard() {
               <p className="text-amber-400 font-bold">
                 Est. Room Charge: {"\u20B9"}
                 {dischargeModal.estimatedRoomCharge?.toLocaleString()}
+              </p>
+            </div>
+            <div>
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">
+                Discharge Date &amp; Time
+              </label>
+              <input
+                type="datetime-local"
+                value={dischargeDateTime}
+                onChange={(e) => setDischargeDateTime(e.target.value)}
+                className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-rose-500/50 focus:outline-none"
+              />
+              <p className="text-[10px] text-gray-400 mt-1">
+                Defaults to now. Cannot be in the future or before admission date.
               </p>
             </div>
             <div>
