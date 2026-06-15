@@ -40,6 +40,27 @@ async function main() {
   console.log(`\n=== Backfill walk-in pharmacy bill discounts ===`);
   console.log(APPLY ? '*** APPLY MODE — changes WILL be written ***\n' : '--- DRY RUN (no changes) ---\n');
 
+  // ── Connection / target diagnostics ───────────────────────────────────────
+  // Confirms WHICH database we're connected to and whether a known affected
+  // bill is present. Pass an invoice number as the first non-flag arg to inspect
+  // a different one (default: AVS-PHM-26-27-008).
+  const inspectNumber = process.argv.find((a) => !a.startsWith('-') && /-PHM-|-IPD-/.test(a)) || 'AVS-PHM-26-27-008';
+  const totalInvoices = await prisma.invoices.count();
+  console.log(`DB connection OK. Total invoices in this database: ${totalInvoices}`);
+  const target = await prisma.invoices.findFirst({
+    where: { invoice_number: inspectNumber },
+    include: { items: true, credit_notes: true },
+  });
+  if (!target) {
+    console.log(`⚠️  Invoice ${inspectNumber} NOT found in this database — you are likely connected to the WRONG DB.\n`);
+  } else {
+    const g = target.items.reduce((s, i) => s + n(i.total_price), 0);
+    const t = target.items.reduce((s, i) => s + n(i.tax_amount), 0);
+    console.log(`Found ${inspectNumber}: type=${target.invoice_type} patient=${target.patient_id} status=${target.status}`);
+    console.log(`  total_amount=₹${money(n(target.total_amount))}  net=₹${money(n(target.net_amount))}  paid=₹${money(n(target.paid_amount))}  balance=₹${money(n(target.balance_due))}`);
+    console.log(`  total_discount=₹${money(n(target.total_discount))}  bill_discount=₹${money(n((target as any).bill_discount))}  itemsGross+tax=₹${money(g + t)}\n`);
+  }
+
   // Scan ALL pharmacy invoices (no patient/status pre-filter) so the dry-run can
   // also DIAGNOSE why a given bill isn't matching.
   const invoices = await prisma.invoices.findMany({
