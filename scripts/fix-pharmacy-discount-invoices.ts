@@ -40,19 +40,16 @@ async function main() {
   console.log(`\n=== Backfill walk-in pharmacy bill discounts ===`);
   console.log(APPLY ? '*** APPLY MODE — changes WILL be written ***\n' : '--- DRY RUN (no changes) ---\n');
 
-  // No status filter: the buggy build left these as 'Partial' (balance_due > 0),
-  // so filtering on 'Paid' would miss them. The in-loop guards (paid>0, gap>0,
-  // no discount recorded, no credit/line discounts) select the right rows.
+  // Scan ALL pharmacy invoices (no patient/status pre-filter) so the dry-run can
+  // also DIAGNOSE why a given bill isn't matching.
   const invoices = await prisma.invoices.findMany({
-    where: {
-      invoice_type: 'Pharmacy',
-      patient_id: 'WALKIN',
-      status: { notIn: ['Cancelled', 'Voided', 'Draft'] },
-    },
+    where: { invoice_type: 'Pharmacy', status: { notIn: ['Cancelled', 'Voided', 'Draft'] } },
     include: { items: true, credit_notes: true },
   });
+  console.log(`Scanned ${invoices.length} active pharmacy invoice(s).\n`);
 
   const fixes: { id: number; number: string; org: string; gross: number; tax: number; paid: number; gap: number }[] = [];
+  const diag: string[] = [];
 
   for (const inv of invoices) {
     const paid = n(inv.paid_amount);
@@ -63,10 +60,17 @@ async function main() {
     const tax = inv.items.reduce((s, i) => s + n(i.tax_amount), 0);
     const gap = gross + tax - paid;
 
-    // Skip anything that isn't the "unrecorded discount" signature.
-    // NOTE: walk-in / OTC pharmacy sales are always collected in full at the
-    // counter (no credit / partial), so a leftover balance on such an invoice
-    // is in practice an un-recorded discount, not money genuinely owed.
+    // DIAGNOSTIC: any pharmacy invoice with a positive gap & no recorded discount
+    // (regardless of patient_id) — shows us what's actually in the DB.
+    if (gap > EPS && totalDisc <= EPS && billDisc <= EPS) {
+      diag.push(`  ${inv.invoice_number}  patient=${inv.patient_id}  status=${inv.status}  itemsGross+tax=₹${money(gross + tax)}  net=₹${money(n(inv.net_amount))}  paid=₹${money(paid)}  gap=₹${money(gap)}  lineDisc=${money(lineDisc)}  creditNotes=${inv.credit_notes.length}`);
+    }
+
+    // Skip anything that isn't the safe "unrecorded WALK-IN discount" signature.
+    // (Walk-in/OTC is always collected in full, so a gap there = an un-recorded
+    //  discount, not money owed. We do NOT touch non-walk-in invoices, which may
+    //  be legitimately part-paid.)
+    if (inv.patient_id !== 'WALKIN') continue;
     if (paid <= EPS) continue;                        // nothing collected → leave alone
     if (totalDisc > EPS || billDisc > EPS) continue;  // discount already recorded
     if (lineDisc > EPS) continue;                     // has line-level discounts
@@ -76,8 +80,15 @@ async function main() {
     fixes.push({ id: inv.id, number: inv.invoice_number, org: inv.organizationId, gross, tax, paid, gap });
   }
 
+  if (diag.length > 0) {
+    console.log(`DIAGNOSTIC — pharmacy invoices with an unexplained gap (any patient):`);
+    diag.forEach((d) => console.log(d));
+    console.log('');
+  }
+
   if (fixes.length === 0) {
-    console.log('No affected invoices found. Nothing to do.');
+    console.log('No walk-in invoices matched the safe fix signature. Nothing to apply.');
+    console.log('(If the bill above shows patient != WALKIN, tell me the patient value so I can adjust the matcher.)');
     return;
   }
 
