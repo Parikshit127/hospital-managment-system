@@ -226,7 +226,7 @@ export default function PurchaseOrdersPage() {
         !poItems.find(i => i.medicine_id === m.medicine_id) &&
         // safety dedupe: keep first row per medicine
         medicines.findIndex((x: any) => x.medicine_id === m.medicine_id) === idx
-    ).slice(0, 15);
+    ).slice(0, 50);
 
     const poTotals = poItems.reduce(
         (acc, i) => {

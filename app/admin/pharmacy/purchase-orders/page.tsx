@@ -69,8 +69,21 @@ export default function PurchaseOrdersPage() {
             if (sRes.success) setSuppliers(sRes.data || []);
         }
         if (medicines.length === 0) {
-            const mRes = await listMedicines({ page: 1, limit: 500 });
-            if (mRes.success) setMedicines(mRes.data?.medicines || []);
+            // Load the FULL medicine catalogue, not just the first page. The
+            // dropdown has no server-side search, so every medicine must be
+            // present client-side — a single capped page would silently hide
+            // any medicine beyond the cap for large catalogues.
+            const PAGE = 500;
+            const first = await listMedicines({ page: 1, limit: PAGE });
+            if (first.success) {
+                let all = first.data?.medicines || [];
+                const totalPages = first.data?.totalPages || 1;
+                for (let p = 2; p <= totalPages; p++) {
+                    const next = await listMedicines({ page: p, limit: PAGE });
+                    if (next.success) all = all.concat(next.data?.medicines || []);
+                }
+                setMedicines(all);
+            }
         }
     };
 
