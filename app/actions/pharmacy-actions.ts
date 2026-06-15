@@ -227,7 +227,7 @@ export async function getInventoryForPO() {
 export async function generateInvoice(
     patientId: string,
     items: any[],
-    optionsOrWalkInName?: string | { walkInName?: string; billDateTime?: string; doctorId?: string; doctorName?: string; paymentMethod?: string }
+    optionsOrWalkInName?: string | { walkInName?: string; billDateTime?: string; doctorId?: string; doctorName?: string; paymentMethod?: string; discount?: number }
 ) {
     try {
         const { db, organizationId } = await requireTenantContext();
@@ -242,6 +242,9 @@ export async function generateInvoice(
         };
         const walkInName = options.walkInName;
         const paymentMethod = options.paymentMethod || 'Cash';
+        // Optional bill-level discount (flat ₹ off the grand total). Used for
+        // walk-in/OTC counter sales; line prices/tax stay untouched.
+        const billDiscount = Math.max(0, Number((options as any).discount) || 0);
         // For walk-in/OTC sales the patient name (if the cashier entered one) is
         // stored on the invoice itself, since all walk-ins share one OPD_REG record.
         const walkInLabel = patientId === 'WALKIN' ? (walkInName || '').trim() : '';
@@ -479,7 +482,10 @@ export async function generateInvoice(
         }
 
         // 3. Create formal invoice in finance system
-        const netAmount = totalAmount + totalTax;
+        const grossAmount = totalAmount + totalTax;
+        // Clamp the discount so it can never exceed the bill or go negative.
+        const appliedDiscount = Math.min(billDiscount, grossAmount);
+        const netAmount = grossAmount - appliedDiscount;
         const cgst = totalTax / 2;
         const sgst = totalTax / 2;
 
@@ -490,7 +496,8 @@ export async function generateInvoice(
                 invoice_type: 'Pharmacy',
                 status: 'Paid',
                 total_amount: totalAmount,
-                total_discount: 0,
+                total_discount: appliedDiscount,
+                bill_discount: appliedDiscount,
                 net_amount: netAmount,
                 paid_amount: netAmount,
                 balance_due: 0,
@@ -579,6 +586,7 @@ export async function generateInvoice(
             total: netAmount,
             subtotal: totalAmount,
             tax: totalTax,
+            discount: appliedDiscount,
             cgst, sgst,
             invoice_id: invoice.id,
             invoice_number: invoice.invoice_number,

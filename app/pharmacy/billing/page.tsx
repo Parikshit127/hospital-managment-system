@@ -76,6 +76,8 @@ export default function PharmacyPage() {
     const [selectedPatient, setSelectedPatient] = useState<any>(null);
     const [isWalkIn, setIsWalkIn] = useState(false);
     const [walkInName, setWalkInName] = useState('');
+    // Optional bill-level discount (₹) for walk-in / OTC sales.
+    const [discount, setDiscount] = useState('');
 
     // Backdate + prescribing doctor (optional)
     const [billDateTime, setBillDateTime] = useState('');
@@ -224,6 +226,9 @@ export default function PharmacyPage() {
     const cgst = totalTax / 2;
     const sgst = totalTax / 2;
     const grandTotal = subtotal + totalTax;
+    // Optional discount applies to walk-in / OTC only; clamped to [0, grandTotal].
+    const discountAmt = isWalkIn ? Math.min(Math.max(0, Number(discount) || 0), grandTotal) : 0;
+    const payableTotal = Math.max(0, grandTotal - discountAmt);
 
     const handleCheckout = () => {
         if (!isWalkIn && !patientId) return alert('Please search and select a patient, or enable Walk-in / OTC mode.');
@@ -252,10 +257,12 @@ export default function PharmacyPage() {
                 doctorId: doctorId || undefined,
                 doctorName: doctorName || undefined,
                 paymentMethod: paymentMethod,
+                discount: discountAmt || undefined,
             });
             if (res.success) {
                 setInvoiceResult(res);
                 setCart([]);
+                setDiscount('');
                 loadInventory();
             } else {
                 alert('Checkout Failed: ' + (res.error || ''));
@@ -274,6 +281,7 @@ export default function PharmacyPage() {
         setPatientSearch('');
         setSelectedPatient(null);
         setWalkInName('');
+        setDiscount('');
         setBillDateTime('');
         setDoctorId('');
         setDoctorName('');
@@ -524,7 +532,7 @@ export default function PharmacyPage() {
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Patient</span>
                                 <button
                                     type="button"
-                                    onClick={() => { setIsWalkIn(!isWalkIn); clearPatient(); setWalkInName(''); }}
+                                    onClick={() => { setIsWalkIn(!isWalkIn); clearPatient(); setWalkInName(''); setDiscount(''); }}
                                     className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors ${
                                         isWalkIn ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                                     }`}
@@ -674,9 +682,27 @@ export default function PharmacyPage() {
                                         </div>
                                     </>
                                 )}
+                                {isWalkIn && (
+                                    <div className="flex justify-between items-center pt-1">
+                                        <span className="text-gray-500">Discount (₹)</span>
+                                        <input
+                                            type="number" min="0" max={grandTotal} step="0.01"
+                                            value={discount}
+                                            onChange={e => setDiscount(e.target.value)}
+                                            placeholder="0"
+                                            className="w-24 text-right text-sm p-1.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                        />
+                                    </div>
+                                )}
+                                {discountAmt > 0 && (
+                                    <div className="flex justify-between text-emerald-600 text-xs">
+                                        <span>Discount applied</span>
+                                        <span>−₹{discountAmt.toFixed(2)}</span>
+                                    </div>
+                                )}
                                 <div className="flex justify-between pt-2 border-t border-gray-200">
                                     <span className="font-bold text-gray-700">Total</span>
-                                    <span className="text-2xl font-black text-gray-900">₹{grandTotal.toFixed(2)}</span>
+                                    <span className="text-2xl font-black text-gray-900">₹{payableTotal.toFixed(2)}</span>
                                 </div>
                             </div>
                         )}
@@ -851,6 +877,12 @@ export default function PharmacyPage() {
                                                 </div>
                                             </>
                                         )}
+                                        {invoiceResult.discount > 0 && (
+                                            <div className="flex justify-between text-sm text-emerald-600">
+                                                <span>Discount</span>
+                                                <span>−₹{invoiceResult.discount?.toFixed(2)}</span>
+                                            </div>
+                                        )}
                                         <div className="flex justify-between pt-2 border-t border-gray-300">
                                             <span className="font-bold text-lg text-gray-700">Total</span>
                                             <span className="font-black text-2xl text-emerald-600">₹{invoiceResult.total?.toFixed(2)}</span>
@@ -907,9 +939,14 @@ export default function PharmacyPage() {
                                                 <span>GST (CGST + SGST)</span><span>₹{totalTax.toFixed(2)}</span>
                                             </div>
                                         )}
+                                        {discountAmt > 0 && (
+                                            <div className="flex justify-between text-sm text-emerald-600">
+                                                <span>Discount</span><span>−₹{discountAmt.toFixed(2)}</span>
+                                            </div>
+                                        )}
                                         <div className="flex justify-between pt-2 border-t border-gray-300">
                                             <span className="font-bold text-gray-700">Total</span>
-                                            <span className="font-black text-2xl text-gray-900">₹{grandTotal.toFixed(2)}</span>
+                                            <span className="font-black text-2xl text-gray-900">₹{payableTotal.toFixed(2)}</span>
                                         </div>
                                     </div>
                                     <div className="flex gap-2 pt-2">
