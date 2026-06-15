@@ -748,30 +748,52 @@ export async function addInventoryBatch(data: {
 
         let medicineId = data.medicine_id;
 
-        // If new medicine, create master entry first
+        // If no explicit medicine_id, reuse an existing master entry for this
+        // brand (the inventory grid is full of master rows that have no batches
+        // yet) — otherwise the unique [brand_name, organizationId] constraint
+        // would reject the create and the whole add would fail.
         if (!medicineId && data.brand_name) {
-            const newMed = await db.pharmacy_medicine_master.create({
-                data: {
-                    brand_name: data.brand_name,
-                    generic_name: data.generic_name || '',
-                    price_per_unit: data.price,
-                    organizationId,
-                }
+            const existing = await db.pharmacy_medicine_master.findFirst({
+                where: { brand_name: data.brand_name, organizationId },
+                select: { id: true },
             });
-            medicineId = newMed.id;
+
+            if (existing) {
+                medicineId = existing.id;
+            } else {
+                const newMed = await db.pharmacy_medicine_master.create({
+                    data: {
+                        brand_name: data.brand_name,
+                        generic_name: data.generic_name || '',
+                        mrp: data.price,
+                        selling_price: data.price,
+                        price_per_unit: data.price,
+                        organizationId,
+                    }
+                });
+                medicineId = newMed.id;
+            }
         }
 
         if (!medicineId) return { success: false, error: 'Invalid Medicine ID' };
 
-        // Create Batch
-        await db.pharmacy_batch_inventory.create({
-            data: {
+        // Upsert the batch: if this batch_no already exists for the medicine,
+        // top up its stock instead of failing on the unique constraint.
+        await db.pharmacy_batch_inventory.upsert({
+            where: { medicine_id_batch_no: { medicine_id: medicineId, batch_no: data.batch_no } },
+            create: {
                 medicine_id: medicineId,
                 batch_no: data.batch_no,
                 current_stock: data.stock,
                 expiry_date: data.expiry,
-                rack_location: data.rack
-            }
+                rack_location: data.rack,
+                mrp: data.price,
+            },
+            update: {
+                current_stock: { increment: data.stock },
+                expiry_date: data.expiry,
+                rack_location: data.rack,
+            },
         });
 
         revalidatePath('/pharmacy/billing');
