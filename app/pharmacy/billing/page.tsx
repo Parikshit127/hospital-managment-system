@@ -227,7 +227,9 @@ export default function PharmacyPage() {
     const sgst = totalTax / 2;
     const grandTotal = subtotal + totalTax;
     // Optional discount applies to walk-in / OTC only; clamped to [0, grandTotal].
-    const discountAmt = isWalkIn ? Math.min(Math.max(0, Number(discount) || 0), grandTotal) : 0;
+    // Walk-in / OTC only: percentage discount (clamped 0–100%) → ₹ off the bill.
+    const discountPct = isWalkIn ? Math.min(Math.max(0, Number(discount) || 0), 100) : 0;
+    const discountAmt = grandTotal * discountPct / 100;
     const payableTotal = Math.max(0, grandTotal - discountAmt);
 
     const handleCheckout = () => {
@@ -257,7 +259,7 @@ export default function PharmacyPage() {
                 doctorId: doctorId || undefined,
                 doctorName: doctorName || undefined,
                 paymentMethod: paymentMethod,
-                discount: discountAmt || undefined,
+                discountPct: discountPct || undefined,
             });
             if (res.success) {
                 setInvoiceResult(res);
@@ -684,19 +686,22 @@ export default function PharmacyPage() {
                                 )}
                                 {isWalkIn && (
                                     <div className="flex justify-between items-center pt-1">
-                                        <span className="text-gray-500">Discount (₹)</span>
-                                        <input
-                                            type="number" min="0" max={grandTotal} step="0.01"
-                                            value={discount}
-                                            onChange={e => setDiscount(e.target.value)}
-                                            placeholder="0"
-                                            className="w-24 text-right text-sm p-1.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
-                                        />
+                                        <span className="text-gray-500">Discount (%)</span>
+                                        <div className="flex items-center gap-1">
+                                            <input
+                                                type="number" min="0" max="100" step="0.01"
+                                                value={discount}
+                                                onChange={e => setDiscount(e.target.value)}
+                                                placeholder="0"
+                                                className="w-20 text-right text-sm p-1.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                            />
+                                            <span className="text-gray-400 text-sm">%</span>
+                                        </div>
                                     </div>
                                 )}
                                 {discountAmt > 0 && (
                                     <div className="flex justify-between text-emerald-600 text-xs">
-                                        <span>Discount applied</span>
+                                        <span>Discount ({discountPct}%)</span>
                                         <span>−₹{discountAmt.toFixed(2)}</span>
                                     </div>
                                 )}
@@ -879,7 +884,7 @@ export default function PharmacyPage() {
                                         )}
                                         {invoiceResult.discount > 0 && (
                                             <div className="flex justify-between text-sm text-emerald-600">
-                                                <span>Discount</span>
+                                                <span>Discount{invoiceResult.discount_pct > 0 ? ` (${invoiceResult.discount_pct}%)` : ''}</span>
                                                 <span>−₹{invoiceResult.discount?.toFixed(2)}</span>
                                             </div>
                                         )}
@@ -941,7 +946,7 @@ export default function PharmacyPage() {
                                         )}
                                         {discountAmt > 0 && (
                                             <div className="flex justify-between text-sm text-emerald-600">
-                                                <span>Discount</span><span>−₹{discountAmt.toFixed(2)}</span>
+                                                <span>Discount ({discountPct}%)</span><span>−₹{discountAmt.toFixed(2)}</span>
                                             </div>
                                         )}
                                         <div className="flex justify-between pt-2 border-t border-gray-300">

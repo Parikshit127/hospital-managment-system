@@ -227,7 +227,7 @@ export async function getInventoryForPO() {
 export async function generateInvoice(
     patientId: string,
     items: any[],
-    optionsOrWalkInName?: string | { walkInName?: string; billDateTime?: string; doctorId?: string; doctorName?: string; paymentMethod?: string; discount?: number }
+    optionsOrWalkInName?: string | { walkInName?: string; billDateTime?: string; doctorId?: string; doctorName?: string; paymentMethod?: string; discount?: number; discountPct?: number }
 ) {
     try {
         const { db, organizationId } = await requireTenantContext();
@@ -242,9 +242,11 @@ export async function generateInvoice(
         };
         const walkInName = options.walkInName;
         const paymentMethod = options.paymentMethod || 'Cash';
-        // Optional bill-level discount (flat ₹ off the grand total). Used for
-        // walk-in/OTC counter sales; line prices/tax stay untouched.
-        const billDiscount = Math.max(0, Number((options as any).discount) || 0);
+        // Optional bill-level discount for walk-in/OTC counter sales; line
+        // prices/tax stay untouched. A percentage (discountPct) is preferred and
+        // takes priority; a flat ₹ amount (discount) is kept as a fallback.
+        const billDiscountPct = Math.min(Math.max(0, Number((options as any).discountPct) || 0), 100);
+        const flatDiscount = Math.max(0, Number((options as any).discount) || 0);
         // For walk-in/OTC sales the patient name (if the cashier entered one) is
         // stored on the invoice itself, since all walk-ins share one OPD_REG record.
         const walkInLabel = patientId === 'WALKIN' ? (walkInName || '').trim() : '';
@@ -483,8 +485,10 @@ export async function generateInvoice(
 
         // 3. Create formal invoice in finance system
         const grossAmount = totalAmount + totalTax;
-        // Clamp the discount so it can never exceed the bill or go negative.
-        const appliedDiscount = Math.min(billDiscount, grossAmount);
+        // Percentage discount takes priority; fall back to a flat ₹ amount.
+        // Clamp so it can never exceed the bill or go negative.
+        const rawDiscount = billDiscountPct > 0 ? grossAmount * billDiscountPct / 100 : flatDiscount;
+        const appliedDiscount = Math.min(Math.max(0, rawDiscount), grossAmount);
         const netAmount = grossAmount - appliedDiscount;
         const cgst = totalTax / 2;
         const sgst = totalTax / 2;
@@ -587,6 +591,7 @@ export async function generateInvoice(
             subtotal: totalAmount,
             tax: totalTax,
             discount: appliedDiscount,
+            discount_pct: billDiscountPct,
             cgst, sgst,
             invoice_id: invoice.id,
             invoice_number: invoice.invoice_number,
