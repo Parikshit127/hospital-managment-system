@@ -667,6 +667,7 @@ export async function settleAndDischarge(data: {
         payment_method: string;
         reference?: string;
     }>;
+    discharge_date?: Date | string;
 }) {
     try {
         const { db, session, organizationId } = await requireTenantContext();
@@ -843,10 +844,12 @@ export async function settleAndDischarge(data: {
             data: { status: finalStatus, finalized_at: new Date() },
         });
 
+        const dischargeDate = data.discharge_date ? new Date(data.discharge_date) : new Date();
+
         // 6. Discharge patient
         await db.admissions.update({
             where: { admission_id: data.admission_id },
-            data: { status: 'Discharged', discharge_date: new Date() },
+            data: { status: 'Discharged', discharge_date: dischargeDate },
         });
 
         // 7. Free the bed
@@ -882,7 +885,7 @@ export async function settleAndDischarge(data: {
             data: serialize({
                 admission_id: data.admission_id,
                 invoice_id: invoice.id,
-                discharge_date: new Date(),
+                discharge_date: dischargeDate,
                 remaining_balance: finalBalance,
                 bill: finalBill.success ? finalBill.data : null,
             }),

@@ -5,6 +5,11 @@ import { useParams, useRouter } from 'next/navigation';
 import { generateInterimBill, settleAndDischarge } from '@/app/actions/ipd-finance-actions';
 import { formatDoctorName } from '@/app/lib/format-name';
 
+function getLocalDatetimeString(date: Date) {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export default function DischargeSettlementPage() {
     const params = useParams();
     const router = useRouter();
@@ -25,6 +30,9 @@ export default function DischargeSettlementPage() {
 
     // Deposit application
     const [applyDeposits, setApplyDeposits] = useState(true);
+
+    // Discharge Date & Time option
+    const [dischargeDateTime, setDischargeDateTime] = useState(() => getLocalDatetimeString(new Date()));
 
     function showToast(message: string, type: 'success' | 'error' = 'success') {
         setToast({ message, type });
@@ -106,6 +114,7 @@ export default function DischargeSettlementPage() {
                 payment_method: s.method,
                 reference: s.reference || undefined,
             })) : undefined,
+            discharge_date: new Date(dischargeDateTime),
         });
         setSettling(false);
 
@@ -347,6 +356,20 @@ export default function DischargeSettlementPage() {
                                 placeholder="Approver name"
                             />
                         </div>
+                    </div>
+                </div>
+
+                {/* Discharge Details */}
+                <div className="bg-white rounded-lg shadow p-4">
+                    <h2 className="font-semibold text-sm mb-3 text-gray-800">Discharge Details</h2>
+                    <div className="max-w-xs">
+                        <label className="text-xs text-gray-500 block mb-1">Discharge Date & Time</label>
+                        <input
+                            type="datetime-local"
+                            value={dischargeDateTime}
+                            onChange={(e) => setDischargeDateTime(e.target.value)}
+                            className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 text-gray-700 bg-white"
+                        />
                     </div>
                 </div>
 
