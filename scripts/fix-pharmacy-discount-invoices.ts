@@ -53,7 +53,6 @@ async function main() {
 
   for (const inv of invoices) {
     const paid = n(inv.paid_amount);
-    const balance = n(inv.balance_due);
     const totalDisc = n(inv.total_discount);
     const billDisc = n((inv as any).bill_discount);
     const lineDisc = inv.items.reduce((s, i) => s + n(i.discount), 0);
@@ -61,12 +60,15 @@ async function main() {
     const tax = inv.items.reduce((s, i) => s + n(i.tax_amount), 0);
     const gap = gross + tax - paid;
 
-    // Skip anything that isn't the exact "unrecorded discount" signature.
-    if (Math.abs(balance) > EPS) continue;            // not fully paid
+    // Skip anything that isn't the "unrecorded discount" signature.
+    // NOTE: walk-in / OTC pharmacy sales are always collected in full at the
+    // counter (no credit / partial), so a leftover balance on such an invoice
+    // is in practice an un-recorded discount, not money genuinely owed.
+    if (paid <= EPS) continue;                        // nothing collected → leave alone
     if (totalDisc > EPS || billDisc > EPS) continue;  // discount already recorded
     if (lineDisc > EPS) continue;                     // has line-level discounts
     if (inv.credit_notes.length > 0) continue;        // credit notes change the math
-    if (gap <= EPS) continue;                          // no phantom balance → nothing to fix
+    if (gap <= EPS) continue;                          // paid == bill → nothing to fix
 
     fixes.push({ id: inv.id, number: inv.invoice_number, org: inv.organizationId, gross, tax, paid, gap });
   }
@@ -93,7 +95,7 @@ async function main() {
     for (const f of fixes) {
       await tx.invoices.update({
         where: { id: f.id },
-        data: { total_discount: f.gap, bill_discount: f.gap, net_amount: f.paid, balance_due: 0 },
+        data: { total_discount: f.gap, bill_discount: f.gap, net_amount: f.paid, balance_due: 0, status: 'Paid' },
       });
     }
   });
