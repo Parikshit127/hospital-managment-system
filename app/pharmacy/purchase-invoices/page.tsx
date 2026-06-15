@@ -65,10 +65,41 @@ export default function PurchaseInvoicesPage() {
     const openCreate = async () => {
         const [v, p] = await Promise.all([getSuppliers(), getPurchaseOrders()]);
         if (v.success) setVendors(v.data || []);
-        if (p.success) setPos((p.data || []).filter((po: any) => ['Received', 'Partially Received'].includes(po.status)));
+        // Show all POs that are not cancelled — invoice can be created for any stage
+        if (p.success) setPos(p.data || []);
         setForm({ vendor_id: '', po_id: '', invoice_number: '', invoice_date: new Date().toISOString().slice(0, 10), due_date: '', vendor_gstin: '' });
         setLines([{ medicine_id: '', medicine_name: '', quantity: 1, unit_price: 0, gst_rate: 12, hsn_code: '3004' }]);
         setShowCreate(true);
+    };
+
+    // When a PO is selected, auto-fill vendor + line items from PO
+    const handlePoSelect = (poId: string) => {
+        setForm(f => ({ ...f, po_id: poId }));
+        if (!poId) return;
+        const selectedPo = pos.find((p: any) => String(p.id) === poId);
+        if (!selectedPo) return;
+
+        // Auto-fill vendor
+        const vendorId = selectedPo.vendor_id || selectedPo.supplier_id;
+        if (vendorId) setForm(f => ({ ...f, po_id: poId, vendor_id: String(vendorId) }));
+
+        // Auto-fill line items from PO items
+        if (selectedPo.items && selectedPo.items.length > 0) {
+            const autoLines = selectedPo.items.map((item: any) => ({
+                medicine_id: String(item.medicine_id),
+                medicine_name: item.medicine?.brand_name || '',
+                quantity: item.quantity_ordered - (item.quantity_received || 0),
+                unit_price: item.unit_price || 0,
+                gst_rate: item.gst_rate || 12,
+                hsn_code: item.hsn_code || item.medicine?.hsn_sac_code || '3004',
+                pack: item.pack || '',
+                batch_no: item.batch_no || '',
+                expiry: item.expiry || '',
+                mrp: item.mrp || 0,
+                discount_pct: item.discount_pct || 0,
+            }));
+            setLines(autoLines);
+        }
     };
 
     const handleMedSearch = async (q: string, idx: number) => {
@@ -113,6 +144,10 @@ export default function PurchaseInvoicesPage() {
                 unit_price: parseFloat(l.unit_price),
                 gst_rate: parseFloat(l.gst_rate),
                 hsn_code: l.hsn_code,
+                batch_no: l.batch_no || undefined,
+                expiry: l.expiry || undefined,
+                pack: l.pack || undefined,
+                mrp: l.mrp ? parseFloat(l.mrp) : undefined,
             })),
         });
         setSaving(false);
@@ -352,10 +387,11 @@ export default function PurchaseInvoicesPage() {
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase">Linked PO (optional)</label>
-                                    <select value={form.po_id} onChange={e => setForm({ ...form, po_id: e.target.value })} className="w-full p-3 border border-gray-300 rounded-xl text-sm">
+                                    <select value={form.po_id} onChange={e => handlePoSelect(e.target.value)} className="w-full p-3 border border-gray-300 rounded-xl text-sm">
                                         <option value="">No PO link</option>
                                         {pos.map((p: any) => <option key={p.id} value={p.id}>{p.po_number} — {p.vendor?.vendor_name || p.supplier?.name}</option>)}
                                     </select>
+                                    {form.po_id && <p className="text-[10px] text-blue-600 font-bold">✓ PO items auto-loaded below</p>}
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase">Invoice Number *</label>
@@ -421,6 +457,25 @@ export default function PurchaseInvoicesPage() {
                                             <div>
                                                 <label className="text-[9px] font-bold text-gray-400 uppercase">Line Total</label>
                                                 <div className="p-2 bg-gray-50 rounded-lg text-sm font-bold text-right">{fmt(lineTotal(line))}</div>
+                                            </div>
+                                        </div>
+                                        {/* Batch / Pack / Expiry / MRP — supplier invoice details */}
+                                        <div className="grid grid-cols-4 gap-2 mt-1">
+                                            <div>
+                                                <label className="text-[9px] font-bold text-gray-400 uppercase">Batch No</label>
+                                                <input value={line.batch_no || ''} onChange={e => { const u = [...lines]; u[idx].batch_no = e.target.value; setLines(u); }} className="w-full p-2 border border-gray-200 rounded-lg text-xs" placeholder="e.g. B123" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] font-bold text-gray-400 uppercase">Expiry</label>
+                                                <input value={line.expiry || ''} onChange={e => { const u = [...lines]; u[idx].expiry = e.target.value; setLines(u); }} className="w-full p-2 border border-gray-200 rounded-lg text-xs" placeholder="MM/YY" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] font-bold text-gray-400 uppercase">Pack</label>
+                                                <input value={line.pack || ''} onChange={e => { const u = [...lines]; u[idx].pack = e.target.value; setLines(u); }} className="w-full p-2 border border-gray-200 rounded-lg text-xs" placeholder="1*10" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] font-bold text-gray-400 uppercase">MRP</label>
+                                                <input type="number" value={line.mrp || 0} onChange={e => { const u = [...lines]; u[idx].mrp = e.target.value; setLines(u); }} className="w-full p-2 border border-gray-200 rounded-lg text-xs" />
                                             </div>
                                         </div>
                                     </div>
