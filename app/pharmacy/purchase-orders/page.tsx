@@ -55,10 +55,19 @@ export default function PurchaseOrdersPage() {
     const [bulkFilter, setBulkFilter] = useState<'all' | 'low'>('all');
     const [selectedMedIds, setSelectedMedIds] = useState<Set<number>>(new Set());
 
+    const [loadError, setLoadError] = useState('');
+
     const loadOrders = async () => {
         setRefreshing(true);
         const res = await getPurchaseOrders();
-        if (res.success) setOrders(res.data);
+        if (res.success) {
+            setOrders(res.data);
+            setLoadError('');
+        } else {
+            // Don't hide a real failure behind an empty "No purchase orders yet"
+            setOrders([]);
+            setLoadError((res as any).error || 'Failed to load purchase orders.');
+        }
         setRefreshing(false);
     };
 
@@ -270,7 +279,11 @@ export default function PurchaseOrdersPage() {
                         </thead>
                         <tbody className="divide-y divide-gray-200">
                             {orders.length === 0 ? (
-                                <tr><td colSpan={6} className="px-6 py-16 text-center text-gray-400 text-sm">No purchase orders yet</td></tr>
+                                <tr><td colSpan={6} className={`px-6 py-16 text-center text-sm ${loadError ? 'text-red-600' : 'text-gray-400'}`}>
+                                    {loadError ? (
+                                        <span className="inline-flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Couldn’t load purchase orders: {loadError}</span>
+                                    ) : 'No purchase orders yet'}
+                                </td></tr>
                             ) : orders.map((po) => (
                                 <tr key={po.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-4"><span className="font-mono font-bold text-gray-900 bg-gray-100 rounded px-2 py-1">{po.po_number}</span></td>

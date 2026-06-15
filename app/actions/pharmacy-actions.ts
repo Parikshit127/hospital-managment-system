@@ -1800,8 +1800,12 @@ export async function getPurchaseOrders() {
             take: 200,
         });
         return { success: true, data: pos };
-    } catch (error) {
-        return { success: false, data: [] };
+    } catch (error: any) {
+        // Surface the real reason instead of silently returning an empty list —
+        // an empty array here is indistinguishable from "no POs exist" in the UI
+        // and hides genuine failures (e.g. schema drift, DB errors).
+        console.error('getPurchaseOrders error:', error?.message || error);
+        return { success: false, data: [], error: error?.message || 'Failed to load purchase orders' };
     }
 }
 
