@@ -2,6 +2,7 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { resolveIncomeHeadCode, incomeHeadName } from '@/app/lib/gl-income-head-map';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 function serialize<T>(data: T): T {
     return JSON.parse(JSON.stringify(data, (_, value) =>
@@ -950,8 +951,13 @@ export async function getMISReport(filters: { from: string; to: string; billType
                     (it.service_category || '').toLowerCase() === 'consultation'
                 );
                 if (consultItem) {
-                    const parsed = consultItem.description.replace(/^(Dr\.?\s*|Consultation\s*[-–—]\s*)/i, '').trim();
-                    if (parsed && !isGenericDoc(parsed)) doctorName = parsed;
+                    let parsed = consultItem.description
+                        .replace(/^(Dr\.?\s*|Consultation\s*[-–—]\s*|Follow-up\s*[-–—]\s*)/i, '')
+                        .replace(/\s*\([^)]*\)\s*$/, '')
+                        .trim();
+                    if (parsed && !isGenericDoc(parsed)) {
+                        doctorName = formatDoctorName(parsed);
+                    }
                 }
             }
             doctorName = doctorName || '';

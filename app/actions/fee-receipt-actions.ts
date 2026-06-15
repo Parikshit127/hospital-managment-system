@@ -160,6 +160,73 @@ export async function saveFeeReceipt(payload: SaveFeeReceiptInput) {
         const receiptNo = await genRcpNum(organizationId, db);
         const createdAt = payload.receipt_date ? new Date(payload.receipt_date) : undefined;
 
+        // Load doctors, checkups, medicines to recognize categories and fill departments/doctor fields
+        const [dbDoctors, dbCheckups, dbMedicines] = await Promise.all([
+            db.user.findMany({
+                where: { role: "doctor", organizationId },
+                select: { id: true, name: true, specialty: true }
+            }),
+            db.lab_test_inventory.findMany({
+                where: { organizationId },
+                select: { test_name: true }
+            }),
+            db.pharmacy_medicine_master.findMany({
+                where: { organizationId },
+                select: { brand_name: true }
+            })
+        ]);
+
+        let resolvedDoctorId: string | null = null;
+        let resolvedDoctorName: string | null = null;
+
+        const mappedItems = cleanItems.map(item => {
+            let department = "General";
+            let serviceCategory: string | null = null;
+
+            const lowerDesc = item.description.toLowerCase();
+            const doctorMatch = dbDoctors.find((doc: any) => {
+                const formatted = formatDoctorName(doc.name).toLowerCase();
+                const rawName = doc.name.toLowerCase();
+                return lowerDesc.includes(formatted) || lowerDesc.includes(rawName);
+            });
+
+            if (doctorMatch) {
+                resolvedDoctorId = doctorMatch.id;
+                resolvedDoctorName = formatDoctorName(doctorMatch.name);
+                department = doctorMatch.specialty || "General";
+                serviceCategory = "consultation";
+            } else if (dbCheckups.some((c: any) => c.test_name.toLowerCase() === lowerDesc)) {
+                department = "Laboratory";
+                serviceCategory = "lab";
+            } else if (dbMedicines.some((m: any) => m.brand_name.toLowerCase() === lowerDesc)) {
+                department = "Pharmacy";
+                serviceCategory = "pharmacy";
+            } else {
+                // Fallbacks based on keywords in description
+                if (lowerDesc.includes("consult") || lowerDesc.includes("opd consult") || lowerDesc.includes("follow-up")) {
+                    serviceCategory = "consultation";
+                } else if (lowerDesc.includes("test") || lowerDesc.includes("lab") || lowerDesc.includes("pathology") || lowerDesc.includes("blood")) {
+                    department = "Laboratory";
+                    serviceCategory = "lab";
+                } else if (lowerDesc.includes("medicine") || lowerDesc.includes("pharmacy") || lowerDesc.includes("syrup") || lowerDesc.includes("tablet")) {
+                    department = "Pharmacy";
+                    serviceCategory = "pharmacy";
+                }
+            }
+
+            return {
+                department,
+                description: item.description,
+                quantity: item.quantity,
+                unit_price: item.amount,
+                total_price: item.amount * item.quantity,
+                discount: item.discount || 0,
+                net_price: item.amount * item.quantity - (item.discount || 0),
+                service_category: serviceCategory,
+                organizationId
+            };
+        });
+
         const invoice = await db.invoices.create({
             data: {
                 invoice_number: invoiceNo,
@@ -173,18 +240,11 @@ export async function saveFeeReceipt(payload: SaveFeeReceiptInput) {
                 status: "Paid",
                 notes: payload.notes?.trim() || null,
                 organizationId,
+                doctor_id: resolvedDoctorId || null,
+                doctor_name: resolvedDoctorName || null,
                 ...(createdAt ? { created_at: createdAt } : {}),
                 items: {
-                    create: cleanItems.map(item => ({
-                        department: "General",
-                        description: item.description,
-                        quantity: item.quantity,
-                        unit_price: item.amount,
-                        total_price: item.amount * item.quantity,
-                        discount: item.discount || 0,
-                        net_price: item.amount * item.quantity - (item.discount || 0),
-                        organizationId
-                    }))
+                    create: mappedItems
                 },
                 payments: {
                     create: {
