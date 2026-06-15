@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Truck, Plus, CheckCircle, PackageOpen, X, Search, AlertTriangle, ListChecks } from 'lucide-react';
-import { getPurchaseOrders, receivePurchaseOrder, createPurchaseOrder, getSuppliers, getInventory } from '@/app/actions/pharmacy-actions';
+import { getPurchaseOrders, receivePurchaseOrder, createPurchaseOrder, getSuppliers, getInventoryForPO } from '@/app/actions/pharmacy-actions';
 
 type PoItem = {
     medicine_id: number;
@@ -73,7 +73,7 @@ export default function PurchaseOrdersPage() {
         setBulkSearch('');
         setBulkFilter('all');
         setSelectedMedIds(new Set());
-        const [sRes, mRes] = await Promise.all([getSuppliers(), getInventory()]);
+        const [sRes, mRes] = await Promise.all([getSuppliers(), getInventoryForPO()]);
         if (sRes.success) setSuppliers(sRes.data || []);
         if (mRes.success) setMedicines(mRes.data || []);
     };
@@ -224,7 +224,7 @@ export default function PurchaseOrdersPage() {
     const filteredMeds = medicines.filter((m: any, idx: number) =>
         (m.brand_name || m.medicine?.brand_name || '').toLowerCase().includes(medicineSearch.toLowerCase()) &&
         !poItems.find(i => i.medicine_id === m.medicine_id) &&
-        // dedupe: getInventory returns one row per batch, keep first per medicine
+        // safety dedupe: keep first row per medicine
         medicines.findIndex((x: any) => x.medicine_id === m.medicine_id) === idx
     ).slice(0, 15);
 

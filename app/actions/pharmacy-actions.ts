@@ -171,6 +171,59 @@ export async function getInventory() {
     return getInventoryPage({ limit: 100 });
 }
 
+// Full medicine catalogue for the Purchase Order screen.
+//
+// The PO page loads the list once and does all searching / bulk-select /
+// low-stock detection client-side, so it needs EVERY active medicine — not
+// the 100-row page cap that getInventory() applies. Returns one row per
+// medicine (not per batch) with the total in-stock quantity and reorder
+// threshold so the PO UI can flag low stock correctly.
+export async function getInventoryForPO() {
+    try {
+        const { db } = await requireTenantContext();
+
+        const medicines = await db.pharmacy_medicine_master.findMany({
+            where: { is_active: true },
+            orderBy: { brand_name: 'asc' },
+            select: {
+                id: true,
+                brand_name: true,
+                generic_name: true,
+                selling_price: true,
+                price_per_unit: true,
+                mrp: true,
+                gst_percent: true,
+                tax_rate: true,
+                hsn_sac_code: true,
+                min_threshold: true,
+                batches: {
+                    where: { current_stock: { gt: 0 } },
+                    select: { current_stock: true },
+                },
+            },
+        });
+
+        const data = medicines.map((med: any) => ({
+            medicine_id: med.id,
+            brand_name: med.brand_name,
+            generic_name: med.generic_name,
+            selling_price: med.selling_price,
+            price_per_unit: med.price_per_unit,
+            mrp: med.mrp,
+            gst_percent: med.gst_percent,
+            tax_rate: med.tax_rate,
+            hsn_sac_code: med.hsn_sac_code,
+            min_threshold: med.min_threshold,
+            current_stock: med.batches.reduce((s: number, b: any) => s + b.current_stock, 0),
+        }));
+
+        return { success: true, data };
+    } catch (error) {
+        console.error('PO Inventory Fetch Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
 export async function generateInvoice(
     patientId: string,
     items: any[],
