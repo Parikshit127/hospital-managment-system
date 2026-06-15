@@ -35,11 +35,20 @@ export default async function PharmacyInvoiceViewPage({ params }: { params: Prom
     }
 
     const subtotal = items.reduce((s, i) => s + Number(i.net_price || 0), 0);
-    const totalDiscount = items.reduce((s, i) => s + Number(i.discount || 0), 0);
+    const lineDiscount = items.reduce((s, i) => s + Number(i.discount || 0), 0);
+    // Bill-level (final) discount lives on the invoice header (bill_discount /
+    // total_discount), NOT on the line items. It must be subtracted too — else a
+    // walk-in/OTC discount wrongly shows up as a Balance. (IPD sub-view shows a
+    // pharmacy-only total, so the invoice-level bill discount doesn't apply there.)
+    const billDiscount = isIpd ? 0 : Math.max(0, Math.max(
+        Number((invoice as any).bill_discount || 0),
+        Number((invoice as any).total_discount || 0) - lineDiscount,
+    ));
+    const totalDiscount = lineDiscount + billDiscount;
     const tax     = items.reduce((s, i) => s + Number(i.tax_amount || 0), 0);
     const cgst    = tax / 2;
     const sgst    = tax / 2;
-    const total   = subtotal + tax;
+    const total   = subtotal + tax - billDiscount;
     // For IPD invoices, paid/balance are for the whole bill — show pharmacy total as the amount
     const paid    = isIpd ? 0 : Number((invoice as any).paid_amount || 0);
     const balance = isIpd ? total : (total - paid);
