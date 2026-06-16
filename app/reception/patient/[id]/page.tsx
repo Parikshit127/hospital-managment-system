@@ -151,39 +151,45 @@ export default function PatientProfilePage() {
     const searchParams = useSearchParams();
     const toast = useToast();
     const patientId = params.id as string;
-    const initialTab = (searchParams?.get('tab') as any) || 'overview';
-    const wantsNewBill = searchParams?.get('action') === 'new';
-    const isWelcome = searchParams?.get('welcome') === '1';
 
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [processLoading, setProcessLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'triage' | 'vitals' | 'timeline' | 'billing' | 'records'>(initialTab);
-
-    // Welcome banner — appears after a fresh registration redirect (?welcome=1).
-    // Auto-hides on the first action a user takes from the banner.
-    const [showWelcome, setShowWelcome] = useState(isWelcome);
+    // Tab/banner state starts neutral so the SSR pass and first client render match.
+    // We promote it from URL params inside a mount-only useEffect below.
+    const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'triage' | 'vitals' | 'timeline' | 'billing' | 'records'>('overview');
+    const [showWelcome, setShowWelcome] = useState(false);
     const [recentRegistration, setRecentRegistration] = useState<RecentRegistration | null>(null);
-
-    // Phase 2: auto-open the inline bill builder when ?action=new is in the URL
-    // (e.g. from the welcome banner or the Master Billing patient-search modal).
-    const [autoOpenBillBuilder, setAutoOpenBillBuilder] = useState(wantsNewBill);
-    const [showBillBuilder, setShowBillBuilder] = useState(wantsNewBill);
+    const [autoOpenBillBuilder, setAutoOpenBillBuilder] = useState(false);
+    const [showBillBuilder, setShowBillBuilder] = useState(false);
 
     useEffect(() => {
-        if (!isWelcome) return;
-        try {
-            const raw = sessionStorage.getItem('recent_registration');
-            if (raw) {
-                const parsed: RecentRegistration = JSON.parse(raw);
-                if (parsed?.patient_id === patientId) {
-                    setRecentRegistration(parsed);
+        // Promote URL params on the client only — running this during SSR would
+        // produce a hydration mismatch when `?welcome=1` is present.
+        const tab = searchParams?.get('tab');
+        const action = searchParams?.get('action');
+        const welcome = searchParams?.get('welcome');
+        if (tab && ['overview','appointments','triage','vitals','timeline','billing','records'].includes(tab)) {
+            setActiveTab(tab as any);
+        }
+        if (welcome === '1') setShowWelcome(true);
+        if (action === 'new') {
+            setAutoOpenBillBuilder(true);
+            setShowBillBuilder(true);
+        }
+        if (welcome === '1') {
+            try {
+                const raw = sessionStorage.getItem('recent_registration');
+                if (raw) {
+                    const parsed: RecentRegistration = JSON.parse(raw);
+                    if (parsed?.patient_id === patientId) setRecentRegistration(parsed);
+                    sessionStorage.removeItem('recent_registration');
                 }
-                // Read-once: clear immediately so a hard refresh doesn't show stale state.
-                sessionStorage.removeItem('recent_registration');
-            }
-        } catch { /* sessionStorage unavailable */ }
-    }, [isWelcome, patientId]);
+            } catch { /* sessionStorage unavailable */ }
+        }
+    // We only want this to run once after mount; searchParams identity is stable per route.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [patientId]);
 
     const dismissWelcome = useCallback(() => {
         setShowWelcome(false);

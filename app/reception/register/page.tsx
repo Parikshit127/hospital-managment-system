@@ -360,7 +360,7 @@ export default function ReceptionPage() {
                                                     name="full_name"
                                                     required
                                                     maxLength={60}
-                                                    pattern="[A-Za-z\s.'-]{2,60}"
+                                                    pattern="[A-Za-z\s.'\-]{2,60}"
                                                     onChange={(e) => { e.target.value = sanitizeName(e.target.value); }}
                                                     className={inputWithIconClass}
                                                     placeholder="e.g. Rahul Kumar"
