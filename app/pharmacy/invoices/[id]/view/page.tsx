@@ -3,6 +3,17 @@ import { prisma } from '@/backend/db';
 import { getSession } from '@/app/lib/session';
 import { getPharmacyBranding } from '@/app/lib/pharmacy-branding';
 
+// IPD pharmacy line descriptions carry a trailing " — Dr. X" (prescribing
+// doctor). Split it out so the doctor can be shown once in the header rather
+// than repeated on every medicine row.
+function splitLineDoctor(desc: any): { text: string; doctor: string } {
+    const parts = String(desc || '').split(' — ');
+    if (parts.length > 1) {
+        return { text: parts.slice(0, -1).join(' — '), doctor: parts[parts.length - 1].trim() };
+    }
+    return { text: String(desc || ''), doctor: '' };
+}
+
 export default async function PharmacyInvoiceViewPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
     const invoiceId = parseInt(id);
@@ -33,6 +44,11 @@ export default async function PharmacyInvoiceViewPage({ params }: { params: Prom
     if (isIpd && items.length === 0) {
         return <div style={{ padding: 40, fontFamily: 'Arial', color: '#6b7280' }}>No pharmacy items found on this IPD invoice.</div>;
     }
+
+    // Prescribing doctor(s) — shown once in the header. Prefer the invoice's own
+    // doctor; otherwise derive the unique doctor(s) from the line descriptions.
+    const headerDoctor = (invoice as any).doctor_name
+        || Array.from(new Set(items.map((i: any) => splitLineDoctor(i.description).doctor).filter(Boolean))).join(', ');
 
     const subtotal = items.reduce((s, i) => s + Number(i.net_price || 0), 0);
     const lineDiscount = items.reduce((s, i) => s + Number(i.discount || 0), 0);
@@ -266,6 +282,12 @@ export default async function PharmacyInvoiceViewPage({ params }: { params: Prom
                             <span className="pt-label">Payment:</span>
                             <span className="pt-value">{(invoice as any).payment_method || 'Cash'}</span>
                         </div>
+                        {headerDoctor ? (
+                            <div className="pt-field">
+                                <span className="pt-label">Doctor:</span>
+                                <span className="pt-value">{headerDoctor}</span>
+                            </div>
+                        ) : null}
                     </div>
 
                     {/* ── Items Table ── */}
@@ -286,7 +308,7 @@ export default async function PharmacyInvoiceViewPage({ params }: { params: Prom
                                 <tr key={idx}>
                                     <td style={{ textAlign: 'center', color: '#9ca3af' }}>{idx + 1}</td>
                                     <td>
-                                        <span className="med-name">{item.description || item.medicine_name || '-'}</span>
+                                        <span className="med-name">{splitLineDoctor(item.description).text || item.medicine_name || '-'}</span>
                                         {item.batch_no && item.batch_no !== 'N/A' ? (
                                             <span className="batch-tag">(Batch: {item.batch_no})</span>
                                         ) : null}
