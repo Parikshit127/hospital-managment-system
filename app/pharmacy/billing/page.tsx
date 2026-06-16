@@ -76,6 +76,7 @@ export default function PharmacyPage() {
     const [selectedPatient, setSelectedPatient] = useState<any>(null);
     const [isWalkIn, setIsWalkIn] = useState(false);
     const [walkInName, setWalkInName] = useState('');
+    const [walkInContact, setWalkInContact] = useState('');
     // Optional bill-level discount (₹) for walk-in / OTC sales.
     const [discount, setDiscount] = useState('');
 
@@ -255,6 +256,7 @@ export default function PharmacyPage() {
             const payload = cart.map(item => ({ ...item, batch_no: item.batch_id }));
             const res = await generateInvoice(resolvedPatientId, payload, {
                 walkInName: isWalkIn ? walkInName : undefined,
+                walkInContact: isWalkIn ? walkInContact : undefined,
                 billDateTime: billDateTime || undefined,
                 doctorId: doctorId || undefined,
                 doctorName: doctorName || undefined,
@@ -283,6 +285,7 @@ export default function PharmacyPage() {
         setPatientSearch('');
         setSelectedPatient(null);
         setWalkInName('');
+        setWalkInContact('');
         setDiscount('');
         setBillDateTime('');
         setDoctorId('');
@@ -534,7 +537,7 @@ export default function PharmacyPage() {
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Patient</span>
                                 <button
                                     type="button"
-                                    onClick={() => { setIsWalkIn(!isWalkIn); clearPatient(); setWalkInName(''); setDiscount(''); }}
+                                    onClick={() => { setIsWalkIn(!isWalkIn); clearPatient(); setWalkInName(''); setWalkInContact(''); setDiscount(''); }}
                                     className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors ${
                                         isWalkIn ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                                     }`}
@@ -554,7 +557,17 @@ export default function PharmacyPage() {
                                             placeholder="Customer name (optional)"
                                         />
                                     </div>
-                                    <p className="text-[10px] font-bold text-amber-600 px-1">Walk-in / OTC — no registration needed. Name appears on the bill.</p>
+                                    <div className="relative">
+                                        <input
+                                            value={walkInContact}
+                                            onChange={e => setWalkInContact(e.target.value.replace(/[^0-9+\-\s]/g, ''))}
+                                            inputMode="tel"
+                                            maxLength={15}
+                                            className="w-full pl-3 pr-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-400/30 focus:border-amber-300 outline-none font-medium text-amber-900 placeholder:text-amber-400"
+                                            placeholder="Contact number (optional)"
+                                        />
+                                    </div>
+                                    <p className="text-[10px] font-bold text-amber-600 px-1">Walk-in / OTC — no registration needed. Name &amp; contact appear on the bill.</p>
                                 </div>
                             ) : (
                                 <div className="relative">

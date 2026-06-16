@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/backend/db';
 import { getSession } from '@/app/lib/session';
 import { getPharmacyBranding } from '@/app/lib/pharmacy-branding';
+import { parseWalkinNote } from '@/app/lib/walkin-note';
 
 // IPD pharmacy line descriptions carry a trailing " — Dr. X" (prescribing
 // doctor). Split it out so the doctor can be shown once in the header rather
@@ -35,6 +36,12 @@ export default async function PharmacyInvoiceViewPage({ params }: { params: Prom
     });
 
     if (!invoice) notFound();
+
+    // Walk-in / OTC bills store the customer name + optional contact on `notes`.
+    const isWalkIn = invoice.patient_id === 'WALKIN';
+    const walkin = parseWalkinNote(invoice.notes);
+    const patientName = isWalkIn ? (walkin.name || 'Walk-in Patient') : (invoice.patient?.full_name || 'Walk-in Patient');
+    const patientContact = (isWalkIn ? walkin.contact : invoice.patient?.phone) || invoice.patient?.phone || '-';
 
     const isIpd = invoice.invoice_type === 'IPD';
     // For IPD invoices, only show pharmacy items; for pharmacy invoices, show all
@@ -268,7 +275,7 @@ export default async function PharmacyInvoiceViewPage({ params }: { params: Prom
                     <div className="pt-grid">
                         <div className="pt-field">
                             <span className="pt-label">Patient:</span>
-                            <span className="pt-value">{(invoice.patient_id === 'WALKIN' && invoice.notes?.trim()) ? invoice.notes.trim() : (invoice.patient?.full_name || 'Walk-in Patient')}</span>
+                            <span className="pt-value">{patientName}</span>
                         </div>
                         <div className="pt-field" style={{ justifyContent: 'flex-end' }}>
                             <span className="pt-label">Patient ID:</span>
@@ -276,7 +283,7 @@ export default async function PharmacyInvoiceViewPage({ params }: { params: Prom
                         </div>
                         <div className="pt-field">
                             <span className="pt-label">Contact:</span>
-                            <span className="pt-value">{invoice.patient?.phone || '-'}</span>
+                            <span className="pt-value">{patientContact}</span>
                         </div>
                         <div className="pt-field" style={{ justifyContent: 'flex-end' }}>
                             <span className="pt-label">Payment:</span>

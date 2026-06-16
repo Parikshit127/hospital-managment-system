@@ -2,6 +2,7 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { getTenantPrisma } from '@/backend/db';
+import { buildWalkinNote, parseWalkinNote } from '@/app/lib/walkin-note';
 import { revalidatePath, updateTag, unstable_cache } from 'next/cache';
 
 // ── Cache invalidation tags ─────────────────────────────────────────
@@ -227,7 +228,7 @@ export async function getInventoryForPO() {
 export async function generateInvoice(
     patientId: string,
     items: any[],
-    optionsOrWalkInName?: string | { walkInName?: string; billDateTime?: string; doctorId?: string; doctorName?: string; paymentMethod?: string; discount?: number; discountPct?: number }
+    optionsOrWalkInName?: string | { walkInName?: string; walkInContact?: string; billDateTime?: string; doctorId?: string; doctorName?: string; paymentMethod?: string; discount?: number; discountPct?: number }
 ) {
     try {
         const { db, organizationId } = await requireTenantContext();
@@ -247,9 +248,12 @@ export async function generateInvoice(
         // takes priority; a flat ₹ amount (discount) is kept as a fallback.
         const billDiscountPct = Math.min(Math.max(0, Number((options as any).discountPct) || 0), 100);
         const flatDiscount = Math.max(0, Number((options as any).discount) || 0);
-        // For walk-in/OTC sales the patient name (if the cashier entered one) is
-        // stored on the invoice itself, since all walk-ins share one OPD_REG record.
-        const walkInLabel = patientId === 'WALKIN' ? (walkInName || '').trim() : '';
+        // For walk-in/OTC sales the patient name and optional contact (if the
+        // cashier entered them) are stored on the invoice itself, since all
+        // walk-ins share one OPD_REG record.
+        const walkInLabel = patientId === 'WALKIN'
+            ? buildWalkinNote(walkInName, (options as any).walkInContact)
+            : undefined;
 
         // Validate optional backdated bill date.
         let backdatedAt: Date | undefined;
@@ -2605,7 +2609,7 @@ export async function getPharmacyRevenueReport(filters?: {
                 bumpMed(it.description, Number(it.quantity) || 0, (Number(it.net_price) || 0) + (Number(it.tax_amount) || 0));
             }
             const patientName = ch === 'counter'
-                ? ((inv.notes && inv.notes.trim()) || 'Walk-in')
+                ? (parseWalkinNote(inv.notes).name || 'Walk-in')
                 : ((inv.patient as any)?.full_name || inv.patient_id);
             bills.push({
                 billNo: inv.invoice_number,

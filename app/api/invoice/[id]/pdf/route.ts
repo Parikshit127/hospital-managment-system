@@ -6,6 +6,7 @@ import { getBillBranding, inlineHeaderHtml, billFooterHtml, letterheadBackground
 import { getPharmacyBranding } from '@/app/lib/pharmacy-branding'
 import { getBillSections } from '@/app/lib/bill-sections'
 import { formatDoctorName } from '@/app/lib/format-name'
+import { parseWalkinNote } from '@/app/lib/walkin-note'
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager', 'pharmacy', 'pharmacist', 'nurse'];
 
@@ -175,9 +176,11 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
     // Walk-in / OTC sales share one patient record; the actual customer name (if the
     // cashier entered one) is stored on the invoice's notes field.
     const isWalkInInvoice = invoice.patient_id === 'WALKIN'
-    const patientDisplayName = (isWalkInInvoice && invoice.notes?.trim())
-        ? invoice.notes.trim()
+    const walkinNote = parseWalkinNote(invoice.notes)
+    const patientDisplayName = isWalkInInvoice
+        ? (walkinNote.name || 'Walk-in Patient')
         : (patient.full_name || '-')
+    const patientContact = (isWalkInInvoice ? walkinNote.contact : patient.phone) || patient.phone || '-'
     const admission = invoice.admission || null
     // Derive totals from line items so the summary always matches the charges shown
     // (stored header totals can drift). See deriveInvoiceTotals.
@@ -315,7 +318,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
                 <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                     <div>
                         <p style="font-size:12px;font-weight:bold;">${patientDisplayName} [${patient.patient_id || '-'}]</p>
-                        <p style="font-size:10px;color:#555;">Contact No.: ${patient.phone || '-'}</p>
+                        <p style="font-size:10px;color:#555;">Contact No.: ${patientContact}</p>
                     </div>
                     <div style="text-align:right;">
                         <p style="font-size:11px;">Age /Gender: ${patient.age || '-'} / ${patient.gender || '-'}</p>
@@ -407,7 +410,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
 
                 <p style="font-size:10px;text-align:right;color:#666;margin-bottom:8px;">(All figures are in Rupees (INR) only)</p>
 
-                ${invoice.notes ? `<p style="font-size:11px;margin-bottom:8px;"><strong>Remarks:</strong> ${invoice.notes}</p>` : ''}
+                ${(invoice.notes && !isWalkInInvoice) ? `<p style="font-size:11px;margin-bottom:8px;"><strong>Remarks:</strong> ${invoice.notes}</p>` : ''}
 
                 <div style="border-top:1px dashed #999;margin:12px 0;"></div>
 
