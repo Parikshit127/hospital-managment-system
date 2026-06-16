@@ -2,6 +2,7 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
+import { unstable_cache } from 'next/cache';
 
 function serialize<T>(data: T): T {
     return JSON.parse(JSON.stringify(data, (_, value) =>
@@ -80,6 +81,104 @@ export async function getAllBillableServices() {
         ];
 
         return { success: true, data: serialize(all) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+// ============================================
+// SERVICE CATALOG SEARCH (typeahead-friendly)
+// ============================================
+
+type CatalogService = {
+    id: string;
+    service_name: string;
+    service_code: string;
+    default_rate: number;
+    tax_rate: number;
+    service_category: string;
+    hsn_sac_code: string;
+    source: 'ipd' | 'catalog' | 'lab';
+};
+
+/**
+ * Fetch the full catalog once per org, cached for 60 s.
+ * `unstable_cache` requires plain args, so the orgId is baked into the key.
+ */
+function fetchCatalogForOrg(organizationId: string) {
+    return unstable_cache(
+        async (): Promise<CatalogService[]> => {
+            const ctx = await requireTenantContext();
+            const db = ctx.db;
+            const [ipdServices, chargeCatalog, labTests] = await Promise.all([
+                db.ipdServiceMaster.findMany({ where: { is_active: true }, orderBy: { service_name: 'asc' } }),
+                db.charge_catalog.findMany({ where: { is_active: true }, orderBy: { item_name: 'asc' } }),
+                db.lab_test_inventory.findMany({ where: { is_available: true }, orderBy: { test_name: 'asc' } }),
+            ]);
+            const all: CatalogService[] = [
+                ...ipdServices.map((s: any) => ({
+                    id: `ipd-${s.id}`,
+                    service_name: s.service_name,
+                    service_code: s.service_code || '',
+                    default_rate: Number(s.default_rate),
+                    tax_rate: Number(s.tax_rate || 0),
+                    service_category: s.service_category || 'IPD Services',
+                    hsn_sac_code: s.hsn_sac_code || '9993',
+                    source: 'ipd' as const,
+                })),
+                ...chargeCatalog.map((s: any) => ({
+                    id: `cat-${s.id}`,
+                    service_name: s.item_name,
+                    service_code: s.item_code || '',
+                    default_rate: Number(s.default_price),
+                    tax_rate: Number(s.tax_rate || 0),
+                    service_category: s.service_category || s.category || 'Services',
+                    hsn_sac_code: s.hsn_sac_code || '9993',
+                    source: 'catalog' as const,
+                })),
+                ...labTests.map((s: any) => ({
+                    id: `lab-${s.id}`,
+                    service_name: s.test_name,
+                    service_code: s.test_code || '',
+                    default_rate: Number(s.price),
+                    tax_rate: Number(s.tax_rate || 0),
+                    service_category: s.category || 'Laboratory',
+                    hsn_sac_code: s.hsn_sac_code || '9993',
+                    source: 'lab' as const,
+                })),
+            ];
+            return all;
+        },
+        [`service-catalog-${organizationId}`],
+        { tags: [`services:org-${organizationId}`], revalidate: 60 },
+    )();
+}
+
+/**
+ * Typeahead-friendly catalog search. Substring match on name/code/category.
+ * Returns up to `limit` rows grouped by service_category.
+ */
+export async function searchServiceCatalog(query: string, limit = 50, ids?: string[]) {
+    try {
+        const { organizationId } = await requireTenantContext();
+        const all = await fetchCatalogForOrg(organizationId);
+
+        // Fetch-by-ids path (used by ServicePicker to hydrate "recents" from localStorage).
+        if (ids && ids.length > 0) {
+            const idSet = new Set(ids);
+            return { success: true, data: all.filter(s => idSet.has(s.id)) };
+        }
+
+        const q = (query || '').trim().toLowerCase();
+        const filtered = q
+            ? all.filter(s =>
+                s.service_name.toLowerCase().includes(q) ||
+                s.service_code.toLowerCase().includes(q) ||
+                s.service_category.toLowerCase().includes(q),
+            )
+            : all;
+
+        return { success: true, data: serialize(filtered.slice(0, limit)) };
     } catch (error: any) {
         return { success: false, error: error.message };
     }

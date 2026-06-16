@@ -1,21 +1,19 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { Undo2, Search, CheckCircle2, XCircle, Clock } from 'lucide-react';
-import { getRefunds, updateRefundStatus, requestRefund } from '@/app/actions/finance-actions';
-import { useToast } from '@/app/components/ui/Toast';
+import { Undo2, Search, ArrowRight, Info } from 'lucide-react';
+import { getRefunds } from '@/app/actions/finance-actions';
+
+function fmt(n: number) {
+    return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+}
 
 export default function RefundsPage() {
-    const toast = useToast();
     const [refunds, setRefunds] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-
-    // Quick Form
-    const [invId, setInvId] = useState('');
-    const [amt, setAmt] = useState('');
-    const [reason, setReason] = useState('');
-    const [submitting, setSubmitting] = useState(false);
+    const [query, setQuery] = useState('');
 
     const loadData = async () => {
         setLoading(true);
@@ -26,131 +24,126 @@ export default function RefundsPage() {
 
     useEffect(() => { loadData(); }, []);
 
-    const processStatus = async (id: number, status: string) => {
-        const res = await updateRefundStatus(id, status);
-        if (res.success) loadData();
-        else toast.error('Failed to update status.');
-    };
-
-    const handleRequest = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setSubmitting(true);
-        const res = await requestRefund({
-            invoice_id: invId,
-            amount: Number(amt),
-            reason
-        });
-        setSubmitting(false);
-        if (res.success) {
-            setInvId(''); setAmt(''); setReason('');
-            toast.success('Refund successfully queued for manager approval.');
-            loadData();
-        } else toast.error('Failed to queue refund.');
-    };
+    const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return refunds;
+        return refunds.filter((r: any) =>
+            String(r.invoice_id || '').toLowerCase().includes(q) ||
+            String(r.payment_id || '').toLowerCase().includes(q) ||
+            String(r.reason || '').toLowerCase().includes(q) ||
+            String(r.processed_by || '').toLowerCase().includes(q)
+        );
+    }, [refunds, query]);
 
     return (
         <AppShell
-            pageTitle="Refund Processing"
+            pageTitle="Refund History"
             pageIcon={<Undo2 className="h-5 w-5" />}
             onRefresh={loadData}
             refreshing={loading}
         >
-            <div className="grid lg:grid-cols-4 gap-8">
-                {/* Left Controls */}
-                <div className="lg:col-span-1">
-                    <form onSubmit={handleRequest} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-6 sticky top-24">
-                        <div>
-                            <h3 className="font-black text-gray-900 mb-1">Queue New Refund</h3>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest border-b border-gray-100 pb-4 mb-4">Manual Override</p>
-                        </div>
-
-                        <div>
-                            <label className="block text-xs uppercase tracking-widest font-bold text-gray-500 mb-2">Invoice Number *</label>
-                            <input required value={invId} onChange={e => setInvId(e.target.value)} type="text" placeholder="e.g. INV-2026..." className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-rose-500/20 text-sm font-bold uppercase transition-colors outline-none" />
-                        </div>
-                        <div>
-                            <label className="block text-xs uppercase tracking-widest font-bold text-gray-500 mb-2">Refund Value (₹) *</label>
-                            <input required value={amt} onChange={e => setAmt(e.target.value)} type="number" min="1" step="0.01" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-rose-500/20 text-sm font-bold transition-colors outline-none" />
-                        </div>
-                        <div>
-                            <label className="block text-xs uppercase tracking-widest font-bold text-gray-500 mb-2">Auditor Justification *</label>
-                            <textarea required value={reason} onChange={e => setReason(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-rose-500/20 text-sm font-medium transition-colors outline-none min-h-[90px]" />
-                        </div>
-
-                        <button disabled={submitting} type="submit" className="w-full mt-6 py-4 bg-gray-900 hover:bg-black text-white font-black rounded-xl shadow-lg transition-transform active:scale-95 disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2">
-                            {submitting ? 'Submitting...' : <><Undo2 className="h-5 w-5" /> Queue to L2 Approval</>}
-                        </button>
-                    </form>
+            <div className="space-y-5">
+                <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-start gap-3">
+                    <Info className="h-5 w-5 text-rose-600 mt-0.5 shrink-0" />
+                    <div className="text-xs text-rose-900">
+                        <p className="font-bold mb-1">Refunds are now processed from Master Billing.</p>
+                        <p>
+                            Click <span className="font-bold">Process Refund</span> in the{' '}
+                            <Link href="/billing" className="underline font-bold">Master Billing</Link> quick action bar
+                            (or use the Refund button on any patient's invoice) to pick a paid receipt and refund it.
+                            The payment receipt and invoice balance are updated automatically.
+                        </p>
+                    </div>
                 </div>
 
-                {/* Right Viewport */}
-                <div className="lg:col-span-3">
-                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-8">
-                        <div className="p-6 bg-gray-50 border-b border-gray-100 flex items-center gap-4">
-                            <Undo2 className="h-5 w-5 text-gray-400" />
-                            <div>
-                                <h2 className="text-xl font-black text-gray-900">Refund Approval Queue</h2>
-                                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mt-1">Pending Management Authorization</p>
-                            </div>
+                <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                    <div className="p-4 border-b border-gray-100 flex items-center gap-3">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <input
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                placeholder="Search by invoice, payment, reason, or user…"
+                                className="w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-rose-400 focus:ring-2 focus:ring-rose-400/10 outline-none"
+                            />
                         </div>
+                        <Link
+                            href="/billing"
+                            className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl"
+                        >
+                            Process Refund <ArrowRight className="h-3.5 w-3.5" />
+                        </Link>
+                    </div>
 
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm whitespace-nowrap">
-                                <thead className="bg-white border-b border-gray-100 text-gray-500 text-[10px] uppercase font-bold tracking-widest">
-                                    <tr>
-                                        <th className="px-6 py-4">Request TS</th>
-                                        <th className="px-6 py-4">Origin Invoice</th>
-                                        <th className="px-6 py-4 text-right">Refund Amount (₹)</th>
-                                        <th className="px-6 py-4">Status & Action</th>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-gray-50 text-gray-500 text-[10px] uppercase font-bold tracking-widest">
+                                <tr>
+                                    <th className="px-4 py-3">Date</th>
+                                    <th className="px-4 py-3">Invoice</th>
+                                    <th className="px-4 py-3">Payment</th>
+                                    <th className="px-4 py-3 text-right">Amount</th>
+                                    <th className="px-4 py-3">Reason</th>
+                                    <th className="px-4 py-3">Processed By</th>
+                                    <th className="px-4 py-3">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {filtered.map((r: any) => (
+                                    <tr key={r.id} className="hover:bg-gray-50/50">
+                                        <td className="px-4 py-3 text-xs text-gray-500">
+                                            {new Date(r.created_at).toLocaleString('en-IN')}
+                                        </td>
+                                        <td className="px-4 py-3 font-mono text-xs">{r.invoice_id}</td>
+                                        <td className="px-4 py-3 font-mono text-xs text-gray-500">{r.payment_id || '—'}</td>
+                                        <td className="px-4 py-3 text-right font-bold text-rose-600">₹{fmt(Number(r.amount))}</td>
+                                        <td className="px-4 py-3 text-xs text-gray-600 max-w-[260px] truncate" title={r.reason}>{r.reason}</td>
+                                        <td className="px-4 py-3 text-xs text-gray-500">{r.processed_by || '—'}</td>
+                                        <td className="px-4 py-3">
+                                            <StatusBadge status={r.status} />
+                                        </td>
                                     </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50">
-                                    {refunds.map((r: any) => (
-                                        <tr key={r.id} className="hover:bg-gray-50/50 transition-colors">
-                                            <td className="px-6 py-5 font-medium text-gray-500">
-                                                {new Date(r.created_at).toLocaleString()}
-                                                <div className="text-[10px] font-bold uppercase tracking-wider text-rose-500 mt-1">By: {r.processed_by || 'System'}</div>
-                                            </td>
-                                            <td className="px-6 py-5 font-black text-indigo-700 tracking-wider">
-                                                {r.invoice_id}
-                                                <div className="mt-2 text-xs font-medium text-gray-500 whitespace-normal min-w-[200px] border-l-2 border-gray-200 pl-2"> "{r.reason}"</div>
-                                            </td>
-                                            <td className="px-6 py-5 font-black text-rose-600 text-right text-lg">₹{Number(r.amount).toFixed(2)}</td>
-                                            <td className="px-6 py-5">
-                                                {r.status === 'Pending' ? (
-                                                    <div className="flex gap-2">
-                                                        <button onClick={() => processStatus(r.id, 'Approved')} className="bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 font-bold px-3 py-2 rounded-xl text-xs uppercase tracking-wider flex items-center gap-1 transition-colors shadow-sm"><CheckCircle2 className="h-4 w-4" />Approve</button>
-                                                        <button onClick={() => processStatus(r.id, 'Rejected')} className="bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 hover:border-rose-300 font-bold px-3 py-2 rounded-xl text-xs uppercase tracking-wider flex items-center gap-1 transition-colors shadow-sm"><XCircle className="h-4 w-4" />Reject</button>
-                                                    </div>
-                                                ) : (
-                                                    <span className={`px-4 py-2 text-[10px] uppercase tracking-widest font-black rounded-xl border flex items-center gap-2 w-max ${r.status === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                                            r.status === 'Rejected' ? 'bg-rose-50 text-rose-700 border-rose-200' :
-                                                                'bg-gray-50 text-gray-700 border-gray-200'
-                                                        }`}>
-                                                        {r.status === 'Approved' ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                                                        {r.status}
-                                                    </span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {refunds.length === 0 && !loading && (
-                                        <tr>
-                                            <td colSpan={4} className="px-6 py-16 text-center text-gray-500">
-                                                <div className="flex flex-col items-center justify-center">
-                                                    <Undo2 className="h-10 w-10 text-gray-300 mb-3" />
-                                                    <p className="font-bold">No Refund Authorizations Pending.</p>
-                                                    <p className="text-xs mt-1">L1 Support requests will populate here.</p>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
+                                ))}
+                                {filtered.length === 0 && !loading && (
+                                    <tr>
+                                        <td colSpan={7} className="px-4 py-16 text-center text-gray-500">
+                                            <div className="flex flex-col items-center justify-center">
+                                                <Undo2 className="h-10 w-10 text-gray-300 mb-3" />
+                                                <p className="font-bold">No refunds {query ? 'match your search' : 'on record'}.</p>
+                                                <p className="text-xs mt-1">
+                                                    Process a refund from <Link href="/billing" className="underline">Master Billing</Link>.
+                                                </p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                                {loading && (
+                                    <tr>
+                                        <td colSpan={7} className="px-4 py-16 text-center text-xs text-gray-400">
+                                            Loading refunds…
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
         </AppShell>
+    );
+}
+
+function StatusBadge({ status }: { status: string }) {
+    const map: Record<string, string> = {
+        Processed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        Approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        Pending: 'bg-amber-50 text-amber-700 border-amber-200',
+        Rejected: 'bg-rose-50 text-rose-700 border-rose-200',
+    };
+    const cls = map[status] || 'bg-gray-50 text-gray-700 border-gray-200';
+    return (
+        <span className={`px-2 py-0.5 rounded-md border text-[10px] font-bold uppercase tracking-wider ${cls}`}>
+            {status}
+        </span>
     );
 }

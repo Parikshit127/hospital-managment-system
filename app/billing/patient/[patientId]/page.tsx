@@ -44,6 +44,7 @@ import { recordPayment } from "@/app/actions/finance-actions";
 import { getCashComplianceConfig } from "@/app/actions/cash-compliance-actions";
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan } from "@/app/lib/cash-compliance";
 import { EditInvoiceModal } from "@/app/components/finance/EditInvoiceModal";
+import { RefundModal } from "@/app/components/finance/RefundModal";
 import { Pencil } from "lucide-react";
 
 // ── helpers ───────────────────────────────────────────────────────────────
@@ -98,6 +99,7 @@ export default function PatientFinancialProfilePage() {
   const [expandedInvoice, setExpandedInvoice] = useState<number | null>(null);
   const [payingInvoice, setPayingInvoice] = useState<any | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
+  const [refundOpen, setRefundOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -180,6 +182,7 @@ export default function PatientFinancialProfilePage() {
                   setExpandedInvoice={setExpandedInvoice}
                   onCollectPayment={(inv: any) => setPayingInvoice(inv)}
                   onEdit={(inv: any) => setEditingInvoiceId(Number(inv.id))}
+                  onRefund={() => setRefundOpen(true)}
                 />
               )}
               {tab === "payments" && <PaymentsTab invoices={profile.invoices} />}
@@ -227,6 +230,22 @@ export default function PatientFinancialProfilePage() {
           }}
         />
       )}
+
+      {/* Refund Modal — pre-filled for this patient */}
+      <RefundModal
+        open={refundOpen}
+        onClose={() => setRefundOpen(false)}
+        initialPatient={
+          profile?.patient
+            ? {
+                patient_id: profile.patient.patient_id,
+                full_name: profile.patient.full_name,
+                phone: profile.patient.phone,
+              }
+            : null
+        }
+        onRefunded={load}
+      />
     </AppShell>
   );
 }
@@ -362,12 +381,14 @@ function InvoicesTab({
   setExpandedInvoice,
   onCollectPayment,
   onEdit,
+  onRefund,
 }: {
   invoices: any[];
   expandedInvoice: number | null;
   setExpandedInvoice: (id: number | null) => void;
   onCollectPayment: (inv: any) => void;
   onEdit: (inv: any) => void;
+  onRefund: () => void;
 }) {
   if (!invoices.length) {
     return <div className="text-xs text-gray-400">No invoices yet.</div>;
@@ -634,7 +655,15 @@ function InvoicesTab({
                     </button>
                   )}
                   <ActionLink href="/finance/credit-notes">Credit Note</ActionLink>
-                  <ActionLink href="/finance/refunds">Refund</ActionLink>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRefund();
+                    }}
+                    className="px-2.5 py-1 bg-white border border-gray-200 hover:border-rose-300 hover:bg-rose-50 text-xs font-bold text-gray-700 rounded"
+                  >
+                    Refund
+                  </button>
                 </div>
               </div>
             )}

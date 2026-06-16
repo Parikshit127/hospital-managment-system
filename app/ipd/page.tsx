@@ -31,6 +31,12 @@ import {
   ScrollText,
 } from "lucide-react";
 import Link from "next/link";
+
+function getLocalDatetimeString(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 import {
   getWardsWithBeds,
   getAllBeds,
@@ -95,6 +101,9 @@ export default function IPDDashboard() {
     deposit_payment_method: "Cash",
     package_id: "",
   });
+  const [admissionDateTime, setAdmissionDateTime] = useState<string>(() =>
+    getLocalDatetimeString(new Date()),
+  );
   const [doctors, setDoctors] = useState<{ id: string; name: string; specialty: string | null }[]>([]);
   const [admitLoading, setAdmitLoading] = useState(false);
   const [admitError, setAdmitError] = useState("");
@@ -227,6 +236,7 @@ export default function IPDDashboard() {
         doctor_name: admitForm.doctor_name,
         deposit_amount: admitForm.deposit_amount ? parseFloat(admitForm.deposit_amount) : undefined,
         deposit_payment_method: admitForm.deposit_payment_method || "Cash",
+        ...(admissionDateTime && { admission_date: admissionDateTime }),
       });
       if (res.success) {
         // If a package was selected, attach it to the new admission
@@ -252,6 +262,7 @@ export default function IPDDashboard() {
           deposit_payment_method: "Cash",
           package_id: "",
         });
+        setAdmissionDateTime(getLocalDatetimeString(new Date()));
         setShowPackageDetails(false);
         if (!admitError) setAdmitError("");
         loadData();
@@ -1279,6 +1290,22 @@ export default function IPDDashboard() {
                         ))}
                     </select>
                   </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">
+                    Admission Date &amp; Time *
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={admissionDateTime}
+                    max={getLocalDatetimeString(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))}
+                    onChange={(e) => setAdmissionDateTime(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-violet-500/50 focus:outline-none"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    Defaults to now (IST). Backdate up to 1 year, or schedule up to 7 days ahead.
+                  </p>
                 </div>
 
                 <div>

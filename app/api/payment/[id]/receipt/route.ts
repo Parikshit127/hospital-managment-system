@@ -30,6 +30,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
             return NextResponse.json({ error: 'Payment not found' }, { status: 404 });
         }
 
+        const refunds = await prisma.refund.findMany({
+            where: {
+                organizationId: auth.context.organizationId,
+                payment_id: String(payment.id),
+                status: { in: ['Processed', 'Approved'] },
+            },
+            select: { amount: true, reason: true, created_at: true, processed_by: true },
+            orderBy: { created_at: 'desc' },
+        });
+        const totalRefunded = refunds.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+        (payment as any).refunds = refunds;
+        (payment as any).total_refunded = totalRefunded;
+
         if (auth.context.kind === 'patient' && payment.invoice.patient_id !== auth.context.session.id) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
@@ -86,6 +99,10 @@ function generateReceiptHTML(payment: any, org: any, logoSignedUrl = '') {
     const patient = invoice.patient || {};
     const amount = Number(payment.amount || 0);
     const paymentDate = payment.created_at ? fmtBillDateTime(payment.created_at) : '';
+    const refunds: any[] = payment.refunds || [];
+    const totalRefunded = Number(payment.total_refunded || 0);
+    const isFullyRefunded = payment.status === 'Refunded' || (totalRefunded > 0 && totalRefunded + 0.01 >= amount);
+    const hasAnyRefund = refunds.length > 0 || isFullyRefunded;
 
     const hospitalName = org?.name || 'Hospital';
     const hospitalAddress = org?.address || '';
@@ -117,7 +134,12 @@ function generateReceiptHTML(payment: any, org: any, logoSignedUrl = '') {
     </style>
 </head>
 <body>
-    <div style="max-width: 700px; margin: 0 auto; padding: 32px;">
+    <div style="max-width: 700px; margin: 0 auto; padding: 32px; position: relative;">
+        ${hasAnyRefund ? `<div style="position:absolute;top:40%;left:50%;transform:translate(-50%,-50%) rotate(-22deg);pointer-events:none;z-index:1;">
+            <div style="border:6px solid #dc2626;color:#dc2626;font-size:96px;font-weight:900;padding:14px 36px;border-radius:18px;letter-spacing:8px;opacity:0.18;font-family:Arial,sans-serif;">
+                ${isFullyRefunded ? 'REFUNDED' : 'PARTIAL REFUND'}
+            </div>
+        </div>` : ''}
         <!-- Print Button -->
         <div class="no-print" style="text-align:right;margin-bottom:16px;">
             <button onclick="window.print()" style="padding:10px 24px;background:${primaryColor};color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">
@@ -184,7 +206,13 @@ function generateReceiptHTML(payment: any, org: any, logoSignedUrl = '') {
                 <tr>
                     <td style="padding:8px 16px;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #f3f4f6;">Status</td>
                     <td style="padding:8px 16px;font-size:12px;border-bottom:1px solid #f3f4f6;">
-                        <span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;background:#d1fae5;color:#065f46;">${payment.status}</span>
+                        <span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;${
+                            isFullyRefunded
+                                ? 'background:#fee2e2;color:#991b1b;'
+                                : hasAnyRefund
+                                    ? 'background:#fef3c7;color:#92400e;'
+                                    : 'background:#d1fae5;color:#065f46;'
+                        }">${isFullyRefunded ? 'Refunded' : hasAnyRefund ? 'Partially Refunded' : payment.status}</span>
                     </td>
                 </tr>
                 ${razorpayInfo}
@@ -221,8 +249,28 @@ function generateReceiptHTML(payment: any, org: any, logoSignedUrl = '') {
             </table>
         </div>
 
+        ${hasAnyRefund ? `<div style="position:relative;z-index:2;background:#fff1f2;border:2px solid #fecdd3;border-radius:12px;padding:16px;margin-bottom:24px;">
+            <h4 style="font-size:12px;font-weight:800;color:#9f1239;margin-bottom:10px;letter-spacing:1px;">REFUND DETAILS</h4>
+            <table style="width:100%;border-collapse:collapse;">
+                <tr>
+                    <td style="padding:4px 0;font-size:12px;color:#9f1239;font-weight:600;width:180px;">Total Refunded</td>
+                    <td style="padding:4px 0;font-size:13px;font-weight:800;color:#9f1239;text-align:right;">&#8377;${totalRefunded.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                </tr>
+                <tr>
+                    <td style="padding:4px 0;font-size:12px;color:#9f1239;font-weight:600;">Net Amount Retained</td>
+                    <td style="padding:4px 0;font-size:13px;font-weight:700;text-align:right;">&#8377;${(amount - totalRefunded).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                </tr>
+            </table>
+            ${refunds.length ? `<div style="margin-top:12px;border-top:1px solid #fecdd3;padding-top:10px;">
+                ${refunds.map((r: any) => `<div style="font-size:11px;color:#7f1d1d;padding:4px 0;">
+                    <strong>${fmtBillDateTime(r.created_at)}</strong> · &#8377;${Number(r.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${r.processed_by ? `· by ${r.processed_by}` : ''}<br/>
+                    <span style="color:#a16207;">${r.reason || ''}</span>
+                </div>`).join('')}
+            </div>` : ''}
+        </div>` : ''}
+
         <!-- Footer -->
-        <div style="border-top:1px solid #e5e7eb;padding-top:16px;text-align:center;">
+        <div style="border-top:1px solid #e5e7eb;padding-top:16px;text-align:center;position:relative;z-index:2;">
             <p style="font-size:11px;color:#9ca3af;">This is a computer-generated receipt and does not require a signature.</p>
             <p style="font-size:11px;color:#9ca3af;margin-top:4px;">${hospitalName}${hospitalPhone ? ` | ${hospitalPhone}` : ''}${hospitalEmail ? ` | ${hospitalEmail}` : ''}</p>
         </div>

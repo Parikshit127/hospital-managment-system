@@ -213,12 +213,23 @@ export async function admitPatientIPD(data: {
   try {
     const { db, organizationId } = await requireTenantContext();
 
-    // Parse optional admission_date (datetime-local string, treated as IST)
+    // Parse optional admission_date (datetime-local string, treated as IST).
+    // Bounds: not before 1y ago, not more than 7d in the future — guards
+    // against typos like 2025 → 2020 or stray century-off entries.
     let admissionDate: Date | undefined;
     if (data.admission_date) {
       const parsed = new Date(data.admission_date + ':00+05:30');
       if (Number.isNaN(parsed.getTime())) {
         return { success: false, error: 'Invalid admission date' };
+      }
+      const now = Date.now();
+      const oneYearMs = 365 * 24 * 60 * 60 * 1000;
+      const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+      if (parsed.getTime() < now - oneYearMs) {
+        return { success: false, error: 'Admission date cannot be more than 1 year in the past' };
+      }
+      if (parsed.getTime() > now + sevenDaysMs) {
+        return { success: false, error: 'Admission date cannot be more than 7 days in the future' };
       }
       admissionDate = parsed;
     }

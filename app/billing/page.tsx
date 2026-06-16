@@ -43,6 +43,7 @@ import {
 } from "@/app/actions/master-billing-actions";
 import { CancelInvoiceModal } from "@/app/components/finance/CancelInvoiceModal";
 import { EditInvoiceModal } from "@/app/components/finance/EditInvoiceModal";
+import { RefundModal } from "@/app/components/finance/RefundModal";
 import { Pencil } from "lucide-react";
 
 // ── helpers ───────────────────────────────────────────────────────────────
@@ -201,6 +202,7 @@ export default function MasterBillingPage() {
   const [cancelTarget, setCancelTarget] = useState<any | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [refundOpen, setRefundOpen] = useState(false);
 
   const loadGrid = useCallback(async () => {
     setLoading(true);
@@ -317,7 +319,7 @@ export default function MasterBillingPage() {
       }
     >
       {/* Quick Action Toolbar (blueprint § 6) */}
-      <QuickActions />
+      <QuickActions onProcessRefund={() => setRefundOpen(true)} />
 
       {/* KPI Cards (12) */}
       <KpiGrid kpis={kpis} />
@@ -515,6 +517,16 @@ export default function MasterBillingPage() {
           }}
         />
       )}
+
+      {/* Refund modal */}
+      <RefundModal
+        open={refundOpen}
+        onClose={() => setRefundOpen(false)}
+        onRefunded={() => {
+          loadGrid();
+          loadKpis();
+        }}
+      />
     </AppShell>
   );
 }
@@ -541,16 +553,21 @@ function Td({ children, align = "left" }: { children: React.ReactNode; align?: "
   );
 }
 
-function QuickActions() {
+function QuickActions({ onProcessRefund }: { onProcessRefund?: () => void }) {
   // Per blueprint § 6 Quick Action Toolbar.
   // Each button links to the existing flow — the Master Billing page is the orchestrator,
   // not the form host. Forms live in the existing modules (preserves backward compat).
-  const actions = [
+  const actions: Array<{
+    label: string;
+    icon: any;
+    href?: string;
+    onClick?: () => void;
+  }> = [
     { label: "New Bill", icon: Plus, href: "/billing/new" },
     { label: "Fee Receipt", icon: ReceiptText, href: "/billing/fee-receipt" },
     { label: "Collect Payment", icon: CreditCard, href: "/billing" },
     { label: "Add Deposit", icon: Wallet, href: "/finance/deposits" },
-    { label: "Process Refund", icon: Undo2, href: "/finance/refunds" },
+    { label: "Process Refund", icon: Undo2, onClick: onProcessRefund },
     { label: "Credit Note", icon: ReceiptText, href: "/finance/credit-notes" },
     { label: "Discharge Settle", icon: BanknoteArrowDown, href: "/ipd/discharge-settlement" },
     { label: "Insurance Claims", icon: Shield, href: "/insurance" },
@@ -559,18 +576,23 @@ function QuickActions() {
     { label: "Write-off", icon: ShieldAlert, href: "/billing/writeoffs" },
     { label: "Approvals", icon: ShieldAlert, href: "/billing/approvals" },
   ];
+  const baseClass =
+    "flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-700 text-xs font-bold rounded-lg transition-all";
   return (
     <div className="flex flex-wrap items-center gap-1.5 mb-5">
-      {actions.map((a) => (
-        <Link
-          key={a.label}
-          href={a.href}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-700 text-xs font-bold rounded-lg transition-all"
-        >
-          <a.icon className="h-3.5 w-3.5" />
-          {a.label}
-        </Link>
-      ))}
+      {actions.map((a) =>
+        a.onClick ? (
+          <button key={a.label} type="button" onClick={a.onClick} className={baseClass}>
+            <a.icon className="h-3.5 w-3.5" />
+            {a.label}
+          </button>
+        ) : (
+          <Link key={a.label} href={a.href!} className={baseClass}>
+            <a.icon className="h-3.5 w-3.5" />
+            {a.label}
+          </Link>
+        )
+      )}
     </div>
   );
 }

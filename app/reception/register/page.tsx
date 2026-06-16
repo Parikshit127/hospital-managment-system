@@ -89,13 +89,6 @@ export default function ReceptionPage() {
     const [corporates, setCorporates] = useState<CorporateItem[]>([]);
     const [tpaProviders, setTpaProviders] = useState<TpaProviderItem[]>([]);
     const [selectedCorporate, setSelectedCorporate] = useState<CorporateItem | null>(null);
-    const [successData, setSuccessData] = useState<{
-        patient_id: string;
-        appointment_id?: string;
-        user_type?: string;
-        password_setup_required?: boolean;
-        manual_password_setup_link?: string | null;
-    } | null>(null);
     const [isLookingUpInsurance, setIsLookingUpInsurance] = useState(false);
     const [insuranceFoundAlert, setInsuranceFoundAlert] = useState<string | null>(null);
     const [allowDuplicate, setAllowDuplicate] = useState(false);
@@ -252,13 +245,19 @@ export default function ReceptionPage() {
         const result = await registerPatient(formData) as any;
 
         if (result.success) {
-            setSuccessData({
-                patient_id: result.patient_id!,
-                appointment_id: result.appointment_id ?? undefined,
-                user_type: result.user_type,
-                password_setup_required: result.password_setup_required,
-                manual_password_setup_link: result.manual_password_setup_link,
-            });
+            // Stash registration metadata for the welcome banner on the profile.
+            // sessionStorage avoids leaking the password setup link into the URL.
+            try {
+                sessionStorage.setItem('recent_registration', JSON.stringify({
+                    patient_id: result.patient_id,
+                    appointment_id: result.appointment_id ?? null,
+                    password_setup_required: !!result.password_setup_required,
+                    manual_password_setup_link: result.manual_password_setup_link ?? null,
+                    user_type: result.user_type ?? null,
+                    ts: Date.now(),
+                }));
+            } catch { /* sessionStorage unavailable — banner will still show without the setup link */ }
+
             setDuplicates([]);
             setShowDuplicateWarning(false);
             setAllowDuplicate(false);
@@ -268,7 +267,8 @@ export default function ReceptionPage() {
             setAgeValue('');
             setPatientType('cash');
             setSelectedCorporate(null);
-            router.refresh();
+            router.push(`/reception/patient/${result.patient_id}?welcome=1&tab=billing`);
+            return;
         } else if (result.duplicate) {
             // Server blocked duplicate — show warning modal
             toast.error('Patient already registered with this phone number');
@@ -313,66 +313,8 @@ export default function ReceptionPage() {
                             {/* Gradient top border */}
                             <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-teal-400 via-emerald-500 to-teal-400" />
 
-                            {successData ? (
-                                /* Success State */
-                                <div className="p-12 flex flex-col items-center justify-center text-center min-h-[500px]">
-                                    <div className="relative mb-6">
-                                        <div className="absolute inset-0 bg-emerald-500/20 rounded-full blur-xl animate-pulse" />
-                                        <div className="relative h-24 w-24 bg-gradient-to-br from-emerald-400 to-teal-600 rounded-full flex items-center justify-center shadow-2xl shadow-emerald-500/20">
-                                            <CheckCircle className="h-12 w-12 text-white" />
-                                        </div>
-                                    </div>
-                                    <h3 className="text-3xl font-black text-gray-900 mb-2">Registration Complete</h3>
-                                    <p className="text-gray-500 text-sm font-medium mb-8">Patient has been added to the system</p>
-
-                                    <div className="bg-gray-100 border border-gray-200 rounded-2xl p-8 w-full max-w-sm">
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2">Patient ID</p>
-                                        <p className="text-4xl font-black text-transparent bg-gradient-to-r from-teal-400 to-emerald-400 bg-clip-text tracking-tight font-mono">
-                                            {successData.patient_id}
-                                        </p>
-                                        {successData.appointment_id && (
-                                            <div className="mt-4 pt-4 border-t border-gray-200">
-                                                <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.15em] mb-1">Appointment</p>
-                                                <p className="text-sm font-bold text-teal-400 font-mono">{successData.appointment_id}</p>
-                                            </div>
-                                        )}
-                                        {successData.password_setup_required && (
-                                            <div className="mt-4 pt-4 border-t border-gray-200">
-                                                <p className="text-[10px] font-black text-pink-400 uppercase tracking-[0.15em] mb-1">Portal Access Setup</p>
-                                                <p className="text-xs font-bold text-pink-600">Password setup link has been issued</p>
-                                                {successData.manual_password_setup_link ? (
-                                                    <p className="text-[10px] mt-2 break-all text-gray-500 font-mono">{successData.manual_password_setup_link}</p>
-                                                ) : (
-                                                    <p className="text-[10px] mt-2 text-gray-500">Link sent to patient email</p>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                                        <button
-                                            onClick={() => setSuccessData(null)}
-                                            className="px-6 py-3.5 bg-gray-100 border border-gray-200 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-200 transition-all active:scale-[0.98] flex items-center gap-2"
-                                        >
-                                            <UserPlus className="h-4 w-4" /> Register Next
-                                        </button>
-                                        <button
-                                            onClick={() => router.push(`/reception/patient/${successData.patient_id}`)}
-                                            className="px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center gap-2"
-                                        >
-                                            <User className="h-4 w-4" /> View Profile
-                                        </button>
-                                        <button
-                                            onClick={() => router.push(`/reception/appointments?patientId=${successData.patient_id}`)}
-                                            className="px-6 py-3.5 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-teal-500/20 hover:shadow-teal-500/30 transition-all active:scale-[0.98] flex items-center gap-2"
-                                        >
-                                            <CalendarPlus className="h-4 w-4" /> Book Appointment
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : (
-                                /* Registration Form */
-                                <form onSubmit={handleSubmit} className="p-8">
+                            {/* Registration Form (success path redirects to /reception/patient/[id]?welcome=1) */}
+                            <form onSubmit={handleSubmit} className="p-8">
                                     <div className="flex items-center gap-3 mb-6">
                                         <div className="p-2 bg-orange-500/10 rounded-xl">
                                             <UserPlus className="h-5 w-5 text-teal-400" />
@@ -872,7 +814,6 @@ export default function ReceptionPage() {
                                         </button>
                                     </div>
                                 </form>
-                            )}
                         </div>
                     </div>
                 </div>

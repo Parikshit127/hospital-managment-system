@@ -1521,6 +1521,217 @@ export async function requestRefund(data: { invoice_id: string; payment_id?: str
     }
 }
 
+// ============================================
+// REFUND FLOW — patient-driven (Master Billing)
+// Picks a paid receipt, refunds (full or partial), reverses payment + invoice balance
+// ============================================
+
+export async function getRefundablePayments(patientId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        if (!patientId) return { success: true, data: [] };
+
+        const invoices = await db.invoices.findMany({
+            where: {
+                organizationId,
+                patient_id: patientId,
+                payments: { some: { status: { in: ['Completed', 'Refunded'] } } },
+            },
+            select: {
+                id: true,
+                invoice_number: true,
+                invoice_type: true,
+                net_amount: true,
+                paid_amount: true,
+                balance_due: true,
+                status: true,
+                created_at: true,
+                payments: {
+                    where: { status: { in: ['Completed', 'Refunded'] } },
+                    select: {
+                        id: true,
+                        receipt_number: true,
+                        amount: true,
+                        payment_method: true,
+                        status: true,
+                        created_at: true,
+                    },
+                    orderBy: { created_at: 'desc' },
+                },
+            },
+            orderBy: { created_at: 'desc' },
+            take: 50,
+        });
+
+        const paymentIds = invoices.flatMap((i: any) => i.payments.map((p: any) => p.id));
+        const priorRefunds = paymentIds.length
+            ? await db.refund.findMany({
+                where: {
+                    organizationId,
+                    payment_id: { in: paymentIds.map((id: number) => String(id)) },
+                    status: { in: ['Processed', 'Approved'] },
+                },
+                select: { payment_id: true, amount: true },
+            })
+            : [];
+        const refundByPayment = new Map<string, number>();
+        for (const r of priorRefunds) {
+            if (!r.payment_id) continue;
+            refundByPayment.set(r.payment_id, (refundByPayment.get(r.payment_id) || 0) + Number(r.amount));
+        }
+
+        const data = invoices.map((inv: any) => ({
+            id: inv.id,
+            invoice_number: inv.invoice_number,
+            invoice_type: inv.invoice_type,
+            net_amount: Number(inv.net_amount),
+            paid_amount: Number(inv.paid_amount),
+            balance_due: Number(inv.balance_due),
+            status: inv.status,
+            created_at: inv.created_at,
+            payments: inv.payments.map((p: any) => {
+                const refunded = refundByPayment.get(String(p.id)) || 0;
+                const refundable = Math.max(0, Number(p.amount) - refunded);
+                return {
+                    id: p.id,
+                    receipt_number: p.receipt_number,
+                    amount: Number(p.amount),
+                    payment_method: p.payment_method,
+                    status: p.status,
+                    created_at: p.created_at,
+                    refunded_amount: refunded,
+                    refundable_amount: refundable,
+                };
+            }),
+        }));
+
+        return { success: true, data: serialize(data) };
+    } catch (error: any) {
+        console.error('getRefundablePayments error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function processRefund(input: {
+    payment_id: number;
+    amount: number;
+    reason: string;
+}) {
+    try {
+        const { db, organizationId, session } = await requireTenantContext();
+
+        if (!input.payment_id) return { success: false, error: 'Payment is required.' };
+        if (!input.reason?.trim()) return { success: false, error: 'Reason is required.' };
+        const amount = Number(input.amount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            return { success: false, error: 'Refund amount must be greater than zero.' };
+        }
+
+        const result = await db.$transaction(async (tx: any) => {
+            const payment = await tx.payments.findFirst({
+                where: { id: input.payment_id, organizationId },
+                include: { invoice: true },
+            });
+            if (!payment) throw new Error('Payment not found.');
+            if (payment.status === 'Reversed' || payment.status === 'Cancelled') {
+                throw new Error(`Payment is ${payment.status} — cannot refund.`);
+            }
+
+            const priorRefunds = await tx.refund.aggregate({
+                where: {
+                    organizationId,
+                    payment_id: String(payment.id),
+                    status: { in: ['Processed', 'Approved'] },
+                },
+                _sum: { amount: true },
+            });
+            const alreadyRefunded = Number(priorRefunds._sum.amount || 0);
+            const paidAmount = Number(payment.amount);
+            const refundable = paidAmount - alreadyRefunded;
+            if (amount > refundable + 0.01) {
+                throw new Error(`Refund exceeds refundable amount (₹${refundable.toFixed(2)}).`);
+            }
+
+            const refund = await tx.refund.create({
+                data: {
+                    invoice_id: String(payment.invoice_id),
+                    payment_id: String(payment.id),
+                    amount,
+                    reason: input.reason.trim(),
+                    status: 'Processed',
+                    processed_by: session.username,
+                    organizationId,
+                },
+            });
+
+            const isFullPaymentRefund = amount + 0.01 >= refundable;
+            if (isFullPaymentRefund) {
+                await tx.payments.update({
+                    where: { id: payment.id },
+                    data: { status: 'Refunded' },
+                });
+            }
+
+            const activePayments = await tx.payments.findMany({
+                where: { invoice_id: payment.invoice_id, status: 'Completed' },
+                select: { id: true, amount: true },
+            });
+            const refundsForInvoice = await tx.refund.aggregate({
+                where: {
+                    organizationId,
+                    invoice_id: String(payment.invoice_id),
+                    status: { in: ['Processed', 'Approved'] },
+                },
+                _sum: { amount: true },
+            });
+            const grossPaid = activePayments.reduce((s: number, p: any) => s + Number(p.amount), 0);
+            const totalRefunded = Number(refundsForInvoice._sum.amount || 0);
+            const netPaid = Math.max(0, grossPaid - totalRefunded);
+            const netAmount = Number(payment.invoice.net_amount);
+            const balance = Math.max(0, netAmount - netPaid);
+
+            let invoiceStatus: string = payment.invoice.status;
+            if (netPaid <= 0 && totalRefunded > 0) invoiceStatus = 'Refunded';
+            else if (netPaid >= netAmount - 0.01) invoiceStatus = 'Paid';
+            else if (netPaid > 0) invoiceStatus = 'Partial';
+            else invoiceStatus = 'Final';
+
+            await tx.invoices.update({
+                where: { id: payment.invoice_id },
+                data: {
+                    paid_amount: netPaid,
+                    balance_due: balance,
+                    status: invoiceStatus,
+                    version: { increment: 1 },
+                },
+            });
+
+            await tx.system_audit_logs.create({
+                data: {
+                    action: 'PROCESS_REFUND',
+                    module: 'finance',
+                    entity_type: 'payment',
+                    entity_id: payment.receipt_number,
+                    details: JSON.stringify({
+                        refund_id: refund.id,
+                        amount,
+                        reason: input.reason.trim(),
+                        invoice_number: payment.invoice.invoice_number,
+                    }),
+                    organizationId,
+                },
+            });
+
+            return { refund, receipt_number: payment.receipt_number };
+        });
+
+        return { success: true, data: serialize(result) };
+    } catch (error: any) {
+        console.error('processRefund error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 export async function getRefunds() {
     try {
         const { db } = await requireTenantContext();

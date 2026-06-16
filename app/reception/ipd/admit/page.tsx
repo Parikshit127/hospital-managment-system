@@ -516,13 +516,21 @@ export default function AdmitPatientPage() {
                   <input
                     type="datetime-local"
                     value={admissionDateTime}
+                    max={getLocalDatetimeString(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))}
                     onChange={(e) => setAdmissionDateTime(e.target.value)}
                     className={`${inputClass} pl-11`}
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setAdmissionDateTime(getLocalDatetimeString(new Date()))}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-md uppercase tracking-wider"
+                  >
+                    Now
+                  </button>
                 </div>
                 <p className="text-[10px] text-gray-400 font-medium">
-                  Defaults to current time. Backdate or schedule a planned admission here.
+                  Defaults to current time (IST). Backdate up to 1 year, or schedule up to 7 days ahead.
                 </p>
               </div>
 

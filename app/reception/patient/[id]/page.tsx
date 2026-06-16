@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
     User, Calendar, Phone, Mail, MapPin, Activity, Loader2,
     FileText, Thermometer, Zap, ArrowLeft, Clock, Shield,
     Pencil, Check, X, CalendarPlus, FlaskConical, History, CreditCard, DollarSign,
-    Upload, Plus, Trash2, ExternalLink, ChevronRight, AlertTriangle, CheckCircle2
+    Upload, Plus, Trash2, ExternalLink, ChevronRight, AlertTriangle, CheckCircle2,
+    Receipt, Printer, UserPlus, ClipboardList
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
@@ -19,6 +20,17 @@ import { CASH_COMPLIANCE_DEFAULTS, isValidPan } from '@/app/lib/cash-compliance'
 import { useToast } from '@/app/components/ui/Toast';
 import { EditInvoiceModal } from '@/app/components/finance/EditInvoiceModal';
 import { getInsuranceProviders, addPatientPolicy, getPatientPolicies } from '@/app/actions/insurance-actions';
+import dynamic from 'next/dynamic';
+
+// Code-split the inline bill builder — only loaded when staff actually open the panel.
+const InlineBillBuilder = dynamic(
+    () => import('@/app/components/billing/InlineBillBuilder').then(m => m.InlineBillBuilder),
+    { ssr: false, loading: () => (
+        <div className="bg-white border border-orange-200 rounded-2xl p-10 flex items-center justify-center text-gray-400 text-sm">
+            <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading bill builder…
+        </div>
+    ) },
+);
 
 /** Inline editable field */
 function EditableField({
@@ -124,15 +136,64 @@ function TimelineEvent({ type, title, subtitle, date, color }: {
     );
 }
 
+type RecentRegistration = {
+    patient_id: string;
+    appointment_id?: string | null;
+    password_setup_required?: boolean;
+    manual_password_setup_link?: string | null;
+    user_type?: string | null;
+    ts?: number;
+};
+
 export default function PatientProfilePage() {
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const toast = useToast();
     const patientId = params.id as string;
+    const initialTab = (searchParams?.get('tab') as any) || 'overview';
+    const wantsNewBill = searchParams?.get('action') === 'new';
+    const isWelcome = searchParams?.get('welcome') === '1';
+
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [processLoading, setProcessLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'triage' | 'vitals' | 'timeline' | 'billing' | 'records'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'triage' | 'vitals' | 'timeline' | 'billing' | 'records'>(initialTab);
+
+    // Welcome banner — appears after a fresh registration redirect (?welcome=1).
+    // Auto-hides on the first action a user takes from the banner.
+    const [showWelcome, setShowWelcome] = useState(isWelcome);
+    const [recentRegistration, setRecentRegistration] = useState<RecentRegistration | null>(null);
+
+    // Phase 2: auto-open the inline bill builder when ?action=new is in the URL
+    // (e.g. from the welcome banner or the Master Billing patient-search modal).
+    const [autoOpenBillBuilder, setAutoOpenBillBuilder] = useState(wantsNewBill);
+    const [showBillBuilder, setShowBillBuilder] = useState(wantsNewBill);
+
+    useEffect(() => {
+        if (!isWelcome) return;
+        try {
+            const raw = sessionStorage.getItem('recent_registration');
+            if (raw) {
+                const parsed: RecentRegistration = JSON.parse(raw);
+                if (parsed?.patient_id === patientId) {
+                    setRecentRegistration(parsed);
+                }
+                // Read-once: clear immediately so a hard refresh doesn't show stale state.
+                sessionStorage.removeItem('recent_registration');
+            }
+        } catch { /* sessionStorage unavailable */ }
+    }, [isWelcome, patientId]);
+
+    const dismissWelcome = useCallback(() => {
+        setShowWelcome(false);
+        // Strip the query params so a refresh doesn't reopen the banner.
+        if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('welcome');
+            window.history.replaceState({}, '', url.toString());
+        }
+    }, []);
     
     // Billing Modals State
     const [showDuesModal, setShowDuesModal] = useState(false);
@@ -439,6 +500,95 @@ export default function PatientProfilePage() {
                     </div>
                 </div>
 
+                {/* Welcome banner (post-registration) */}
+                {showWelcome && (
+                    <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 p-5 shadow-sm">
+                        <div className="flex items-start justify-between gap-4 mb-4">
+                            <div className="flex items-start gap-3">
+                                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow shadow-emerald-500/30 shrink-0">
+                                    <CheckCircle2 className="h-5 w-5 text-white" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-black text-gray-900">Registration complete</h3>
+                                    <p className="text-xs text-gray-500 font-medium mt-0.5">
+                                        UHID <span className="font-mono font-bold text-emerald-700">{patientId}</span>
+                                        {recentRegistration?.appointment_id && (
+                                            <> · Appointment <span className="font-mono font-bold text-teal-700">{recentRegistration.appointment_id}</span></>
+                                        )}
+                                    </p>
+                                    {recentRegistration?.password_setup_required && (
+                                        <p className="text-[11px] text-pink-600 font-bold mt-1">
+                                            Portal access link issued{recentRegistration.manual_password_setup_link ? '' : ' — sent to patient email'}.
+                                        </p>
+                                    )}
+                                    {recentRegistration?.manual_password_setup_link && (
+                                        <p className="text-[10px] mt-1 break-all text-gray-500 font-mono">{recentRegistration.manual_password_setup_link}</p>
+                                    )}
+                                </div>
+                            </div>
+                            <button
+                                onClick={dismissWelcome}
+                                className="text-gray-400 hover:text-gray-700 p-1 rounded-lg hover:bg-white/60 shrink-0"
+                                aria-label="Dismiss"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <button
+                                onClick={() => {
+                                    setActiveTab('billing');
+                                    setAutoOpenBillBuilder(true);
+                                    setShowBillBuilder(true);
+                                    dismissWelcome();
+                                }}
+                                className="flex items-center justify-center gap-2 px-3 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all active:scale-[0.98]"
+                            >
+                                <Receipt className="h-3.5 w-3.5" /> Create Bill
+                            </button>
+                            <button
+                                onClick={() => {
+                                    dismissWelcome();
+                                    router.push(`/reception/appointments?patientId=${patientId}`);
+                                }}
+                                className="flex items-center justify-center gap-2 px-3 py-2.5 bg-white hover:bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded-xl transition-all active:scale-[0.98]"
+                            >
+                                <CalendarPlus className="h-3.5 w-3.5" /> Book Appointment
+                            </button>
+                            <button
+                                onClick={() => {
+                                    dismissWelcome();
+                                    router.push(`/reception/check-in?patientId=${patientId}`);
+                                }}
+                                className="flex items-center justify-center gap-2 px-3 py-2.5 bg-white hover:bg-teal-50 border border-teal-200 text-teal-700 text-xs font-bold rounded-xl transition-all active:scale-[0.98]"
+                            >
+                                <ClipboardList className="h-3.5 w-3.5" /> Add to Queue
+                            </button>
+                            <button
+                                onClick={() => {
+                                    window.open(`/api/opd/${patientId}/registration-slip`, '_blank');
+                                    dismissWelcome();
+                                }}
+                                className="flex items-center justify-center gap-2 px-3 py-2.5 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-xs font-bold rounded-xl transition-all active:scale-[0.98]"
+                            >
+                                <Printer className="h-3.5 w-3.5" /> Print UHID Slip
+                            </button>
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-3 text-center">
+                            Or
+                            <button
+                                onClick={() => {
+                                    dismissWelcome();
+                                    router.push('/reception/register');
+                                }}
+                                className="ml-1 underline hover:text-gray-700"
+                            >
+                                register another patient
+                            </button>
+                        </p>
+                    </div>
+                )}
+
                 {/* Tabs */}
                 <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1 overflow-x-auto">
                     {[
@@ -650,6 +800,43 @@ export default function PatientProfilePage() {
                 )}
                 {activeTab === 'billing' && (
                     <div className="space-y-4">
+                        {/* New bill builder — top of the tab */}
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h3 className="text-sm font-black text-gray-900">Billing</h3>
+                                <p className="text-[11px] text-gray-400 font-medium">Create new bills and view payment history for this patient.</p>
+                            </div>
+                            {!showBillBuilder && (
+                                <button
+                                    onClick={() => setShowBillBuilder(true)}
+                                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-400 hover:to-amber-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-orange-500/20 active:scale-[0.98]"
+                                >
+                                    <Plus className="h-3.5 w-3.5" /> New Bill
+                                </button>
+                            )}
+                        </div>
+                        {showBillBuilder && (
+                            <InlineBillBuilder
+                                patient={{
+                                    patient_id: data.patient_id,
+                                    full_name: data.full_name,
+                                    patient_type: data.patient_type,
+                                    corporate_id: data.corporate_id,
+                                    tpa_provider_id: data.tpa_provider_id,
+                                    pre_auth_approved: data.pre_auth_approved,
+                                }}
+                                onCreated={() => {
+                                    setShowBillBuilder(false);
+                                    setAutoOpenBillBuilder(false);
+                                    loadData();
+                                    loadFinancialProfile();
+                                }}
+                                onCancel={() => {
+                                    setShowBillBuilder(false);
+                                    setAutoOpenBillBuilder(false);
+                                }}
+                            />
+                        )}
                         {financialLoading && !financialProfile ? (
                             <div className="flex justify-center py-12">
                                 <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
