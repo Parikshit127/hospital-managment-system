@@ -505,6 +505,10 @@ model OPD_REG {
   phone                      String?
   email                      String?
   address                    String?
+  city                       String?
+  state                      String?
+  country                    String?   @default("India")
+  pincode                    String?
   department                 String?
   aadhar_card                String?
   nationality                String?   // e.g. Indian
@@ -577,6 +581,8 @@ model OPD_REG {
   @@index([created_at])
   @@index([organizationId, created_at])
   @@index([patient_type])
+  @@index([organizationId, city])
+  @@index([organizationId, pincode])
 }
 
 model appointments {
@@ -2920,6 +2926,7 @@ model IpdChargePosting {
   amount          Decimal
   posted_by       String?
   posted_at       DateTime @default(now())
+  is_backdated    Boolean  @default(false)
   organizationId  String
 
   organization Organization @relation(fields: [organizationId], references: [id])

@@ -22,6 +22,7 @@ import { postInvoiceToGL } from '@/app/actions/gl-actions';
 import { syncInvoiceToGSTRegister } from '@/app/actions/gst-compliance-actions';
 import { generateSequentialNumber, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
 import { formatDoctorName } from '@/app/lib/format-name';
+import { validateBackdate } from '@/app/lib/backdate';
 
 // Helper: post a GL journal entry using account codes (resolves to account IDs)
 async function postPharmacyJournal(db: any, organizationId: string, data: {
@@ -256,22 +257,11 @@ export async function generateInvoice(
             : undefined;
 
         // Validate optional backdated bill date.
-        let backdatedAt: Date | undefined;
-        if (options.billDateTime) {
-            const parsed = new Date(options.billDateTime);
-            if (isNaN(parsed.getTime())) {
-                return { success: false, error: 'Invalid bill date' };
-            }
-            const now = new Date();
-            const oneYearBack = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-            if (parsed.getTime() > now.getTime()) {
-                return { success: false, error: 'Bill date cannot be in the future' };
-            }
-            if (parsed.getTime() < oneYearBack.getTime()) {
-                return { success: false, error: 'Bill date too far in the past' };
-            }
-            backdatedAt = parsed;
+        const backdateResult = validateBackdate(options.billDateTime, { label: 'Bill date' });
+        if (!backdateResult.ok) {
+            return { success: false, error: backdateResult.error };
         }
+        const backdatedAt = backdateResult.date;
 
         let totalAmount = 0;
         let totalTax = 0;

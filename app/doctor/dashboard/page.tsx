@@ -138,6 +138,10 @@ export default function DoctorDashboard() {
     age: "",
     gender: "Male",
     address: "",
+    city: "",
+    state: "",
+    country: "India",
+    pincode: "",
     department: "General",
   });
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
@@ -516,15 +520,26 @@ export default function DoctorDashboard() {
       alert('Please enter patient full name');
       return;
     }
+    if (!walkinFormData.city.trim() || walkinFormData.city.trim().length < 2) {
+      alert('Please enter city');
+      return;
+    }
+    if (!/^[1-9][0-9]{5}$/.test(walkinFormData.pincode)) {
+      alert('Pincode must be 6 digits and not start with 0');
+      return;
+    }
+    if (!walkinFormData.country.trim() || walkinFormData.country.trim().length < 2) {
+      alert('Please enter country');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       const formData = new FormData();
-      // Ensure address meets min 10 char requirement
       const dataToSubmit = {
         ...walkinFormData,
         phone,
-        address: walkinFormData.address?.trim().length >= 10 ? walkinFormData.address : (walkinFormData.address?.trim() || 'Walk-in patient'),
+        address: walkinFormData.address?.trim() || 'Walk-in patient',
         registration_consent: 'true',
         skipAppointment: 'false',
       };
@@ -914,9 +929,10 @@ export default function DoctorDashboard() {
                 </select>
               </div>
               <textarea
-                placeholder="Address"
+                placeholder="Street / House No. / Landmark *"
                 className={inputCls}
                 rows={2}
+                required
                 value={walkinFormData.address}
                 onChange={(e) =>
                   setWalkinFormData({
@@ -925,6 +941,62 @@ export default function DoctorDashboard() {
                   })
                 }
               />
+              <div className="grid grid-cols-2 gap-4">
+                <input
+                  placeholder="City *"
+                  className={inputCls}
+                  required
+                  maxLength={60}
+                  value={walkinFormData.city}
+                  onChange={(e) =>
+                    setWalkinFormData({
+                      ...walkinFormData,
+                      city: e.target.value.replace(/[^a-zA-Z\s.'-]/g, ''),
+                    })
+                  }
+                />
+                <input
+                  placeholder="Pincode * (6 digits)"
+                  className={inputCls}
+                  required
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={walkinFormData.pincode}
+                  onChange={(e) =>
+                    setWalkinFormData({
+                      ...walkinFormData,
+                      pincode: e.target.value.replace(/\D/g, '').slice(0, 6),
+                    })
+                  }
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <input
+                  placeholder="State (Optional)"
+                  className={inputCls}
+                  maxLength={60}
+                  value={walkinFormData.state}
+                  onChange={(e) =>
+                    setWalkinFormData({
+                      ...walkinFormData,
+                      state: e.target.value.replace(/[^a-zA-Z\s.'-]/g, ''),
+                    })
+                  }
+                />
+                <input
+                  placeholder="Country *"
+                  className={inputCls}
+                  required
+                  maxLength={60}
+                  value={walkinFormData.country}
+                  onChange={(e) =>
+                    setWalkinFormData({
+                      ...walkinFormData,
+                      country: e.target.value.replace(/[^a-zA-Z\s.'-]/g, ''),
+                    })
+                  }
+                />
+              </div>
               <button
                 type="submit"
                 disabled={isSubmitting}

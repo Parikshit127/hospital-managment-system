@@ -205,13 +205,15 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
 
     let itemRows = '';
     for (const [cat, data] of Object.entries(categoryMap)) {
-        itemRows += `<tr style="background:#f0fdf4;"><td colspan="7" style="padding:5px 12px;font-size:11px;font-weight:700;color:#059669;">${cat} — ${data.total.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`;
+        itemRows += `<tr style="background:#f0fdf4;"><td colspan="8" style="padding:5px 12px;font-size:11px;font-weight:700;color:#059669;">${cat} — ${data.total.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`;
         // Medicine-name toggle: when off, keep the Pharmacy total line but hide the
         // individual medicine rows. The amount stays in the totals (items not removed).
         const isBulkPharmacy = cat.toLowerCase() === 'pharmacy';
         if (isBulkPharmacy && !includeMeds) continue;
         for (const item of data.items) {
+            const serviceDate = item.created_at ? fmtBillDate(item.created_at).split(',')[0] : '-';
             itemRows += `<tr>
+                <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#6b7280;white-space:nowrap;">${serviceDate}</td>
                 <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;">${item.description}</td>
                 <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#9ca3af;">${item.hsn_sac_code || '-'}</td>
                 <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:center;">${item.quantity}</td>
@@ -321,6 +323,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                         <!-- Charges -->
                         <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
                             <thead><tr style="border-y:2px solid ${branding.accentColor};">
+                                <th style="padding:6px 12px;text-align:left;font-size:9px;font-weight:800;color:${branding.accentColor};">Date</th>
                                 <th style="padding:6px 12px;text-align:left;font-size:9px;font-weight:800;color:${branding.accentColor};">Description</th>
                                 <th style="padding:6px 12px;text-align:left;font-size:9px;font-weight:800;color:${branding.accentColor};">SAC/HSN</th>
                                 <th style="padding:6px 12px;text-align:center;font-size:9px;font-weight:800;color:${branding.accentColor};">Qty</th>

@@ -8,6 +8,7 @@ import { billingInvoiceMsg, paymentReceiptMsg } from '@/app/lib/whatsapp-templat
 import { postInvoiceToGL, postPaymentToGL, reverseJournalEntry } from './gl-actions';
 import { getCashThresholds, validateCashCompliance, normalizePan, CASH_METHOD } from '@/app/lib/cash-compliance';
 import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
+import { validateBackdate } from '@/app/lib/backdate';
 
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
@@ -74,6 +75,8 @@ export async function createInvoice(data: {
     // When set (Master Billing OPD counter), a consulting doctor MUST be provided so the
     // bill header + MIS always show a doctor. Other callers (ER/reception) leave it off.
     require_doctor?: boolean;
+    // Optional backdated service date (datetime-local string). Validated; max 1 year back.
+    service_date?: string;
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
@@ -81,6 +84,12 @@ export async function createInvoice(data: {
         if (data.require_doctor && !data.doctor_id && !(data.doctor_name || '').trim()) {
             return { success: false, error: 'Consulting doctor is required for this bill.' };
         }
+
+        const backdate = validateBackdate(data.service_date, { label: 'Service date' });
+        if (!backdate.ok) {
+            return { success: false, error: backdate.error };
+        }
+        const backdatedAt = backdate.date;
 
         // Phase 4: Period Locking
         await checkPeriodLock(db);
@@ -125,6 +134,7 @@ export async function createInvoice(data: {
                 concession_approved_by: data.concession_approved_by || null,
                 doctor_name: data.doctor_name || null,
                 doctor_id: data.doctor_id || null,
+                ...(backdatedAt ? { created_at: backdatedAt } : {}),
             },
         });
 
@@ -183,9 +193,17 @@ export async function addInvoiceItem(data: {
     tax_rate?: number;
     hsn_sac_code?: string;
     service_category?: string;
+    // Optional backdated service date (datetime-local string). Validated; max 1 year back.
+    service_date?: string;
 }) {
     try {
         const { db } = await requireTenantContext();
+
+        const backdate = validateBackdate(data.service_date, { label: 'Service date' });
+        if (!backdate.ok) {
+            return { success: false, error: backdate.error };
+        }
+        const backdatedAt = backdate.date;
 
         const discount = data.discount || 0;
         const total_price = data.quantity * data.unit_price;
@@ -208,6 +226,7 @@ export async function addInvoiceItem(data: {
                 hsn_sac_code: data.hsn_sac_code || null,
                 service_category: data.service_category || null,
                 ref_id: data.ref_id || null,
+                ...(backdatedAt ? { created_at: backdatedAt } : {}),
             },
         });
 
@@ -2154,6 +2173,7 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
         hsn_sac_code?: string | null;
         service_category?: string | null;
         ref_id?: string;
+        service_date?: string;
     }>;
     items_to_remove?: number[];
 }) {
@@ -2221,6 +2241,11 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
                 const net_price = total_price - discount;
                 const tax_amount = (net_price * tax_rate) / 100;
 
+                const backdate = validateBackdate(a.service_date, { label: 'Service date' });
+                if (!backdate.ok) {
+                    throw new Error(backdate.error);
+                }
+
                 await tx.invoice_items.create({
                     data: {
                         invoice_id: invoiceId,
@@ -2236,6 +2261,7 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
                         hsn_sac_code: a.hsn_sac_code || null,
                         service_category: a.service_category || null,
                         ref_id: a.ref_id || null,
+                        ...(backdate.date ? { created_at: backdate.date } : {}),
                     },
                 });
             }

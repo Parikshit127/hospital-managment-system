@@ -53,6 +53,7 @@ export default function IpdBillingPage() {
     const [chargeRate, setChargeRate] = useState('');
     const [chargeCategory, setChargeCategory] = useState('');
     const [chargeTaxRate, setChargeTaxRate] = useState(0);
+    const [chargeDateTime, setChargeDateTime] = useState('');
     const [removingItemId, setRemovingItemId] = useState<number | null>(null);
 
     // Deposit state
@@ -183,6 +184,7 @@ export default function IpdBillingPage() {
             unit_price: parseFloat(chargeRate),
             service_category: chargeCategory || 'Misc',
             tax_rate: chargeTaxRate,
+            posted_at: chargeDateTime ? new Date(chargeDateTime) : undefined,
         });
         setActionLoading(false);
         if (res.success) {
@@ -193,6 +195,7 @@ export default function IpdBillingPage() {
             setChargeQty(1);
             setChargeCategory('');
             setChargeTaxRate(0);
+            setChargeDateTime('');
             showToast('Charge added to bill');
             await refreshBill();
         } else {
@@ -928,6 +931,20 @@ export default function IpdBillingPage() {
                                         className="w-full px-3 py-2 border rounded-md"
                                     />
                                 </div>
+                            </div>
+
+                            <div>
+                                <label className="text-sm text-gray-600">
+                                    Service Date <span className="text-xs text-gray-400">(optional — leave blank for today)</span>
+                                </label>
+                                <input
+                                    type="datetime-local"
+                                    value={chargeDateTime}
+                                    max={new Date().toISOString().slice(0, 16)}
+                                    onChange={(e) => setChargeDateTime(e.target.value)}
+                                    className="w-full px-3 py-2 border rounded-md"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Backdate up to 1 year. For services performed on an earlier date.</p>
                             </div>
 
                             <div className="flex gap-2">

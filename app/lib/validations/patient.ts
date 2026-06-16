@@ -28,7 +28,7 @@ export const patientRegistrationSchema = z.object({
     gender: z.enum(['Male', 'Female', 'Other'], {
         error: 'Select a valid gender',
     }),
-    department: z.string().min(1, 'Department is required'),
+    department: z.string().optional().or(z.literal('')),
     email: z
         .string()
         .email('Enter a valid email address')
@@ -36,10 +36,25 @@ export const patientRegistrationSchema = z.object({
         .or(z.literal('')),
     address: z
         .string()
-        .min(10, 'Address must be at least 10 characters')
-        .max(500, 'Address must be under 500 characters')
+        .min(5, 'Address must be at least 5 characters')
+        .max(500, 'Address must be under 500 characters'),
+    city: z
+        .string()
+        .min(2, 'City is required')
+        .max(60, 'City must be under 60 characters')
+        .regex(/^[A-Za-z\s.'-]+$/, 'City can only contain letters, spaces, and . \' -'),
+    state: z
+        .string()
+        .max(60, 'State must be under 60 characters')
         .optional()
         .or(z.literal('')),
+    country: z
+        .string()
+        .min(2, 'Country is required')
+        .max(60, 'Country must be under 60 characters'),
+    pincode: z
+        .string()
+        .regex(/^[1-9][0-9]{5}$/, 'Pincode must be 6 digits and not start with 0'),
     aadhar: z
         .string()
         .transform(val => val.replace(/[-\s]/g, ''))

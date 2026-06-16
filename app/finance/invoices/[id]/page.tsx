@@ -26,6 +26,7 @@ export default function InvoiceDetailPage() {
     const [isOpen, setIsOpen] = useState(false);
     const [draftQty, setDraftQty] = useState(1);
     const [draftDiscount, setDraftDiscount] = useState(0);
+    const [draftServiceDate, setDraftServiceDate] = useState('');
     const [actionLoading, setActionLoading] = useState(false);
 
     const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -82,7 +83,8 @@ export default function InvoiceDetailPage() {
             unit_price: price,
             discount: draftDiscount,
             tax_rate: taxRate,
-            service_category: category
+            service_category: category,
+            service_date: draftServiceDate || undefined,
         });
 
         setActionLoading(false);
@@ -93,6 +95,7 @@ export default function InvoiceDetailPage() {
             setDraftPrice(0);
             setDraftQty(1);
             setDraftDiscount(0);
+            setDraftServiceDate('');
             await loadInvoice();
         } else {
             toast.error(res.error || 'Failed to add item');
@@ -303,6 +306,17 @@ export default function InvoiceDetailPage() {
                                     value={draftDiscount}
                                     onChange={e => setDraftDiscount(Number(e.target.value))}
                                     className="w-full px-2 py-1.5 border rounded text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-500">Service Date (optional)</label>
+                                <input
+                                    type="datetime-local"
+                                    value={draftServiceDate}
+                                    max={new Date().toISOString().slice(0, 16)}
+                                    onChange={e => setDraftServiceDate(e.target.value)}
+                                    className="w-full px-2 py-1.5 border rounded text-sm"
+                                    title="Backdate up to 1 year. Leave blank for today."
                                 />
                             </div>
                             <div className="flex items-end">

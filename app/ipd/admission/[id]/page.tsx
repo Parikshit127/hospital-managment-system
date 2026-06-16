@@ -136,6 +136,7 @@ export default function AdmissionDetailPage() {
     const [chargeQty, setChargeQty] = useState('1');
     const [chargeRate, setChargeRate] = useState('');
     const [chargeCategory, setChargeCategory] = useState('Miscellaneous');
+    const [chargeDateTime, setChargeDateTime] = useState('');
     const [postingCharge, setPostingCharge] = useState(false);
     const [removingItemId, setRemovingItemId] = useState<number | null>(null);
     const [chargeMode, setChargeMode] = useState<'service' | 'package'>('service');
@@ -530,11 +531,12 @@ export default function AdmissionDetailPage() {
             quantity: Number(chargeQty) || 1,
             unit_price: Number(chargeRate),
             service_category: chargeCategory,
+            posted_at: chargeDateTime ? new Date(chargeDateTime) : undefined,
         });
         setPostingCharge(false);
         if (res.success) {
             toast.success('Charge posted');
-            setChargeDesc(''); setChargeQty('1'); setChargeRate(''); setChargeCategory('Miscellaneous');
+            setChargeDesc(''); setChargeQty('1'); setChargeRate(''); setChargeCategory('Miscellaneous'); setChargeDateTime('');
             setBill(null); // reset bill cache so it reloads
             loadBill();
         } else {
@@ -1987,6 +1989,20 @@ export default function AdmissionDetailPage() {
                                                         <option key={c}>{c}</option>
                                                     ))}
                                                 </select>
+                                                <div className="col-span-2">
+                                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                                                        Service Date <span className="text-gray-400 normal-case font-normal">(optional — leave blank for today)</span>
+                                                    </label>
+                                                    <input
+                                                        type="datetime-local"
+                                                        value={chargeDateTime}
+                                                        min={data.admission_date ? new Date(data.admission_date).toISOString().slice(0, 16) : undefined}
+                                                        max={new Date().toISOString().slice(0, 16)}
+                                                        onChange={e => setChargeDateTime(e.target.value)}
+                                                        className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                                    />
+                                                    <p className="text-[10px] text-gray-400 mt-1">Backdate up to 1 year. Cannot be before patient was admitted.</p>
+                                                </div>
                                             </div>
                                             <button
                                                 type="submit"

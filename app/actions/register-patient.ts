@@ -59,6 +59,10 @@ export async function registerPatient(formData: FormData) {
         department: formData.get('department') as string,
         email: (formData.get('email') as string) || '',
         address: (formData.get('address') as string) || '',
+        city: (formData.get('city') as string) || '',
+        state: (formData.get('state') as string) || '',
+        country: (formData.get('country') as string) || 'India',
+        pincode: (formData.get('pincode') as string) || '',
         aadhar: (formData.get('aadhar') as string) || '',
         nationality: (formData.get('nationality') as string) || '',
         govt_id_type: (formData.get('govt_id_type') as string) || '',
@@ -166,6 +170,10 @@ export async function registerPatient(formData: FormData) {
                     department: rawData.department,
                     email: rawData.email,
                     address: rawData.address,
+                    city: rawData.city || null,
+                    state: rawData.state || null,
+                    country: rawData.country || 'India',
+                    pincode: rawData.pincode || null,
                     aadhar_card: rawData.aadhar,
                     nationality: rawData.nationality || 'Indian',
                     govt_id_type: rawData.govt_id_type || null,
@@ -308,7 +316,7 @@ export async function registerPatient(formData: FormData) {
         if (!skipAppointment) {
             notifyPatient(
                 { email: rawData.email !== 'not given' ? rawData.email : undefined, phone: rawData.phone },
-                { type: 'appointment', patientName: rawData.full_name, doctorName: rawData.department, department: rawData.department, date: 'Today', time: 'as scheduled', hospitalName: 'Hospital' },
+                { type: 'appointment', patientName: rawData.full_name, doctorName: rawData.department || '', department: rawData.department || '', date: 'Today', time: 'as scheduled', hospitalName: 'Hospital' },
             ).catch(err => console.warn('[Notify] Registration appointment notification failed:', err));
         }
 

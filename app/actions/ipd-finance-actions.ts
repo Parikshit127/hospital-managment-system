@@ -257,6 +257,8 @@ export async function postChargeToIpdBill(data: {
         await recalculateInvoiceWithGst(invoice.id);
 
         // Create charge posting audit
+        const now = new Date();
+        const isBackdated = !!data.posted_at && Math.abs(now.getTime() - data.posted_at.getTime()) > 60 * 1000;
         await db.ipdChargePosting.create({
             data: {
                 admission_id: data.admission_id,
@@ -266,6 +268,8 @@ export async function postChargeToIpdBill(data: {
                 description,
                 amount: net_price + tax_amount,
                 posted_by: data.posted_by || session.id,
+                posted_at: data.posted_at || now,
+                is_backdated: isBackdated,
                 organizationId,
             },
         });

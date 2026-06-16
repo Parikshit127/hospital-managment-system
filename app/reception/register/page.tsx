@@ -11,12 +11,9 @@ import {
 } from 'lucide-react';
 import { registerPatient, checkDuplicatePatient } from '@/app/actions/register-patient';
 import { lookupInsuranceByPhone } from '@/app/actions/insurance-lookup';
-import { getDepartmentList } from '@/app/actions/reception-actions';
 import { getCorporateMasters, getTpaProviders } from '@/app/actions/patient-type-actions';
-import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useToast } from '@/app/components/ui/Toast';
-import { FALLBACK_DEPARTMENTS } from '@/app/lib/constants/departments';
 import { useRouter } from 'next/navigation';
 
 type DuplicatePatient = {
@@ -40,11 +37,6 @@ const PATIENT_TYPE_LABEL: Record<string, string> = {
     cash: 'Cash',
     corporate: 'Corporate',
     tpa_insurance: 'TPA',
-};
-
-type DepartmentItem = {
-    id: string;
-    name: string;
 };
 
 type CorporateItem = {
@@ -86,8 +78,6 @@ export default function ReceptionPage() {
     const toast = useToast();
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [departments, setDepartments] = useState<DepartmentItem[]>([]);
-    const [doctors, setDoctors] = useState<{ id: string; name: string; specialty: string | null }[]>([]);
     const [duplicates, setDuplicates] = useState<DuplicatePatient[]>([]);
     const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
     const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
@@ -110,27 +100,13 @@ export default function ReceptionPage() {
     const [insuranceFoundAlert, setInsuranceFoundAlert] = useState<string | null>(null);
     const [allowDuplicate, setAllowDuplicate] = useState(false);
 
-    // Load departments, corporates, TPA providers on mount
+    // Load corporates + TPA providers on mount
     useEffect(() => {
-        getDepartmentList().then(result => {
-            if (result.success && result.data && result.data.length > 0) {
-                setDepartments(result.data.map((d: { id: string; name: string }) => ({ id: d.id, name: d.name })));
-            } else if ((result as any).useFallback) {
-                // No departments configured at all — show fallback list
-                setDepartments(FALLBACK_DEPARTMENTS.map(name => ({ id: name, name })));
-            } else {
-                // Departments exist but all are deactivated — show empty
-                setDepartments([]);
-            }
-        });
         getCorporateMasters().then(r => {
             if (r.success) setCorporates(r.data as CorporateItem[]);
         });
         getTpaProviders().then(r => {
             if (r.success) setTpaProviders(r.data as TpaProviderItem[]);
-        });
-        getDoctorsForDropdown().then(r => {
-            if (r.success) setDoctors(r.data || []);
         });
     }, []);
 
@@ -549,30 +525,6 @@ export default function ReceptionPage() {
                                             </div>
                                         </div>
 
-                                        {/* Department from DB */}
-                                        <div className="md:col-span-2 space-y-1.5">
-                                            <label className={labelClass}>Department <span className="text-gray-400 font-normal">(Optional)</span></label>
-                                            <select name="department" className={selectClass}>
-                                                <option value="">Select Department</option>
-                                                {departments.map(dept => (
-                                                    <option key={dept.id} value={dept.name}>{dept.name}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        {/* Doctor dropdown */}
-                                        <div className="md:col-span-2 space-y-1.5">
-                                            <label className={labelClass}>Doctor <span className="text-gray-400 font-normal">(Optional)</span></label>
-                                            <select name="doctor_name" className={selectClass}>
-                                                <option value="">Select Doctor</option>
-                                                {doctors.map(d => (
-                                                    <option key={d.id} value={d.name}>
-                                                        {d.name}{d.specialty ? ` — ${d.specialty}` : ''}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-
                                         {/* Aadhaar */}
                                         <div className="md:col-span-2 space-y-1.5">
                                             <label className={labelClass}>Aadhaar (Optional)</label>
@@ -638,17 +590,86 @@ export default function ReceptionPage() {
                                             </div>
                                         </div>
 
-                                        {/* Address textarea */}
-                                        <div className="md:col-span-2 space-y-1.5">
-                                            <label className={labelClass}>Address *</label>
-                                            <div className="relative">
-                                                <MapPin className="absolute left-4 top-4 h-4 w-4 text-gray-300" />
-                                                <textarea
-                                                    name="address"
+                                    </div>
+
+                                    {/* Address Details Section */}
+                                    <div className="mb-6 border-t border-gray-200 pt-6">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <MapPin className="h-4 w-4 text-teal-500" />
+                                            <span className="text-xs font-black text-gray-500">Address Details *</span>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                                            {/* Street / House / Landmark */}
+                                            <div className="md:col-span-4 space-y-1.5">
+                                                <label className={labelClass}>Street / House No. / Landmark *</label>
+                                                <div className="relative">
+                                                    <MapPin className="absolute left-4 top-4 h-4 w-4 text-gray-300" />
+                                                    <textarea
+                                                        name="address"
+                                                        required
+                                                        rows={2}
+                                                        maxLength={500}
+                                                        className="w-full bg-white border border-gray-300 rounded-xl pl-11 pr-4 py-3.5 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10 outline-none transition-all resize-none"
+                                                        placeholder="House No., Street, Area, Landmark..."
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* City */}
+                                            <div className="md:col-span-2 space-y-1.5">
+                                                <label className={labelClass}>City *</label>
+                                                <input
+                                                    name="city"
                                                     required
-                                                    rows={3}
-                                                    className="w-full bg-white border border-gray-300 rounded-xl pl-11 pr-4 py-3.5 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10 outline-none transition-all resize-none"
-                                                    placeholder="House No, Street, City, State, PIN..."
+                                                    maxLength={60}
+                                                    pattern="[A-Za-z\s.'\-]{2,60}"
+                                                    onChange={(e) => { e.target.value = sanitizeName(e.target.value); }}
+                                                    className={inputClass}
+                                                    placeholder="e.g. Mumbai"
+                                                />
+                                            </div>
+
+                                            {/* State */}
+                                            <div className="space-y-1.5">
+                                                <label className={labelClass}>State <span className="text-gray-400 font-normal">(Optional)</span></label>
+                                                <input
+                                                    name="state"
+                                                    maxLength={60}
+                                                    onChange={(e) => { e.target.value = sanitizeName(e.target.value); }}
+                                                    className={inputClass}
+                                                    placeholder="e.g. Maharashtra"
+                                                />
+                                            </div>
+
+                                            {/* Pincode */}
+                                            <div className="space-y-1.5">
+                                                <label className={labelClass}>Pincode *</label>
+                                                <input
+                                                    name="pincode"
+                                                    required
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    pattern="[1-9][0-9]{5}"
+                                                    maxLength={6}
+                                                    onChange={(e) => {
+                                                        e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                                                    }}
+                                                    className={`${inputClass} font-mono tracking-wider`}
+                                                    placeholder="6-digit PIN"
+                                                />
+                                            </div>
+
+                                            {/* Country */}
+                                            <div className="md:col-span-2 space-y-1.5">
+                                                <label className={labelClass}>Country *</label>
+                                                <input
+                                                    name="country"
+                                                    required
+                                                    defaultValue="India"
+                                                    maxLength={60}
+                                                    onChange={(e) => { e.target.value = sanitizeName(e.target.value); }}
+                                                    className={inputClass}
+                                                    placeholder="e.g. India"
                                                 />
                                             </div>
                                         </div>
@@ -832,27 +853,6 @@ export default function ReceptionPage() {
                                                 </span>
                                                 <p className="text-xs text-gray-400 mt-0.5">
                                                     I confirm the patient has given consent for registration and data collection as per hospital policy.
-                                                </p>
-                                            </div>
-                                        </label>
-                                    </div>
-
-                                    {/* Book Appointment Option — opt-in */}
-                                    <div className="mb-6 border-t border-gray-200 pt-6">
-                                        <label className="flex items-start gap-3 cursor-pointer group">
-                                            <input
-                                                type="checkbox"
-                                                name="bookAppointment"
-                                                value="true"
-                                                className="mt-1 h-4 w-4 rounded border-gray-300 text-teal-500 focus:ring-teal-500/20"
-                                            />
-                                            <div>
-                                                <span className="text-sm font-bold text-gray-700 group-hover:text-gray-900 transition-colors flex items-center gap-1.5">
-                                                    <Calendar className="h-3.5 w-3.5 text-teal-400" />
-                                                    Book appointment now
-                                                </span>
-                                                <p className="text-xs text-gray-400 mt-0.5">
-                                                    Check this to create an appointment along with registration. Leave unchecked to register only.
                                                 </p>
                                             </div>
                                         </label>

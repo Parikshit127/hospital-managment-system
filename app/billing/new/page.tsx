@@ -76,6 +76,7 @@ export default function ReceptionGenerateBillPage() {
     const [preAuthBlocked, setPreAuthBlocked] = useState(false);
     const [concessionAmount, setConcessionAmount] = useState(0);
     const [concessionReason, setConcessionReason] = useState('');
+    const [serviceDate, setServiceDate] = useState('');
 
     useEffect(() => {
         getAllBillableServices().then(res => {
@@ -205,6 +206,7 @@ export default function ReceptionGenerateBillPage() {
                 tpa_payable: split?.tpaPayable ?? 0,
                 concession_amount: concessionAmount,
                 concession_reason: concessionReason || undefined,
+                service_date: serviceDate || undefined,
             });
 
             if (!invRes.success) {
@@ -224,7 +226,8 @@ export default function ReceptionGenerateBillPage() {
                     unit_price: item.unit_price,
                     discount: item.discount,
                     tax_rate: item.tax_rate,
-                    service_category: item.department
+                    service_category: item.department,
+                    service_date: serviceDate || undefined,
                 });
             }
 
@@ -388,6 +391,20 @@ export default function ReceptionGenerateBillPage() {
                                         {!selectedDoctorId && (
                                             <p className="text-[10px] text-red-500 mt-1">Doctor is required to generate the bill.</p>
                                         )}
+                                    </div>
+                                    {/* Service date (optional — backdate up to 1 year) */}
+                                    <div className="mt-3">
+                                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                                            Service Date <span className="text-gray-400 normal-case font-normal">(optional — leave blank for today)</span>
+                                        </label>
+                                        <input
+                                            type="datetime-local"
+                                            value={serviceDate}
+                                            max={new Date().toISOString().slice(0, 16)}
+                                            onChange={e => setServiceDate(e.target.value)}
+                                            className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                                        />
+                                        <p className="text-[10px] text-gray-400 mt-1">Backdate the bill — services performed on an earlier date.</p>
                                     </div>
                                     {/* Pre-auth blocking warning */}
                                     {preAuthBlocked && (

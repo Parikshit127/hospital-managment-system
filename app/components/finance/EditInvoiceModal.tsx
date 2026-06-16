@@ -29,6 +29,8 @@ type EditableItem = {
     tax_rate: number;
     hsn_sac_code: string | null;
     service_category: string | null;
+    // Optional backdate (only used for newly-added rows; ignored for existing)
+    service_date?: string;
     // Soft-removed (kept in array so the index stays stable, hidden from UI)
     _removed?: boolean;
     // Original snapshot for diff detection (existing rows only)
@@ -300,6 +302,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                     tax_rate: Number(it.tax_rate),
                     hsn_sac_code: it.hsn_sac_code,
                     service_category: it.service_category,
+                    service_date: it.service_date || undefined,
                 }));
             const items_to_remove = items
                 .filter(it => it.id && it._removed)
@@ -439,6 +442,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                         <th className="px-2 py-2 text-right font-semibold w-24">Unit ₹</th>
                                         <th className="px-2 py-2 text-right font-semibold w-24">Disc ₹</th>
                                         <th className="px-2 py-2 text-right font-semibold w-16">Tax %</th>
+                                        <th className="px-2 py-2 text-left font-semibold w-40" title="Backdate up to 1 year. Applies to newly-added rows only.">Service Date</th>
                                         <th className="px-2 py-2 text-right font-semibold w-24">Line Net</th>
                                         <th className="px-2 py-2 w-10"></th>
                                     </tr>
@@ -510,6 +514,21 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                         disabled={saving}
                                                     />
                                                 </td>
+                                                <td className="px-2 py-1.5">
+                                                    {it.id ? (
+                                                        <span className="text-[10px] text-gray-400 italic">existing</span>
+                                                    ) : (
+                                                        <input
+                                                            type="datetime-local"
+                                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs"
+                                                            value={it.service_date || ''}
+                                                            max={new Date().toISOString().slice(0, 16)}
+                                                            onChange={e => updateItem(idx, { service_date: e.target.value })}
+                                                            disabled={saving}
+                                                            title="Leave blank for today. Backdate up to 1 year."
+                                                        />
+                                                    )}
+                                                </td>
                                                 <td className="px-2 py-1.5 text-right font-mono text-gray-700">
                                                     {fmtINR(lineNet + lineTax)}
                                                 </td>
@@ -529,7 +548,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                     })}
                                     {items.filter(i => !i._removed).length === 0 && (
                                         <tr>
-                                            <td colSpan={8} className="px-3 py-6 text-center text-gray-400 italic">
+                                            <td colSpan={9} className="px-3 py-6 text-center text-gray-400 italic">
                                                 No items. Click "Add Item" to insert one.
                                             </td>
                                         </tr>
