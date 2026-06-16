@@ -74,6 +74,22 @@ export default function DischargeSettlementPage() {
     const isBalanced = balanceDue <= 0 || Math.abs(splitTotal - balanceDue) < 0.01;
     const [dischargeWithOutstanding, setDischargeWithOutstanding] = useState(false);
 
+    // Keep the single auto payment row in sync with the live balance. When a
+    // discount is applied (or deposits toggled) the balance changes, but a stale
+    // split amount would no longer match it and "Settle & Discharge" would be
+    // blocked with "Payment amount does not match balance due". We only sync when
+    // there's a single payment row, so manually split / multi-method payments are
+    // left untouched.
+    useEffect(() => {
+        setSplits(prev => {
+            if (prev.length > 1) return prev;
+            if (balanceDue <= 0) return prev.length === 0 ? prev : [];
+            const amt = String(Number(balanceDue.toFixed(2)));
+            if (prev.length === 1 && prev[0].amount === amt) return prev;
+            return [{ amount: amt, method: prev[0]?.method || 'Cash', reference: prev[0]?.reference || '' }];
+        });
+    }, [balanceDue]);
+
     // Group items by category
     const categoryGroups = billData?.items?.reduce((acc: any, item: any) => {
         const cat = item.service_category || item.department || 'Other';
