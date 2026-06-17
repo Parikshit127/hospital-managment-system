@@ -1,6 +1,7 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
+import { prisma } from '@/backend/db';
 import { logAudit } from '@/app/lib/audit';
 import { unstable_cache } from 'next/cache';
 
@@ -108,12 +109,13 @@ type CatalogService = {
 function fetchCatalogForOrg(organizationId: string) {
     return unstable_cache(
         async (): Promise<CatalogService[]> => {
-            const ctx = await requireTenantContext();
-            const db = ctx.db;
+            // IMPORTANT: use the raw prisma client with an explicit org filter here.
+            // requireTenantContext() reads cookies, which Next.js forbids inside
+            // unstable_cache() — doing so threw and made the catalog come back empty.
             const [ipdServices, chargeCatalog, labTests] = await Promise.all([
-                db.ipdServiceMaster.findMany({ where: { is_active: true }, orderBy: { service_name: 'asc' } }),
-                db.charge_catalog.findMany({ where: { is_active: true }, orderBy: { item_name: 'asc' } }),
-                db.lab_test_inventory.findMany({ where: { is_available: true }, orderBy: { test_name: 'asc' } }),
+                prisma.ipdServiceMaster.findMany({ where: { organizationId, is_active: true }, orderBy: { service_name: 'asc' } }),
+                prisma.charge_catalog.findMany({ where: { organizationId, is_active: true }, orderBy: { item_name: 'asc' } }),
+                prisma.lab_test_inventory.findMany({ where: { organizationId, is_available: true }, orderBy: { test_name: 'asc' } }),
             ]);
             const all: CatalogService[] = [
                 ...ipdServices.map((s: any) => ({
