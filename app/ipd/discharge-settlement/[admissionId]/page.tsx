@@ -64,11 +64,18 @@ export default function DischargeSettlementPage() {
 
     const insuranceApproved = 0; // Placeholder for insurance integration
 
+    // TPA / insurance approved amount — only relevant for TPA-billed patients.
+    const isTpaPatient = billData?.invoice?.billing_patient_type === 'tpa_insurance'
+        || !!billData?.invoice?.tpa_provider_id
+        || (billData?.invoice?.tpa_payable || 0) > 0;
+    const [tpaApproved, setTpaApproved] = useState('');
+    const tpaApprovedAmount = isTpaPatient ? Math.max(0, parseFloat(tpaApproved) || 0) : 0;
+
     const discount = parseFloat(discountAmount) || 0;
     const netBill = (billData?.invoice?.net_amount || 0) - discount;
     const priorPayments = billData?.invoice?.paid_amount || 0;
     const depositsToApply = applyDeposits ? Math.min(totalDepositsAvailable, netBill - priorPayments) : 0;
-    const balanceDue = Math.max(0, netBill - priorPayments - depositsToApply - insuranceApproved);
+    const balanceDue = Math.max(0, netBill - priorPayments - depositsToApply - insuranceApproved - tpaApprovedAmount);
 
     const splitTotal = splits.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
     const isBalanced = balanceDue <= 0 || Math.abs(splitTotal - balanceDue) < 0.01;
@@ -122,6 +129,7 @@ export default function DischargeSettlementPage() {
         const res = await settleAndDischarge({
             admission_id: admissionId,
             apply_deposits: applyDeposits,
+            tpa_approved_amount: tpaApprovedAmount > 0 ? tpaApprovedAmount : undefined,
             discount_amount: discount > 0 ? discount : undefined,
             discount_reason: discountReason || undefined,
             approved_by: approvedBy || undefined,
@@ -231,6 +239,30 @@ export default function DischargeSettlementPage() {
                                 <span className="text-purple-700 font-medium">-{depositsToApply.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</span>
                             )}
                         </div>
+
+                        {/* TPA / Insurance approved amount — only for TPA patients */}
+                        {isTpaPatient && (
+                            <div className="flex justify-between items-center text-sm p-2 bg-blue-50 rounded gap-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="font-medium text-blue-800">TPA Approved Amount</span>
+                                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-bold uppercase">TPA</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-blue-700">₹</span>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        value={tpaApproved}
+                                        onChange={e => setTpaApproved(e.target.value)}
+                                        placeholder="0"
+                                        className="w-32 px-2 py-1.5 border border-blue-200 rounded text-sm text-right"
+                                    />
+                                    {tpaApprovedAmount > 0 && (
+                                        <span className="text-blue-700 font-medium whitespace-nowrap">-{tpaApprovedAmount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</span>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Prior Payments */}
                         {priorPayments > 0 && (

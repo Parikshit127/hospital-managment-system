@@ -511,6 +511,12 @@ export async function generateInterimBill(admissionId: string) {
                     net_amount: Number(invoice.net_amount),
                     paid_amount: Number(invoice.paid_amount),
                     balance_due: Number(invoice.balance_due),
+                    // Billing type so the settlement screen can offer a TPA-approved
+                    // amount input for insurance/TPA patients.
+                    billing_patient_type: invoice.billing_patient_type,
+                    tpa_payable: Number(invoice.tpa_payable || 0),
+                    tpa_settled_amount: Number(invoice.tpa_settled_amount || 0),
+                    tpa_provider_id: invoice.tpa_provider_id,
                 },
                 items: invoice.items.map((item: any) => ({
                     id: item.id,
@@ -665,6 +671,7 @@ export async function getChargePostingLog(admissionId?: string, date?: Date) {
 export async function settleAndDischarge(data: {
     admission_id: string;
     apply_deposits: boolean;
+    tpa_approved_amount?: number;
     discount_amount?: number;
     discount_reason?: string;
     approved_by?: string;
@@ -780,6 +787,56 @@ export async function settleAndDischarge(data: {
             const netAmount = Number(invoice.net_amount || 0);
             const balance = netAmount - totalPaid;
 
+            await db.invoices.update({
+                where: { id: invoice.id },
+                data: {
+                    paid_amount: totalPaid,
+                    balance_due: balance > 0 ? balance : 0,
+                    status: balance <= 0 ? 'Paid' : totalPaid > 0 ? 'Partial' : invoice.status,
+                },
+            });
+        }
+
+        // 3.5 Record the TPA / insurance approved amount as a settlement payment so
+        // it reduces the patient's balance and the bill reflects the insurer's share.
+        const tpaApproved = Math.max(0, Number(data.tpa_approved_amount) || 0);
+        const currentInvoiceForTpa = tpaApproved > 0 ? await db.invoices.findUnique({ where: { id: invoice.id } }) : null;
+        const currentBalanceForTpa = Number(currentInvoiceForTpa?.balance_due ?? invoice.balance_due ?? 0);
+        // Never let the insurer's share exceed what is actually outstanding.
+        const applyTpa = Math.max(0, Math.min(tpaApproved, currentBalanceForTpa));
+        if (applyTpa > 0) {
+            const currentInvoice = currentInvoiceForTpa;
+
+            await db.payments.create({
+                data: {
+                    receipt_number: `RCP-TPA-${Date.now()}`,
+                    invoice_id: invoice.id,
+                    amount: applyTpa,
+                    payment_method: 'TPA',
+                    payment_type: 'Settlement',
+                    status: 'Completed',
+                    notes: 'TPA / insurance approved amount',
+                    organizationId,
+                },
+            });
+
+            // Track the settled amount + claim status on the invoice.
+            const prevSettled = Number(currentInvoice?.tpa_settled_amount || 0);
+            await db.invoices.update({
+                where: { id: invoice.id },
+                data: {
+                    tpa_settled_amount: prevSettled + applyTpa,
+                    tpa_claim_status: 'settled',
+                },
+            });
+
+            // Recalculate paid/balance after the TPA payment.
+            const allPayments = await db.payments.findMany({
+                where: { invoice_id: invoice.id, status: 'Completed' },
+            });
+            const totalPaid = allPayments.reduce((s: number, p: any) => s + Number(p.amount), 0);
+            const netAmount = Number(invoice.net_amount || 0);
+            const balance = netAmount - totalPaid;
             await db.invoices.update({
                 where: { id: invoice.id },
                 data: {
