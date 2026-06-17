@@ -798,52 +798,19 @@ export async function settleAndDischarge(data: {
             });
         }
 
-        // 3.5 Record the TPA / insurance approved amount as a settlement payment so
-        // it reduces the patient's balance and the bill reflects the insurer's share.
+        // 3.5 TPA / insurance APPROVED amount = the insurer's sanctioned share.
+        // This is NOT money received yet — it stays as an outstanding balance (a
+        // receivable from the TPA) and is settled later when the payment actually
+        // arrives (record a payment against the invoice then). So here we only
+        // record the expected amount on the invoice; the patient pays just their
+        // co-pay via the splits below, leaving the TPA share outstanding.
         const tpaApproved = Math.max(0, Number(data.tpa_approved_amount) || 0);
-        const currentInvoiceForTpa = tpaApproved > 0 ? await db.invoices.findUnique({ where: { id: invoice.id } }) : null;
-        const currentBalanceForTpa = Number(currentInvoiceForTpa?.balance_due ?? invoice.balance_due ?? 0);
-        // Never let the insurer's share exceed what is actually outstanding.
-        const applyTpa = Math.max(0, Math.min(tpaApproved, currentBalanceForTpa));
-        if (applyTpa > 0) {
-            const currentInvoice = currentInvoiceForTpa;
-
-            await db.payments.create({
-                data: {
-                    receipt_number: `RCP-TPA-${Date.now()}`,
-                    invoice_id: invoice.id,
-                    amount: applyTpa,
-                    payment_method: 'TPA',
-                    payment_type: 'Settlement',
-                    status: 'Completed',
-                    notes: 'TPA / insurance approved amount',
-                    organizationId,
-                },
-            });
-
-            // Track the settled amount + claim status on the invoice.
-            const prevSettled = Number(currentInvoice?.tpa_settled_amount || 0);
+        if (tpaApproved > 0) {
             await db.invoices.update({
                 where: { id: invoice.id },
                 data: {
-                    tpa_settled_amount: prevSettled + applyTpa,
-                    tpa_claim_status: 'settled',
-                },
-            });
-
-            // Recalculate paid/balance after the TPA payment.
-            const allPayments = await db.payments.findMany({
-                where: { invoice_id: invoice.id, status: 'Completed' },
-            });
-            const totalPaid = allPayments.reduce((s: number, p: any) => s + Number(p.amount), 0);
-            const netAmount = Number(invoice.net_amount || 0);
-            const balance = netAmount - totalPaid;
-            await db.invoices.update({
-                where: { id: invoice.id },
-                data: {
-                    paid_amount: totalPaid,
-                    balance_due: balance > 0 ? balance : 0,
-                    status: balance <= 0 ? 'Paid' : totalPaid > 0 ? 'Partial' : invoice.status,
+                    tpa_payable: tpaApproved,
+                    tpa_claim_status: 'approved',
                 },
             });
         }

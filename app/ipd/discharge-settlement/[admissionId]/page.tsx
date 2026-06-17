@@ -244,27 +244,35 @@ export default function DischargeSettlementPage() {
                             )}
                         </div>
 
-                        {/* TPA / Insurance approved amount — only for TPA patients */}
+                        {/* TPA / Insurance approved amount — only for TPA patients.
+                            This is the insurer's sanctioned share: it is NOT collected
+                            now, it stays as an outstanding receivable to be settled when
+                            the TPA payment is actually received. The patient pays only
+                            their co-pay (Balance Due below). */}
                         {isTpaPatient && (
-                            <div className="flex justify-between items-center text-sm p-2 bg-blue-50 rounded gap-2">
-                                <div className="flex items-center gap-2">
-                                    <span className="font-medium text-blue-800">TPA Approved Amount</span>
-                                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-bold uppercase">TPA</span>
+                            <div className="p-2 bg-blue-50 rounded">
+                                <div className="flex justify-between items-center text-sm gap-2">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-medium text-blue-800">TPA Approved Amount</span>
+                                        <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-bold uppercase">TPA</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-blue-700">₹</span>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            value={tpaApproved}
+                                            onChange={e => setTpaApproved(e.target.value)}
+                                            placeholder="0"
+                                            className="w-32 px-2 py-1.5 border border-blue-200 rounded text-sm text-right"
+                                        />
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-blue-700">₹</span>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        value={tpaApproved}
-                                        onChange={e => setTpaApproved(e.target.value)}
-                                        placeholder="0"
-                                        className="w-32 px-2 py-1.5 border border-blue-200 rounded text-sm text-right"
-                                    />
-                                    {tpaApprovedAmount > 0 && (
-                                        <span className="text-blue-700 font-medium whitespace-nowrap">-{tpaApprovedAmount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</span>
-                                    )}
-                                </div>
+                                {tpaApprovedAmount > 0 && (
+                                    <p className="text-[11px] text-blue-700 mt-1">
+                                        {tpaApprovedAmount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })} stays <strong>outstanding</strong> as a TPA receivable — settle it later when the insurer pays. The patient pays only the co-pay below.
+                                    </p>
+                                )}
                             </div>
                         )}
 
@@ -276,9 +284,17 @@ export default function DischargeSettlementPage() {
                             </div>
                         )}
 
-                        {/* Balance Due */}
+                        {/* TPA receivable that will remain outstanding after discharge */}
+                        {tpaApprovedAmount > 0 && (
+                            <div className="flex justify-between text-sm p-2 bg-blue-50 rounded text-blue-800">
+                                <span>TPA Outstanding (collect from insurer later)</span>
+                                <span className="font-medium">{tpaApprovedAmount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</span>
+                            </div>
+                        )}
+
+                        {/* Balance Due (what the patient pays now) */}
                         <div className={`flex justify-between text-sm font-bold p-3 rounded ${balanceDue > 0 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
-                            <span>BALANCE DUE</span>
+                            <span>{tpaApprovedAmount > 0 ? 'PATIENT PAYS NOW (CO-PAY)' : 'BALANCE DUE'}</span>
                             <span>{balanceDue.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</span>
                         </div>
                     </div>
