@@ -11,7 +11,6 @@ export const patientRegistrationSchema = z.object({
         .string()
         .min(2, 'Name must be at least 2 characters')
         .max(100, 'Name must be under 100 characters')
-        .regex(/^[^0-9]*$/, 'Name cannot contain numbers')
         .transform(val => val.trim()),
     phone: z
         .string()
@@ -36,13 +35,12 @@ export const patientRegistrationSchema = z.object({
         .or(z.literal('')),
     address: z
         .string()
-        .min(5, 'Address must be at least 5 characters')
+        .min(2, 'Address is required')
         .max(500, 'Address must be under 500 characters'),
     city: z
         .string()
         .min(2, 'City is required')
-        .max(60, 'City must be under 60 characters')
-        .regex(/^[A-Za-z\s.'-]+$/, 'City can only contain letters, spaces, and . \' -'),
+        .max(60, 'City must be under 60 characters'),
     state: z
         .string()
         .max(60, 'State must be under 60 characters')
@@ -54,7 +52,7 @@ export const patientRegistrationSchema = z.object({
         .max(60, 'Country must be under 60 characters'),
     pincode: z
         .string()
-        .regex(/^[1-9][0-9]{5}$/, 'Pincode must be 6 digits and not start with 0'),
+        .regex(/^\d{6}$/, 'Pincode must be 6 digits'),
     aadhar: z
         .string()
         .transform(val => val.replace(/[-\s]/g, ''))
@@ -140,7 +138,6 @@ export const patientProfileUpdateSchema = z.object({
         .string()
         .min(2, 'Name must be at least 2 characters')
         .max(100)
-        .regex(/^[^0-9]*$/, 'Name cannot contain numbers')
         .optional(),
     phone: z
         .string()
@@ -150,7 +147,7 @@ export const patientProfileUpdateSchema = z.object({
         })
         .optional(),
     email: z.string().email('Enter a valid email').optional().or(z.literal('')),
-    address: z.string().min(10).max(500).optional().or(z.literal('')),
+    address: z.string().min(2).max(500).optional().or(z.literal('')),
     blood_group: z
         .enum(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'])
         .optional()

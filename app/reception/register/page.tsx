@@ -62,7 +62,6 @@ const PATIENT_TYPES = [
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 const RELATIONSHIPS = ['Spouse', 'Parent', 'Child', 'Sibling', 'Friend', 'Other'] as const;
-const sanitizeName = (value: string) => value.replace(/[^a-zA-Z\s.'-]/g, '');
 
 function calculateAge(dob: string): string {
     if (!dob) return '';
@@ -359,9 +358,8 @@ export default function ReceptionPage() {
                                                 <input
                                                     name="full_name"
                                                     required
-                                                    maxLength={60}
-                                                    pattern="[A-Za-z\s.'\-]{2,60}"
-                                                    onChange={(e) => { e.target.value = sanitizeName(e.target.value); }}
+                                                    minLength={2}
+                                                    maxLength={100}
                                                     className={inputWithIconClass}
                                                     placeholder="e.g. Rahul Kumar"
                                                 />
@@ -563,9 +561,8 @@ export default function ReceptionPage() {
                                                 <input
                                                     name="city"
                                                     required
+                                                    minLength={2}
                                                     maxLength={60}
-                                                    pattern="[A-Za-z\s.'\-]{2,60}"
-                                                    onChange={(e) => { e.target.value = sanitizeName(e.target.value); }}
                                                     className={inputClass}
                                                     placeholder="e.g. Mumbai"
                                                 />
@@ -577,7 +574,6 @@ export default function ReceptionPage() {
                                                 <input
                                                     name="state"
                                                     maxLength={60}
-                                                    onChange={(e) => { e.target.value = sanitizeName(e.target.value); }}
                                                     className={inputClass}
                                                     placeholder="e.g. Maharashtra"
                                                 />
@@ -591,7 +587,7 @@ export default function ReceptionPage() {
                                                     required
                                                     type="text"
                                                     inputMode="numeric"
-                                                    pattern="[1-9][0-9]{5}"
+                                                    pattern="[0-9]{6}"
                                                     maxLength={6}
                                                     onChange={(e) => {
                                                         e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
@@ -609,7 +605,6 @@ export default function ReceptionPage() {
                                                     required
                                                     defaultValue="India"
                                                     maxLength={60}
-                                                    onChange={(e) => { e.target.value = sanitizeName(e.target.value); }}
                                                     className={inputClass}
                                                     placeholder="e.g. India"
                                                 />
@@ -629,7 +624,6 @@ export default function ReceptionPage() {
                                                 <input
                                                     name="emergency_contact_name"
                                                     maxLength={60}
-                                                    onChange={(e) => { e.target.value = sanitizeName(e.target.value); }}
                                                     className={inputClass}
                                                     placeholder="Full name"
                                                 />
