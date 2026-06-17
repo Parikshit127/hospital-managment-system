@@ -1974,10 +1974,11 @@ export default function AdmissionDetailPage() {
                                                 />
                                                 <input
                                                     type="number"
-                                                    min="1"
+                                                    min="0.01"
+                                                    step="any"
                                                     value={chargeQty}
                                                     onChange={e => setChargeQty(e.target.value)}
-                                                    placeholder="Qty"
+                                                    placeholder="Qty / Days"
                                                     className="text-xs p-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
                                                 />
                                                 <select

@@ -1218,7 +1218,7 @@ model invoice_items {
   invoice_id       Int
   department       String
   description      String
-  quantity         Int      @default(1)
+  quantity         Float    @default(1)
   unit_price       Decimal
   total_price      Decimal
   discount         Decimal  @default(0)
