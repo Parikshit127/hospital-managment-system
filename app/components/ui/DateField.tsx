@@ -72,6 +72,9 @@ export function DateField({
 }: DateFieldProps) {
     const controlled = value !== undefined;
     const [text, setText] = React.useState<string>(isoToDisplay(controlled ? value : defaultValue));
+    // Hidden native date input drives the calendar popup (so users can pick a
+    // date instead of only typing dd/mm/yyyy).
+    const pickerRef = React.useRef<HTMLInputElement>(null);
 
     // Keep the visible text in sync when the controlled ISO value changes externally
     // (presets, resets) — but never while the user is mid-typing a partial date.
@@ -98,8 +101,31 @@ export function DateField({
         });
     };
 
+    // Calendar pick → update the visible dd/mm/yyyy text + fire onChange (ISO).
+    const handlePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const iso = e.target.value; // already ISO yyyy-mm-dd
+        setText(isoToDisplay(iso));
+        onChange?.({ target: { value: iso, name }, currentTarget: { value: iso, name } });
+    };
+
+    const openPicker = () => {
+        const el = pickerRef.current;
+        if (!el || disabled) return;
+        // showPicker() is the modern way; fall back to focus+click for older browsers.
+        if (typeof (el as any).showPicker === 'function') {
+            try { (el as any).showPicker(); return; } catch { /* fall through */ }
+        }
+        el.focus();
+        el.click();
+    };
+
+    const currentIso = (controlled ? value : displayToIso(text)) || '';
+    // Preserve the caller's sizing: full-width inputs need a full-width wrapper,
+    // fixed-width ones should hug their content.
+    const fullWidth = (className || '').includes('w-full');
+
     return (
-        <>
+        <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: fullWidth ? '100%' : undefined }}>
             <input
                 {...rest}
                 type="text"
@@ -108,14 +134,28 @@ export function DateField({
                 value={text}
                 maxLength={10}
                 onChange={handle}
+                onClick={openPicker}
                 className={className}
                 required={required}
                 disabled={disabled}
                 id={id}
                 title={title}
             />
-            {name ? <input type="hidden" name={name} value={(controlled ? value : displayToIso(text)) || ''} /> : null}
-        </>
+            {/* Native date input — invisible, anchors the calendar popup to the field. */}
+            <input
+                ref={pickerRef}
+                type="date"
+                tabIndex={-1}
+                aria-hidden="true"
+                value={currentIso}
+                min={min}
+                max={max}
+                disabled={disabled}
+                onChange={handlePick}
+                style={{ position: 'absolute', right: 0, bottom: 0, width: 1, height: 1, opacity: 0, pointerEvents: 'none', border: 0, padding: 0, margin: 0 }}
+            />
+            {name ? <input type="hidden" name={name} value={currentIso} /> : null}
+        </span>
     );
 }
 
