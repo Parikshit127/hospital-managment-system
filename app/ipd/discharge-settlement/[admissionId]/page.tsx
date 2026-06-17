@@ -65,7 +65,11 @@ export default function DischargeSettlementPage() {
     const insuranceApproved = 0; // Placeholder for insurance integration
 
     // TPA / insurance approved amount — only relevant for TPA-billed patients.
-    const isTpaPatient = billData?.invoice?.billing_patient_type === 'tpa_insurance'
+    // The patient's registered type is the most reliable signal (the IPD invoice
+    // often stays 'cash'); also honour invoice-level TPA flags.
+    const patientType = String(billData?.admission?.patient_type || '').toLowerCase();
+    const isTpaPatient = patientType === 'tpa_insurance' || patientType === 'tpa'
+        || billData?.invoice?.billing_patient_type === 'tpa_insurance'
         || !!billData?.invoice?.tpa_provider_id
         || (billData?.invoice?.tpa_payable || 0) > 0;
     const [tpaApproved, setTpaApproved] = useState('');
