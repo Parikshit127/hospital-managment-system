@@ -56,7 +56,7 @@ export async function registerPatient(formData: FormData) {
         phone: formData.get('phone') as string,
         age: formData.get('age') as string,
         gender: formData.get('gender') as string,
-        department: formData.get('department') as string,
+        department: (formData.get('department') as string) || '',
         email: (formData.get('email') as string) || '',
         address: (formData.get('address') as string) || '',
         city: (formData.get('city') as string) || '',
@@ -100,7 +100,11 @@ export async function registerPatient(formData: FormData) {
     // Server-side Zod validation
     const parsed = patientRegistrationSchema.safeParse(rawInput);
     if (!parsed.success) {
-        const firstError = parsed.error.issues[0]?.message || 'Validation failed';
+        const issue = parsed.error.issues[0];
+        const field = issue?.path?.join('.') || '';
+        const msg = issue?.message || 'Validation failed';
+        // Include the field name so staff can see which field failed
+        const firstError = field ? `${field}: ${msg}` : msg;
         return { success: false, error: firstError };
     }
 
