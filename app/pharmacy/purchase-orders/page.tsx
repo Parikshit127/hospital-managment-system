@@ -439,9 +439,8 @@ export default function PurchaseOrdersPage() {
                                                 <th className="px-2 py-2 text-center">Exp.</th>
                                                 <th className="px-2 py-2 text-center">MRP</th>
                                                 <th className="px-2 py-2 text-center">Rate</th>
-                                                <th className="px-2 py-2 text-center">Dis%</th>
-                                                <th className="px-2 py-2 text-center">CGST%</th>
-                                                <th className="px-2 py-2 text-center">SGST%</th>
+                                                <th className="px-2 py-2 text-center" title="Discount %">Dis%</th>
+                                                <th className="px-2 py-2 text-center" title="Total GST % (CGST+SGST combined)">GST%</th>
                                                 <th className="px-2 py-2 text-right">Amount</th>
                                                 <th className="px-2 py-2"></th>
                                             </tr>
@@ -494,15 +493,20 @@ export default function PurchaseOrdersPage() {
                                                                 className={`w-14 text-center border rounded p-1 text-sm ${Number(item.discount_pct) > 50 ? 'border-red-400 bg-red-50 text-red-700' : 'border-gray-200'}`}
                                                                 title="Discount % — leave 0 if no discount" />
                                                         </td>
+                                                        {/* Single GST% — auto-split into CGST/SGST internally */}
                                                         <td className="px-2 py-2">
-                                                            <input type="number" min="0" max="100" step="0.01" value={item.cgst_rate}
-                                                                onChange={e => updateItem(idx, 'cgst_rate', e.target.value)}
-                                                                className="w-14 text-center border border-gray-200 rounded p-1 text-sm" />
-                                                        </td>
-                                                        <td className="px-2 py-2">
-                                                            <input type="number" min="0" max="100" step="0.01" value={item.sgst_rate}
-                                                                onChange={e => updateItem(idx, 'sgst_rate', e.target.value)}
-                                                                className="w-14 text-center border border-gray-200 rounded p-1 text-sm" />
+                                                            <input type="number" min="0" max="30" step="0.01"
+                                                                value={item.cgst_rate + item.sgst_rate}
+                                                                onChange={e => {
+                                                                    const total = Number(e.target.value);
+                                                                    setPoItems(prev => {
+                                                                        const u = [...prev];
+                                                                        u[idx] = { ...u[idx], cgst_rate: total / 2, sgst_rate: total / 2 };
+                                                                        return u;
+                                                                    });
+                                                                }}
+                                                                className="w-14 text-center border border-gray-200 rounded p-1 text-sm"
+                                                                title="Total GST % (auto-split as CGST+SGST)" />
                                                         </td>
                                                         <td className="px-2 py-2 text-right font-semibold text-gray-900">
                                                             ₹{fmt(amount)}
