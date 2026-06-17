@@ -197,7 +197,7 @@ export async function addInvoiceItem(data: {
     service_date?: string;
 }) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
 
         const backdate = validateBackdate(data.service_date, { label: 'Service date' });
         if (!backdate.ok) {
@@ -226,6 +226,7 @@ export async function addInvoiceItem(data: {
                 hsn_sac_code: data.hsn_sac_code || null,
                 service_category: data.service_category || null,
                 ref_id: data.ref_id || null,
+                organizationId,
                 ...(backdatedAt ? { created_at: backdatedAt } : {}),
             },
         });
@@ -2472,6 +2473,7 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
                         hsn_sac_code: a.hsn_sac_code || null,
                         service_category: a.service_category || null,
                         ref_id: a.ref_id || null,
+                        organizationId,
                         ...(backdate.date ? { created_at: backdate.date } : {}),
                     },
                 });

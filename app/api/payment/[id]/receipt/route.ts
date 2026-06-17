@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getSignedDownloadUrl } from '@/app/lib/s3';
-import { fmtBillDateTime } from '@/app/lib/bill-branding';
+import { fmtBillDateTime, deriveInvoiceStatus, deriveTpaStatusPill, deriveInvoiceTotals } from '@/app/lib/bill-branding';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -42,6 +42,24 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         const totalRefunded = refunds.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
         (payment as any).refunds = refunds;
         (payment as any).total_refunded = totalRefunded;
+
+        // Resolve TPA provider name (no direct relation on invoices) — only when the
+        // invoice has a provider id, so non-TPA bills incur zero extra DB cost.
+        const invoiceForTpa: any = payment.invoice || {};
+        let tpaProviderName = '';
+        if (invoiceForTpa.tpa_provider_id) {
+            try {
+                const provider = await prisma.insurance_providers.findFirst({
+                    where: {
+                        id: Number(invoiceForTpa.tpa_provider_id),
+                        organizationId: auth.context.organizationId,
+                    },
+                    select: { provider_name: true },
+                });
+                tpaProviderName = provider?.provider_name || '';
+            } catch { /* swallow — receipt should still render */ }
+        }
+        (payment as any).tpa_provider_name = tpaProviderName;
 
         if (auth.context.kind === 'patient' && payment.invoice.patient_id !== auth.context.session.id) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -104,12 +122,51 @@ function generateReceiptHTML(payment: any, org: any, logoSignedUrl = '') {
     const isFullyRefunded = payment.status === 'Refunded' || (totalRefunded > 0 && totalRefunded + 0.01 >= amount);
     const hasAnyRefund = refunds.length > 0 || isFullyRefunded;
 
+    // ─── TPA detection ─────────────────────────────────────────────────────
+    // Header swaps to "TPA Settlement Receipt" when the payment itself was
+    // recorded as a TPA settlement (either by explicit payment_type or the
+    // notes prefix that `recordTpaPaymentReceived` writes).
+    const paymentType = String(payment.payment_type || '');
+    const paymentNotes = String(payment.notes || '');
+    const isTpaSettlementPayment =
+        paymentType === 'TPA Settlement' || paymentNotes.startsWith('TPA settlement');
+    const receiptHeading = isTpaSettlementPayment ? 'TPA SETTLEMENT RECEIPT' : 'PAYMENT RECEIPT';
+
+    // ─── TPA invoice summary state ─────────────────────────────────────────
+    // A TPA-flagged invoice surfaces the dedicated "TPA Summary" block from
+    // plan §8. We use the same trigger as the rest of the billing UI: either
+    // the patient type is tpa_insurance OR an approved amount has been
+    // recorded (so legacy rows with an approval but cash patient_type still
+    // get the block).
+    const tpaApprovedAmount = Number(invoice.tpa_approved_amount || 0);
+    const tpaSettledAmount = Number(invoice.tpa_settled_amount || 0);
+    const isTpaInvoice =
+        invoice.billing_patient_type === 'tpa_insurance' || tpaApprovedAmount > 0;
+    const totals = deriveInvoiceTotals(invoice);
+    const invoiceStatusBadge = deriveInvoiceStatus(invoice);
+    const tpaPill = deriveTpaStatusPill(invoice.tpa_claim_status, tpaApprovedAmount, tpaSettledAmount);
+    const tpaProviderName = String(payment.tpa_provider_name || '');
+
     const hospitalName = org?.name || 'Hospital';
     const hospitalAddress = org?.address || '';
     const hospitalPhone = org?.phone || '';
     const hospitalEmail = org?.email || '';
     const gstin = org?.registration_number || '';
     const primaryColor = org?.branding?.primary_color || '#10b981';
+
+    // Colour swatches for status pills (shared between invoice + tpa pill).
+    const pillStyle = (color: string) => {
+        switch (color) {
+            case 'green': return 'background:#d1fae5;color:#065f46;';
+            case 'amber': return 'background:#fef3c7;color:#92400e;';
+            case 'red':   return 'background:#fee2e2;color:#991b1b;';
+            case 'blue':  return 'background:#dbeafe;color:#1e40af;';
+            case 'gray':
+            default:      return 'background:#e5e7eb;color:#374151;';
+        }
+    };
+    const fmtINR = (n: number) =>
+        `&#8377;${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
     const razorpayInfo = payment.razorpay_payment_id
         ? `<tr>
@@ -160,7 +217,7 @@ function generateReceiptHTML(payment: any, org: any, logoSignedUrl = '') {
                     ${gstin ? `<p style="font-size:11px;color:#6b7280;">GSTIN: ${gstin}</p>` : ''}
                 </div>
                 <div style="text-align:right;">
-                    <h2 style="font-size:18px;font-weight:800;color:#1f2937;margin-bottom:4px;">PAYMENT RECEIPT</h2>
+                    <h2 style="font-size:18px;font-weight:800;color:#1f2937;margin-bottom:4px;">${receiptHeading}</h2>
                     <p style="font-size:13px;font-weight:700;color:${primaryColor};font-family:monospace;">${payment.receipt_number}</p>
                     <p style="font-size:11px;color:#6b7280;margin-top:4px;">${paymentDate}</p>
                 </div>
@@ -232,22 +289,55 @@ function generateReceiptHTML(payment: any, org: any, logoSignedUrl = '') {
 
         <!-- Invoice Summary -->
         <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:24px;">
-            <h4 style="font-size:12px;font-weight:700;color:#374151;margin-bottom:10px;">Invoice Summary</h4>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <h4 style="font-size:12px;font-weight:700;color:#374151;">Invoice Summary</h4>
+                <span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;${pillStyle(invoiceStatusBadge.color)}">${invoiceStatusBadge.label}</span>
+            </div>
             <table style="width:100%;">
                 <tr>
                     <td style="padding:4px 16px;font-size:12px;color:#6b7280;">Invoice Total</td>
-                    <td style="padding:4px 16px;font-size:12px;text-align:right;font-weight:600;">&#8377;${Number(invoice.net_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td style="padding:4px 16px;font-size:12px;text-align:right;font-weight:600;">${fmtINR(invoice.net_amount)}</td>
                 </tr>
                 <tr>
                     <td style="padding:4px 16px;font-size:12px;color:#6b7280;">Total Paid</td>
-                    <td style="padding:4px 16px;font-size:12px;text-align:right;font-weight:600;color:#059669;">&#8377;${Number(invoice.paid_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td style="padding:4px 16px;font-size:12px;text-align:right;font-weight:600;color:#059669;">${fmtINR(invoice.paid_amount)}</td>
                 </tr>
                 <tr>
-                    <td style="padding:4px 16px;font-size:12px;color:#6b7280;">Balance Due</td>
-                    <td style="padding:4px 16px;font-size:12px;text-align:right;font-weight:700;color:${Number(invoice.balance_due || 0) > 0 ? '#dc2626' : '#059669'};">&#8377;${Number(invoice.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td style="padding:4px 16px;font-size:12px;color:#6b7280;">Patient Outstanding</td>
+                    <td style="padding:4px 16px;font-size:12px;text-align:right;font-weight:700;color:${totals.patientOutstanding > 0.01 ? '#dc2626' : '#059669'};">${fmtINR(totals.patientOutstanding)}</td>
                 </tr>
+                ${tpaApprovedAmount > 0 ? `<tr>
+                    <td style="padding:4px 16px;font-size:12px;color:#6b7280;">TPA Outstanding</td>
+                    <td style="padding:4px 16px;font-size:12px;text-align:right;font-weight:700;color:${totals.tpaOutstanding > 0.01 ? '#b45309' : '#059669'};">${fmtINR(totals.tpaOutstanding)}</td>
+                </tr>` : ''}
             </table>
         </div>
+
+        ${isTpaInvoice ? `<!-- TPA Summary (plan §8) -->
+        <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:16px;margin-bottom:24px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <h4 style="font-size:12px;font-weight:800;color:#92400e;letter-spacing:0.5px;">TPA SETTLEMENT</h4>
+                <span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;${pillStyle(tpaPill.color)}">${tpaPill.label}</span>
+            </div>
+            <table style="width:100%;">
+                <tr>
+                    <td style="padding:4px 16px;font-size:12px;color:#92400e;font-weight:600;width:200px;">Provider</td>
+                    <td style="padding:4px 16px;font-size:12px;text-align:right;font-weight:600;">${tpaProviderName || '-'}</td>
+                </tr>
+                <tr>
+                    <td style="padding:4px 16px;font-size:12px;color:#92400e;font-weight:600;">TPA Approved</td>
+                    <td style="padding:4px 16px;font-size:12px;text-align:right;font-weight:600;">${fmtINR(totals.tpaApproved)}</td>
+                </tr>
+                <tr>
+                    <td style="padding:4px 16px;font-size:12px;color:#92400e;font-weight:600;">Received from TPA</td>
+                    <td style="padding:4px 16px;font-size:12px;text-align:right;font-weight:600;color:#059669;">${fmtINR(totals.tpaReceived)}</td>
+                </tr>
+                <tr>
+                    <td style="padding:4px 16px;font-size:12px;color:#92400e;font-weight:600;">TPA Outstanding</td>
+                    <td style="padding:4px 16px;font-size:12px;text-align:right;font-weight:700;color:${totals.tpaOutstanding > 0.01 ? '#b45309' : '#059669'};">${fmtINR(totals.tpaOutstanding)}</td>
+                </tr>
+            </table>
+        </div>` : ''}
 
         ${hasAnyRefund ? `<div style="position:relative;z-index:2;background:#fff1f2;border:2px solid #fecdd3;border-radius:12px;padding:16px;margin-bottom:24px;">
             <h4 style="font-size:12px;font-weight:800;color:#9f1239;margin-bottom:10px;letter-spacing:1px;">REFUND DETAILS</h4>

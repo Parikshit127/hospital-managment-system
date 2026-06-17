@@ -241,7 +241,132 @@ export function deriveInvoiceTotals(invoice: any) {
     const creditNotes: any[] = invoice?.credit_notes || [];
     const creditNoteTotal = creditNotes.reduce((s, c) => s + Number(c?.total_amount || 0), 0);
     const balance = net - creditNoteTotal - paid;
-    return { gross, discount, tax, net, paid, creditNoteTotal, balance };
+
+    // ─── TPA split ──────────────────────────────────────────────────────────
+    // The stored balance_due (computed by server actions) is the single source of
+    // truth for total outstanding; we re-derive the patient-vs-TPA split here so
+    // every renderer agrees. Falls back to the locally-computed `balance` when
+    // balance_due is absent (e.g. fresh in-memory invoice objects).
+    const tpaApproved = Number(invoice?.tpa_approved_amount || 0);
+    const tpaReceived = Number(invoice?.tpa_settled_amount || 0);
+    const tpaOutstanding = Math.max(0, tpaApproved - tpaReceived);
+    const storedBalanceDue = invoice?.balance_due != null
+        ? Number(invoice.balance_due)
+        : balance;
+    const patientOutstanding = Math.max(0, storedBalanceDue - tpaOutstanding);
+
+    return {
+        gross,
+        discount,
+        tax,
+        net,
+        paid,
+        creditNoteTotal,
+        balance,
+        tpaApproved,
+        tpaReceived,
+        tpaOutstanding,
+        patientOutstanding,
+    };
+}
+
+// ─── Invoice status derivation (single source of truth for status pills) ─────
+// Centralised so every renderer (dashboard, PDF, receipt) agrees on what the
+// invoice "is". Divergent local derivations are the #1 source of "looks paid
+// here, unpaid there" bugs (see plan §11).
+
+export type InvoiceStatusCode =
+    | 'PAID'
+    | 'TPA_APPROVED_INTERIM'
+    | 'PARTIALLY_PAID'
+    | 'UNPAID'
+    | 'CANCELLED'
+    | 'REFUNDED'
+    | 'TPA_REJECTED';
+
+export interface InvoiceStatusBadge {
+    code: InvoiceStatusCode;
+    label: string;
+    color: 'green' | 'amber' | 'red' | 'gray' | 'blue';
+}
+
+export function deriveInvoiceStatus(invoice: any): InvoiceStatusBadge {
+    const status = String(invoice?.status || '');
+    const tpaClaimStatus = String(invoice?.tpa_claim_status || '');
+    const paid = Number(invoice?.paid_amount || 0);
+    // Prefer stored balance_due — server actions are authoritative — but fall
+    // back to derived totals when the caller didn't pass the header field.
+    const balanceDue = invoice?.balance_due != null
+        ? Number(invoice.balance_due)
+        : deriveInvoiceTotals(invoice).balance;
+
+    if (status === 'Cancelled') {
+        return { code: 'CANCELLED', label: 'Cancelled', color: 'gray' };
+    }
+    if (status === 'Refunded') {
+        return { code: 'REFUNDED', label: 'Refunded', color: 'gray' };
+    }
+    if (tpaClaimStatus === 'rejected') {
+        return { code: 'TPA_REJECTED', label: 'TPA Rejected', color: 'red' };
+    }
+    if (
+        balanceDue <= 0.01 &&
+        (tpaClaimStatus === 'settled' || tpaClaimStatus === 'not_submitted' || tpaClaimStatus === '')
+    ) {
+        return { code: 'PAID', label: 'Paid', color: 'green' };
+    }
+    if (
+        (tpaClaimStatus === 'approved' || tpaClaimStatus === 'partially_settled') &&
+        balanceDue > 0
+    ) {
+        return {
+            code: 'TPA_APPROVED_INTERIM',
+            label: 'TPA Approved — Interim',
+            color: 'amber',
+        };
+    }
+    if (paid > 0 && balanceDue > 0) {
+        return { code: 'PARTIALLY_PAID', label: 'Partially Paid', color: 'amber' };
+    }
+    return { code: 'UNPAID', label: 'Unpaid', color: 'red' };
+}
+
+// ─── TPA claim status pill (table from plan §8) ──────────────────────────────
+
+export interface TpaStatusPill {
+    label: string;
+    color: 'green' | 'amber' | 'red' | 'gray' | 'blue';
+}
+
+export function deriveTpaStatusPill(
+    tpaClaimStatus: string | null | undefined,
+    tpaApprovedAmount: any = 0,
+    tpaSettledAmount: any = 0,
+): TpaStatusPill {
+    const status = String(tpaClaimStatus || '').toLowerCase();
+    // Reference the amounts so callers can pass them through without lint
+    // complaints, and so future divergence checks (e.g. settled flag vs amounts)
+    // have a single home.
+    void Number(tpaApprovedAmount || 0);
+    void Number(tpaSettledAmount || 0);
+
+    switch (status) {
+        case 'not_submitted':
+        case '':
+            return { label: 'TPA: Not Submitted', color: 'gray' };
+        case 'submitted':
+            return { label: 'TPA: Submitted', color: 'blue' };
+        case 'approved':
+            return { label: 'TPA: Approved — Awaiting Payment', color: 'amber' };
+        case 'partially_settled':
+            return { label: 'TPA: Partial Settlement', color: 'amber' };
+        case 'settled':
+            return { label: 'TPA: Settled', color: 'green' };
+        case 'rejected':
+            return { label: 'TPA: Rejected', color: 'red' };
+        default:
+            return { label: `TPA: ${status}`, color: 'gray' };
+    }
 }
 
 // ─── Utility ─────────────────────────────────────────────────────────────────

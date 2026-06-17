@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
-import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, fmtBillDateTime, deriveInvoiceTotals, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding';
+import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, fmtBillDateTime, deriveInvoiceTotals, deriveInvoiceStatus, deriveTpaStatusPill, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding';
 import { getBillSections } from '@/app/lib/bill-sections';
 import { formatDoctorName } from '@/app/lib/format-name';
 
@@ -170,7 +170,23 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
 
     // Derive totals from line items so the summary always matches the charges shown
     // (stored header totals can drift). See deriveInvoiceTotals.
-    const { gross: total, discount: totalDiscount, tax: totalTax, net, paid, balance } = deriveInvoiceTotals(invoice);
+    const { gross: total, discount: totalDiscount, tax: totalTax, net, paid, balance, tpaApproved, tpaReceived, tpaOutstanding, patientOutstanding } = deriveInvoiceTotals(invoice);
+    // Centralised status derivation — drives the top-of-bill TPA INTERIM banner so the
+    // summary bill never shows a green "Paid" stamp for an approved-but-unsettled TPA bill.
+    const invoiceStatus = deriveInvoiceStatus(invoice);
+    // TPA-flagged when either explicitly typed tpa_insurance or any approved amount exists.
+    const isTpaFlagged = invoice.billing_patient_type === 'tpa_insurance' || tpaApproved > 0;
+    const tpaPill = deriveTpaStatusPill(invoice.tpa_claim_status, tpaApproved, tpaReceived);
+    // Tailwind-ish pill colour table mirrors the receipt + invoice PDF routes.
+    const pillColors: Record<string, { bg: string; fg: string; border: string }> = {
+        green: { bg: '#dcfce7', fg: '#166534', border: '#86efac' },
+        amber: { bg: '#fef3c7', fg: '#92400e', border: '#fcd34d' },
+        red:   { bg: '#fee2e2', fg: '#991b1b', border: '#fca5a5' },
+        gray:  { bg: '#f3f4f6', fg: '#374151', border: '#d1d5db' },
+        blue:  { bg: '#dbeafe', fg: '#1e40af', border: '#93c5fd' },
+    };
+    const tpaPillStyle = pillColors[tpaPill.color] || pillColors.gray;
+    const showInterimBanner = invoiceStatus.code === 'TPA_APPROVED_INTERIM';
 
     // Group items by service_category for MEDNET-style detail rows
     const fmtDate = fmtBillDate;
@@ -260,6 +276,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     <div class="watermark">${billType}</div>
     ${printButtonHtml(branding, 'Category-level summary bill for ' + invoice.invoice_number)}
     ${medsToggle}
+    ${showInterimBanner ? `<div style="background:#fef3c7;border:2px solid #f59e0b;color:#92400e;padding:10px 16px;margin:0 60px 12px;border-radius:6px;font-weight:800;text-align:center;font-size:13px;letter-spacing:0.5px;">TPA APPROVED &mdash; INTERIM BILL (Awaiting insurer settlement)</div>` : ''}
     <table class="print-layout-table">
         <thead><tr><td class="print-layout-header-spacer"></td></tr></thead>
         <tbody><tr><td>
@@ -324,6 +341,24 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
                     <tbody>${paymentDetailRows}</tbody>
                 </table>` : ''}
 
+                ${isTpaFlagged ? `
+                <!-- TPA Summary block (plan §8) — surfaces who-owes-what on every TPA bill -->
+                <table style="width:100%;border-collapse:collapse;margin-bottom:12px;border:1px solid #f59e0b;">
+                    <thead>
+                        <tr style="background:#fef3c7;">
+                            <th colspan="2" style="padding:6px 8px;text-align:left;font-size:11px;font-weight:800;color:#92400e;border-bottom:1px solid #f59e0b;">TPA SETTLEMENT</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td style="padding:4px 8px;font-size:11px;width:180px;">Provider</td><td style="padding:4px 8px;font-size:11px;font-weight:600;">${tpaProviderName || '-'}</td></tr>
+                        <tr><td style="padding:4px 8px;font-size:11px;">Claim Status</td><td style="padding:4px 8px;font-size:11px;"><span style="display:inline-block;padding:2px 8px;font-size:10px;font-weight:700;border-radius:9999px;background:${tpaPillStyle.bg};color:${tpaPillStyle.fg};border:1px solid ${tpaPillStyle.border};">${tpaPill.label}</span></td></tr>
+                        ${invoice.tpa_claim_number ? `<tr><td style="padding:4px 8px;font-size:11px;">Claim Number</td><td style="padding:4px 8px;font-size:11px;">${invoice.tpa_claim_number}</td></tr>` : ''}
+                        <tr><td style="padding:4px 8px;font-size:11px;">TPA Approved</td><td style="padding:4px 8px;font-size:11px;text-align:left;">${tpaApproved.toFixed(2)}</td></tr>
+                        <tr><td style="padding:4px 8px;font-size:11px;">Received from TPA</td><td style="padding:4px 8px;font-size:11px;text-align:left;">${tpaReceived.toFixed(2)}</td></tr>
+                        <tr><td style="padding:4px 8px;font-size:11px;font-weight:700;">TPA Outstanding</td><td style="padding:4px 8px;font-size:11px;font-weight:700;color:${tpaOutstanding > 0 ? '#92400e' : '#166534'};">${tpaOutstanding.toFixed(2)}</td></tr>
+                    </tbody>
+                </table>` : ''}
+
                 <!-- Amount Summary (MEDNET format with words) -->
                 <table style="width:100%;margin-bottom:12px;">
                     <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;width:120px;">Bill Amount :</td><td style="font-size:11px;">${total.toFixed(2)} - ${numberToWords(total)}</td></tr>
@@ -333,7 +368,11 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
                     <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Paid Amount :</td><td style="font-size:11px;">${paid.toFixed(2)} - ${numberToWords(paid)}</td></tr>
                     ${balance < 0
                         ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;color:#1d4ed8;">Advance / Credit :</td><td style="font-size:11px;color:#1d4ed8;">${Math.abs(balance).toFixed(2)} - ${numberToWords(Math.abs(balance))}</td></tr>`
-                        : `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Balance :</td><td style="font-size:11px;">${balance.toFixed(2)} - ${numberToWords(balance)}</td></tr>`}
+                        : (isTpaFlagged
+                            ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;color:${patientOutstanding > 0 ? '#991b1b' : '#166534'};">Patient Outstanding :</td><td style="font-size:11px;font-weight:700;color:${patientOutstanding > 0 ? '#991b1b' : '#166534'};">${patientOutstanding.toFixed(2)} - ${numberToWords(patientOutstanding)}</td></tr>
+                            <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;color:${tpaOutstanding > 0 ? '#92400e' : '#166534'};">TPA Outstanding :</td><td style="font-size:11px;font-weight:700;color:${tpaOutstanding > 0 ? '#92400e' : '#166534'};">${tpaOutstanding.toFixed(2)} - ${numberToWords(tpaOutstanding)}</td></tr>
+                            <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Balance :</td><td style="font-size:11px;">${balance.toFixed(2)} - ${numberToWords(balance)}</td></tr>`
+                            : `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Balance :</td><td style="font-size:11px;">${balance.toFixed(2)} - ${numberToWords(balance)}</td></tr>`)}
                 </table>
                 <p style="font-size:10px;text-align:right;color:#666;margin-bottom:10px;">(All figures are in Rupees (INR) only)</p>
                 ${sections.showFooter ? billFooterHtml(branding) : ''}

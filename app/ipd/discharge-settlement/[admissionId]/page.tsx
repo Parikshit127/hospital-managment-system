@@ -253,7 +253,7 @@ export default function DischargeSettlementPage() {
                             <div className="p-2 bg-blue-50 rounded">
                                 <div className="flex justify-between items-center text-sm gap-2">
                                     <div className="flex items-center gap-2">
-                                        <span className="font-medium text-blue-800">TPA Approved Amount</span>
+                                        <span className="font-medium text-blue-800">TPA Approved Amount (Receivable — not yet received)</span>
                                         <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-bold uppercase">TPA</span>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -261,6 +261,7 @@ export default function DischargeSettlementPage() {
                                         <input
                                             type="number"
                                             min={0}
+                                            max={netBill}
                                             value={tpaApproved}
                                             onChange={e => setTpaApproved(e.target.value)}
                                             placeholder="0"
@@ -268,6 +269,11 @@ export default function DischargeSettlementPage() {
                                         />
                                     </div>
                                 </div>
+                                {tpaApprovedAmount > netBill && (
+                                    <div className="mt-2 p-2 bg-rose-50 border border-rose-200 rounded text-[11px] text-rose-700">
+                                        Approved amount cannot exceed bill total {netBill.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}
+                                    </div>
+                                )}
                                 {tpaApprovedAmount > 0 && (
                                     <p className="text-[11px] text-blue-700 mt-1">
                                         {tpaApprovedAmount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })} stays <strong>outstanding</strong> as a TPA receivable — settle it later when the insurer pays. The patient pays only the co-pay below.
@@ -297,6 +303,16 @@ export default function DischargeSettlementPage() {
                             <span>{tpaApprovedAmount > 0 ? 'PATIENT PAYS NOW (CO-PAY)' : 'BALANCE DUE'}</span>
                             <span>{balanceDue.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</span>
                         </div>
+
+                        {/* TPA Receivable reminder — visible after co-pay so it's clear
+                            this amount is NOT collected now and will land when the
+                            insurer pays out. */}
+                        {tpaApprovedAmount > 0 && (
+                            <div className="flex justify-between text-sm p-2 bg-amber-50 text-amber-800 rounded border border-amber-200">
+                                <span>TPA Receivable: ₹{tpaApprovedAmount.toLocaleString('en-IN')}</span>
+                                <span className="font-medium">collected when insurer pays</span>
+                            </div>
+                        )}
                     </div>
                 </div>
 

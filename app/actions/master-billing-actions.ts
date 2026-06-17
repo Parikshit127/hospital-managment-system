@@ -220,6 +220,10 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
             select: { amount: true, payment_method: true, created_at: true },
           },
         },
+        // Prisma `include` returns all scalar fields by default, so the new
+        // TPA settlement fields (tpa_approved_amount, tpa_approved_at,
+        // tpa_settled_amount, tpa_settled_at, tpa_claim_status,
+        // tpa_provider_id) are automatically available on `inv`.
         orderBy: { created_at: "desc" },
         skip,
         take: limit,
@@ -242,6 +246,25 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
       depositMap.set(d.patient_id, (depositMap.get(d.patient_id) || 0) + remaining);
     }
 
+    // Batch-resolve TPA provider names for the page's invoices in one query.
+    const tpaProviderIds = Array.from(
+      new Set(
+        invoices
+          .map((i: any) => i.tpa_provider_id)
+          .filter((id: any): id is number => typeof id === "number"),
+      ),
+    );
+    const tpaProviders = tpaProviderIds.length
+      ? await db.insurance_providers.findMany({
+          where: { id: { in: tpaProviderIds }, organizationId },
+          select: { id: true, provider_name: true },
+        })
+      : [];
+    const tpaProviderMap = new Map<number, string>();
+    for (const p of tpaProviders) {
+      tpaProviderMap.set(p.id, p.provider_name);
+    }
+
     const rows = invoices.map((inv: any) => {
       const total = decToNum(inv.net_amount);
       const paid = decToNum(inv.paid_amount);
@@ -249,6 +272,12 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
       const ageDays = daysBetween(inv.created_at);
       const depositBalance = depositMap.get(inv.patient_id) || 0;
       const lastPayment = inv.payments[0]?.created_at ?? null;
+
+      // TPA settlement derivations.
+      const tpaApproved = decToNum(inv.tpa_approved_amount);
+      const tpaSettled = decToNum(inv.tpa_settled_amount);
+      const tpaOutstanding = Math.max(0, tpaApproved - tpaSettled);
+      const patientOutstanding = Math.max(0, balance - tpaOutstanding);
 
       const paymentStatus = normalisePaymentStatus({
         total,
@@ -270,6 +299,7 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
       return {
         invoice_id: inv.id,
         invoice_number: inv.invoice_number,
+        version: inv.version, // optimistic lock for downstream mutating actions
         patient_id: inv.patient_id,
         patient_name: inv.patient?.full_name ?? "—",
         patient_phone: inv.patient?.phone ?? null,
@@ -281,6 +311,18 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
         invoice_status: inv.status,
         payment_status: paymentStatus,
         claim_status: inv.tpa_claim_status,
+        tpa_claim_status: inv.tpa_claim_status,
+        tpa_provider_id: inv.tpa_provider_id ?? null,
+        tpa_provider_name:
+          typeof inv.tpa_provider_id === "number"
+            ? tpaProviderMap.get(inv.tpa_provider_id) ?? null
+            : null,
+        tpa_approved_amount: tpaApproved,
+        tpa_approved_at: inv.tpa_approved_at ?? null,
+        tpa_settled_amount: tpaSettled,
+        tpa_settled_at: inv.tpa_settled_at ?? null,
+        tpa_outstanding: tpaOutstanding,
+        patient_outstanding: patientOutstanding,
         total_amount: total,
         paid_amount: paid,
         outstanding_amount: balance,

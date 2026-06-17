@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { validateZealthixApiKey } from '@/app/lib/zealthix/auth'
-import { getBillBranding, inlineHeaderHtml, billFooterHtml, letterheadBackgroundHtml, letterheadCss, printButtonHtml, fmtBillDate, deriveInvoiceTotals, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding'
+import { getBillBranding, inlineHeaderHtml, billFooterHtml, letterheadBackgroundHtml, letterheadCss, printButtonHtml, fmtBillDate, deriveInvoiceTotals, deriveInvoiceStatus, deriveTpaStatusPill, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding'
 import { getPharmacyBranding } from '@/app/lib/pharmacy-branding'
 import { getBillSections } from '@/app/lib/bill-sections'
 import { formatDoctorName } from '@/app/lib/format-name'
@@ -184,8 +184,13 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
     const admission = invoice.admission || null
     // Derive totals from line items so the summary always matches the charges shown
     // (stored header totals can drift). See deriveInvoiceTotals.
-    const { gross: total, discount: totalDiscount, tax: totalTax, net, paid, balance } = deriveInvoiceTotals(invoice)
+    const { gross: total, discount: totalDiscount, tax: totalTax, net, paid, balance, tpaApproved, tpaReceived, tpaOutstanding, patientOutstanding } = deriveInvoiceTotals(invoice)
     const isInterState = invoice.is_inter_state || false
+    // Derived invoice status — used for top-of-bill badge override (e.g. TPA interim).
+    const invoiceStatus = deriveInvoiceStatus(invoice)
+    // TPA-flagged when either explicitly typed tpa_insurance or any approved amount exists.
+    const isTpaFlagged = invoice.billing_patient_type === 'tpa_insurance' || tpaApproved > 0
+    const tpaPill = deriveTpaStatusPill(invoice.tpa_claim_status, tpaApproved, tpaReceived)
 
     const fmtDate = fmtBillDate
     const fmtTime = (d: any) => d ? new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h12' }) : ''
@@ -275,7 +280,55 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
         '<hr style="border:none;border-top:2px solid #000;margin:6px 0 10px 0;" />',
     ].join('\n');
 
-    const hospitalBillTitle = '<div style="text-align:center;margin-bottom:12px;"><h2 style="font-size:14px;font-weight:bold;border-bottom:1px solid #999;display:inline-block;padding-bottom:2px;">' + billType + '</h2></div>';
+    // Amber "TPA APPROVED — INTERIM BILL" badge replaces the default title when the
+    // derived status is TPA_APPROVED_INTERIM — patient/co-pay may still be due and
+    // the bill must NOT be misread as a final/paid bill.
+    const isInterimTpaBill = invoiceStatus.code === 'TPA_APPROVED_INTERIM'
+    const hospitalBillTitle = isInterimTpaBill
+        ? '<div style="text-align:center;margin-bottom:12px;"><h2 style="font-size:14px;font-weight:900;color:#92400e;background:#fef3c7;border:2px solid #f59e0b;display:inline-block;padding:4px 14px;border-radius:4px;letter-spacing:0.5px;">TPA APPROVED — INTERIM BILL</h2></div>'
+        : '<div style="text-align:center;margin-bottom:12px;"><h2 style="font-size:14px;font-weight:bold;border-bottom:1px solid #999;display:inline-block;padding-bottom:2px;">' + billType + '</h2></div>';
+
+    // ── TPA Summary block (plan §8) ─────────────────────────────────────────
+    // Rendered for every TPA-flagged invoice: shows provider, claim status pill,
+    // approved/received/outstanding amounts. The outer renderer drops this block
+    // for non-TPA invoices.
+    const tpaPillColorMap: Record<string, { bg: string; fg: string; border: string }> = {
+        green: { bg: '#dcfce7', fg: '#166534', border: '#16a34a' },
+        amber: { bg: '#fef3c7', fg: '#92400e', border: '#f59e0b' },
+        red:   { bg: '#fee2e2', fg: '#991b1b', border: '#dc2626' },
+        gray:  { bg: '#f3f4f6', fg: '#374151', border: '#9ca3af' },
+        blue:  { bg: '#dbeafe', fg: '#1e40af', border: '#3b82f6' },
+    }
+    const pillColors = tpaPillColorMap[tpaPill.color] || tpaPillColorMap.gray
+    const tpaSummaryHtml = isTpaFlagged ? `
+                <!-- TPA Summary -->
+                <div style="border:1px solid #f59e0b;background:#fffbeb;border-radius:4px;padding:8px 12px;margin-bottom:10px;">
+                    <p style="font-size:11px;font-weight:900;color:#92400e;margin:0 0 6px 0;letter-spacing:0.4px;">TPA SETTLEMENT</p>
+                    <table style="width:100%;font-size:11px;">
+                        <tr>
+                            <td style="padding:2px 0;color:#555;width:140px;">Provider:</td>
+                            <td style="padding:2px 0;font-weight:600;">${tpaProviderName || '-'}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:2px 0;color:#555;">Claim Status:</td>
+                            <td style="padding:2px 0;">
+                                <span style="display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:${pillColors.bg};color:${pillColors.fg};border:1px solid ${pillColors.border};">${tpaPill.label}</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:2px 0;color:#555;">TPA Approved:</td>
+                            <td style="padding:2px 0;font-weight:600;">${tpaApproved.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:2px 0;color:#555;">Received from TPA:</td>
+                            <td style="padding:2px 0;font-weight:600;">${tpaReceived.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:2px 0;color:#555;">TPA Outstanding:</td>
+                            <td style="padding:2px 0;font-weight:700;color:${tpaOutstanding > 0 ? '#b45309' : '#166534'};">${tpaOutstanding.toFixed(2)}</td>
+                        </tr>
+                    </table>
+                </div>` : '';
 
     return `<!DOCTYPE html>
 <html>
@@ -313,6 +366,8 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
                     }
                     return '';
                 })()}
+
+                ${tpaSummaryHtml}
 
                 <!-- Patient Row -->
                 <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
@@ -405,7 +460,10 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
                     <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Paid Amount :</td><td style="font-size:11px;">${paid.toFixed(2)} - ${numberToWords(paid)}</td></tr>
                     ${balance < 0
                         ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;color:#1d4ed8;">Advance / Credit :</td><td style="font-size:11px;color:#1d4ed8;">${Math.abs(balance).toFixed(2)} - ${numberToWords(Math.abs(balance))}</td></tr>`
-                        : `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Balance :</td><td style="font-size:11px;">${balance.toFixed(2)} - ${numberToWords(balance)}</td></tr>`}
+                        : (isTpaFlagged
+                            ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;color:#b45309;">Patient Outstanding :</td><td style="font-size:11px;color:#b45309;">${patientOutstanding.toFixed(2)} - ${numberToWords(patientOutstanding)}</td></tr>
+                               <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;color:#b45309;">TPA Outstanding :</td><td style="font-size:11px;color:#b45309;">${tpaOutstanding.toFixed(2)} - ${numberToWords(tpaOutstanding)}</td></tr>`
+                            : `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Balance :</td><td style="font-size:11px;">${balance.toFixed(2)} - ${numberToWords(balance)}</td></tr>`)}
                 </table>
 
                 <p style="font-size:10px;text-align:right;color:#666;margin-bottom:8px;">(All figures are in Rupees (INR) only)</p>

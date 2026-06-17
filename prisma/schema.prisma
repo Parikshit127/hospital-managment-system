@@ -1170,6 +1170,11 @@ model invoices {
   tpa_claim_status         String  @default("not_submitted") // not_submitted | submitted | under_review | approved | rejected | settled | partially_settled
   tpa_claim_number         String?
   tpa_settled_amount       Decimal @default(0)
+  // TPA approval lifecycle — separates "what TPA promised" (immutable anchor)
+  // from "what we've actually received" (accumulator in tpa_settled_amount).
+  tpa_approved_amount      Decimal   @default(0)
+  tpa_approved_at          DateTime?
+  tpa_settled_at           DateTime?
   corporate_invoice_number String?
   concession_amount        Decimal @default(0)
   concession_reason        String?

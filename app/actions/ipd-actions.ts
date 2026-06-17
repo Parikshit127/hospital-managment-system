@@ -711,6 +711,7 @@ export async function accrueIPDDailyCharges(admissionId: string) {
             hsn_sac_code: roomRate > 5000 ? '9963' : '9993',
             service_category: 'Room',
             ref_id: roomRef,
+            organizationId,
           },
         });
       }
@@ -746,6 +747,7 @@ export async function accrueIPDDailyCharges(admissionId: string) {
             hsn_sac_code: '9993',
             service_category: 'Nursing',
             ref_id: nursingRef,
+            organizationId,
           },
         });
       }

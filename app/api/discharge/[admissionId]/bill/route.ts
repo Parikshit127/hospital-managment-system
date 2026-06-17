@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { ensureIPDRoomChargesAccrued } from '@/app/actions/ipd-billing-helpers'
-import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, deriveInvoiceTotals, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding';
+import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, deriveInvoiceTotals, deriveInvoiceStatus, deriveTpaStatusPill, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding';
 import { getBillSections } from '@/app/lib/bill-sections';
 import { formatDoctorName } from '@/app/lib/format-name';
 
@@ -141,15 +141,42 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
     const hospitalName = branding.hospitalName;
     const gstin = branding.gstin;
 
-    const billColor = isFinal ? branding.accentColor : '#f97316';
-
     const admissionDate = fmtBillDate(admission.admission_date);
     const dischargeDate = admission.discharge_date ? fmtBillDate(admission.discharge_date) : '';
     const los = Math.max(1, Math.ceil((new Date(admission.discharge_date || new Date()).getTime() - new Date(admission.admission_date).getTime()) / (1000 * 60 * 60 * 24)));
 
     // Derive gross/discount/tax/net from the line items so the summary always matches
     // the charges shown above it (stored header totals can drift). See deriveInvoiceTotals.
-    const { gross: total, discount: totalDiscount, tax: totalTax, net, paid, balance } = deriveInvoiceTotals(invoice);
+    const { gross: total, discount: totalDiscount, tax: totalTax, net, paid, balance, tpaApproved, tpaReceived, tpaOutstanding, patientOutstanding } = deriveInvoiceTotals(invoice);
+    // Centralised status derivation — drives the top-of-bill TPA INTERIM banner so
+    // discharge bills never show a green "PAID" stamp for an approved-but-unsettled TPA bill.
+    const invoiceStatus = deriveInvoiceStatus(invoice);
+    // TPA-flagged when either explicitly typed tpa_insurance/insurance OR an approved amount exists.
+    const invoiceTypeLc = String(invoice.billing_patient_type || '').toLowerCase();
+    const isTpaFlagged = ['tpa_insurance', 'insurance', 'tpa'].includes(invoiceTypeLc) || tpaApproved > 0 || isInsuranceBill;
+    const tpaPill = deriveTpaStatusPill(invoice.tpa_claim_status, tpaApproved, tpaReceived);
+    // Status pill colour swatches — mirror the receipt + invoice PDF routes (plan §8).
+    const pillColors: Record<string, { bg: string; fg: string; border: string }> = {
+        green: { bg: '#dcfce7', fg: '#166534', border: '#86efac' },
+        amber: { bg: '#fef3c7', fg: '#92400e', border: '#fcd34d' },
+        red:   { bg: '#fee2e2', fg: '#991b1b', border: '#fca5a5' },
+        gray:  { bg: '#f3f4f6', fg: '#374151', border: '#d1d5db' },
+        blue:  { bg: '#dbeafe', fg: '#1e40af', border: '#93c5fd' },
+    };
+    const tpaPillStyle = pillColors[tpaPill.color] || pillColors.gray;
+    const showInterimBanner = invoiceStatus.code === 'TPA_APPROVED_INTERIM';
+
+    // TPA-approved-but-unsettled bills override the title/colour to amber INTERIM —
+    // never green PAID — so the document never misrepresents an unpaid TPA claim
+    // as a settled bill (plan §8 + test scenario 8).
+    const billColor = showInterimBanner ? '#f59e0b' : (isFinal ? branding.accentColor : '#f97316');
+    const billTitle = showInterimBanner
+        ? 'TPA APPROVED — INTERIM BILL'
+        : (isFinal ? 'FINAL BILL' : 'INTERIM BILL');
+    const watermarkText = showInterimBanner
+        ? 'TPA INTERIM'
+        : (isFinal ? 'FINAL BILL' : 'INTERIM');
+    const watermarkColor = showInterimBanner ? '#f59e0b' : (isFinal ? branding.accentColor : '#f59e0b');
 
     // Consolidate per-day Room + Nursing rows into single summary rows
     const consolidatedItems: any[] = [];
@@ -241,18 +268,18 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
 <html>
 <head>
     <meta charset="utf-8">
-    <title>${isFinal ? 'FINAL' : 'INTERIM'} BILL - ${admission.admission_id}</title>
+    <title>${billTitle} - ${admission.admission_id}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; background: #fff; }
         ${letterheadCss(branding)}
-        .watermark { color: ${isFinal ? branding.accentColor : '#f59e0b'}; }
+        .watermark { color: ${watermarkColor}; }
     </style>
 </head>
 <body>
     ${letterheadBackgroundHtml(branding)}
 
-    <div class="watermark">${isFinal ? 'FINAL BILL' : 'INTERIM'}</div>
+    <div class="watermark">${watermarkText}</div>
 
     ${printButtonHtml(branding)}
     ${medsToggle}
@@ -285,7 +312,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 ${gstin !== 'N/A' ? `<p style="font-size:10px;color:#6b7280;">GSTIN: ${gstin}</p>` : ''}
                             </div>
                             <div style="text-align:right;">
-                                <h2 style="font-size:16px;font-weight:800;color:${billColor};">${isFinal ? 'FINAL BILL' : 'INTERIM BILL'}</h2>
+                                <h2 style="font-size:16px;font-weight:800;color:${billColor};">${billTitle}</h2>
                                 <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${invoice.invoice_number}</p>
                                 <p style="font-size:10px;color:#6b7280;">Type: <strong>${invoice.invoice_type || 'IPD'}</strong></p>
                                 <p style="font-size:10px;color:#6b7280;">Date: ${fmtBillDate(new Date())}</p>
@@ -348,13 +375,33 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 ${creditNoteTotal > 0 ? `<tr><td style="padding:4px 12px;font-size:11px;color:#0891b2;">Credit Notes Applied</td><td style="padding:4px 12px;font-size:11px;text-align:right;color:#0891b2;">-${creditNoteTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
                                 ${depositTotal > 0 ? `<tr><td style="padding:4px 12px;font-size:11px;color:#7c3aed;">Deposits Applied</td><td style="padding:4px 12px;font-size:11px;text-align:right;color:#7c3aed;">-${depositTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
                                 <tr><td style="padding:4px 12px;font-size:11px;color:#059669;">Total Paid</td><td style="padding:4px 12px;font-size:11px;text-align:right;color:#059669;">${paid.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
-                                ${balance > 0
-                                    ? `<tr style="background:#fef2f2;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#dc2626;">Balance Due</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#dc2626;">${balance.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`
-                                    : balance < 0
-                                        ? `<tr style="background:#eff6ff;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#1d4ed8;">Advance / Credit Balance</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#1d4ed8;">${Math.abs(balance).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`
-                                        : `<tr style="background:#f0fdf4;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#059669;">FULLY PAID</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#059669;">&#10003;</td></tr>`}
+                                ${balance < 0
+                                    ? `<tr style="background:#eff6ff;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#1d4ed8;">Advance / Credit Balance</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#1d4ed8;">${Math.abs(balance).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`
+                                    : balance === 0 && !(isTpaFlagged && tpaOutstanding > 0)
+                                        ? `<tr style="background:#f0fdf4;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#059669;">FULLY PAID</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#059669;">&#10003;</td></tr>`
+                                        : isTpaFlagged && (tpaOutstanding > 0 || patientOutstanding > 0)
+                                            // Split the single Balance Due into Patient Outstanding + TPA Outstanding so
+                                            // the bill never bundles an unpaid TPA receivable into the patient's amount due.
+                                            ? `${patientOutstanding > 0 ? `<tr style="background:#fef2f2;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#dc2626;">Patient Outstanding</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#dc2626;">${patientOutstanding.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}${tpaOutstanding > 0 ? `<tr style="background:#fffbeb;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#92400e;">TPA Outstanding</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#92400e;">${tpaOutstanding.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}`
+                                            : `<tr style="background:#fef2f2;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#dc2626;">Balance Due</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#dc2626;">${balance.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`}
                             </table>
                         </div>
+
+                        ${isTpaFlagged ? `
+                        <!-- TPA Summary (plan §8) — provider, status pill, approved/received/outstanding -->
+                        <div style="border:1px solid ${tpaPillStyle.border};background:#fffbeb;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                <h3 style="font-size:11px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:1px;">TPA Settlement</h3>
+                                <span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:10px;font-weight:700;background:${tpaPillStyle.bg};color:${tpaPillStyle.fg};border:1px solid ${tpaPillStyle.border};">${tpaPill.label}</span>
+                            </div>
+                            <table style="width:100%;border-collapse:collapse;">
+                                <tr><td style="padding:3px 0;font-size:11px;color:#6b7280;width:55%;">Provider</td><td style="padding:3px 0;font-size:11px;text-align:right;font-weight:600;">${tpaProviderName || '-'}</td></tr>
+                                ${policyNumber ? `<tr><td style="padding:3px 0;font-size:11px;color:#6b7280;">Policy Number</td><td style="padding:3px 0;font-size:11px;text-align:right;font-weight:600;">${policyNumber}</td></tr>` : ''}
+                                <tr><td style="padding:3px 0;font-size:11px;color:#6b7280;">TPA Approved</td><td style="padding:3px 0;font-size:11px;text-align:right;font-weight:600;">${tpaApproved.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
+                                <tr><td style="padding:3px 0;font-size:11px;color:#6b7280;">Received from TPA</td><td style="padding:3px 0;font-size:11px;text-align:right;font-weight:600;color:#059669;">${tpaReceived.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
+                                <tr style="border-top:1px dashed #fcd34d;"><td style="padding:5px 0;font-size:11px;font-weight:800;color:#92400e;">TPA Outstanding</td><td style="padding:5px 0;font-size:11px;text-align:right;font-weight:800;color:#92400e;">${tpaOutstanding.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
+                            </table>
+                        </div>` : ''}
 
                         ${sections.showAmountInWords ? `
                         <div style="background:#f0fdf4;border-radius:6px;padding:8px 14px;margin-bottom:14px;">

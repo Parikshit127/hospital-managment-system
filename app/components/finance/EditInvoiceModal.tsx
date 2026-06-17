@@ -97,6 +97,8 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
         paid_amount: number;
         version: number;
         patient_name?: string;
+        tpa_claim_status?: string | null;
+        tpa_settled_amount?: number;
     } | null>(null);
 
     const [items, setItems] = useState<EditableItem[]>([]);
@@ -132,6 +134,8 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                 paid_amount: Number(inv.paid_amount ?? 0),
                 version: Number(inv.version ?? 0),
                 patient_name: inv.patient?.full_name,
+                tpa_claim_status: inv.tpa_claim_status ?? null,
+                tpa_settled_amount: Number(inv.tpa_settled_amount ?? 0),
             });
 
             const loadedItems: EditableItem[] = (inv.items || []).map((it: any) => {
@@ -276,6 +280,10 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
 
     async function handleSave() {
         if (!invoiceMeta || !header) return;
+        if (tpaLocked) {
+            toast.error('TPA settlement is in progress — edit via the TPA workflow only.');
+            return;
+        }
         setSaving(true);
         try {
             const items_to_update = items
@@ -367,7 +375,17 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
     }
 
     const isFinal = invoiceMeta?.status === 'Final';
-    const readOnly = !!error;
+    // TPA settlement guard — once a TPA claim is approved/partial/settled with money
+    // already received, the invoice must be driven exclusively through the TPA workflow
+    // (Mark TPA Received from the dashboard). Editing line items, billing type, or the
+    // bill discount here would silently invalidate the approved amount + split.
+    const tpaLocked =
+        !!invoiceMeta &&
+        ['approved', 'partially_settled', 'settled'].includes(
+            String(invoiceMeta.tpa_claim_status ?? '').toLowerCase(),
+        ) &&
+        Number(invoiceMeta.tpa_settled_amount ?? 0) > 0;
+    const readOnly = !!error || tpaLocked;
 
     if (!isOpen) return null;
 
@@ -393,6 +411,17 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                 </div>
             ) : header && invoiceMeta ? (
                 <div className="space-y-5">
+                    {/* TPA settlement guard banner */}
+                    {tpaLocked && (
+                        <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-3">
+                            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                            <p className="text-xs text-amber-800 leading-relaxed">
+                                TPA settlement is in progress — edit via the TPA workflow only.
+                                Use <span className="font-bold">Mark TPA Received</span> from the dashboard to record payments.
+                            </p>
+                        </div>
+                    )}
+
                     {/* Status banner */}
                     {isFinal && (
                         <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-3">
@@ -428,7 +457,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
                         <div className="bg-gray-50 px-3 py-2 flex items-center justify-between">
                             <p className="text-xs font-bold uppercase tracking-wide text-gray-600">Line Items</p>
-                            <Button variant="secondary" size="sm" onClick={addItem} icon={<Plus className="h-3.5 w-3.5" />} disabled={readOnly || saving}>
+                            <Button variant="secondary" size="sm" onClick={addItem} icon={<Plus className="h-3.5 w-3.5" />} disabled={readOnly || saving} title={tpaLocked ? 'Locked — TPA settlement in progress' : undefined}>
                                 Add Item
                             </Button>
                         </div>
@@ -459,7 +488,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                         className="w-full px-2 py-1 border border-gray-200 rounded text-xs"
                                                         value={it.department}
                                                         onChange={e => updateItem(idx, { department: e.target.value })}
-                                                        disabled={saving}
+                                                        disabled={readOnly || saving}
                                                     />
                                                 </td>
                                                 <td className="px-2 py-1.5">
@@ -467,7 +496,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                         className="w-full px-2 py-1 border border-gray-200 rounded text-xs"
                                                         value={it.description}
                                                         onChange={e => updateItem(idx, { description: e.target.value })}
-                                                        disabled={saving}
+                                                        disabled={readOnly || saving}
                                                     />
                                                 </td>
                                                 <td className="px-2 py-1.5 text-right">
@@ -478,7 +507,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                         className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-right"
                                                         value={it.quantity}
                                                         onChange={e => updateItem(idx, { quantity: Number(e.target.value) })}
-                                                        disabled={saving}
+                                                        disabled={readOnly || saving}
                                                     />
                                                 </td>
                                                 <td className="px-2 py-1.5 text-right">
@@ -488,7 +517,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                         className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-right"
                                                         value={it.unit_price}
                                                         onChange={e => updateItem(idx, { unit_price: Number(e.target.value) })}
-                                                        disabled={saving}
+                                                        disabled={readOnly || saving}
                                                     />
                                                 </td>
                                                 <td className="px-2 py-1.5 text-right">
@@ -499,7 +528,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                         className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-right"
                                                         value={it.discount}
                                                         onChange={e => updateItem(idx, { discount: Number(e.target.value) })}
-                                                        disabled={saving}
+                                                        disabled={readOnly || saving}
                                                     />
                                                 </td>
                                                 <td className="px-2 py-1.5 text-right">
@@ -511,7 +540,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                         className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-right"
                                                         value={it.tax_rate}
                                                         onChange={e => updateItem(idx, { tax_rate: Number(e.target.value) })}
-                                                        disabled={saving}
+                                                        disabled={readOnly || saving}
                                                     />
                                                 </td>
                                                 <td className="px-2 py-1.5">
@@ -524,7 +553,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                             value={it.service_date || ''}
                                                             max={new Date().toISOString().slice(0, 16)}
                                                             onChange={e => updateItem(idx, { service_date: e.target.value })}
-                                                            disabled={saving}
+                                                            disabled={readOnly || saving}
                                                             title="Leave blank for today. Backdate up to 1 year."
                                                         />
                                                     )}
@@ -536,7 +565,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                     <button
                                                         type="button"
                                                         onClick={() => removeItem(idx)}
-                                                        disabled={saving}
+                                                        disabled={readOnly || saving}
                                                         className="text-rose-500 hover:text-rose-700 disabled:opacity-30"
                                                         title="Remove item"
                                                     >
@@ -651,7 +680,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                         value={header.billing_patient_type}
                                         onChange={e => setHeader({ ...header, billing_patient_type: e.target.value })}
                                         className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs"
-                                        disabled={saving}
+                                        disabled={readOnly || saving}
                                     >
                                         <option value="cash">Self / Cash</option>
                                         <option value="corporate">Corporate</option>
@@ -664,7 +693,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                         id="is_inter_state"
                                         checked={header.is_inter_state}
                                         onChange={e => setHeader({ ...header, is_inter_state: e.target.checked })}
-                                        disabled={saving}
+                                        disabled={readOnly || saving}
                                     />
                                     <label htmlFor="is_inter_state" className="text-xs text-gray-700">
                                         Inter-state supply (use IGST instead of CGST+SGST)
@@ -679,13 +708,13 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                     step="any"
                                     value={header.concession_amount}
                                     onChange={e => setHeader({ ...header, concession_amount: Number(e.target.value) })}
-                                    disabled={saving}
+                                    disabled={readOnly || saving}
                                 />
                                 <Input
                                     label="Concession Reason"
                                     value={header.concession_reason}
                                     onChange={e => setHeader({ ...header, concession_reason: e.target.value })}
-                                    disabled={saving}
+                                    disabled={readOnly || saving}
                                 />
                             </div>
                             <Textarea
@@ -693,7 +722,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                 rows={2}
                                 value={header.notes}
                                 onChange={e => setHeader({ ...header, notes: e.target.value })}
-                                disabled={saving}
+                                disabled={readOnly || saving}
                             />
                         </div>
                     </details>
@@ -708,8 +737,9 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                             size="md"
                             onClick={handleSave}
                             loading={saving}
-                            disabled={saving}
+                            disabled={readOnly || saving}
                             icon={!saving ? <Save className="h-4 w-4" /> : undefined}
+                            title={tpaLocked ? 'Locked — TPA settlement in progress' : undefined}
                         >
                             Save Changes
                         </Button>

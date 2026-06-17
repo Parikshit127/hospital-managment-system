@@ -824,12 +824,12 @@ export default function PatientProfilePage() {
                         {showBillBuilder && (
                             <InlineBillBuilder
                                 patient={{
-                                    patient_id: data.patient_id,
-                                    full_name: data.full_name,
-                                    patient_type: data.patient_type,
-                                    corporate_id: data.corporate_id,
-                                    tpa_provider_id: data.tpa_provider_id,
-                                    pre_auth_approved: data.pre_auth_approved,
+                                    patient_id: patient.patient_id,
+                                    full_name: patient.full_name,
+                                    patient_type: patient.patient_type,
+                                    corporate_id: patient.corporate_id,
+                                    tpa_provider_id: patient.tpa_provider_id,
+                                    pre_auth_approved: patient.pre_auth_approved,
                                 }}
                                 onCreated={() => {
                                     setShowBillBuilder(false);

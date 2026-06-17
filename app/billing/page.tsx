@@ -44,6 +44,7 @@ import {
 import { CancelInvoiceModal } from "@/app/components/finance/CancelInvoiceModal";
 import { EditInvoiceModal } from "@/app/components/finance/EditInvoiceModal";
 import { RefundModal } from "@/app/components/finance/RefundModal";
+import { RecordTpaPaymentModal } from "@/app/components/billing/RecordTpaPaymentModal";
 import { Pencil } from "lucide-react";
 
 // ── helpers ───────────────────────────────────────────────────────────────
@@ -101,21 +102,25 @@ function PaymentBadge({ status }: { status: string }) {
 }
 
 function ClaimBadge({ status }: { status: string }) {
-  if (!status || status === "not_submitted") return <span className="text-[10px] text-gray-400">—</span>;
-  const map: Record<string, string> = {
-    submitted: "bg-blue-100 text-blue-700",
-    under_review: "bg-amber-100 text-amber-700",
-    approved: "bg-emerald-100 text-emerald-700",
-    rejected: "bg-rose-100 text-rose-700",
-    partially_approved: "bg-orange-100 text-orange-700",
-    partially_settled: "bg-orange-100 text-orange-700",
-    settled: "bg-emerald-100 text-emerald-700",
+  if (!status) return <span className="text-[10px] text-gray-400">—</span>;
+  // Plan §8 status pill table — single source of truth for TPA claim color/label.
+  const meta: Record<string, { label: string; cls: string }> = {
+    not_submitted: { label: "TPA: Not Submitted", cls: "bg-gray-100 text-gray-700 border border-gray-200" },
+    submitted: { label: "TPA: Submitted", cls: "bg-blue-100 text-blue-700 border border-blue-200" },
+    approved: { label: "TPA: Approved — Awaiting Payment", cls: "bg-amber-100 text-amber-800 border border-amber-200" },
+    partially_settled: { label: "TPA: Partial Settlement", cls: "bg-amber-100 text-amber-800 border border-amber-200" },
+    settled: { label: "TPA: Settled", cls: "bg-emerald-100 text-emerald-700 border border-emerald-200" },
+    rejected: { label: "TPA: Rejected", cls: "bg-rose-100 text-rose-700 border border-rose-200" },
+    // Legacy values kept for backward compatibility — same palette family.
+    under_review: { label: "TPA: Under Review", cls: "bg-amber-100 text-amber-800 border border-amber-200" },
+    partially_approved: { label: "TPA: Partially Approved", cls: "bg-amber-100 text-amber-800 border border-amber-200" },
   };
+  const m = meta[status] ?? { label: status.replace(/_/g, " "), cls: "bg-gray-100 text-gray-700 border border-gray-200" };
   return (
     <span
-      className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${map[status] ?? "bg-gray-100 text-gray-700"}`}
+      className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${m.cls}`}
     >
-      {status.replace(/_/g, " ")}
+      {m.label}
     </span>
   );
 }
@@ -203,6 +208,7 @@ export default function MasterBillingPage() {
   const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
   const [refundOpen, setRefundOpen] = useState(false);
+  const [tpaPaymentTarget, setTpaPaymentTarget] = useState<any | null>(null);
 
   const loadGrid = useCallback(async () => {
     setLoading(true);
@@ -441,6 +447,15 @@ export default function MasterBillingPage() {
                             <Pencil className="h-3 w-3" /> Edit
                           </button>
                         )}
+                        {(r.tpa_claim_status === 'approved' || r.tpa_claim_status === 'partially_settled') && (
+                          <button
+                            onClick={() => setTpaPaymentTarget(r)}
+                            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-bold rounded transition-colors flex items-center gap-0.5"
+                            title="Record actual money received from TPA"
+                          >
+                            <Shield className="h-3 w-3" /> Mark TPA Received
+                          </button>
+                        )}
                         {canCancelInvoice(r) && (
                           <button
                             onClick={() => setCancelTarget(r)}
@@ -527,6 +542,28 @@ export default function MasterBillingPage() {
           loadKpis();
         }}
       />
+
+      {/* Record TPA Payment Received modal */}
+      {tpaPaymentTarget && (
+        <RecordTpaPaymentModal
+          open
+          onClose={() => setTpaPaymentTarget(null)}
+          onRecorded={() => {
+            setTpaPaymentTarget(null);
+            loadGrid();
+            loadKpis();
+          }}
+          invoice={{
+            id: Number(tpaPaymentTarget.invoice_id),
+            version: Number(tpaPaymentTarget.version ?? 0),
+            invoice_number: tpaPaymentTarget.invoice_number,
+            patient_name: tpaPaymentTarget.patient_name,
+            tpa_provider_name: tpaPaymentTarget.corporate_name ?? null,
+            tpa_approved_amount: Number(tpaPaymentTarget.tpa_approved_amount ?? 0),
+            tpa_settled_amount: Number(tpaPaymentTarget.tpa_settled_amount ?? 0),
+          }}
+        />
+      )}
     </AppShell>
   );
 }

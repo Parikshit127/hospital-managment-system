@@ -11,7 +11,26 @@ import { useToast } from '@/app/components/ui/Toast';
 import { processPatientPayment, addPatientDues } from '@/app/actions/reception-actions';
 import { reversePayment, cancelInvoice, revertInvoice, searchPatientsForBilling } from '@/app/actions/finance-actions';
 import { EditInvoiceModal } from '@/app/components/finance/EditInvoiceModal';
+import { RecordTpaPaymentModal } from '@/app/components/billing/RecordTpaPaymentModal';
 import { useRouter } from 'next/navigation';
+
+// Row shape that the TPA modal consumes — minimal subset of invoice fields the
+// `RecordTpaPaymentModal` needs to render and submit a settlement. Shape must
+// stay in sync with `RecordTpaPaymentModalProps.invoice`.
+type RowShape = {
+    id: number;
+    version: number;
+    invoice_number: string;
+    patient_name?: string | null;
+    tpa_provider_name?: string | null;
+    tpa_approved_amount: number;
+    tpa_settled_amount: number;
+    // Extra context kept on the row so the dashboard can show summary chips
+    // and decide button visibility without re-querying.
+    tpa_outstanding?: number;
+    tpa_claim_status?: string | null;
+    billing_patient_type?: string | null;
+};
 
 interface BillingMasterProps {
     role: 'admin' | 'reception' | 'opd';
@@ -32,6 +51,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
     const [paymentModal, setPaymentModal] = useState<any>(null); // { invoice_id, patient_id, max_amount }
     const [duesModal, setDuesModal] = useState<string | null>(null); // patient_id
     const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
+    const [tpaModalInvoice, setTpaModalInvoice] = useState<RowShape | null>(null);
     const [processLoading, setProcessLoading] = useState(false);
 
     const [dueForm, setDueForm] = useState({ amount: '', description: '', department: 'General' });
@@ -66,7 +86,37 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
         setLoading(true);
         const res = await getMasterBillingData({ page, limit: 15, search, filter });
         if (res.success) {
-            setData(res.data);
+            // Enrich each patient row with TPA aggregates computed from their
+            // invoices. The server already returns the new TPA scalars via the
+            // default Prisma `include`, but rolling them up here keeps the
+            // table render trivially fast and avoids re-summing on every render.
+            const enriched = (res.data || []).map((p: any) => {
+                const invs = p.invoices || [];
+                let tpaApproved = 0;
+                let tpaSettled = 0;
+                let tpaOutstanding = 0;
+                let patientOutstanding = 0;
+                for (const inv of invs) {
+                    if (inv.status === 'Cancelled') continue;
+                    const a = Number(inv.tpa_approved_amount || 0);
+                    const s = Number(inv.tpa_settled_amount || 0);
+                    const balance = Number(inv.balance_due || 0);
+                    const tOut = Math.max(0, a - s);
+                    const pOut = Math.max(0, balance - tOut);
+                    tpaApproved += a;
+                    tpaSettled += s;
+                    tpaOutstanding += tOut;
+                    patientOutstanding += pOut;
+                }
+                return {
+                    ...p,
+                    tpa_approved_amount: tpaApproved,
+                    tpa_settled_amount: tpaSettled,
+                    tpa_outstanding: tpaOutstanding,
+                    patient_outstanding: patientOutstanding,
+                };
+            });
+            setData(enriched);
             setMeta(res.meta);
         }
         setLoading(false);
@@ -221,6 +271,9 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                 <th className="px-6 py-4 text-left text-[11px] font-black text-gray-500 uppercase tracking-wider">Registered</th>
                                 <th className="px-6 py-4 text-right text-[11px] font-black text-gray-500 uppercase tracking-wider">Total Billed</th>
                                 <th className="px-6 py-4 text-right text-[11px] font-black text-gray-500 uppercase tracking-wider">Balance Due</th>
+                                <th className="px-6 py-4 text-right text-[11px] font-black text-gray-500 uppercase tracking-wider">TPA Approved</th>
+                                <th className="px-6 py-4 text-right text-[11px] font-black text-gray-500 uppercase tracking-wider">TPA Received</th>
+                                <th className="px-6 py-4 text-right text-[11px] font-black text-gray-500 uppercase tracking-wider">Patient Out</th>
                                 <th className="px-6 py-4 text-center text-[11px] font-black text-gray-500 uppercase tracking-wider">Status</th>
                                 <th className="px-6 py-4 text-center text-[11px] font-black text-gray-500 uppercase tracking-wider">Ledger</th>
                             </tr>
@@ -228,14 +281,14 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                         <tbody className="divide-y divide-gray-100">
                             {loading && data.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="py-20 text-center">
+                                    <td colSpan={10} className="py-20 text-center">
                                         <Loader2 className="h-8 w-8 animate-spin text-orange-500 mx-auto" />
                                         <p className="text-sm text-gray-400 mt-2 font-medium">Scanning Master Data...</p>
                                     </td>
                                 </tr>
                             ) : data.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="py-20 text-center text-gray-400 font-medium">
+                                    <td colSpan={10} className="py-20 text-center text-gray-400 font-medium">
                                         No financial records found for these filters.
                                     </td>
                                 </tr>
@@ -267,8 +320,58 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                                 <td className="px-6 py-4 text-gray-500">{formatDate(patient.created_at)}</td>
                                                 <td className="px-6 py-4 text-right font-medium text-gray-700">₹{Number(totalBilled).toFixed(2)}</td>
                                                 <td className="px-6 py-4 text-right">
-                                                    <span className={`font-black ${patient.total_balance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                                        ₹{Number(patient.total_balance).toFixed(2)}
+                                                    {(() => {
+                                                        const pOut = Number(patient.patient_outstanding || 0);
+                                                        const tOut = Number(patient.tpa_outstanding || 0);
+                                                        // Split into stacked pills when both Patient AND TPA have
+                                                        // outstanding balances; otherwise fall back to the legacy
+                                                        // single coloured number so settled accounts stay green.
+                                                        if (pOut > 0 && tOut > 0) {
+                                                            return (
+                                                                <div className="flex flex-col items-end gap-1">
+                                                                    <span className="inline-flex px-2 py-0.5 text-[10px] font-black rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                                                                        Patient: ₹{pOut.toFixed(2)}
+                                                                    </span>
+                                                                    <span className="inline-flex px-2 py-0.5 text-[10px] font-black rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                                                        TPA: ₹{tOut.toFixed(2)}
+                                                                    </span>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        if (pOut > 0) {
+                                                            return (
+                                                                <span className="inline-flex px-2 py-0.5 text-[10px] font-black rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                                                                    Patient: ₹{pOut.toFixed(2)}
+                                                                </span>
+                                                            );
+                                                        }
+                                                        if (tOut > 0) {
+                                                            return (
+                                                                <span className="inline-flex px-2 py-0.5 text-[10px] font-black rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                                                    TPA: ₹{tOut.toFixed(2)}
+                                                                </span>
+                                                            );
+                                                        }
+                                                        return (
+                                                            <span className="font-black text-emerald-600">
+                                                                ₹{Number(patient.total_balance).toFixed(2)}
+                                                            </span>
+                                                        );
+                                                    })()}
+                                                </td>
+                                                <td className="px-6 py-4 text-right text-gray-700 font-medium">
+                                                    {Number(patient.tpa_approved_amount || 0) > 0
+                                                        ? `₹${Number(patient.tpa_approved_amount).toFixed(2)}`
+                                                        : '—'}
+                                                </td>
+                                                <td className="px-6 py-4 text-right text-gray-700 font-medium">
+                                                    {Number(patient.tpa_settled_amount || 0) > 0
+                                                        ? `₹${Number(patient.tpa_settled_amount).toFixed(2)}`
+                                                        : '—'}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <span className={`font-black ${Number(patient.patient_outstanding || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                        ₹{Number(patient.patient_outstanding || 0).toFixed(2)}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
@@ -286,7 +389,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                             {/* EXPANDED ACCORDION VIEW */}
                                             {isExpanded && (
                                                 <tr>
-                                                    <td colSpan={7} className="p-0 border-b-4 border-slate-200">
+                                                    <td colSpan={10} className="p-0 border-b-4 border-slate-200">
                                                         <div className="bg-white p-6 shadow-[inset_0px_10px_20px_-15px_rgba(0,0,0,0.1)]">
                                                             
                                                             <div className="flex items-center justify-between mb-6">
@@ -367,12 +470,36 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                                                                         </div>
                                                                                     </div>
                                                                                     
-                                                                                    <div className="flex gap-2 mt-1">
+                                                                                    <div className="flex gap-2 mt-1 flex-wrap">
                                                                                         <button
                                                                                             onClick={() => setPaymentModal({ invoice_id: inv.id, patient_id: patient.patient_id, max: inv.balance_due })}
                                                                                             className="flex-1 py-1.5 bg-orange-50 text-orange-700 text-xs font-bold rounded-md hover:bg-orange-100">
                                                                                             Accept Payment
                                                                                         </button>
+                                                                                        {(inv.tpa_claim_status === 'approved' || inv.tpa_claim_status === 'partially_settled') && (
+                                                                                            <button
+                                                                                                onClick={() => {
+                                                                                                    const approved = Number(inv.tpa_approved_amount || 0);
+                                                                                                    const settled = Number(inv.tpa_settled_amount || 0);
+                                                                                                    setTpaModalInvoice({
+                                                                                                        id: Number(inv.id),
+                                                                                                        version: Number(inv.version || 0),
+                                                                                                        invoice_number: inv.invoice_number,
+                                                                                                        patient_name: patient.full_name,
+                                                                                                        tpa_provider_name: inv.tpa_provider?.name ?? inv.tpa_provider?.provider_name ?? null,
+                                                                                                        tpa_approved_amount: approved,
+                                                                                                        tpa_settled_amount: settled,
+                                                                                                        tpa_outstanding: Math.max(0, approved - settled),
+                                                                                                        tpa_claim_status: inv.tpa_claim_status,
+                                                                                                        billing_patient_type: inv.billing_patient_type ?? null,
+                                                                                                    });
+                                                                                                }}
+                                                                                                className="px-2 py-1.5 bg-amber-50 text-amber-700 text-xs font-bold rounded-md hover:bg-amber-100"
+                                                                                                title="Record TPA payment received"
+                                                                                            >
+                                                                                                Mark TPA Received
+                                                                                            </button>
+                                                                                        )}
                                                                                         {role === 'admin' && Number(inv.paid_amount ?? 0) === 0 && inv.status !== 'Cancelled' && (
                                                                                             <button
                                                                                                 onClick={() => setEditingInvoiceId(Number(inv.id))}
@@ -502,6 +629,16 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                     isOpen
                     onClose={() => setEditingInvoiceId(null)}
                     onSaved={() => { setEditingInvoiceId(null); loadData(); }}
+                />
+            )}
+
+            {/* RECORD TPA PAYMENT MODAL */}
+            {tpaModalInvoice && (
+                <RecordTpaPaymentModal
+                    open
+                    invoice={tpaModalInvoice}
+                    onClose={() => setTpaModalInvoice(null)}
+                    onRecorded={() => { setTpaModalInvoice(null); loadData(); }}
                 />
             )}
 

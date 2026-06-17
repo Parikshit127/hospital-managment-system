@@ -811,6 +811,24 @@ export async function settleAndDischarge(data: {
                 data: {
                     tpa_payable: tpaApproved,
                     tpa_claim_status: 'approved',
+                    tpa_approved_amount: tpaApproved,
+                    tpa_approved_at: new Date(),
+                },
+            });
+
+            await db.system_audit_logs.create({
+                data: {
+                    action: 'tpa_claim_approved',
+                    module: 'finance',
+                    entity_type: 'invoice',
+                    entity_id: String(invoice.id),
+                    details: JSON.stringify({
+                        invoice_id: invoice.id,
+                        tpa_approved_amount: tpaApproved,
+                        tpa_provider_id: invoice.tpa_provider_id,
+                        by: session.username,
+                    }),
+                    organizationId,
                 },
             });
         }

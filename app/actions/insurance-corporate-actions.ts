@@ -2,6 +2,7 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
+import { generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
 
 function serialize<T>(data: T): T {
     return JSON.parse(JSON.stringify(data, (_, v) =>
@@ -178,6 +179,12 @@ export async function updateTpaClaimAction(data: {
     settled_amount?: number;
     split_id?: number;
 }) {
+    // Block silent settlement overwrites — settlements must go through
+    // recordTpaPaymentReceived which accumulates correctly and creates a
+    // payments row + audit trail.
+    if (data.status === 'settled' && data.settled_amount !== undefined) {
+        return { success: false, error: 'Use recordTpaPaymentReceived for settlement' };
+    }
     const { db, organizationId } = await requireTenantContext();
     try {
         await db.invoices.update({
@@ -199,6 +206,265 @@ export async function updateTpaClaimAction(data: {
         revalidatePath('/reception/insurance');
         return { success: true };
     } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+// Record actual TPA payment received against an invoice. Accumulates into
+// tpa_settled_amount (does NOT overwrite), creates a payments row, recomputes
+// invoice paid_amount/balance_due/status, and flips tpa_claim_status to
+// 'settled' or 'partially_settled'. Optimistic-locked via invoices.version.
+export async function recordTpaPaymentReceived(input: {
+    invoice_id: number;
+    expected_version: number;
+    amount_received: number;
+    received_date: string;
+    payment_method: 'NEFT' | 'RTGS' | 'Cheque' | 'UPI' | 'Other';
+    reference_number: string;
+    remarks?: string;
+    is_partial?: boolean;
+}): Promise<{ success: boolean; payment_id?: number; error?: string }> {
+    try {
+        const { db, session, organizationId } = await requireTenantContext();
+
+        const amount = Number(input.amount_received);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            return { success: false, error: 'amount_received must be greater than 0' };
+        }
+        if (!input.reference_number || !input.reference_number.trim()) {
+            return { success: false, error: 'reference_number is required' };
+        }
+        const reference = input.reference_number.trim();
+        const receivedDate = new Date(input.received_date);
+        if (isNaN(receivedDate.getTime())) {
+            return { success: false, error: 'Invalid received_date' };
+        }
+
+        const result = await db.$transaction(async (tx: any) => {
+            // 1. Load invoice (tenant-scoped).
+            const invoice = await tx.invoices.findFirst({
+                where: { id: input.invoice_id, organizationId },
+            });
+            if (!invoice) throw new Error('Invoice not found');
+
+            // 2. Optimistic lock.
+            if (invoice.version !== input.expected_version) {
+                throw new Error('Invoice was modified by another user. Please refresh and retry.');
+            }
+
+            // 3. Status must be approved or partially_settled.
+            const currentStatus = invoice.tpa_claim_status;
+            if (currentStatus !== 'approved' && currentStatus !== 'partially_settled') {
+                throw new Error(`Cannot record TPA payment when claim status is '${currentStatus}'`);
+            }
+
+            const approved = Number(invoice.tpa_approved_amount || 0);
+            const priorSettled = Number(invoice.tpa_settled_amount || 0);
+            const newSettled = priorSettled + amount;
+
+            // 6. Cannot exceed approved (with 0.01 tolerance).
+            if (newSettled > approved + 0.01) {
+                throw new Error(
+                    `Amount exceeds approved balance. Approved: ${approved}, Already settled: ${priorSettled}, Remaining: ${(approved - priorSettled).toFixed(2)}`
+                );
+            }
+
+            // 7. If less than approved, partial flag must be set.
+            if (newSettled < approved - 0.01 && input.is_partial !== true) {
+                throw new Error('Use partial flag for amount less than approved');
+            }
+
+            // 8. Reference uniqueness scoped to this invoice.
+            const refExists = await tx.payments.findFirst({
+                where: { invoice_id: invoice.id, reference },
+                select: { id: true },
+            });
+            if (refExists) {
+                throw new Error(`Reference number '${reference}' already recorded against this invoice`);
+            }
+
+            // 9. Create payments row (mirror recordPayment shape).
+            const notes = input.remarks && input.remarks.trim()
+                ? `TPA settlement — ${input.remarks.trim()}`
+                : 'TPA settlement';
+            const receiptNumber = await genRcpNum(organizationId, tx);
+            const payment = await tx.payments.create({
+                data: {
+                    receipt_number: receiptNumber,
+                    invoice_id: invoice.id,
+                    amount,
+                    payment_method: input.payment_method,
+                    payment_type: 'TPA Settlement',
+                    reference,
+                    status: 'Completed',
+                    notes,
+                    organizationId,
+                    created_at: receivedDate,
+                },
+            });
+
+            // 10. Recompute invoice totals + status.
+            const newPaidAmount = Number(invoice.paid_amount || 0) + amount;
+            const netAmount = Number(invoice.net_amount || 0);
+            const newBalanceDue = Math.max(0, netAmount - newPaidAmount);
+            const newTpaPayable = Math.max(0, approved - newSettled);
+            const fullySettled = newSettled >= approved - 0.01;
+            const newClaimStatus = fullySettled ? 'settled' : 'partially_settled';
+            const newInvoiceStatus = newBalanceDue <= 0.01 ? 'Paid' : 'Partially Paid';
+
+            const updateData: any = {
+                tpa_settled_amount: newSettled,
+                tpa_payable: newTpaPayable,
+                tpa_claim_status: newClaimStatus,
+                paid_amount: newPaidAmount,
+                balance_due: newBalanceDue,
+                status: newInvoiceStatus,
+                version: { increment: 1 },
+            };
+            if (fullySettled && !invoice.tpa_settled_at) {
+                updateData.tpa_settled_at = new Date();
+            }
+
+            await tx.invoices.update({
+                where: { id: invoice.id },
+                data: updateData,
+            });
+
+            // 11. Audit log with before/after snapshots.
+            await tx.system_audit_logs.create({
+                data: {
+                    user_id: session?.id,
+                    username: session?.username || session?.name,
+                    role: session?.role,
+                    action: 'tpa_payment_received',
+                    module: 'finance',
+                    entity_type: 'invoice',
+                    entity_id: String(invoice.id),
+                    details: JSON.stringify({
+                        invoice_id: invoice.id,
+                        invoice_number: invoice.invoice_number,
+                        payment_id: payment.id,
+                        receipt_number: receiptNumber,
+                        reference_number: reference,
+                        amount_received: amount,
+                        payment_method: input.payment_method,
+                        received_date: receivedDate.toISOString(),
+                        is_partial: input.is_partial === true,
+                        remarks: input.remarks || null,
+                        before: {
+                            tpa_claim_status: currentStatus,
+                            tpa_settled_amount: priorSettled,
+                            tpa_payable: Number(invoice.tpa_payable || 0),
+                            paid_amount: Number(invoice.paid_amount || 0),
+                            balance_due: Number(invoice.balance_due || 0),
+                            status: invoice.status,
+                            version: invoice.version,
+                        },
+                        after: {
+                            tpa_claim_status: newClaimStatus,
+                            tpa_settled_amount: newSettled,
+                            tpa_payable: newTpaPayable,
+                            paid_amount: newPaidAmount,
+                            balance_due: newBalanceDue,
+                            status: newInvoiceStatus,
+                            version: invoice.version + 1,
+                        },
+                    }),
+                    organizationId,
+                },
+            });
+
+            return { payment_id: payment.id };
+        });
+
+        revalidatePath('/reception/insurance');
+        revalidatePath('/billing');
+        return { success: true, payment_id: result.payment_id };
+    } catch (error: any) {
+        console.error('recordTpaPaymentReceived error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Reject a TPA claim. Clears approved/payable and flips claim status. Patient
+// becomes liable for the full remaining balance. Optimistic-locked.
+export async function rejectTpaClaim(input: {
+    invoice_id: number;
+    expected_version: number;
+    reason: string;
+}): Promise<{ success: boolean; error?: string }> {
+    try {
+        const { db, session, organizationId } = await requireTenantContext();
+
+        const reason = (input.reason || '').trim();
+        if (!reason) return { success: false, error: 'reason is required' };
+
+        await db.$transaction(async (tx: any) => {
+            const invoice = await tx.invoices.findFirst({
+                where: { id: input.invoice_id, organizationId },
+            });
+            if (!invoice) throw new Error('Invoice not found');
+
+            if (invoice.version !== input.expected_version) {
+                throw new Error('Invoice was modified by another user. Please refresh and retry.');
+            }
+
+            const allowed = ['submitted', 'under_review', 'approved'];
+            if (!allowed.includes(invoice.tpa_claim_status)) {
+                throw new Error(`Cannot reject TPA claim from status '${invoice.tpa_claim_status}'`);
+            }
+
+            const before = {
+                tpa_claim_status: invoice.tpa_claim_status,
+                tpa_approved_amount: Number(invoice.tpa_approved_amount || 0),
+                tpa_approved_at: invoice.tpa_approved_at,
+                tpa_payable: Number(invoice.tpa_payable || 0),
+                version: invoice.version,
+            };
+
+            await tx.invoices.update({
+                where: { id: invoice.id },
+                data: {
+                    tpa_claim_status: 'rejected',
+                    tpa_approved_amount: 0,
+                    tpa_approved_at: null,
+                    tpa_payable: 0,
+                    version: { increment: 1 },
+                },
+            });
+
+            await tx.system_audit_logs.create({
+                data: {
+                    user_id: session?.id,
+                    username: session?.username || session?.name,
+                    role: session?.role,
+                    action: 'tpa_claim_rejected',
+                    module: 'finance',
+                    entity_type: 'invoice',
+                    entity_id: String(invoice.id),
+                    details: JSON.stringify({
+                        invoice_id: invoice.id,
+                        invoice_number: invoice.invoice_number,
+                        reason,
+                        before,
+                        after: {
+                            tpa_claim_status: 'rejected',
+                            tpa_approved_amount: 0,
+                            tpa_approved_at: null,
+                            tpa_payable: 0,
+                            version: invoice.version + 1,
+                        },
+                    }),
+                    organizationId,
+                },
+            });
+        });
+
+        revalidatePath('/reception/insurance');
+        revalidatePath('/billing');
+        return { success: true };
+    } catch (error: any) {
+        console.error('rejectTpaClaim error:', error);
         return { success: false, error: error.message };
     }
 }
