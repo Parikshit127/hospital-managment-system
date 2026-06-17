@@ -583,6 +583,31 @@ export async function finalizeInvoice(invoiceId: number) {
     }
 }
 
+/**
+ * "Lock" a patient's bill from the reception list: find their most recent Draft
+ * invoice and finalize it (Draft -> Final). Returns a friendly error when the
+ * patient has no draft to lock.
+ */
+export async function finalizePatientLatestDraft(patientId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const draft = await db.invoices.findFirst({
+            where: { organizationId, patient_id: patientId, status: 'Draft' },
+            orderBy: { created_at: 'desc' },
+            select: { id: true, invoice_number: true },
+        });
+        if (!draft) {
+            return { success: false, error: 'No draft bill to lock for this patient.' };
+        }
+        const res = await finalizeInvoice(draft.id);
+        if (!res.success) return { success: false, error: res.error || 'Failed to lock bill.' };
+        return { success: true, data: { invoice_number: draft.invoice_number } };
+    } catch (error: any) {
+        console.error('finalizePatientLatestDraft error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 // Cancel invoice (soft cancellation — never deletes)
 /**
  * Cancel an invoice with a MANDATORY reason. Sets status = "Cancelled" and

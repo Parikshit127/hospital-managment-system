@@ -1,267 +1,718 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-    UserPlus, Calendar, Clock, CheckCircle2, Users, RefreshCw,
-    Stethoscope, ChevronRight, Loader2, AlertCircle, Activity,
-    Phone, ClipboardList, User,
+    Users, UserPlus, Search, Filter, Calendar, Phone,
+    ChevronLeft, ChevronRight, Eye, Zap, Loader2, Activity,
+    CheckCircle2, Bell, Stethoscope, Bed, IndianRupee, Receipt, Lock,
+    ReceiptText, Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import toast from 'react-hot-toast';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { Skeleton, SkeletonCard } from '@/app/components/ui/Skeleton';
 import {
-    getReceptionStats,
-    getAllDoctorQueues,
-    getTodayCheckInList,
-    checkInPatient,
+    getRegisteredPatients, getReceptionStats, getReceptionRevenueToday,
+    getExpectedArrivals, checkInPatient,
 } from '@/app/actions/reception-actions';
+import { finalizePatientLatestDraft } from '@/app/actions/finance-actions';
+import { getIPDAdmissions, getWardsWithBeds } from '@/app/actions/ipd-actions';
 
-type Stats = { todayRegistrations: number; todayAppointments: number; pendingAppointments: number; completedToday: number; totalPatients: number };
-type DoctorQueue = { doctorId: string; doctorName: string; department: string; current: { patientName: string; token: number | null } | null; waiting: { patientName: string; token: number | null }[]; scheduled: { patientName: string }[] };
-type Appointment = { appointment_id: string; appointment_date: string; status: string; doctor_name: string | null; department: string | null; reason_for_visit: string | null; patient: { full_name: string; phone: string | null; age: number | null; gender: string | null } | null };
+// ─── helpers ──────────────────────────────────────────────────────────────
 
-const STATUS_STYLE: Record<string, string> = {
-    'Pending': 'bg-amber-50 text-amber-700 border border-amber-200',
-    'Scheduled': 'bg-blue-50 text-blue-700 border border-blue-200',
-    'Checked In': 'bg-orange-50 text-orange-700 border border-orange-200',
-    'In Progress': 'bg-violet-50 text-violet-700 border border-violet-200',
-    'Completed': 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-    'Cancelled': 'bg-gray-100 text-gray-500 border border-gray-200',
-};
+function formatDate(dateStr: string | null | undefined): string {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '—';
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+}
+
+function formatMoney(amount: number | null | undefined): string {
+    if (amount == null) return '₹0';
+    return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        maximumFractionDigits: 0,
+    }).format(amount);
+}
+
+function getIPDStatusBadge(status: string) {
+    const map: Record<string, string> = {
+        Admitted: 'bg-blue-50 text-blue-700 border-blue-200',
+        Discharged: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        Cancelled: 'bg-red-50 text-red-700 border-red-200',
+    };
+    return map[status] || 'bg-gray-100 text-gray-500 border-gray-200';
+}
+
+const IPD_STATUS_FILTERS = ['All', 'Admitted', 'Discharged', 'Cancelled'] as const;
+type IPDStatusFilter = typeof IPD_STATUS_FILTERS[number];
+
+// ─── Component ──────────────────────────────────────────────────────────────
 
 export default function ReceptionDashboard() {
-    const [stats, setStats] = useState<Stats | null>(null);
-    const [queues, setQueues] = useState<DoctorQueue[]>([]);
-    const [appointments, setAppointments] = useState<Appointment[]>([]);
+    const pathname = usePathname();
+
+    // ── OPD Patients state ──
+    const [patients, setPatients] = useState<any[]>([]);
+    const [stats, setStats] = useState<any>(null);
+    const [revenue, setRevenue] = useState<{ total: number; opd: number; ipd: number }>({ total: 0, opd: 0, ipd: 0 });
     const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+    const [department, setDepartment] = useState('');
+    const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'all'>('all');
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(0);
+    const [total, setTotal] = useState(0);
+
+    // ── Expected arrivals state ──
+    const [expectedArrivals, setExpectedArrivals] = useState<any[]>([]);
+    const [arrivalsLoading, setArrivalsLoading] = useState(true);
     const [checkingIn, setCheckingIn] = useState<string | null>(null);
 
-    const loadAll = useCallback(async () => {
+    // ── IPD state ──
+    const [ipdAdmissions, setIpdAdmissions] = useState<any[]>([]);
+    const [ipdWards, setIpdWards] = useState<any[]>([]);
+    const [ipdLoading, setIpdLoading] = useState(false);
+    const [ipdStatusFilter, setIpdStatusFilter] = useState<IPDStatusFilter>('All');
+    const [ipdWardFilter, setIpdWardFilter] = useState('');
+    const [ipdSearch, setIpdSearch] = useState('');
+    const ipdLoaded = useRef(false);
+
+    // ── Tab ──
+    const [activeTab, setActiveTab] = useState<'opd' | 'ipd' | 'arrivals'>('opd');
+
+    // ── OPD data loading ──
+    const loadData = useCallback(async () => {
         setLoading(true);
-        const [statsRes, queuesRes, apptRes] = await Promise.all([
-            getReceptionStats(),
-            getAllDoctorQueues(),
-            getTodayCheckInList(),
-        ]);
-        if (statsRes.success && statsRes.data) setStats(statsRes.data);
-        if (queuesRes.success) setQueues((queuesRes.data as DoctorQueue[]) || []);
-        if (apptRes.success) setAppointments((apptRes.data as Appointment[]) || []);
+        try {
+            const [patientsRes, statsRes, revRes] = await Promise.all([
+                getRegisteredPatients({ search, department, page, limit: 25, dateRange }),
+                getReceptionStats(),
+                getReceptionRevenueToday(),
+            ]);
+            if (patientsRes.success) {
+                setPatients(patientsRes.data || []);
+                setTotalPages(patientsRes.totalPages || 0);
+                setTotal(patientsRes.total || 0);
+            }
+            if (statsRes.success) setStats(statsRes.data);
+            if (revRes.success && revRes.data) setRevenue(revRes.data);
+        } catch (err) {
+            console.error('Reception load error:', err);
+        }
         setLoading(false);
+    }, [search, department, page, dateRange]);
+
+    // ── Expected arrivals loading ──
+    const loadArrivals = useCallback(async () => {
+        setArrivalsLoading(true);
+        try {
+            const res = await getExpectedArrivals();
+            if (res.success) setExpectedArrivals(res.data || []);
+        } catch (err) {
+            console.error('Expected arrivals error:', err);
+        }
+        setArrivalsLoading(false);
     }, []);
 
-    useEffect(() => { loadAll(); }, [loadAll]);
+    // ── IPD data loading (lazy) ──
+    const loadIPDData = useCallback(async () => {
+        setIpdLoading(true);
+        try {
+            const [admRes, wardRes] = await Promise.all([
+                getIPDAdmissions(ipdStatusFilter === 'All' ? undefined : ipdStatusFilter),
+                getWardsWithBeds(),
+            ]);
+            if (admRes.success) setIpdAdmissions(admRes.data || []);
+            if (wardRes.success) setIpdWards(wardRes.data || []);
+        } catch (err) {
+            console.error('IPD load error:', err);
+        }
+        setIpdLoading(false);
+        ipdLoaded.current = true;
+    }, [ipdStatusFilter]);
+
+    useEffect(() => { loadData(); }, [loadData]);
+    useEffect(() => { loadArrivals(); }, [loadArrivals]);
+
+    // Lazy-load IPD data when IPD tab is first activated or status filter changes
+    useEffect(() => {
+        if (activeTab === 'ipd') {
+            loadIPDData();
+        }
+    }, [activeTab, loadIPDData]);
+
+    // Refetch when user navigates back
+    useEffect(() => {
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                loadData();
+                loadArrivals();
+                if (ipdLoaded.current) loadIPDData();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => document.removeEventListener('visibilitychange', handleVisibility);
+    }, [loadData, loadArrivals, loadIPDData]);
+
+    useEffect(() => {
+        if (pathname === '/reception/dashboard') {
+            loadData();
+        }
+    }, [pathname, loadData]);
 
     const handleCheckIn = async (appointmentId: string) => {
         setCheckingIn(appointmentId);
-        const res = await checkInPatient(appointmentId);
-        if (res.success) {
-            setAppointments(prev => prev.map(a =>
-                a.appointment_id === appointmentId ? { ...a, status: 'Checked In' } : a
-            ));
-            setStats(prev => prev ? { ...prev, pendingAppointments: Math.max(0, prev.pendingAppointments - 1) } : prev);
+        try {
+            const res = await checkInPatient(appointmentId);
+            if (res.success) {
+                setExpectedArrivals(prev => prev.filter(a => a.appointment_id !== appointmentId));
+                loadData();
+            }
+        } catch (err) {
+            console.error('Check-in error:', err);
         }
         setCheckingIn(null);
     };
 
-    const fmt = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    // Lock (finalize) the patient's latest draft bill straight from the list.
+    const [lockingId, setLockingId] = useState<string | null>(null);
+    const handleLockBill = async (patientId: string) => {
+        if (!window.confirm("Lock this patient's latest draft bill? Once locked it is finalized (Draft → Final).")) return;
+        setLockingId(patientId);
+        try {
+            const res = await finalizePatientLatestDraft(patientId);
+            if (res.success) {
+                toast.success(`Bill ${res.data?.invoice_number || ''} locked.`);
+                loadData();
+            } else {
+                toast.error(res.error || 'Could not lock bill.');
+            }
+        } catch {
+            toast.error('Could not lock bill.');
+        }
+        setLockingId(null);
+    };
+
+    // Debounced search for OPD
+    const [searchInput, setSearchInput] = useState('');
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setSearch(searchInput);
+            setPage(1);
+        }, 400);
+        return () => clearTimeout(timer);
+    }, [searchInput]);
+
+    const getStatusColor = (status: string | null) => {
+        if (!status) return 'bg-gray-100 text-gray-500';
+        const map: Record<string, string> = {
+            'Pending': 'bg-amber-50 text-amber-700 border border-amber-200',
+            'Scheduled': 'bg-blue-50 text-blue-700 border border-blue-200',
+            'Checked In': 'bg-orange-50 text-orange-700 border border-orange-200',
+            'In Progress': 'bg-violet-50 text-violet-700 border border-violet-200',
+            'Completed': 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+            'Admitted': 'bg-rose-50 text-rose-700 border border-rose-200',
+        };
+        return map[status] || 'bg-gray-100 text-gray-500';
+    };
+
+    // IPD client-side filtering
+    const ipdFiltered = ipdAdmissions.filter(a => {
+        const q = ipdSearch.toLowerCase();
+        const matchesSearch = !q
+            || a.patient?.full_name?.toLowerCase().includes(q)
+            || a.patient?.patient_id?.toLowerCase().includes(q)
+            || a.patient?.phone?.toLowerCase().includes(q);
+        const matchesWard = !ipdWardFilter
+            || (a.wardName || a.ward?.ward_name || a.bed?.wards?.ward_name || '') === ipdWardFilter;
+        return matchesSearch && matchesWard;
+    });
+
+    // IPD KPI calculations
+    const totalAdmitted = ipdAdmissions.filter(a => a.status === 'Admitted').length;
+
+    // Revenue card follows the active tab: OPD tab → OPD revenue, IPD tab → IPD revenue,
+    // Expected Today → total.
+    const revenueValue = activeTab === 'ipd' ? revenue.ipd : activeTab === 'opd' ? revenue.opd : revenue.total;
+    const revenueLabel = activeTab === 'ipd' ? "Today's Revenue (IPD)" : activeTab === 'opd' ? "Today's Revenue (OPD)" : "Today's Revenue";
+
+    const headerActions = (
+        <div className="flex items-center gap-2">
+            <Link href="/reception/register"
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md transition-all">
+                <UserPlus className="h-3.5 w-3.5" /> Register Patient
+            </Link>
+            <Link href="/reception/appointments"
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all">
+                <Calendar className="h-3.5 w-3.5" /> Book Appointment
+            </Link>
+            <Link href="/reception/queue"
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all">
+                <Activity className="h-3.5 w-3.5" /> Manage Queue
+            </Link>
+            <Link href="/reception/ipd/admit"
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all">
+                <Bed className="h-3.5 w-3.5" /> Admit IPD
+            </Link>
+            <Link href="/reception/triage"
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all">
+                <Zap className="h-3.5 w-3.5" /> AI Triage
+            </Link>
+        </div>
+    );
 
     return (
-        <AppShell pageTitle="Reception" pageIcon={<ClipboardList className="h-5 w-5" />} onRefresh={loadAll} refreshing={loading}>
+        <AppShell
+            pageTitle="Reception"
+            pageIcon={<Users className="h-5 w-5" />}
+            headerActions={headerActions}
+            onRefresh={() => { loadData(); loadArrivals(); if (ipdLoaded.current) loadIPDData(); }}
+            refreshing={loading}
+        >
             <div className="space-y-6">
-
-                {/* KPI Row */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    {[
-                        { label: 'Registered Today', value: stats?.todayRegistrations ?? 0, icon: UserPlus, color: 'blue' },
-                        { label: 'Appointments', value: stats?.todayAppointments ?? 0, icon: Calendar, color: 'violet' },
-                        { label: 'Waiting / Pending', value: stats?.pendingAppointments ?? 0, icon: Clock, color: 'amber' },
-                        { label: 'Completed', value: stats?.completedToday ?? 0, icon: CheckCircle2, color: 'emerald' },
-                    ].map(({ label, value, icon: Icon, color }) => (
-                        <div key={label} className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5">
-                            <div className="flex items-center justify-between mb-3">
-                                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{label}</span>
-                                <div className={`p-1.5 rounded-lg bg-${color}-50`}>
-                                    <Icon className={`h-3.5 w-3.5 text-${color}-500`} />
-                                </div>
-                            </div>
-                            <p className="text-3xl font-black text-gray-900">{loading ? '—' : value}</p>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Quick Actions */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <Link href="/reception/register"
-                        className="group bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-blue-300 hover:shadow-md transition-all flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2.5 bg-blue-50 rounded-xl"><UserPlus className="h-5 w-5 text-blue-500" /></div>
-                            <div>
-                                <p className="text-sm font-bold text-gray-900">Register Patient</p>
-                                <p className="text-xs text-gray-400">New OPD registration</p>
-                            </div>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-blue-500 transition-colors" />
-                    </Link>
-
-                    <Link href="/reception/appointments"
-                        className="group bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-violet-300 hover:shadow-md transition-all flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2.5 bg-violet-50 rounded-xl"><Calendar className="h-5 w-5 text-violet-500" /></div>
-                            <div>
-                                <p className="text-sm font-bold text-gray-900">Book Appointment</p>
-                                <p className="text-xs text-gray-400">Schedule a consultation</p>
-                            </div>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-violet-500 transition-colors" />
-                    </Link>
-
-                    <Link href="/reception/queue"
-                        className="group bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-orange-300 hover:shadow-md transition-all flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2.5 bg-orange-50 rounded-xl"><Activity className="h-5 w-5 text-orange-500" /></div>
-                            <div>
-                                <p className="text-sm font-bold text-gray-900">Manage Queue</p>
-                                <p className="text-xs text-gray-400">Live OPD queue view</p>
-                            </div>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-orange-500 transition-colors" />
-                    </Link>
-                </div>
-
-                {/* IPD Portal Entry */}
-                <Link href="/ipd"
-                    className="group flex items-center justify-between bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-2xl px-6 py-4 shadow-lg shadow-violet-500/20 transition-all">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-white/20 rounded-xl">
-                            <ClipboardList className="h-5 w-5 text-white" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-bold">Enter IPD Portal</p>
-                            <p className="text-xs text-violet-200">Full access — admissions, beds, billing & more</p>
-                        </div>
+                {/* KPI ROW */}
+                {loading && !stats ? (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
                     </div>
-                    <ChevronRight className="h-5 w-5 text-white/70 group-hover:text-white transition-colors" />
+                ) : null}
+                <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 ${loading && !stats ? 'hidden' : ''}`}>
+                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Today&apos;s Registrations</span>
+                            <div className="p-1.5 bg-orange-50 rounded-lg"><UserPlus className="h-3.5 w-3.5 text-orange-500" /></div>
+                        </div>
+                        <p className="text-2xl font-black text-gray-900">{stats?.todayRegistrations || 0}</p>
+                    </div>
+                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Total Patients</span>
+                            <div className="p-1.5 bg-violet-50 rounded-lg"><Users className="h-3.5 w-3.5 text-violet-500" /></div>
+                        </div>
+                        <p className="text-2xl font-black text-gray-900">{stats?.totalPatients || 0}</p>
+                    </div>
+                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">IPD Admitted</span>
+                            <div className="p-1.5 bg-blue-50 rounded-lg"><Bed className="h-3.5 w-3.5 text-blue-500" /></div>
+                        </div>
+                        <p className="text-2xl font-black text-gray-900">{totalAdmitted}</p>
+                    </div>
+                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{revenueLabel}</span>
+                            <div className="p-1.5 bg-emerald-50 rounded-lg"><IndianRupee className="h-3.5 w-3.5 text-emerald-500" /></div>
+                        </div>
+                        <p className="text-2xl font-black text-gray-900">{formatMoney(revenueValue)}</p>
+                    </div>
+                </div>
+
+                {/* Compact IPD Portal Entry */}
+                <Link href="/ipd"
+                    className="group flex items-center justify-between bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl px-4 py-2.5 shadow-sm transition-all">
+                    <div className="flex items-center gap-2.5">
+                        <Bed className="h-4 w-4 text-white/90" />
+                        <p className="text-xs font-bold">Enter IPD Portal <span className="font-normal text-violet-200">— admissions, beds, billing &amp; more</span></p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-white/70 group-hover:text-white transition-colors" />
                 </Link>
 
-                {/* Doctor Queues */}
-                {(queues.length > 0 || loading) && (
-                    <div>
-                        <h2 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                            <Stethoscope className="h-4 w-4 text-gray-400" /> Live Doctor Queues
-                        </h2>
-                        {loading ? (
-                            <div className="flex items-center justify-center py-10">
-                                <Loader2 className="h-5 w-5 animate-spin text-orange-500" />
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                {queues.map((q) => (
-                                    <div key={q.doctorId} className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4 space-y-3">
-                                        <div>
-                                            <p className="text-sm font-bold text-gray-900 truncate">{q.doctorName}</p>
-                                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{q.department || 'General'}</p>
-                                        </div>
-
-                                        {q.current ? (
-                                            <div className="bg-violet-50 border border-violet-100 rounded-xl p-3">
-                                                <p className="text-[10px] font-semibold text-violet-500 uppercase tracking-wide mb-1">In Progress</p>
-                                                <p className="text-sm font-bold text-violet-900 truncate">{q.current.patientName}</p>
-                                                {q.current.token && <p className="text-xs text-violet-500">Token #{q.current.token}</p>}
-                                            </div>
-                                        ) : (
-                                            <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 text-center">
-                                                <p className="text-xs text-gray-400">No patient in progress</p>
-                                            </div>
-                                        )}
-
-                                        <div className="flex items-center gap-3 text-xs text-gray-500">
-                                            <span className="flex items-center gap-1">
-                                                <Clock className="h-3 w-3 text-amber-500" />
-                                                <span className="font-semibold text-gray-900">{q.waiting.length}</span> waiting
-                                            </span>
-                                            <span className="flex items-center gap-1">
-                                                <Calendar className="h-3 w-3 text-blue-400" />
-                                                <span className="font-semibold text-gray-900">{q.scheduled.length}</span> scheduled
-                                            </span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                {/* TAB SWITCHER */}
+                <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+                    <button
+                        onClick={() => setActiveTab('opd')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'opd' ? 'bg-white text-orange-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <Stethoscope className="h-3.5 w-3.5" />
+                        OPD Patients
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('ipd')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'ipd' ? 'bg-white text-orange-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <Bed className="h-3.5 w-3.5" />
+                        IPD Patients
+                        {totalAdmitted > 0 && (
+                            <span className="bg-blue-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">
+                                {totalAdmitted}
+                            </span>
                         )}
-                    </div>
-                )}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('arrivals')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'arrivals' ? 'bg-white text-orange-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <Bell className="h-3.5 w-3.5" />
+                        Expected Today
+                        {expectedArrivals.length > 0 && (
+                            <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">
+                                {expectedArrivals.length}
+                            </span>
+                        )}
+                    </button>
+                </div>
 
-                {/* Today's Appointments */}
+                {/* ═══════════════════════════════════════════════════════════
+                    TAB: OPD PATIENTS
+                   ═══════════════════════════════════════════════════════════ */}
+                {activeTab === 'opd' && <>
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="relative flex-1 min-w-[240px]">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                            type="text"
+                            value={searchInput}
+                            onChange={e => setSearchInput(e.target.value)}
+                            placeholder="Search by name, patient ID, or phone..."
+                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Filter className="h-4 w-4 text-gray-400" />
+                        <select
+                            value={department}
+                            onChange={e => { setDepartment(e.target.value); setPage(1); }}
+                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
+                        >
+                            <option value="">All Departments</option>
+                            <option value="General Medicine">General Medicine</option>
+                            <option value="Cardiology">Cardiology</option>
+                            <option value="Orthopedics">Orthopedics</option>
+                            <option value="Pediatrics">Pediatrics</option>
+                            <option value="Neurology">Neurology</option>
+                            <option value="ENT">ENT</option>
+                            <option value="Dermatology">Dermatology</option>
+                            <option value="Pulmonology">Pulmonology</option>
+                        </select>
+                        <select
+                            value={dateRange}
+                            onChange={e => { setDateRange(e.target.value as any); setPage(1); }}
+                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
+                        >
+                            <option value="all">All Time</option>
+                            <option value="today">Today</option>
+                            <option value="week">This Week</option>
+                            <option value="month">This Month</option>
+                        </select>
+                    </div>
+                </div>
+
+                {/* OPD PATIENT TABLE */}
                 <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
-                    <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                        <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-gray-400" /> Today&apos;s Appointments
-                        </h2>
-                        <span className="text-xs text-gray-400">{appointments.length} total</span>
-                    </div>
-
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead>
-                                <tr className="border-b border-gray-100">
-                                    {['Time', 'Patient', 'Contact', 'Doctor / Dept', 'Reason', 'Status', 'Action'].map(h => (
-                                        <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                                <tr className="border-b border-gray-200">
+                                    {['Patient ID', 'Name', 'Age / Gender', 'Phone', 'Department', 'Registered', 'Status', 'Balance', 'Actions'].map(h => (
+                                        <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                                     ))}
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-50">
-                                {loading ? (
-                                    <tr><td colSpan={7} className="text-center py-16">
-                                        <Loader2 className="h-6 w-6 animate-spin text-orange-500 mx-auto" />
-                                    </td></tr>
-                                ) : appointments.length === 0 ? (
-                                    <tr><td colSpan={7} className="text-center py-16">
-                                        <Calendar className="h-8 w-8 text-gray-200 mx-auto mb-2" />
-                                        <p className="text-gray-400 text-sm">No appointments today</p>
-                                    </td></tr>
-                                ) : appointments.map((appt) => {
-                                    const canCheckIn = appt.status === 'Pending' || appt.status === 'Scheduled';
-                                    const isCheckingIn = checkingIn === appt.appointment_id;
+                            <tbody className="divide-y divide-gray-100">
+                                {loading && patients.length === 0 ? (
+                                    <>
+                                        {Array.from({ length: 6 }).map((_, i) => (
+                                            <tr key={`skel-${i}`}>
+                                                {Array.from({ length: 9 }).map((_, c) => (
+                                                    <td key={c} className="px-4 py-3.5">
+                                                        <Skeleton height="0.625rem" width={c === 1 ? '70%' : c === 8 ? '2rem' : '60%'} />
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </>
+                                ) : patients.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={9} className="text-center py-16">
+                                            <Users className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                                            <p className="text-gray-400 text-sm font-medium">No patients found</p>
+                                            <p className="text-gray-300 text-xs mt-1">Try adjusting your search or filters</p>
+                                        </td>
+                                    </tr>
+                                ) : patients.map((patient: any) => (
+                                    <tr key={patient.patient_id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-4 py-3">
+                                            <span className="text-xs font-mono font-bold text-orange-600">{patient.patient_id}</span>
+                                        </td>
+                                        <td className="px-4 py-3 font-medium text-gray-900">{patient.full_name}</td>
+                                        <td className="px-4 py-3 text-gray-500">
+                                            {patient.age || '-'} / {patient.gender || '-'}
+                                        </td>
+                                        <td className="px-4 py-3 text-gray-500">
+                                            {patient.phone ? (
+                                                <span className="flex items-center gap-1">
+                                                    <Phone className="h-3 w-3" />
+                                                    {patient.phone}
+                                                </span>
+                                            ) : '-'}
+                                        </td>
+                                        <td className="px-4 py-3 text-gray-500">{patient.department || '-'}</td>
+                                        <td className="px-4 py-3 text-gray-400 text-xs">
+                                            {new Date(patient.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {patient.lastAppointmentStatus ? (
+                                                <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full ${getStatusColor(patient.lastAppointmentStatus)}`}>
+                                                    {patient.lastAppointmentStatus}
+                                                </span>
+                                            ) : (
+                                                <span className="text-gray-300 text-xs">-</span>
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {patient.totalBalance > 0 ? (
+                                                <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">₹ {Number(patient.totalBalance).toFixed(2)}</span>
+                                            ) : (
+                                                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">₹ 0</span>
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center gap-1">
+                                                <Link
+                                                    href={`/reception/patient/${patient.patient_id}`}
+                                                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-orange-600 transition-colors inline-flex"
+                                                    title="View Full Profile"
+                                                >
+                                                    <Eye className="h-4 w-4" />
+                                                </Link>
+                                                <Link
+                                                    href={`/billing/new?patientId=${encodeURIComponent(patient.patient_id)}`}
+                                                    className="p-1.5 hover:bg-emerald-50 rounded-lg text-gray-400 hover:text-emerald-600 transition-colors inline-flex"
+                                                    title="Create Bill"
+                                                >
+                                                    <Receipt className="h-4 w-4" />
+                                                </Link>
+                                                <Link
+                                                    href={`/billing/fee-receipt?patientId=${encodeURIComponent(patient.patient_id)}`}
+                                                    className="p-1.5 hover:bg-blue-50 rounded-lg text-gray-400 hover:text-blue-600 transition-colors inline-flex"
+                                                    title="Fee Receipt"
+                                                >
+                                                    <ReceiptText className="h-4 w-4" />
+                                                </Link>
+                                                <button
+                                                    onClick={() => handleLockBill(patient.patient_id)}
+                                                    disabled={lockingId === patient.patient_id}
+                                                    className="p-1.5 hover:bg-amber-50 rounded-lg text-gray-400 hover:text-amber-600 transition-colors inline-flex disabled:opacity-50"
+                                                    title="Lock Bill (finalize latest draft)"
+                                                >
+                                                    {lockingId === patient.patient_id
+                                                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                                                        : <Lock className="h-4 w-4" />}
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* PAGINATION */}
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
+                            <span className="text-xs text-gray-400">
+                                Showing {((page - 1) * 25) + 1} - {Math.min(page * 25, total)} of {total}
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                                    disabled={page <= 1}
+                                    className="p-1.5 hover:bg-gray-100 rounded-lg disabled:opacity-30"
+                                >
+                                    <ChevronLeft className="h-4 w-4 text-gray-400" />
+                                </button>
+                                <span className="text-xs font-medium text-gray-500">Page {page} of {totalPages}</span>
+                                <button
+                                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={page >= totalPages}
+                                    className="p-1.5 hover:bg-gray-100 rounded-lg disabled:opacity-30"
+                                >
+                                    <ChevronRight className="h-4 w-4 text-gray-400" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+                </>}
+
+                {/* ═══════════════════════════════════════════════════════════
+                    TAB: IPD PATIENTS
+                   ═══════════════════════════════════════════════════════════ */}
+                {activeTab === 'ipd' && <>
+                {/* IPD Filter Bar */}
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
+                        {IPD_STATUS_FILTERS.map(s => (
+                            <button
+                                key={s}
+                                onClick={() => setIpdStatusFilter(s)}
+                                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                                    ipdStatusFilter === s
+                                        ? 'bg-gradient-to-r from-teal-500 to-emerald-600 text-white shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                                }`}
+                            >
+                                {s}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="relative flex-1 min-w-[200px] max-w-xs">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                        <input
+                            type="text"
+                            value={ipdSearch}
+                            onChange={e => setIpdSearch(e.target.value)}
+                            placeholder="Search name, UHID, phone..."
+                            className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-emerald-400 placeholder-gray-400"
+                        />
+                    </div>
+
+                    <select
+                        value={ipdWardFilter}
+                        onChange={e => setIpdWardFilter(e.target.value)}
+                        className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-emerald-400"
+                    >
+                        <option value="">All Wards</option>
+                        {ipdWards.map((w: any) => (
+                            <option key={w.id} value={w.ward_name}>{w.ward_name}</option>
+                        ))}
+                    </select>
+
+                    <span className="text-xs text-gray-400 ml-auto">
+                        {ipdFiltered.length} record{ipdFiltered.length !== 1 ? 's' : ''}
+                    </span>
+                </div>
+
+                {/* IPD Table */}
+                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-gray-100 bg-gray-50">
+                                    {['Admission ID', 'Patient Name', 'UHID', 'Doctor', 'Ward / Bed', 'Diagnosis', 'Days', 'Balance', 'Status', 'Actions'].map(h => (
+                                        <th
+                                            key={h}
+                                            className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                                        >
+                                            {h}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {ipdLoading ? (
+                                    <tr>
+                                        <td colSpan={10} className="text-center py-16">
+                                            <Loader2 className="h-6 w-6 animate-spin text-emerald-500 mx-auto" />
+                                            <p className="text-xs text-gray-400 mt-2">Loading admissions...</p>
+                                        </td>
+                                    </tr>
+                                ) : ipdFiltered.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={10} className="text-center py-16">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <Bed className="h-8 w-8 text-gray-200" />
+                                                <p className="text-sm font-medium text-gray-400">No admissions found</p>
+                                                <p className="text-xs text-gray-300">
+                                                    {ipdSearch || ipdWardFilter || ipdStatusFilter !== 'All'
+                                                        ? 'Try adjusting your filters'
+                                                        : 'No patients have been admitted yet'}
+                                                </p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ) : ipdFiltered.map((admission: any) => {
+                                    const wardName = admission.wardName
+                                        || admission.ward?.ward_name
+                                        || admission.bed?.wards?.ward_name
+                                        || '—';
+                                    const bedId = admission.bed?.bed_id || '—';
+
                                     return (
-                                        <tr key={appt.appointment_id} className="hover:bg-gray-50 transition-colors">
-                                            <td className="px-4 py-3 text-xs font-mono text-gray-500 whitespace-nowrap">
-                                                {fmt(appt.appointment_date)}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <p className="font-semibold text-gray-900 text-sm">{appt.patient?.full_name || '—'}</p>
-                                                <p className="text-[10px] text-gray-400">{appt.patient?.age ? `${appt.patient.age}y` : ''} {appt.patient?.gender || ''}</p>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {appt.patient?.phone ? (
-                                                    <a href={`tel:${appt.patient.phone}`} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 transition-colors">
-                                                        <Phone className="h-3 w-3" /> {appt.patient.phone}
-                                                    </a>
-                                                ) : <span className="text-xs text-gray-300">—</span>}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <p className="text-xs font-medium text-gray-700">{appt.doctor_name || '—'}</p>
-                                                <p className="text-[10px] text-gray-400">{appt.department || 'General'}</p>
-                                            </td>
-                                            <td className="px-4 py-3 max-w-[140px]">
-                                                <p className="text-xs text-gray-500 truncate">{appt.reason_for_visit || '—'}</p>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <span className={`inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full whitespace-nowrap ${STATUS_STYLE[appt.status] || 'bg-gray-100 text-gray-500'}`}>
-                                                    {appt.status}
+                                        <tr key={admission.admission_id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <span className="text-xs font-mono font-bold text-emerald-600">
+                                                    {admission.admission_id}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3">
-                                                {canCheckIn ? (
-                                                    <button
-                                                        onClick={() => handleCheckIn(appt.appointment_id)}
-                                                        disabled={!!checkingIn}
-                                                        className="flex items-center gap-1 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap"
+                                                <p className="font-semibold text-gray-900 text-xs whitespace-nowrap">
+                                                    {admission.patient?.full_name || '—'}
+                                                </p>
+                                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                                    {admission.patient?.age ? `${admission.patient.age}y` : ''}{' '}
+                                                    {admission.patient?.gender || ''}
+                                                </p>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="text-xs font-mono text-gray-500">
+                                                    {admission.patient?.patient_id || '—'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="text-xs text-gray-700 whitespace-nowrap">
+                                                    {admission.doctor_name || '—'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <p className="text-xs font-medium text-gray-800 whitespace-nowrap">{wardName}</p>
+                                                <p className="text-[10px] text-gray-400 mt-0.5">Bed: {bedId}</p>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="text-xs text-gray-600 max-w-[120px] truncate block">
+                                                    {admission.diagnosis || '—'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <div>
+                                                    <span className="text-xs font-bold text-gray-900">
+                                                        {admission.daysAdmitted ?? '—'}
+                                                    </span>
+                                                    {admission.daysAdmitted != null && (
+                                                        <span className="text-[10px] text-gray-400 ml-1">day{admission.daysAdmitted !== 1 ? 's' : ''}</span>
+                                                    )}
+                                                </div>
+                                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                                    {formatDate(admission.admission_date)}
+                                                </p>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <span className={`text-xs font-bold ${
+                                                    (admission.totalBalance ?? 0) > 0
+                                                        ? 'text-red-600'
+                                                        : 'text-emerald-600'
+                                                }`}>
+                                                    {formatMoney(admission.totalBalance)}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full border ${getIPDStatusBadge(admission.status)}`}>
+                                                    {admission.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Link
+                                                        href={`/reception/ipd/${encodeURIComponent(admission.admission_id)}`}
+                                                        className="inline-flex items-center px-3 py-1.5 text-[10px] font-bold text-white bg-gradient-to-r from-teal-500 to-emerald-600 rounded-lg hover:shadow-md transition-shadow"
                                                     >
-                                                        {isCheckingIn ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-                                                        Check In
-                                                    </button>
-                                                ) : (
-                                                    <span className="text-xs text-gray-300">—</span>
-                                                )}
+                                                        View
+                                                    </Link>
+                                                    <Link
+                                                        href={`/ipd/discharge-settlement/${encodeURIComponent(admission.admission_id)}`}
+                                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
+                                                        title="Discharge Settlement"
+                                                    >
+                                                        <Wallet className="h-3 w-3" /> Settle
+                                                    </Link>
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -270,7 +721,91 @@ export default function ReceptionDashboard() {
                         </table>
                     </div>
                 </div>
+                </>}
 
+                {/* ═══════════════════════════════════════════════════════════
+                    TAB: EXPECTED TODAY
+                   ═══════════════════════════════════════════════════════════ */}
+                {activeTab === 'arrivals' && (
+                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-sm font-bold text-gray-900">Expected Today — Not Yet Checked In</h3>
+                                <p className="text-xs text-gray-400 mt-0.5">Patients with appointments today who haven&apos;t arrived yet</p>
+                            </div>
+                            <button onClick={loadArrivals} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-orange-600 transition-colors">
+                                <Activity className="h-4 w-4" />
+                            </button>
+                        </div>
+                        {arrivalsLoading ? (
+                            <div className="flex items-center justify-center py-12">
+                                <Loader2 className="h-5 w-5 animate-spin text-orange-500" />
+                            </div>
+                        ) : expectedArrivals.length === 0 ? (
+                            <div className="text-center py-12">
+                                <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto mb-2" />
+                                <p className="text-sm font-medium text-gray-500">All patients checked in</p>
+                                <p className="text-xs text-gray-300 mt-1">No pending arrivals for today</p>
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-gray-50">
+                                {expectedArrivals.map((arrival: any) => {
+                                    const isOverdue = arrival.minutes_overdue > 0;
+                                    const isLate = arrival.minutes_overdue > 15;
+                                    return (
+                                        <div key={arrival.appointment_id} className={`flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors ${isLate ? 'bg-rose-50/30' : ''}`}>
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isLate ? 'bg-rose-500' : isOverdue ? 'bg-amber-500' : 'bg-orange-500'}`} />
+                                                <div>
+                                                    <p className="text-sm font-semibold text-gray-900">{arrival.patient_name}</p>
+                                                    <p className="text-xs text-gray-400">
+                                                        {arrival.doctor_name} · {arrival.department}
+                                                        {arrival.reason && ` · ${arrival.reason}`}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <div className="text-right">
+                                                    <p className="text-xs font-bold text-gray-700">
+                                                        {new Date(arrival.appointment_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                                    </p>
+                                                    {isLate ? (
+                                                        <p className="text-[10px] text-rose-600 font-semibold">{arrival.minutes_overdue}m overdue</p>
+                                                    ) : isOverdue ? (
+                                                        <p className="text-[10px] text-amber-600 font-semibold">{arrival.minutes_overdue}m late</p>
+                                                    ) : (
+                                                        <p className="text-[10px] text-orange-600 font-semibold">
+                                                            in {Math.abs(arrival.minutes_overdue)}m
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                {arrival.patient_phone && (
+                                                    <a href={`tel:${arrival.patient_phone}`}
+                                                        className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-orange-600 transition-colors"
+                                                        title="Call patient">
+                                                        <Phone className="h-3.5 w-3.5" />
+                                                    </a>
+                                                )}
+                                                <button
+                                                    onClick={() => handleCheckIn(arrival.appointment_id)}
+                                                    disabled={checkingIn === arrival.appointment_id}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 text-white text-xs font-bold rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50"
+                                                >
+                                                    {checkingIn === arrival.appointment_id ? (
+                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                    ) : (
+                                                        <CheckCircle2 className="h-3 w-3" />
+                                                    )}
+                                                    Check In
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </AppShell>
     );

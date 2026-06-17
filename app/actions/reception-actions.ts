@@ -183,6 +183,40 @@ export async function getReceptionStats() {
     }
 }
 
+/**
+ * Today's billed revenue split by OPD vs IPD for the reception KPI card.
+ * IPD = invoices with invoice_type 'IPD'; OPD = everything else (OPD / OPD_FEE / LAB /
+ * PHARMACY). Cancelled invoices are excluded. Amounts use net_amount.
+ */
+export async function getReceptionRevenueToday() {
+    try {
+        const { db } = await requireTenantContext();
+        const tz = await getOrgTimezone();
+        const { start: todayStart, end: todayEnd } = getTodayRange(tz);
+        const dateFilter = { gte: todayStart, lte: todayEnd };
+
+        const [totalAgg, ipdAgg] = await Promise.all([
+            db.invoices.aggregate({
+                _sum: { net_amount: true },
+                where: { status: { not: 'Cancelled' }, created_at: dateFilter },
+            }),
+            db.invoices.aggregate({
+                _sum: { net_amount: true },
+                where: { status: { not: 'Cancelled' }, invoice_type: 'IPD', created_at: dateFilter },
+            }),
+        ]);
+
+        const total = Number(totalAgg._sum.net_amount || 0);
+        const ipd = Number(ipdAgg._sum.net_amount || 0);
+        const opd = Math.max(0, total - ipd);
+
+        return { success: true, data: { total, opd, ipd } };
+    } catch (error) {
+        console.error('Reception Revenue Error:', error);
+        return { success: false, data: { total: 0, opd: 0, ipd: 0 } };
+    }
+}
+
 export async function getPatientDetail(patientId: string) {
     try {
         const { db } = await requireTenantContext();

@@ -87,6 +87,25 @@ export default function ReceptionGenerateBillPage() {
         });
     }, []);
 
+    // Pre-select a patient when opened with ?patientId=... (e.g. the "Bill" action
+    // on the reception patient list). Runs once, after doctors load so the
+    // consulting-doctor auto-match works.
+    const preselectedRef = React.useRef(false);
+    useEffect(() => {
+        if (preselectedRef.current || doctors.length === 0) return;
+        const pid = new URLSearchParams(window.location.search).get('patientId');
+        if (!pid) return;
+        preselectedRef.current = true;
+        (async () => {
+            const res = await searchPatientsForBilling(pid);
+            if (res.success && res.data?.length) {
+                const exact = res.data.find((p: any) => p.patient_id === pid) || res.data[0];
+                if (exact) handleSelectPatient(exact);
+            }
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [doctors]);
+
     // Select a patient and pre-fill the consulting doctor from their latest
     // appointment (biller can still change it before generating the bill).
     const handleSelectPatient = async (p: any) => {

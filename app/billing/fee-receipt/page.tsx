@@ -155,6 +155,21 @@ function NewReceiptForm() {
         });
     }, []);
 
+    // Pre-select a patient when opened with ?patientId=... (e.g. the "Fee Receipt"
+    // action on the reception patient list).
+    useEffect(() => {
+        const pid = new URLSearchParams(window.location.search).get('patientId');
+        if (!pid) return;
+        (async () => {
+            const res = await searchPatientsForReceipt(pid);
+            if (res.success && res.data?.length) {
+                const exact = res.data.find((p: any) => p.patient_id === pid) || res.data[0];
+                if (exact) selectPatient(exact);
+            }
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const handleSearch = async (q: string) => {
         setSearchQuery(q);
         if (q.length < 2) {

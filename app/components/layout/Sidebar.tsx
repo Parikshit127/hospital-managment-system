@@ -198,8 +198,6 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       title: "Front Desk",
       items: [
         { label: "Dashboard", href: "/reception/dashboard", icon: LayoutDashboard },
-        { label: "Patient List", href: "/reception", icon: Users },
-        { label: "Register Patient", href: "/reception/register", icon: UserPlus },
         { label: "Master Billing", href: "/billing", icon: CircleDollarSign },
         { label: "Fee Receipt", href: "/billing/fee-receipt", icon: ReceiptText },
         { label: "IPD Settlement", href: "/ipd/discharge-settlement", icon: Wallet },
