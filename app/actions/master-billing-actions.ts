@@ -593,6 +593,7 @@ export async function globalFinanceSearch(query: string): Promise<{
       db.payments.findMany({
         where: {
           organizationId,
+          status: { not: "Reversed" },
           OR: [
             { receipt_number: { contains: trimmed, mode: "insensitive" } },
             { reference: { contains: trimmed, mode: "insensitive" } },
@@ -749,7 +750,7 @@ export async function getPatientFinancialProfile(patientId: string) {
           where: { patient_id: patientId, organizationId },
           include: {
             items: true,
-            payments: { orderBy: { created_at: "desc" } },
+            payments: { where: { status: { not: "Reversed" } }, orderBy: { created_at: "desc" } },
             credit_notes: true,
             insurance_claims: true,
           },
@@ -897,7 +898,7 @@ export async function getPatientLedger(patientId: string) {
     const invoices = await db.invoices.findMany({
       where: { patient_id: patientId, organizationId },
       include: {
-        payments: { orderBy: { created_at: "asc" } },
+        payments: { where: { status: { not: "Reversed" } }, orderBy: { created_at: "asc" } },
         credit_notes: { orderBy: { created_at: "asc" } },
       },
       orderBy: { created_at: "asc" },

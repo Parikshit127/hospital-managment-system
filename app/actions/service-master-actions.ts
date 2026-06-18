@@ -31,7 +31,7 @@ function toMessage(e: any, duplicateLabel = 'name'): string {
 const serviceSchema = z.object({
   service_code: z.string().min(1),
   service_name: z.string().min(1),
-  service_category: z.enum(['OPD Consultation','ICU','Procedure','Room','Nursing','Diet','Consumable','Misc']),
+  service_category: z.enum(['OPD Consultation','ICU','Procedure','Room','Nursing','Diet','Consumable','Home Care','Visit Charges','Misc']),
   default_rate: z.number().nonnegative(),
   hsn_sac_code: optionalText,
   tax_rate: z.number().nonnegative().default(0),
