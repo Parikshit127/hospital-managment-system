@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Clock, User, FileText, Loader2 } from 'lucide-react';
 import { useToast } from '@/app/components/ui/Toast';
-import { useSearchParams } from 'next/navigation';
 import { getPendingApprovals, approveEncounter, rejectEncounter } from '@/app/actions/coordinator-actions';
 
 type PendingEncounter = {
@@ -19,8 +18,6 @@ type PendingEncounter = {
 };
 
 export default function PendingApprovalsContent() {
-    const searchParams = useSearchParams();
-    const doctorId = searchParams.get('doctor_id') || '';
     const toast = useToast();
     const [encounters, setEncounters] = useState<PendingEncounter[]>([]);
     const [loading, setLoading] = useState(true);
@@ -29,16 +26,15 @@ export default function PendingApprovalsContent() {
     const [rejectingId, setRejectingId] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!doctorId) { setLoading(false); return; }
-        getPendingApprovals(doctorId).then(res => {
+        getPendingApprovals().then(res => {
             if (res.success) setEncounters(res.data as PendingEncounter[]);
             setLoading(false);
         });
-    }, [doctorId]);
+    }, []);
 
     const handleApprove = async (id: string) => {
         setActionLoading(id);
-        const res = await approveEncounter(id, doctorId);
+        const res = await approveEncounter(id);
         setActionLoading(null);
         if (res.success) {
             toast.success('EMR entry approved and signed');
@@ -51,7 +47,7 @@ export default function PendingApprovalsContent() {
     const handleReject = async (id: string) => {
         if (!rejectReason.trim()) { toast.error('Please enter a rejection reason'); return; }
         setActionLoading(id);
-        const res = await rejectEncounter(id, doctorId, rejectReason);
+        const res = await rejectEncounter(id, rejectReason);
         setActionLoading(null);
         if (res.success) {
             toast.success('EMR entry rejected');

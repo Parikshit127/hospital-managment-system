@@ -7,20 +7,21 @@
  * Doctor sees pending approvals on their screen.
  */
 
-import { requireTenantContext } from '@/backend/tenant';
+import { requireRoleAndTenant } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
 export async function createEncounterAsCoordinator(data: {
     patient_id: string;
     appointment_id?: string;
     doctor_id: string;
-    coordinator_id: string;
     subjective?: Record<string, unknown>;
     objective?: Record<string, unknown>;
     assessment?: unknown[];
     plan?: Record<string, unknown>;
 }) {
-    const { db, organizationId } = await requireTenantContext();
+    // Identity comes from the session, never the client.
+    const { db, session, organizationId } = await requireRoleAndTenant(['coordinator', 'admin']);
+    const coordinatorId = session.id;
 
     try {
         const encounter = await db.clinicalEncounter.create({
@@ -34,8 +35,8 @@ export async function createEncounterAsCoordinator(data: {
                 assessment: (data.assessment as object[]) ?? [],
                 plan: (data.plan as object) ?? {},
                 status: 'in_progress',
-                typed_by: data.coordinator_id,
-                entered_by: data.coordinator_id,
+                typed_by: coordinatorId,
+                entered_by: coordinatorId,
                 approval_status: 'pending_approval',
             },
         });
@@ -61,7 +62,6 @@ export async function createEncounterAsCoordinator(data: {
 
 export async function updateEncounterAsCoordinator(
     encounterId: string,
-    coordinatorId: string,
     data: {
         subjective?: Record<string, unknown>;
         objective?: Record<string, unknown>;
@@ -69,7 +69,8 @@ export async function updateEncounterAsCoordinator(
         plan?: Record<string, unknown>;
     }
 ) {
-    const { db, organizationId } = await requireTenantContext();
+    const { db, session, organizationId } = await requireRoleAndTenant(['coordinator', 'admin']);
+    const coordinatorId = session.id;
 
     try {
         // Verify coordinator is allowed to edit (encounter must be in draft/pending)
@@ -103,8 +104,10 @@ export async function updateEncounterAsCoordinator(
     }
 }
 
-export async function approveEncounter(encounterId: string, doctorId: string) {
-    const { db, organizationId } = await requireTenantContext();
+export async function approveEncounter(encounterId: string) {
+    // Only the signing clinician (doctor) or an admin may approve. The signer
+    // identity is taken from the session — never supplied by the client.
+    const { db, session, organizationId } = await requireRoleAndTenant(['doctor', 'admin']);
 
     try {
         await db.clinicalEncounter.update({
@@ -112,13 +115,13 @@ export async function approveEncounter(encounterId: string, doctorId: string) {
             data: {
                 approval_status: 'approved',
                 approved_at: new Date(),
-                signed_by: doctorId,
+                signed_by: session.id,
                 signed_at: new Date(),
                 status: 'completed',
             },
         });
 
-        revalidatePath('/doctor/dashboard');
+        revalidatePath('/doctor/pending-approvals');
         return { success: true };
     } catch (error) {
         const msg = error instanceof Error ? error.message : 'Failed to approve encounter';
@@ -126,8 +129,8 @@ export async function approveEncounter(encounterId: string, doctorId: string) {
     }
 }
 
-export async function rejectEncounter(encounterId: string, doctorId: string, reason: string) {
-    const { db, organizationId } = await requireTenantContext();
+export async function rejectEncounter(encounterId: string, reason: string) {
+    const { db, organizationId } = await requireRoleAndTenant(['doctor', 'admin']);
 
     try {
         const encounter = await db.clinicalEncounter.findFirst({
@@ -157,7 +160,7 @@ export async function rejectEncounter(encounterId: string, doctorId: string, rea
             });
         }
 
-        revalidatePath('/doctor/dashboard');
+        revalidatePath('/doctor/pending-approvals');
         return { success: true };
     } catch (error) {
         const msg = error instanceof Error ? error.message : 'Failed to reject encounter';
@@ -165,14 +168,21 @@ export async function rejectEncounter(encounterId: string, doctorId: string, rea
     }
 }
 
-export async function getPendingApprovals(doctorId: string) {
-    const { db, organizationId } = await requireTenantContext();
+/**
+ * Pending EMR approvals for the signed-in clinician.
+ * A doctor sees only their own pending encounters; an admin sees all
+ * pending encounters in the organization. The doctor id is taken from
+ * the session, not the URL.
+ */
+export async function getPendingApprovals() {
+    const { db, session, organizationId } = await requireRoleAndTenant(['doctor', 'admin']);
 
     const pending = await db.clinicalEncounter.findMany({
         where: {
-            doctor_id: doctorId,
             organizationId,
             approval_status: 'pending_approval',
+            // Admins review the whole org; doctors only their own queue.
+            ...(session.role === 'doctor' ? { doctor_id: session.id } : {}),
         },
         orderBy: { created_at: 'desc' },
         include: {
@@ -185,11 +195,15 @@ export async function getPendingApprovals(doctorId: string) {
     return { success: true, data: JSON.parse(JSON.stringify(pending)) };
 }
 
-export async function getCoordinatorEncounters(coordinatorId: string) {
-    const { db, organizationId } = await requireTenantContext();
+/**
+ * Encounters typed by the signed-in coordinator, newest first.
+ * Identity is taken from the session.
+ */
+export async function getCoordinatorEncounters() {
+    const { db, session, organizationId } = await requireRoleAndTenant(['coordinator', 'admin']);
 
     const encounters = await db.clinicalEncounter.findMany({
-        where: { typed_by: coordinatorId, organizationId },
+        where: { typed_by: session.id, organizationId },
         orderBy: { created_at: 'desc' },
         take: 50,
         include: {
