@@ -34,6 +34,7 @@ import {
     getFeeReceiptDetail,
     voidFeeReceipt,
 } from "@/app/actions/fee-receipt-actions";
+import { getPatientBalances } from "@/app/actions/balance-actions";
 import { PrintLetterhead } from "@/app/components/print/PrintLetterhead";
 import Link from "next/link";
 import { fetchBillBranding } from "@/app/actions/branding-actions";
@@ -130,6 +131,7 @@ function NewReceiptForm() {
     const [patientId, setPatientId] = useState("");
     const [patientName, setPatientName] = useState("");
     const [patientPhone, setPatientPhone] = useState("");
+    const [patientBalance, setPatientBalance] = useState<number | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [isSearching, setIsSearching] = useState(false);
     const [patientResults, setPatientResults] = useState<any[]>([]);
@@ -188,6 +190,8 @@ function NewReceiptForm() {
         setPatientPhone(p.phone || "");
         setSearchQuery("");
         setPatientResults([]);
+        setPatientBalance(null);
+        getPatientBalances([p.patient_id]).then(b => setPatientBalance(b[p.patient_id]?.totalBalance ?? 0));
     };
 
     const handleAddItem = () => {
@@ -372,9 +376,16 @@ function NewReceiptForm() {
                             {patientId && (
                                 <div className="flex items-center justify-between text-[11px] font-medium bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-100">
                                     <span>UHID: <strong>{patientId}</strong></span>
-                                    <button type="button" onClick={() => setPatientId("")} className="text-emerald-700 hover:text-emerald-900">
-                                        <X className="h-3 w-3" />
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        {patientBalance != null && (
+                                            <span className={`font-black px-2 py-0.5 rounded ${patientBalance > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                Outstanding: ₹{Number(patientBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                            </span>
+                                        )}
+                                        <button type="button" onClick={() => { setPatientId(""); setPatientBalance(null); }} className="text-emerald-700 hover:text-emerald-900">
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>

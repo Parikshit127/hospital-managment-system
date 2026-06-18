@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Search, Loader2, Plus, ArrowLeft, Receipt, CheckCircle } from 'lucide-react';
 import { searchPatientsForBilling, createInvoice, addInvoiceItem, getSuggestedOpdDoctor } from '@/app/actions/finance-actions';
+import { getPatientBalances } from '@/app/actions/balance-actions';
 import { calculateBillSplit, createPaymentSplits, type BillSplit } from '@/app/actions/billing-engine';
 import { getAllBillableServices } from '@/app/actions/ipd-master-actions';
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
@@ -49,6 +50,7 @@ export default function ReceptionGenerateBillPage() {
     const [searching, setSearching] = useState(false);
     const [patients, setPatients] = useState<any[]>([]);
     const [selectedPatient, setSelectedPatient] = useState<any>(null);
+    const [patientBalance, setPatientBalance] = useState<number | null>(null);
 
     const [doctors, setDoctors] = useState<any[]>([]);
     const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
@@ -111,6 +113,8 @@ export default function ReceptionGenerateBillPage() {
     const handleSelectPatient = async (p: any) => {
         setSelectedPatient(p);
         setSelectedDoctorId('');
+        setPatientBalance(null);
+        getPatientBalances([p.patient_id]).then(b => setPatientBalance(b[p.patient_id]?.totalBalance ?? 0));
         const res = await getSuggestedOpdDoctor(p.patient_id);
         if (res.success && res.data) {
             const { doctor_id, doctor_name } = res.data;
@@ -386,10 +390,17 @@ export default function ReceptionGenerateBillPage() {
                                                 )}
                                             </div>
                                         </div>
-                                        <button
-                                            onClick={() => { setSelectedPatient(null); setSelectedDoctorId(''); setSearchQuery(''); setBillSplit(null); setPreAuthBlocked(false); }}
-                                            className="text-xs font-bold text-orange-600 hover:text-teal-800 underline"
-                                        >Change Patient</button>
+                                        <div className="flex flex-col items-end gap-1.5">
+                                            <button
+                                                onClick={() => { setSelectedPatient(null); setSelectedDoctorId(''); setSearchQuery(''); setBillSplit(null); setPreAuthBlocked(false); setPatientBalance(null); }}
+                                                className="text-xs font-bold text-orange-600 hover:text-teal-800 underline"
+                                            >Change Patient</button>
+                                            {patientBalance != null && (
+                                                <span className={`text-[11px] font-black px-2 py-1 rounded-lg ${patientBalance > 0 ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                                                    Outstanding: ₹{Number(patientBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Consulting doctor — required, saved on the bill so the printed bill header + MIS show it */}
