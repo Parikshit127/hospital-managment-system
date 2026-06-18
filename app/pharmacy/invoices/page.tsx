@@ -5,6 +5,7 @@ import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { FileText, Search, Eye, CreditCard, X, Pencil, Plus, Trash2, IndianRupee, Receipt, TrendingDown, ShoppingBag } from 'lucide-react';
 import { getInvoices, addInvoiceItem, recordPayment } from '@/app/actions/finance-actions';
+import { parseWalkinNote } from '@/app/lib/walkin-note';
 import { getInventory } from '@/app/actions/pharmacy-actions';
 import Link from 'next/link';
 
@@ -106,10 +107,13 @@ export default function PharmacyInvoicesPage() {
             // Text search
             if (search) {
                 const q = search.toLowerCase();
+                const wk = inv.patient_id === 'WALKIN' ? parseWalkinNote(inv.notes) : null;
                 const hit = inv.invoice_number?.toLowerCase().includes(q) ||
                     inv.patient?.full_name?.toLowerCase().includes(q) ||
                     inv.patient?.phone?.includes(search) ||
-                    inv.patient_id?.toLowerCase().includes(q);
+                    inv.patient_id?.toLowerCase().includes(q) ||
+                    wk?.name?.toLowerCase().includes(q) ||
+                    wk?.contact?.includes(search);
                 if (!hit) return false;
             }
 
@@ -372,15 +376,23 @@ export default function PharmacyInvoicesPage() {
                                                 <span className="font-mono font-bold text-gray-900 text-xs">{inv.invoice_number}</span>
                                             </td>
 
-                                            {/* Patient + MRN */}
+                                            {/* Patient + MRN (walk-in/OTC: show the customer name + contact from notes) */}
                                             <td className="px-4 py-3">
-                                                <p className="font-semibold text-gray-900">{inv.patient?.full_name || 'Walk-in'}</p>
-                                                {inv.patient_id && (
-                                                    <p className="text-[10px] text-gray-400 font-mono mt-0.5">MRN: {inv.patient_id}</p>
-                                                )}
-                                                {inv.patient?.phone && (
-                                                    <p className="text-[10px] text-gray-400 mt-0.5">{inv.patient.phone}</p>
-                                                )}
+                                                {(() => {
+                                                    const isWalkin = inv.patient_id === 'WALKIN';
+                                                    const wk = isWalkin ? parseWalkinNote(inv.notes) : null;
+                                                    const name = isWalkin ? (wk?.name || 'Walk-in (OTC)') : (inv.patient?.full_name || 'Walk-in');
+                                                    const phone = isWalkin ? wk?.contact : inv.patient?.phone;
+                                                    return (
+                                                        <>
+                                                            <p className="font-semibold text-gray-900">{name}</p>
+                                                            {isWalkin
+                                                                ? <p className="text-[10px] text-gray-400 font-mono mt-0.5">OTC / Walk-in</p>
+                                                                : inv.patient_id && <p className="text-[10px] text-gray-400 font-mono mt-0.5">MRN: {inv.patient_id}</p>}
+                                                            {phone && <p className="text-[10px] text-gray-400 mt-0.5">{phone}</p>}
+                                                        </>
+                                                    );
+                                                })()}
                                             </td>
 
                                             {/* Category */}
