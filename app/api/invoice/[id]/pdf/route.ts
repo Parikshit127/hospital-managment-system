@@ -200,10 +200,14 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
     const gstin = branding.gstin
 
     // Determine patient category from billing_patient_type
-    const billingType = invoice.billing_patient_type || 'cash'
+    const billingType = String(invoice.billing_patient_type || (patient as any).patient_type || 'cash').toLowerCase()
+    // TPA/insurer attached anywhere (billing type or a policy → tpaProviderName) ⇒ credit bill.
     let patientCategory = 'Cash / Self-Pay'
-    if (billingType === 'tpa_insurance') patientCategory = 'TPA / Insurance'
-    else if (billingType === 'corporate') patientCategory = 'Corporate'
+    if (billingType === 'tpa_insurance' || billingType === 'insurance' || billingType === 'tpa' || tpaProviderName) {
+        patientCategory = `Credit (TPA / Insurance)${tpaProviderName ? ` — ${tpaProviderName}` : ''}`
+    } else if (billingType === 'corporate' || (patient as any).corporate) {
+        patientCategory = 'Credit (Corporate)'
+    }
 
     // Group items by service_category
     const categoryMap: Record<string, any[]> = {}
@@ -389,12 +393,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
                         ${isIPD ? `<p style="font-size:11px;"><strong>Regn No.:</strong> ${admission.admission_id}</p>` : ''}
                         ${isIPD ? `<p style="font-size:11px;"><strong>Bed No.:</strong> ${admission.bed?.bed_id || '-'}/${admission.ward?.ward_name || '-'}</p>` : ''}
                         <p style="font-size:11px;"><strong>Rate Category:</strong> ${invoice.invoice_type || 'OPD'}</p>
-                        <p style="font-size:11px;"><strong>Category:</strong> ${(() => {
-                            const t = String((invoice as any).billing_patient_type || (patient as any).patient_type || 'cash').toLowerCase();
-                            if (t === 'corporate') return 'CORPORATE';
-                            if (t === 'tpa_insurance' || t === 'insurance' || t === 'tpa') return 'INSURANCE / TPA';
-                            return `${patientCategory}${tpaProviderName ? ` (${tpaProviderName})` : ''}`;
-                        })()}</p>
+                        <p style="font-size:11px;"><strong>Category:</strong> ${patientCategory}</p>
                     </div>
                     <div style="text-align:center;">
                         ${isIPD && admission.doctor_name ? `<p style="font-size:11px;"><strong>Department:</strong> -</p>` : ''}

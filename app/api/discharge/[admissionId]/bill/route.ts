@@ -335,9 +335,10 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 <p style="font-size:11px;"><strong>Category:</strong> ${(() => {
                                     const inv = String(invoice.billing_patient_type || '').toLowerCase();
                                     const pat = String((admission.patient as any)?.patient_type || '').toLowerCase();
-                                    const t = inv || pat;
-                                    if (t === 'tpa_insurance' || t === 'insurance' || t === 'tpa') return 'TPA / Insurance';
-                                    if (t === 'corporate') return 'Corporate';
+                                    const isCorp = inv === 'corporate' || pat === 'corporate' || !!(admission.patient as any)?.corporate;
+                                    // A TPA/insurer attached anywhere (invoice type, patient type, or a policy) ⇒ credit bill.
+                                    if (isInsuranceBill || tpaProviderName || policyNumber) return 'Credit (TPA / Insurance)';
+                                    if (isCorp) return 'Credit (Corporate)';
                                     return 'Cash / Self-Pay';
                                 })()}</p>
                                 ${tpaProviderName ? `<p style="font-size:11px;"><strong>TPA/Insurer:</strong> ${tpaProviderName}${policyNumber ? ` &nbsp;|&nbsp; Policy: ${policyNumber}` : ''}</p>` : (isInsuranceBill ? `<p style="font-size:11px;color:#b04a00;"><strong>TPA/Insurer:</strong> (not configured — add via patient registration)</p>` : '')}

@@ -162,11 +162,15 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
         ));
     }
 
-    // Determine patient category from billing_patient_type
-    const billingType = invoice.billing_patient_type || 'cash';
+    // Patient category — a TPA/insurer attached anywhere (billing type or a policy →
+    // tpaProviderName) means it's a CREDIT bill, not Cash/Self-Pay.
+    const billingType = String(invoice.billing_patient_type || (invoice.patient as any)?.patient_type || 'cash').toLowerCase();
     let patientCategory = 'Cash / Self-Pay';
-    if (billingType === 'tpa_insurance') patientCategory = 'TPA / Insurance';
-    else if (billingType === 'corporate') patientCategory = 'Corporate';
+    if (billingType === 'tpa_insurance' || billingType === 'insurance' || billingType === 'tpa' || tpaProviderName) {
+        patientCategory = 'Credit (TPA / Insurance)';
+    } else if (billingType === 'corporate' || (invoice.patient as any)?.corporate) {
+        patientCategory = 'Credit (Corporate)';
+    }
 
     // Derive totals from line items so the summary always matches the charges shown
     // (stored header totals can drift). See deriveInvoiceTotals.
