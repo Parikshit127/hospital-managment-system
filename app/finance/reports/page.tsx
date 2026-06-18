@@ -164,6 +164,10 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
     const methodLabel = (m: string) => (m === 'Deposit' ? 'Deposit Applied' : m);
     const depositsCollected = data?.depositsCollected || {};
     const depositModes = Object.entries(depositsCollected).filter(([k]) => k !== 'total');
+    // Actual collection = new money received this period (Cash/UPI/Card), i.e. Total
+    // Collections minus "Deposit Applied" (advances collected earlier, just settled now).
+    const depositApplied = Number((data?.totals as any)?.Deposit || 0);
+    const actualCollection = Number(data?.totals?.total || 0) - depositApplied;
 
     const [excelExporting, setExcelExporting] = useState(false);
 
@@ -606,6 +610,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <SummaryCard label="Total Collections" value={fmt(data?.totals?.total || 0)} color="emerald" />
+                <SummaryCard label="Actual Collection (excl. deposit applied)" value={fmt(actualCollection)} color="blue" />
                 {methods.map(([method, amount]) => (
                     <SummaryCard key={method} label={methodLabel(method)} value={fmt(amount as number)} color="gray" />
                 ))}
