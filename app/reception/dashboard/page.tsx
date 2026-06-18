@@ -5,11 +5,12 @@ import {
     Users, UserPlus, Search, Filter, Calendar, Phone,
     ChevronLeft, ChevronRight, Eye, Zap, Loader2, Activity,
     CheckCircle2, Bell, Stethoscope, Bed, IndianRupee, Receipt, Lock,
-    ReceiptText, Wallet,
+    ReceiptText, Wallet, Download, FileText, Printer,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Skeleton, SkeletonCard } from '@/app/components/ui/Skeleton';
 import {
@@ -60,7 +61,7 @@ export default function ReceptionDashboard() {
     // ── OPD Patients state ──
     const [patients, setPatients] = useState<any[]>([]);
     const [stats, setStats] = useState<any>(null);
-    const [revenue, setRevenue] = useState<{ total: number; opd: number; ipd: number }>({ total: 0, opd: 0, ipd: 0 });
+    const [revenue, setRevenue] = useState<{ total: number; opd: number; ipd: number; collected: number; collectedOpd: number; collectedIpd: number }>({ total: 0, opd: 0, ipd: 0, collected: 0, collectedOpd: 0, collectedIpd: 0 });
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [department, setDepartment] = useState('');
@@ -83,8 +84,12 @@ export default function ReceptionDashboard() {
     const [ipdSearch, setIpdSearch] = useState('');
     const ipdLoaded = useRef(false);
 
-    // ── Tab ──
-    const [activeTab, setActiveTab] = useState<'opd' | 'ipd' | 'arrivals'>('opd');
+    // ── Tab ── (honours ?tab=ipd|arrivals from redirects)
+    const [activeTab, setActiveTab] = useState<'opd' | 'ipd' | 'arrivals'>(() => {
+        if (typeof window === 'undefined') return 'opd';
+        const t = new URLSearchParams(window.location.search).get('tab');
+        return t === 'ipd' || t === 'arrivals' ? t : 'opd';
+    });
 
     // ── OPD data loading ──
     const loadData = useCallback(async () => {
@@ -199,6 +204,38 @@ export default function ReceptionDashboard() {
         setLockingId(null);
     };
 
+    // Export the current tab's list to an .xlsx file.
+    const exportToExcel = (rows: any[], filename: string) => {
+        if (!rows.length) { toast.error('Nothing to export.'); return; }
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+        XLSX.writeFile(wb, filename);
+    };
+    const handleExportOpd = () => exportToExcel(patients.map((p: any) => ({
+        'Patient ID': p.patient_id,
+        Name: p.full_name,
+        Age: p.age ?? '',
+        Gender: p.gender ?? '',
+        Phone: p.phone ?? '',
+        Department: p.department ?? '',
+        Registered: p.created_at ? new Date(p.created_at).toLocaleDateString('en-GB') : '',
+        Status: p.lastAppointmentStatus ?? '',
+        'Balance (₹)': Number(p.totalBalance || 0),
+    })), 'opd-patients.xlsx');
+    const handleExportIpd = () => exportToExcel(ipdFiltered.map((a: any) => ({
+        'Admission ID': a.admission_id,
+        Patient: a.patient?.full_name ?? '',
+        UHID: a.patient?.patient_id ?? '',
+        Doctor: a.doctor_name ?? '',
+        Ward: a.wardName || a.ward?.ward_name || a.bed?.wards?.ward_name || '',
+        Bed: a.bed?.bed_id ?? '',
+        Diagnosis: a.diagnosis ?? '',
+        Days: a.daysAdmitted ?? '',
+        'Balance (₹)': Number(a.totalBalance || 0),
+        Status: a.status ?? '',
+    })), 'ipd-admissions.xlsx');
+
     // Debounced search for OPD
     const [searchInput, setSearchInput] = useState('');
     useEffect(() => {
@@ -238,9 +275,11 @@ export default function ReceptionDashboard() {
     const totalAdmitted = ipdAdmissions.filter(a => a.status === 'Admitted').length;
 
     // Revenue card follows the active tab: OPD tab → OPD revenue, IPD tab → IPD revenue,
-    // Expected Today → total.
+    // Expected Today → total. Shows billed (net) with collected (paid) underneath.
     const revenueValue = activeTab === 'ipd' ? revenue.ipd : activeTab === 'opd' ? revenue.opd : revenue.total;
+    const revenueCollected = activeTab === 'ipd' ? revenue.collectedIpd : activeTab === 'opd' ? revenue.collectedOpd : revenue.collected;
     const revenueLabel = activeTab === 'ipd' ? "Today's Revenue (IPD)" : activeTab === 'opd' ? "Today's Revenue (OPD)" : "Today's Revenue";
+    const revenueDrill = `/finance/invoices?rev=${activeTab === 'ipd' ? 'ipd' : activeTab === 'opd' ? 'opd' : 'total'}`;
 
     const headerActions = (
         <div className="flex items-center gap-2">
@@ -304,13 +343,15 @@ export default function ReceptionDashboard() {
                         </div>
                         <p className="text-2xl font-black text-gray-900">{totalAdmitted}</p>
                     </div>
-                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
+                    <Link href={revenueDrill}
+                        className="block bg-white border border-gray-200 shadow-sm rounded-2xl p-4 hover:border-emerald-300 hover:shadow-md transition-all group">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{revenueLabel}</span>
                             <div className="p-1.5 bg-emerald-50 rounded-lg"><IndianRupee className="h-3.5 w-3.5 text-emerald-500" /></div>
                         </div>
-                        <p className="text-2xl font-black text-gray-900">{formatMoney(revenueValue)}</p>
-                    </div>
+                        <p className="text-2xl font-black text-gray-900 group-hover:text-emerald-700 transition-colors">{formatMoney(revenueValue)}</p>
+                        <p className="text-[10px] font-semibold text-gray-400 mt-0.5">Collected: <span className="text-emerald-600">{formatMoney(revenueCollected)}</span> · billed</p>
+                    </Link>
                 </div>
 
                 {/* Compact IPD Portal Entry */}
@@ -400,6 +441,13 @@ export default function ReceptionDashboard() {
                             <option value="week">This Week</option>
                             <option value="month">This Month</option>
                         </select>
+                        <button
+                            onClick={handleExportOpd}
+                            className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors"
+                            title="Export current list to Excel"
+                        >
+                            <Download className="h-4 w-4" /> Export
+                        </button>
                     </div>
                 </div>
 
@@ -440,7 +488,16 @@ export default function ReceptionDashboard() {
                                         <td className="px-4 py-3">
                                             <span className="text-xs font-mono font-bold text-orange-600">{patient.patient_id}</span>
                                         </td>
-                                        <td className="px-4 py-3 font-medium text-gray-900">{patient.full_name}</td>
+                                        <td className="px-4 py-3 font-medium text-gray-900">
+                                            <span className="inline-flex items-center gap-1.5">
+                                                {patient.full_name}
+                                                {patient.hasDraftBill && (
+                                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-amber-50 text-amber-700 border border-amber-200" title="Has a draft bill — can be locked">
+                                                        <FileText className="h-2.5 w-2.5" /> Draft
+                                                    </span>
+                                                )}
+                                            </span>
+                                        </td>
                                         <td className="px-4 py-3 text-gray-500">
                                             {patient.age || '-'} / {patient.gender || '-'}
                                         </td>
@@ -495,6 +552,13 @@ export default function ReceptionDashboard() {
                                                 >
                                                     <ReceiptText className="h-4 w-4" />
                                                 </Link>
+                                                <button
+                                                    onClick={() => window.open(`/api/opd/${patient.patient_id}/registration-slip`, '_blank')}
+                                                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-700 transition-colors inline-flex"
+                                                    title="Registration Slip"
+                                                >
+                                                    <Printer className="h-4 w-4" />
+                                                </button>
                                                 <button
                                                     onClick={() => handleLockBill(patient.patient_id)}
                                                     disabled={lockingId === patient.patient_id}
@@ -585,7 +649,14 @@ export default function ReceptionDashboard() {
                         ))}
                     </select>
 
-                    <span className="text-xs text-gray-400 ml-auto">
+                    <button
+                        onClick={handleExportIpd}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 transition-colors ml-auto"
+                        title="Export current list to Excel"
+                    >
+                        <Download className="h-3.5 w-3.5" /> Export
+                    </button>
+                    <span className="text-xs text-gray-400">
                         {ipdFiltered.length} record{ipdFiltered.length !== 1 ? 's' : ''}
                     </span>
                 </div>

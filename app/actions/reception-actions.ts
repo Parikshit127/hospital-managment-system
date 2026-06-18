@@ -121,7 +121,15 @@ export async function getRegisteredPatients(options?: {
         ]);
 
         const patientIds = data.map((p: any) => p.patient_id);
-        const balances = await getPatientBalances(patientIds);
+        const [balances, draftRows] = await Promise.all([
+            getPatientBalances(patientIds),
+            db.invoices.groupBy({
+                by: ['patient_id'],
+                where: { patient_id: { in: patientIds }, status: 'Draft' },
+                _count: { _all: true },
+            }),
+        ]);
+        const draftSet = new Set((draftRows as any[]).map(r => r.patient_id));
 
         return {
             success: true,
@@ -130,6 +138,7 @@ export async function getRegisteredPatients(options?: {
                 lastAppointmentStatus: p.appointments[0]?.status || null,
                 lastAppointmentDate: p.appointments[0]?.appointment_date || null,
                 totalBalance: balances[p.patient_id]?.totalBalance || 0,
+                hasDraftBill: draftSet.has(p.patient_id),
             })),
             total,
             totalPages: Math.ceil(total / limit),
@@ -197,23 +206,28 @@ export async function getReceptionRevenueToday() {
 
         const [totalAgg, ipdAgg] = await Promise.all([
             db.invoices.aggregate({
-                _sum: { net_amount: true },
+                _sum: { net_amount: true, paid_amount: true },
                 where: { status: { not: 'Cancelled' }, created_at: dateFilter },
             }),
             db.invoices.aggregate({
-                _sum: { net_amount: true },
+                _sum: { net_amount: true, paid_amount: true },
                 where: { status: { not: 'Cancelled' }, invoice_type: 'IPD', created_at: dateFilter },
             }),
         ]);
 
+        // Billed = net_amount on invoices; Collected = paid_amount actually received.
         const total = Number(totalAgg._sum.net_amount || 0);
         const ipd = Number(ipdAgg._sum.net_amount || 0);
         const opd = Math.max(0, total - ipd);
 
-        return { success: true, data: { total, opd, ipd } };
+        const collected = Number(totalAgg._sum.paid_amount || 0);
+        const collectedIpd = Number(ipdAgg._sum.paid_amount || 0);
+        const collectedOpd = Math.max(0, collected - collectedIpd);
+
+        return { success: true, data: { total, opd, ipd, collected, collectedOpd, collectedIpd } };
     } catch (error) {
         console.error('Reception Revenue Error:', error);
-        return { success: false, data: { total: 0, opd: 0, ipd: 0 } };
+        return { success: false, data: { total: 0, opd: 0, ipd: 0, collected: 0, collectedOpd: 0, collectedIpd: 0 } };
     }
 }
 

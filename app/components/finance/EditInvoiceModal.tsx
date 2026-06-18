@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pencil, Plus, Trash2, AlertTriangle, Info, Save } from 'lucide-react';
+import { Pencil, Plus, Trash2, AlertTriangle, Info, Save, Unlock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Modal } from '@/app/components/ui/Modal';
 import { Input, Textarea } from '@/app/components/ui/Input';
@@ -9,6 +9,8 @@ import { Button } from '@/app/components/ui/Button';
 import {
     getInvoiceDetail,
     saveInvoiceEdits,
+    unlockInvoice,
+    getMyRole,
 } from '@/app/actions/finance-actions';
 
 interface EditInvoiceModalProps {
@@ -109,6 +111,25 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
     const [discMode, setDiscMode] = useState<'pct' | 'amt'>('pct');
     const [discInput, setDiscInput] = useState<number>(0);
 
+    // Hard-lock state + viewer role (only Admin/Finance can unlock).
+    const [isLocked, setIsLocked] = useState(false);
+    const [myRole, setMyRole] = useState<string | null>(null);
+    const [unlocking, setUnlocking] = useState(false);
+    const canUnlock = ['admin', 'finance', 'superadmin'].includes(myRole || '');
+
+    useEffect(() => {
+        if (isOpen) getMyRole().then(r => setMyRole(r.role));
+    }, [isOpen]);
+
+    const handleUnlock = async () => {
+        if (!invoiceMeta) return;
+        setUnlocking(true);
+        const res = await unlockInvoice(invoiceMeta.id);
+        setUnlocking(false);
+        if (res.success) { toast.success('Bill unlocked.'); load(); }
+        else toast.error(res.error || 'Failed to unlock.');
+    };
+
     const load = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -120,8 +141,11 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
             }
             const inv: any = res.data;
 
-            // Pre-flight editable check — Cancelled or fully paid invoices are hard-locked.
-            if (inv.status === 'Cancelled') {
+            // Pre-flight editable check — Locked, Cancelled or fully paid invoices block edits.
+            setIsLocked(!!inv.is_locked);
+            if (inv.is_locked) {
+                setError('This bill is locked. Only Admin or Finance can unlock it.');
+            } else if (inv.status === 'Cancelled') {
                 setError('Cancelled invoices cannot be edited. Revert it first if needed.');
             } else if (Number(inv.balance_due ?? 0) <= 0 && Number(inv.paid_amount ?? 0) > 0) {
                 setError('Cannot edit: This invoice is fully paid.');
@@ -405,7 +429,12 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                         <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
                         <p className="text-xs text-rose-700 leading-relaxed">{error}</p>
                     </div>
-                    <div className="flex items-center justify-end">
+                    <div className="flex items-center justify-end gap-3">
+                        {isLocked && canUnlock && (
+                            <Button variant="primary" size="md" onClick={handleUnlock} loading={unlocking} disabled={unlocking} icon={!unlocking ? <Unlock className="h-4 w-4" /> : undefined}>
+                                Unlock Bill
+                            </Button>
+                        )}
                         <Button variant="secondary" size="md" onClick={onClose}>Close</Button>
                     </div>
                 </div>

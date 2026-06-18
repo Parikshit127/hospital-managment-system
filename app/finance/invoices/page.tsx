@@ -11,6 +11,12 @@ export default function InvoicesPage() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+    // OPD/IPD drill-down from the reception revenue card (?rev=opd|ipd|total).
+    const [revFilter, setRevFilter] = useState<'opd' | 'ipd' | ''>('');
+    useEffect(() => {
+        const r = new URLSearchParams(window.location.search).get('rev');
+        if (r === 'opd' || r === 'ipd') setRevFilter(r);
+    }, []);
 
     const loadData = async () => {
         setLoading(true);
@@ -36,11 +42,15 @@ export default function InvoicesPage() {
 
     useEffect(() => { loadData(); }, [statusFilter]);
 
-    const filtered = invoices.filter(inv =>
-    (inv.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        inv.patient?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        inv.patient?.phone?.includes(searchTerm))
-    );
+    const filtered = invoices.filter(inv => {
+        const matchesSearch = inv.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            inv.patient?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            inv.patient?.phone?.includes(searchTerm);
+        // OPD = everything that isn't IPD (matches the reception revenue card split).
+        const matchesRev = !revFilter
+            || (revFilter === 'ipd' ? inv.source === 'IPD' : inv.source !== 'IPD');
+        return matchesSearch && matchesRev;
+    });
 
     return (
         <AppShell
@@ -75,6 +85,15 @@ export default function InvoicesPage() {
                             <option value="Partial">Partial</option>
                             <option value="Cancelled">Cancelled</option>
                         </select>
+                        {revFilter && (
+                            <button
+                                onClick={() => setRevFilter('')}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-colors whitespace-nowrap"
+                                title="Clear OPD/IPD filter"
+                            >
+                                {revFilter === 'ipd' ? 'IPD only' : 'OPD only'} ✕
+                            </button>
+                        )}
                     </div>
                 </div>
 

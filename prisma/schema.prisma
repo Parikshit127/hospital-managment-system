@@ -1198,6 +1198,12 @@ model invoices {
   // per-line discounts so line prices are untouched. Included in total_discount + net.
   bill_discount Decimal @default(0)
 
+  // Hard edit-lock — when true the bill is frozen (no edits). Set once via the
+  // reception "Lock Bill" action; only Admin/Finance can unlock.
+  is_locked Boolean   @default(false)
+  locked_at DateTime?
+  locked_by String?
+
   organization          Organization         @relation(fields: [organizationId], references: [id])
   patient               OPD_REG              @relation(fields: [patient_id], references: [patient_id])
   admission             admissions?          @relation(fields: [admission_id], references: [admission_id])

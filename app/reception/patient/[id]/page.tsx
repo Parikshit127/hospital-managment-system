@@ -22,6 +22,18 @@ import { EditInvoiceModal } from '@/app/components/finance/EditInvoiceModal';
 import { getInsuranceProviders, addPatientPolicy, getPatientPolicies } from '@/app/actions/insurance-actions';
 import dynamic from 'next/dynamic';
 
+/** Derive age in whole years from a date-of-birth string (returns '' if invalid). */
+function ageFromDob(dob: string | null | undefined): string {
+    if (!dob) return '';
+    const birth = new Date(dob);
+    if (isNaN(birth.getTime())) return '';
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    return age >= 0 ? String(age) : '';
+}
+
 // Code-split the inline bill builder — only loaded when staff actually open the panel.
 const InlineBillBuilder = dynamic(
     () => import('@/app/components/billing/InlineBillBuilder').then(m => m.InlineBillBuilder),
@@ -472,7 +484,7 @@ export default function PatientProfilePage() {
                             </div>
                             <EditableField label="Full Name" value={patient.full_name || ''} field="full_name" patientId={patientId} onSave={loadData} />
                             <EditableField label="Phone" value={patient.phone || ''} field="phone" patientId={patientId} onSave={loadData} type="tel" />
-                            <EditableField label="Age" value={patient.age || ''} field="age" patientId={patientId} onSave={loadData} />
+                            <EditableField label="Age" value={ageFromDob(patient.date_of_birth) || patient.age || ''} field="age" patientId={patientId} onSave={loadData} />
                             <EditableField label="Gender" value={patient.gender || ''} field="gender" patientId={patientId} onSave={loadData} />
                             <EditableField label="Department" value={patient.department || ''} field="department" patientId={patientId} onSave={loadData} />
                             <EditableField label="Email" value={patient.email || ''} field="email" patientId={patientId} onSave={loadData} type="email" />

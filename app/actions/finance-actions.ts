@@ -590,21 +590,70 @@ export async function finalizeInvoice(invoiceId: number) {
  */
 export async function finalizePatientLatestDraft(patientId: string) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
+        // Only an unlocked draft can be locked. This makes the action idempotent —
+        // a second click finds nothing to lock instead of re-locking.
         const draft = await db.invoices.findFirst({
-            where: { organizationId, patient_id: patientId, status: 'Draft' },
+            where: { organizationId, patient_id: patientId, status: 'Draft', is_locked: false },
             orderBy: { created_at: 'desc' },
             select: { id: true, invoice_number: true },
         });
         if (!draft) {
+            const alreadyLocked = await db.invoices.findFirst({
+                where: { organizationId, patient_id: patientId, is_locked: true },
+                orderBy: { created_at: 'desc' },
+                select: { invoice_number: true },
+            });
+            if (alreadyLocked) {
+                return { success: false, error: `Bill ${alreadyLocked.invoice_number} is already locked.` };
+            }
             return { success: false, error: 'No draft bill to lock for this patient.' };
         }
         const res = await finalizeInvoice(draft.id);
         if (!res.success) return { success: false, error: res.error || 'Failed to lock bill.' };
+        // Hard-lock: freeze the bill so it cannot be edited again.
+        await db.invoices.update({
+            where: { id: draft.id },
+            data: { is_locked: true, locked_at: new Date(), locked_by: session.username },
+        });
         return { success: true, data: { invoice_number: draft.invoice_number } };
     } catch (error: any) {
         console.error('finalizePatientLatestDraft error:', error);
         return { success: false, error: error.message };
+    }
+}
+
+/** Unlock a hard-locked bill — Admin/Finance only (enforced server-side). */
+export async function unlockInvoice(invoiceId: number) {
+    try {
+        const { db, organizationId, session } = await requireRoleAndTenant(['admin', 'finance', 'superadmin']);
+        await db.invoices.update({
+            where: { id: invoiceId },
+            data: { is_locked: false, locked_at: null, locked_by: null },
+        });
+        await db.system_audit_logs.create({
+            data: {
+                action: 'UNLOCK_INVOICE', module: 'finance', entity_type: 'invoice',
+                entity_id: String(invoiceId), details: JSON.stringify({ by: session.username }), organizationId,
+            },
+        });
+        return { success: true };
+    } catch (error: any) {
+        if (error?.name === 'ForbiddenError' || /FORBIDDEN/.test(error?.message || '')) {
+            return { success: false, error: 'Only Admin or Finance can unlock a bill.' };
+        }
+        console.error('unlockInvoice error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/** Lightweight helper so client components can show role-gated controls (e.g. Unlock). */
+export async function getMyRole() {
+    try {
+        const { session } = await requireTenantContext();
+        return { success: true, role: (session.role as string) || null };
+    } catch {
+        return { success: false, role: null };
     }
 }
 
@@ -2116,6 +2165,9 @@ type InvoiceEditableCheck = {
 
 function evaluateInvoiceEditable(invoice: any, expectedVersion?: number): InvoiceEditableCheck {
     if (!invoice) return { editable: false, reason: 'Invoice not found.' };
+    if (invoice.is_locked) {
+        return { editable: false, reason: 'This bill is locked. Only Admin or Finance can unlock it.' };
+    }
     if (invoice.status === 'Cancelled') {
         return { editable: false, reason: 'Cancelled invoices cannot be edited. Revert first if needed.' };
     }
@@ -2141,7 +2193,7 @@ export async function checkInvoiceEditable(invoiceId: number) {
         const { db } = await requireTenantContext();
         const invoice = await db.invoices.findUnique({
             where: { id: invoiceId },
-            select: { id: true, status: true, paid_amount: true, balance_due: true, version: true, created_at: true },
+            select: { id: true, status: true, paid_amount: true, balance_due: true, version: true, created_at: true, is_locked: true },
         });
         const check = evaluateInvoiceEditable(invoice);
         if (!check.editable) return { success: true, editable: false, reason: check.reason };
