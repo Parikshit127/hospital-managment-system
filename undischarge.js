@@ -8,6 +8,7 @@ async function undischarge() {
     'AVS-2026-00152',  // Rohit Kumar Sharma
     'AVS-2026-00146',  // MOHIT
     'AVS-2026-00144',  // NATVER JHA
+    'AVS-2026-00098',  // GAURAV
   ];
 
   for (const pid of patients) {
