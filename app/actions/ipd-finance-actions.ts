@@ -488,7 +488,7 @@ export async function generateInterimBill(admissionId: string) {
         return {
             success: true,
             data: serialize({
-                type: 'INTERIM',
+                type: admission.status === 'Discharged' ? 'FINAL' : 'INTERIM',
                 admission: {
                     admission_id: admission.admission_id,
                     patient_name: admission.patient?.full_name,

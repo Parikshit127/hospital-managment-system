@@ -170,7 +170,7 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                         <!-- Header details matching pharmacy layout (no logo since it is on the letterhead) -->
                         <div style="display:flex;justify-content:flex-end;border-bottom:2px solid ${branding.accentColor};padding-bottom:12px;margin-bottom:20px;">
                             <div style="text-align:right;">
-                                <h2 style="font-size:16px;font-weight:800;color:${billColor};">${isFinal ? 'SUMMARY BILL' : 'INTERIM SUMMARY'}</h2>
+                                <h2 style="font-size:16px;font-weight:800;color:${billColor};">${isFinal ? 'FINAL SUMMARY BILL' : 'INTERIM SUMMARY'}</h2>
                                 <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${invoice.invoice_number}</p>
                                 <p style="font-size:10px;color:#6b7280;">Type: <strong>${invoice.invoice_type || 'IPD'}</strong></p>
                                 <p style="font-size:10px;color:#6b7280;">Date: ${fmtBillDate(new Date())}</p>
