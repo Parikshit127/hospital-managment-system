@@ -43,7 +43,56 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
 
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState<'ALL' | 'ACTIVE' | 'SETTLED'>('ACTIVE');
+    const [patientType, setPatientType] = useState<'ALL' | 'OPD' | 'IPD' | 'WALKIN'>('ALL');
+    const [tpaStatus, setTpaStatus] = useState<'ALL' | 'NONE' | 'PENDING' | 'APPROVED' | 'SETTLED'>('ALL');
+    const [datePreset, setDatePreset] = useState<'ALL' | 'TODAY' | 'WEEK' | 'MONTH' | 'CUSTOM'>('ALL');
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
+    const [minBalance, setMinBalance] = useState('');
+    const [maxBalance, setMaxBalance] = useState('');
+    const [sortBy, setSortBy] = useState<'recent' | 'oldest' | 'balance_desc' | 'balance_asc' | 'name_asc'>('recent');
+    const [showFilters, setShowFilters] = useState(false);
     const [page, setPage] = useState(1);
+
+    // Derive ISO date range from preset. CUSTOM keeps user-entered values intact.
+    const applyDatePreset = (preset: typeof datePreset) => {
+        setDatePreset(preset);
+        const today = new Date();
+        const fmt = (d: Date) => d.toISOString().slice(0, 10);
+        if (preset === 'TODAY') {
+            setDateFrom(fmt(today)); setDateTo(fmt(today));
+        } else if (preset === 'WEEK') {
+            const d = new Date(); d.setDate(d.getDate() - 6);
+            setDateFrom(fmt(d)); setDateTo(fmt(today));
+        } else if (preset === 'MONTH') {
+            const d = new Date(); d.setDate(d.getDate() - 29);
+            setDateFrom(fmt(d)); setDateTo(fmt(today));
+        } else if (preset === 'ALL') {
+            setDateFrom(''); setDateTo('');
+        }
+        setPage(1);
+    };
+
+    const clearAllFilters = () => {
+        setSearch('');
+        setFilter('ACTIVE');
+        setPatientType('ALL');
+        setTpaStatus('ALL');
+        setDatePreset('ALL');
+        setDateFrom(''); setDateTo('');
+        setMinBalance(''); setMaxBalance('');
+        setSortBy('recent');
+        setPage(1);
+    };
+
+    const activeFilterCount =
+        (filter !== 'ACTIVE' ? 1 : 0) +
+        (patientType !== 'ALL' ? 1 : 0) +
+        (tpaStatus !== 'ALL' ? 1 : 0) +
+        (datePreset !== 'ALL' ? 1 : 0) +
+        (minBalance ? 1 : 0) +
+        (maxBalance ? 1 : 0) +
+        (sortBy !== 'recent' ? 1 : 0);
 
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
@@ -84,7 +133,19 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
 
     const loadData = useCallback(async () => {
         setLoading(true);
-        const res = await getMasterBillingData({ page, limit: 15, search, filter });
+        const res = await getMasterBillingData({
+            page,
+            limit: 15,
+            search,
+            filter,
+            patientType,
+            tpaStatus,
+            dateFrom: dateFrom || undefined,
+            dateTo: dateTo || undefined,
+            minBalance: minBalance ? Number(minBalance) : undefined,
+            maxBalance: maxBalance ? Number(maxBalance) : undefined,
+            sortBy,
+        });
         if (res.success) {
             // Enrich each patient row with TPA aggregates computed from their
             // invoices. The server already returns the new TPA scalars via the
@@ -126,6 +187,13 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
         const t = setTimeout(() => { loadData(); }, 300);
         return () => clearTimeout(t);
     }, [loadData]);
+
+    // Whenever any filter dimension changes, kick the page back to 1 — keeps the
+    // user from seeing an empty page because the previous offset overshot the
+    // narrower result set.
+    useEffect(() => {
+        setPage(1);
+    }, [filter, patientType, tpaStatus, datePreset, minBalance, maxBalance, sortBy]);
 
     const handlePayment = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -237,28 +305,244 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                     </a>
                 </div>
 
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                    <div className="relative flex-1 md:w-64">
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                    <div className="relative flex-1 md:w-72">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input
                             type="text"
-                            placeholder="Search Patient Name or ID..."
+                            placeholder="Search name, UHID, or phone…"
                             value={search}
                             onChange={e => { setSearch(e.target.value); setPage(1); }}
-                            className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm font-medium"
+                            className="w-full pl-10 pr-9 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm font-medium"
                         />
+                        {search && (
+                            <button
+                                onClick={() => { setSearch(''); setPage(1); }}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-700 rounded"
+                                title="Clear search"
+                            >
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        )}
                     </div>
-                    <select
-                        value={filter}
-                        onChange={e => { setFilter(e.target.value as any); setPage(1); }}
-                        className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-orange-500"
+                    <button
+                        onClick={() => setShowFilters(s => !s)}
+                        className={`relative px-3 py-2 border rounded-xl text-sm font-bold flex items-center gap-1.5 transition-colors ${
+                            showFilters || activeFilterCount > 0
+                                ? 'bg-orange-50 border-orange-300 text-orange-700'
+                                : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                        }`}
                     >
-                        <option value="ALL">All Accounts</option>
-                        <option value="ACTIVE">Active Balance Due</option>
-                        <option value="SETTLED">Settled Accounts</option>
-                    </select>
+                        <Filter className="h-4 w-4" />
+                        Filters
+                        {activeFilterCount > 0 && (
+                            <span className="ml-1 min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center text-[10px] font-black bg-orange-600 text-white rounded-full">
+                                {activeFilterCount}
+                            </span>
+                        )}
+                    </button>
                 </div>
             </div>
+
+            {/* ADVANCED FILTERS PANEL */}
+            {showFilters && (
+                <div className="mb-4 bg-white border border-gray-200 rounded-2xl shadow-sm p-4 md:p-5">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-[11px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                            <Filter className="h-3.5 w-3.5 text-orange-500" /> Refine Results
+                        </h2>
+                        <div className="flex items-center gap-2">
+                            {activeFilterCount > 0 && (
+                                <button
+                                    onClick={clearAllFilters}
+                                    className="text-[11px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1"
+                                >
+                                    <X className="h-3 w-3" /> Clear all
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setShowFilters(false)}
+                                className="text-[11px] font-bold text-gray-400 hover:text-gray-700"
+                            >
+                                Hide
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {/* Account Status */}
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Account Status</label>
+                            <div className="flex flex-wrap gap-1.5">
+                                {([
+                                    { v: 'ALL', l: 'All' },
+                                    { v: 'ACTIVE', l: 'Has Due' },
+                                    { v: 'SETTLED', l: 'Settled' },
+                                ] as const).map(opt => (
+                                    <button
+                                        key={opt.v}
+                                        onClick={() => setFilter(opt.v as any)}
+                                        className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-colors ${
+                                            filter === opt.v
+                                                ? 'bg-orange-600 border-orange-600 text-white'
+                                                : 'bg-white border-gray-200 text-gray-600 hover:border-orange-300'
+                                        }`}
+                                    >{opt.l}</button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Patient Type */}
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Bill Type</label>
+                            <div className="flex flex-wrap gap-1.5">
+                                {([
+                                    { v: 'ALL', l: 'All' },
+                                    { v: 'OPD', l: 'OPD' },
+                                    { v: 'IPD', l: 'IPD' },
+                                    { v: 'WALKIN', l: 'Walk-in' },
+                                ] as const).map(opt => (
+                                    <button
+                                        key={opt.v}
+                                        onClick={() => setPatientType(opt.v as any)}
+                                        className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-colors ${
+                                            patientType === opt.v
+                                                ? 'bg-slate-900 border-slate-900 text-white'
+                                                : 'bg-white border-gray-200 text-gray-600 hover:border-slate-400'
+                                        }`}
+                                    >{opt.l}</button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* TPA Status */}
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">TPA Status</label>
+                            <select
+                                value={tpaStatus}
+                                onChange={e => setTpaStatus(e.target.value as any)}
+                                className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-orange-500"
+                            >
+                                <option value="ALL">All TPA states</option>
+                                <option value="NONE">Cash / Corporate (no TPA)</option>
+                                <option value="PENDING">TPA Pending</option>
+                                <option value="APPROVED">TPA Approved (awaiting receipt)</option>
+                                <option value="SETTLED">TPA Settled</option>
+                            </select>
+                        </div>
+
+                        {/* Sort */}
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Sort By</label>
+                            <select
+                                value={sortBy}
+                                onChange={e => setSortBy(e.target.value as any)}
+                                className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-orange-500"
+                            >
+                                <option value="recent">Newest first</option>
+                                <option value="oldest">Oldest first</option>
+                                <option value="balance_desc">Highest balance</option>
+                                <option value="balance_asc">Lowest balance</option>
+                                <option value="name_asc">Name (A–Z)</option>
+                            </select>
+                        </div>
+
+                        {/* Date Range */}
+                        <div className="lg:col-span-2">
+                            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Bill Date</label>
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                                {([
+                                    { v: 'ALL', l: 'Any' },
+                                    { v: 'TODAY', l: 'Today' },
+                                    { v: 'WEEK', l: 'Last 7d' },
+                                    { v: 'MONTH', l: 'Last 30d' },
+                                    { v: 'CUSTOM', l: 'Custom' },
+                                ] as const).map(opt => (
+                                    <button
+                                        key={opt.v}
+                                        onClick={() => applyDatePreset(opt.v as any)}
+                                        className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-colors ${
+                                            datePreset === opt.v
+                                                ? 'bg-indigo-600 border-indigo-600 text-white'
+                                                : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300'
+                                        }`}
+                                    >{opt.l}</button>
+                                ))}
+                            </div>
+                            {datePreset === 'CUSTOM' && (
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="date"
+                                        value={dateFrom}
+                                        onChange={e => setDateFrom(e.target.value)}
+                                        className="flex-1 px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-500"
+                                    />
+                                    <span className="text-xs text-gray-400">to</span>
+                                    <input
+                                        type="date"
+                                        value={dateTo}
+                                        onChange={e => setDateTo(e.target.value)}
+                                        className="flex-1 px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-500"
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Balance Range */}
+                        <div className="lg:col-span-2">
+                            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Outstanding Balance (₹)</label>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="number"
+                                    placeholder="Min"
+                                    value={minBalance}
+                                    onChange={e => setMinBalance(e.target.value)}
+                                    className="flex-1 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium outline-none focus:ring-2 focus:ring-orange-500"
+                                />
+                                <span className="text-xs text-gray-400">–</span>
+                                <input
+                                    type="number"
+                                    placeholder="Max"
+                                    value={maxBalance}
+                                    onChange={e => setMaxBalance(e.target.value)}
+                                    className="flex-1 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium outline-none focus:ring-2 focus:ring-orange-500"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ACTIVE FILTER CHIPS */}
+            {!showFilters && activeFilterCount > 0 && (
+                <div className="mb-4 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-black text-slate-400 uppercase mr-1">Filters:</span>
+                    {filter !== 'ACTIVE' && (
+                        <FilterChip label={filter === 'ALL' ? 'All accounts' : 'Settled only'} onClear={() => setFilter('ACTIVE')} />
+                    )}
+                    {patientType !== 'ALL' && (
+                        <FilterChip label={`Type: ${patientType}`} onClear={() => setPatientType('ALL')} />
+                    )}
+                    {tpaStatus !== 'ALL' && (
+                        <FilterChip label={`TPA: ${tpaStatus.toLowerCase()}`} onClear={() => setTpaStatus('ALL')} />
+                    )}
+                    {datePreset !== 'ALL' && (
+                        <FilterChip
+                            label={datePreset === 'CUSTOM' ? `${dateFrom || '…'} → ${dateTo || '…'}` : datePreset.toLowerCase()}
+                            onClear={() => applyDatePreset('ALL')}
+                        />
+                    )}
+                    {minBalance && <FilterChip label={`Min ₹${minBalance}`} onClear={() => setMinBalance('')} />}
+                    {maxBalance && <FilterChip label={`Max ₹${maxBalance}`} onClear={() => setMaxBalance('')} />}
+                    {sortBy !== 'recent' && (
+                        <FilterChip label={`Sort: ${sortBy.replace('_', ' ')}`} onClear={() => setSortBy('recent')} />
+                    )}
+                    <button
+                        onClick={clearAllFilters}
+                        className="text-[11px] font-bold text-rose-600 hover:text-rose-700 px-2 py-1 hover:underline"
+                    >Clear all</button>
+                </div>
+            )}
 
             {/* Master Table */}
             <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex-1 flex flex-col overflow-hidden">
@@ -743,5 +1027,20 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                 </div>
             )}
         </div>
+    );
+}
+
+function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
+    return (
+        <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-50 border border-orange-200 text-orange-700 text-[11px] font-bold rounded-lg">
+            {label}
+            <button
+                onClick={onClear}
+                className="ml-0.5 -mr-0.5 p-0.5 rounded hover:bg-orange-100"
+                title="Remove filter"
+            >
+                <X className="h-3 w-3" />
+            </button>
+        </span>
     );
 }
