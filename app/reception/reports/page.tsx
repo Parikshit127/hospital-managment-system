@@ -14,13 +14,17 @@ import type { ReportColumn, ReportRow } from '@/app/lib/reports/reception-report
 
 type TabKey = 'ipd' | 'opd' | 'walkin';
 
+type ReportActionResult =
+    | { success: true; columns: ReportColumn[]; rows: ReportRow[] }
+    | { success: false; error: string };
+
 const TABS: { key: TabKey; label: string; icon: typeof BedDouble; hint: string }[] = [
     { key: 'ipd', label: 'IPD Patients', icon: BedDouble, hint: 'Admitted patients, ward/room allocation & admission summary' },
     { key: 'opd', label: 'OPD Patients', icon: Stethoscope, hint: 'Doctor consultations & daily appointments, department-wise' },
     { key: 'walkin', label: 'Walk-in / Casualty', icon: Footprints, hint: 'Direct patients with no prior appointment' },
 ];
 
-const RUNNERS: Record<TabKey, (from: string, to: string) => Promise<any>> = {
+const RUNNERS: Record<TabKey, (from: string, to: string) => Promise<ReportActionResult>> = {
     ipd: getIpdPatientReport,
     opd: getOpdPatientReport,
     walkin: getWalkinPatientReport,

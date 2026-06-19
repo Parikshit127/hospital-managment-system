@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
+import { PatientNotes } from '@/app/components/patient/PatientNotes';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
     User, Calendar, Phone, Mail, MapPin, Activity, Loader2,
@@ -16,7 +17,7 @@ import { getPatientDetail, updatePatientField, addPatientDues, getPatientExterna
 import { getPatientFinancialProfile } from '@/app/actions/master-billing-actions';
 import { recordPayment } from '@/app/actions/finance-actions';
 import { getCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
-import { CASH_COMPLIANCE_DEFAULTS, isValidPan } from '@/app/lib/cash-compliance';
+import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan, resolveRegisteredPan } from '@/app/lib/cash-compliance';
 import { useToast } from '@/app/components/ui/Toast';
 import { EditInvoiceModal } from '@/app/components/finance/EditInvoiceModal';
 import { getInsuranceProviders, addPatientPolicy, getPatientPolicies } from '@/app/actions/insurance-actions';
@@ -725,6 +726,10 @@ export default function PatientProfilePage() {
                     </div>
                 )}
 
+                {activeTab === 'overview' && (
+                    <PatientNotes patientId={patientId} title="Patient Notes" />
+                )}
+
                 {activeTab === 'appointments' && (
                     <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
                         <table className="w-full text-sm">
@@ -1219,6 +1224,8 @@ export default function PatientProfilePage() {
             {payingInvoice && (
                 <CollectPaymentModal
                     invoice={payingInvoice}
+                    registeredPan={resolveRegisteredPan(patient)}
+                    registeredPanName={patient?.full_name || null}
                     onClose={() => setPayingInvoice(null)}
                     onSuccess={() => {
                         setPayingInvoice(null);
@@ -1244,8 +1251,8 @@ export default function PatientProfilePage() {
 }
 
 // ── Collect Payment Modal (mirrors master billing) ──────────────────────
-function CollectPaymentModal({ invoice, onClose, onSuccess }: {
-    invoice: any; onClose: () => void; onSuccess: () => void;
+function CollectPaymentModal({ invoice, registeredPan, registeredPanName, onClose, onSuccess }: {
+    invoice: any; registeredPan?: string | null; registeredPanName?: string | null; onClose: () => void; onSuccess: () => void;
 }) {
     const balanceDue = Number(invoice.balance_due);
     const [amount, setAmount] = useState(balanceDue.toString());
@@ -1272,8 +1279,11 @@ function CollectPaymentModal({ invoice, onClose, onSuccess }: {
     const isCash = method === 'Cash';
     const cashBlocked = isCash && numAmount > thresholds.cash_limit;
     const panRequired = isCash && numAmount >= thresholds.pan_threshold && !cashBlocked;
+    // Skip PAN capture when the patient already has a valid PAN on file from registration.
+    const hasRegisteredPan = isValidPan(registeredPan);
+    const panNeedsCapture = panRequired && !hasRegisteredPan;
     const panProvidedValid = isValidPan(panNumber) && panName.trim().length > 0;
-    const canSubmit = isValid && !cashBlocked && (!panRequired || panProvidedValid);
+    const canSubmit = isValid && !cashBlocked && (!panNeedsCapture || panProvidedValid);
 
     const fmtMoney = (n: number) => Number(n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
 
@@ -1343,7 +1353,7 @@ function CollectPaymentModal({ invoice, onClose, onSuccess }: {
     const handleSubmit = async () => {
         if (!isValid) return;
         if (method === 'Online') return handleRazorpay();
-        if (cashBlocked || (panRequired && !panProvidedValid)) return;
+        if (cashBlocked || (panNeedsCapture && !panProvidedValid)) return;
 
         setError(null);
         setSaving(true);
@@ -1447,7 +1457,13 @@ function CollectPaymentModal({ invoice, onClose, onSuccess }: {
                                 <span>Cash receipts above ₹{fmtMoney(thresholds.cash_limit)} are not permitted. Use another method.</span>
                             </div>
                         )}
-                        {panRequired && (
+                        {panRequired && hasRegisteredPan && (
+                            <div className="flex items-start gap-2 px-3 py-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium rounded-lg">
+                                <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+                                <span>PAN on file from registration ({normalizePan(registeredPan)}) will be recorded — no re-entry needed.</span>
+                            </div>
+                        )}
+                        {panNeedsCapture && (
                             <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
                                 <div className="flex items-start gap-2 text-xs font-medium text-amber-800">
                                     <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />

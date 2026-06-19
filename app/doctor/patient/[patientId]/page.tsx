@@ -24,6 +24,7 @@ import Link from "next/link";
 import { Sidebar } from "@/app/components/layout/Sidebar";
 import { getPatientTimeline } from "@/app/actions/doctor-actions";
 import IPDJourneyTab from "@/app/admin/patients/[patientId]/tabs/IPDJourneyTab";
+import { PatientNotes } from "@/app/components/patient/PatientNotes";
 
 type SessionType = {
   id: string;
@@ -646,6 +647,8 @@ export default function DoctorPatientDetailsPage() {
                   <IPDJourneyTab admissions={ipdAdmissions} />
                 </div>
               )}
+
+              <PatientNotes patientId={patientId} title="Patient Notes" />
             </>
           )}
         </div>

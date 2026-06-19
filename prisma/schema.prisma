@@ -46,6 +46,7 @@ model Organization {
   pharmacy_sales_audit          pharmacy_sales_audit[]
   admissions                    admissions[]
   medical_notes                 medical_notes[]
+  patient_notes                 PatientNote[]
   discharge_summaries           discharge_summaries[]
   beds                          beds[]
   wards                         wards[]
@@ -575,6 +576,7 @@ model OPD_REG {
   // Phase 3 — EMR
   clinical_encounters   ClinicalEncounter[]
   patient_allergies     PatientAllergy[]
+  patient_notes         PatientNote[]
 
   @@index([organizationId])
   @@index([organizationId, is_archived])
@@ -583,6 +585,27 @@ model OPD_REG {
   @@index([patient_type])
   @@index([organizationId, city])
   @@index([organizationId, pincode])
+}
+
+// Free-text notes attached to a patient (added at admission/registration or
+// from the patient profile). Timestamped history, newest-first in the UI.
+model PatientNote {
+  id             Int      @id @default(autoincrement())
+  patient_id     String
+  note           String
+  source         String?  @default("profile") // admission | registration | profile
+  created_by     String? // author username (from session)
+  created_by_name String? // author display name (from session)
+  created_by_role String? // author role (from session)
+  organizationId String
+  created_at     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  patient      OPD_REG      @relation(fields: [patient_id], references: [patient_id])
+
+  @@index([organizationId])
+  @@index([patient_id])
+  @@index([organizationId, patient_id])
 }
 
 model appointments {
@@ -2547,6 +2570,9 @@ model PatientDeposit {
   amount             Decimal
   payment_method     String
   payment_ref        String?
+  // Cash compliance — PAN captured for high-value cash deposits (Rule 1)
+  payer_pan_number   String?
+  payer_pan_name     String?
   status             String   @default("Active") // Active, Applied, Refunded
   applied_to_invoice Int?
   applied_amount     Decimal  @default(0)

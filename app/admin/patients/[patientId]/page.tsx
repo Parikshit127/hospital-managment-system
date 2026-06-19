@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { PatientNotes } from "@/app/components/patient/PatientNotes";
 import {
   User,
   ArrowLeft,
@@ -422,6 +423,11 @@ export default function AdminPatientDetailsPage() {
                     onDraftChange={(field, value) => setDraft(prev => ({ ...prev, [field]: value }))}
                     onPolicyChanged={loadData}
                   />
+                )}
+                {activeTab === "overview" && (
+                  <div className="mt-4">
+                    <PatientNotes patientId={patientId} title="Patient Notes" />
+                  </div>
                 )}
                 {activeTab === "opd" && (
                   <OPDHistoryTab

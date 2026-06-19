@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { PatientNotes } from "@/app/components/patient/PatientNotes";
 import {
   Activity,
   AlertTriangle,
@@ -43,7 +44,7 @@ import {
 import { recordPayment } from "@/app/actions/finance-actions";
 import { collectDeposit } from "@/app/actions/deposit-actions";
 import { getCashComplianceConfig } from "@/app/actions/cash-compliance-actions";
-import { CASH_COMPLIANCE_DEFAULTS, isValidPan } from "@/app/lib/cash-compliance";
+import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan, resolveRegisteredPan } from "@/app/lib/cash-compliance";
 import { EditInvoiceModal } from "@/app/components/finance/EditInvoiceModal";
 import { RefundModal } from "@/app/components/finance/RefundModal";
 import { Pencil } from "lucide-react";
@@ -205,6 +206,8 @@ export default function PatientFinancialProfilePage() {
               {tab === "audit" && <AuditTab audit={audit} />}
             </div>
           </div>
+
+          <PatientNotes patientId={patientId} title="Patient Notes" />
         </div>
       )}
 
@@ -212,6 +215,8 @@ export default function PatientFinancialProfilePage() {
       {payingInvoice && (
         <CollectPaymentModal
           invoice={payingInvoice}
+          registeredPan={resolveRegisteredPan(profile?.patient)}
+          registeredPanName={profile?.patient?.full_name || null}
           onClose={() => setPayingInvoice(null)}
           onSuccess={() => {
             setPayingInvoice(null);
@@ -693,10 +698,14 @@ function ActionLink({ href, children }: { href: string; children: React.ReactNod
 
 function CollectPaymentModal({
   invoice,
+  registeredPan,
+  registeredPanName,
   onClose,
   onSuccess,
 }: {
   invoice: any;
+  registeredPan?: string | null;
+  registeredPanName?: string | null;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -728,8 +737,11 @@ function CollectPaymentModal({
   const cashAmount = isCash ? numAmount : 0;
   const cashBlocked = isCash && cashAmount > thresholds.cash_limit;
   const panRequired = isCash && cashAmount >= thresholds.pan_threshold && !cashBlocked;
+  // Skip PAN capture when the patient already has a valid PAN on file from registration.
+  const hasRegisteredPan = isValidPan(registeredPan);
+  const panNeedsCapture = panRequired && !hasRegisteredPan;
   const panProvidedValid = isValidPan(panNumber) && panName.trim().length > 0;
-  const canSubmit = isValid && !cashBlocked && (!panRequired || panProvidedValid);
+  const canSubmit = isValid && !cashBlocked && (!panNeedsCapture || panProvidedValid);
 
   const handleRazorpay = async () => {
     setError(null);
@@ -829,7 +841,7 @@ function CollectPaymentModal({
       return handleRazorpay();
     }
 
-    if (cashBlocked || (panRequired && !panProvidedValid)) return;
+    if (cashBlocked || (panNeedsCapture && !panProvidedValid)) return;
 
     setError(null);
     setSaving(true);
@@ -962,7 +974,15 @@ function CollectPaymentModal({
                 </span>
               </div>
             )}
-            {panRequired && (
+            {panRequired && hasRegisteredPan && (
+              <div className="flex items-start gap-2 px-3 py-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium rounded-lg">
+                <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  PAN on file from registration ({normalizePan(registeredPan)}) will be recorded on this receipt — no re-entry needed.
+                </span>
+              </div>
+            )}
+            {panNeedsCapture && (
               <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
                 <div className="flex items-start gap-2 text-xs font-medium text-amber-800">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />

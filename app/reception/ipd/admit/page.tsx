@@ -13,6 +13,7 @@ function getLocalDatetimeString(date: Date) {
 }
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { PatientNotes } from '@/app/components/patient/PatientNotes';
 import {
   searchPatientsForAdmission,
   getWardsWithBeds,
@@ -550,6 +551,15 @@ export default function AdmitPatientPage() {
               </div>
             </div>
           </div>
+
+          {/* ── Patient Notes (existing notes + add during admission) ──────── */}
+          {selectedPatient && (
+            <PatientNotes
+              patientId={selectedPatient.patient_id}
+              source="admission"
+              title="Patient Notes"
+            />
+          )}
 
           {/* ── 4. Deposit ────────────────────────────────────────────────── */}
           <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">

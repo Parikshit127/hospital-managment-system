@@ -18,8 +18,9 @@ export async function GET(req: NextRequest) {
 
         const html = await renderReportHtml('walkin', auth.context.organizationId, from, to);
         return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-    } catch (error: any) {
+    } catch (error) {
         console.error('Walk-in Patient Report Error:', error);
-        return NextResponse.json({ error: error.message || 'Failed to generate report' }, { status: 500 });
+        const msg = error instanceof Error ? error.message : 'Failed to generate report';
+        return NextResponse.json({ error: msg }, { status: 500 });
     }
 }
