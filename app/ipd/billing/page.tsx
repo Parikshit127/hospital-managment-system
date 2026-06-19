@@ -368,8 +368,12 @@ export default function IpdBillingPage() {
                                                 {billData.admission.diagnosis}
                                             </p>
                                         </div>
-                                        <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded text-xs font-medium">
-                                            INTERIM
+                                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                            billData.admission.discharge_date 
+                                                ? 'bg-green-100 text-green-800' 
+                                                : 'bg-amber-100 text-amber-800'
+                                        }`}>
+                                            {billData.admission.discharge_date ? 'FINAL' : 'INTERIM'}
                                         </span>
                                     </div>
                                 </div>
@@ -702,7 +706,7 @@ export default function IpdBillingPage() {
                                     disabled={!billData}
                                     className="w-full px-3 py-2 bg-gray-600 text-white rounded-md text-sm hover:bg-gray-700 disabled:opacity-50"
                                 >
-                                    Print Interim Bill
+                                    {billData?.admission?.discharge_date ? 'Print Final Bill' : 'Print Interim Bill'}
                                 </button>
                                 <button
                                     onClick={refreshBill}
@@ -1050,7 +1054,9 @@ export default function IpdBillingPage() {
                                     )}
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-xs font-black uppercase tracking-widest" style={{ color: branding?.accentColor || '#1e3a6e' }}>Interim Bill</p>
+                                    <p className="text-xs font-black uppercase tracking-widest" style={{ color: branding?.accentColor || '#1e3a6e' }}>
+                                        {billData.admission.discharge_date ? 'Final Bill' : 'Interim Bill'}
+                                    </p>
                                     <p className="text-xs font-mono text-gray-600 mt-0.5">{billData.invoice.invoice_number}</p>
                                     <p className="text-xs text-gray-500">Admitted: {new Date(billData.admission.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                                     {billData.admission.discharge_date && (
@@ -1189,8 +1195,14 @@ export default function IpdBillingPage() {
                             {/* Footer */}
                             <div className="pt-10 flex justify-between items-end">
                                 <div className="text-xs text-gray-500 space-y-1">
-                                    <p className="font-bold text-gray-600">This is an INTERIM bill.</p>
-                                    <p>Final bill will be generated at discharge.</p>
+                                    {billData.admission.discharge_date ? (
+                                        <p className="font-bold text-gray-600">This is a FINAL bill.</p>
+                                    ) : (
+                                        <>
+                                            <p className="font-bold text-gray-600">This is an INTERIM bill.</p>
+                                            <p>Final bill will be generated at discharge.</p>
+                                        </>
+                                    )}
                                     <p>Admitted: {new Date(billData.admission.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                                     {billData.admission.discharge_date && (
                                         <p>Discharged: {new Date(billData.admission.discharge_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>

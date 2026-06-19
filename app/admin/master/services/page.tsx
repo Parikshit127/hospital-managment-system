@@ -16,7 +16,7 @@ const sanitizeInteger = (value: string) => value.replace(/\D/g, '');
 const sanitizeText = (value: string) => value.replace(/[^a-zA-Z0-9\s./,+()%-]/g, '');
 
 const PAGE_LIMIT = 25;
-const SERVICE_CATEGORIES = ['OPD Consultation', 'ICU', 'Procedure', 'Room', 'Nursing', 'Diet', 'Consumable', 'Misc'] as const;
+const SERVICE_CATEGORIES = ['OPD Consultation', 'ICU', 'Procedure', 'Room', 'Nursing', 'Diet', 'Consumable', 'Home Care', 'Visit Charges', 'Misc'] as const;
 
 type SubTab = 'services' | 'labtests' | 'packages';
 

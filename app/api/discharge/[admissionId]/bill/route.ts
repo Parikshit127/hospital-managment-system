@@ -164,7 +164,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
         blue:  { bg: '#dbeafe', fg: '#1e40af', border: '#93c5fd' },
     };
     const tpaPillStyle = pillColors[tpaPill.color] || pillColors.gray;
-    const showInterimBanner = invoiceStatus.code === 'TPA_APPROVED_INTERIM';
+    const showInterimBanner = invoiceStatus.code === 'TPA_APPROVED_INTERIM' && !isFinal;
 
     // TPA-approved-but-unsettled bills override the title/colour to amber INTERIM —
     // never green PAID — so the document never misrepresents an unpaid TPA claim

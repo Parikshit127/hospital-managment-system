@@ -141,9 +141,9 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     // An IPD bill is only a FINAL summary once the patient is actually discharged —
     // a paid deposit does NOT make an in-house patient's bill final. (Driving this off
     // invoice="Paid" wrongly stamped admitted patients as discharged with today's date.)
-    const isDischarged = !!admission?.discharge_date;
+    const isDischarged = admission?.status === 'Discharged' || !!admission?.discharge_date;
     const isFinal = isIPD ? isDischarged : (invoice.status === 'Paid' || invoice.status === 'Final');
-    const billType = isIPD ? (isFinal ? 'SUMMARY BILL' : 'INTERIM SUMMARY') : 'TAX INVOICE';
+    const billType = isIPD ? (isFinal ? 'FINAL SUMMARY BILL' : 'INTERIM SUMMARY') : 'TAX INVOICE';
     const billColor = isFinal ? branding.accentColor : '#f97316';
     const invoiceDate = fmtBillDate(invoice.created_at);
 
@@ -190,7 +190,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
         blue:  { bg: '#dbeafe', fg: '#1e40af', border: '#93c5fd' },
     };
     const tpaPillStyle = pillColors[tpaPill.color] || pillColors.gray;
-    const showInterimBanner = invoiceStatus.code === 'TPA_APPROVED_INTERIM';
+    const showInterimBanner = invoiceStatus.code === 'TPA_APPROVED_INTERIM' && !isDischarged;
 
     // Group items by service_category for MEDNET-style detail rows
     const fmtDate = fmtBillDate;

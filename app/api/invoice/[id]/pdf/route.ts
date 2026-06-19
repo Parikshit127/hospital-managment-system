@@ -68,7 +68,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                         },
                     },
                 },
-                admission: { select: { admission_id: true, doctor_name: true, admission_date: true, discharge_date: true, ward: { select: { ward_name: true } }, bed: { select: { bed_id: true } } } },
+                admission: { select: { admission_id: true, doctor_name: true, admission_date: true, discharge_date: true, status: true, ward: { select: { ward_name: true } }, bed: { select: { bed_id: true } } } },
                 payments: {
                     where: { status: { not: 'Reversed' } },
                     orderBy: { created_at: 'desc' },
@@ -196,7 +196,9 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
     const fmtTime = (d: any) => d ? new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h12' }) : ''
     const invoiceDate = fmtDate(invoice.created_at)
     const isIPD = !!admission
-    const billType = isIPD ? 'Bill' : 'Bill'
+    const isDischarged = admission?.status === 'Discharged' || !!admission?.discharge_date
+    const isFinal = isIPD ? isDischarged : (invoice.status === 'Paid' || invoice.status === 'Final')
+    const billType = isIPD ? (isFinal ? 'FINAL BILL' : 'INTERIM BILL') : 'TAX INVOICE'
     const gstin = branding.gstin
 
     // Determine patient category from billing_patient_type
@@ -287,7 +289,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
     // Amber "TPA APPROVED — INTERIM BILL" badge replaces the default title when the
     // derived status is TPA_APPROVED_INTERIM — patient/co-pay may still be due and
     // the bill must NOT be misread as a final/paid bill.
-    const isInterimTpaBill = invoiceStatus.code === 'TPA_APPROVED_INTERIM'
+    const isInterimTpaBill = invoiceStatus.code === 'TPA_APPROVED_INTERIM' && !isDischarged
     const hospitalBillTitle = isInterimTpaBill
         ? '<div style="text-align:center;margin-bottom:12px;"><h2 style="font-size:14px;font-weight:900;color:#92400e;background:#fef3c7;border:2px solid #f59e0b;display:inline-block;padding:4px 14px;border-radius:4px;letter-spacing:0.5px;">TPA APPROVED — INTERIM BILL</h2></div>'
         : '<div style="text-align:center;margin-bottom:12px;"><h2 style="font-size:14px;font-weight:bold;border-bottom:1px solid #999;display:inline-block;padding-bottom:2px;">' + billType + '</h2></div>';
