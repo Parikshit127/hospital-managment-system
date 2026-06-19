@@ -64,8 +64,19 @@ export default function IpdBillingPage() {
     const [showDepositModal, setShowDepositModal] = useState(false);
     const [depositAmount, setDepositAmount] = useState('');
     const [depositMethod, setDepositMethod] = useState('Cash');
+    const [depositPanNumber, setDepositPanNumber] = useState('');
+    const [depositPanName, setDepositPanName] = useState('');
     const [deposits, setDeposits] = useState<any[]>([]);
     const [branding, setBranding] = useState<BillBranding | null>(null);
+
+    // Deposit cash compliance — same rules apply to a cash deposit (reuses registered PAN).
+    const depositAmt = parseFloat(depositAmount) || 0;
+    const depositIsCash = depositMethod === 'Cash';
+    const depositCashBlocked = depositIsCash && depositAmt > cashThresholds.cash_limit;
+    const depositPanRequired = depositIsCash && depositAmt >= cashThresholds.pan_threshold && !depositCashBlocked;
+    const depositPanNeedsCapture = depositPanRequired && !ipdHasRegisteredPan;
+    const depositPanProvidedValid = isValidPan(depositPanNumber) && depositPanName.trim().length > 0;
+    const depositBlocked = depositCashBlocked || (depositPanNeedsCapture && !depositPanProvidedValid);
 
     function showToast(message: string, type: 'success' | 'error' = 'success') {
         setToast({ message, type });
@@ -224,17 +235,30 @@ export default function IpdBillingPage() {
 
     async function handleCollectDeposit() {
         if (!selectedAdmission || !depositAmount) return;
+        // Cash compliance guard (server re-validates as the source of truth)
+        if (depositBlocked) {
+            showToast(
+                depositCashBlocked
+                    ? `Cash deposits above ₹${cashThresholds.cash_limit.toLocaleString('en-IN')} are not permitted. Use UPI/Card/Bank.`
+                    : 'PAN Number and PAN Holder Name are required for this cash deposit.',
+                'error',
+            );
+            return;
+        }
         setActionLoading(true);
         const res = await collectDeposit({
             patient_id: selectedAdmission.patient_id,
             admission_id: selectedAdmission.admission_id,
             amount: parseFloat(depositAmount),
             payment_method: depositMethod,
+            payer_pan_number: depositIsCash ? depositPanNumber.trim().toUpperCase() || undefined : undefined,
+            payer_pan_name: depositIsCash ? depositPanName.trim() || undefined : undefined,
         });
         setActionLoading(false);
         if (res.success) {
             setShowDepositModal(false);
             setDepositAmount('');
+            setDepositPanNumber(''); setDepositPanName('');
             showToast(`Deposit of ₹${parseFloat(depositAmount).toLocaleString('en-IN')} collected`);
             await refreshBill();
         } else {
@@ -1008,10 +1032,50 @@ export default function IpdBillingPage() {
                                     <option>BankTransfer</option>
                                 </select>
                             </div>
+
+                            {/* Cash compliance — block over limit / capture PAN at threshold */}
+                            {depositCashBlocked && (
+                                <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium rounded">
+                                    Cash deposits above ₹{cashThresholds.cash_limit.toLocaleString('en-IN')} are not permitted. Please use UPI, Card, Bank Transfer, or another approved method.
+                                </div>
+                            )}
+                            {depositPanRequired && ipdHasRegisteredPan && (
+                                <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium rounded">
+                                    PAN on file from registration ({normalizePan(ipdRegisteredPan)}) will be recorded on this deposit — no re-entry needed.
+                                </div>
+                            )}
+                            {depositPanNeedsCapture && (
+                                <div className="p-3 bg-amber-50 border border-amber-200 rounded space-y-2">
+                                    <p className="text-xs font-medium text-amber-800">
+                                        PAN details are mandatory for cash deposits of ₹{cashThresholds.pan_threshold.toLocaleString('en-IN')} or more.
+                                    </p>
+                                    <div>
+                                        <input
+                                            type="text"
+                                            value={depositPanNumber}
+                                            onChange={(e) => setDepositPanNumber(e.target.value.toUpperCase())}
+                                            placeholder="PAN Number * (ABCDE1234F)"
+                                            maxLength={10}
+                                            className="w-full px-2 py-1.5 border rounded text-sm font-mono uppercase"
+                                        />
+                                        {depositPanNumber.length > 0 && !isValidPan(depositPanNumber) && (
+                                            <p className="text-[11px] text-rose-500 mt-1">Invalid PAN format.</p>
+                                        )}
+                                    </div>
+                                    <input
+                                        type="text"
+                                        value={depositPanName}
+                                        onChange={(e) => setDepositPanName(e.target.value)}
+                                        placeholder="PAN Holder Name *"
+                                        className="w-full px-2 py-1.5 border rounded text-sm"
+                                    />
+                                </div>
+                            )}
+
                             <div className="flex gap-2">
                                 <button
                                     onClick={handleCollectDeposit}
-                                    disabled={actionLoading}
+                                    disabled={actionLoading || depositBlocked}
                                     className="flex-1 px-3 py-2 bg-purple-600 text-white rounded-md text-sm disabled:opacity-50"
                                 >
                                     {actionLoading ? 'Processing...' : 'Collect'}

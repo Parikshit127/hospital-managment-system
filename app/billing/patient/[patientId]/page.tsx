@@ -1154,15 +1154,42 @@ function DepositsTab({ deposits, patient, onSaved }: { deposits: any[]; patient:
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ amount: "", payment_method: "Cash", payment_ref: "", notes: "" });
   const [saving, setSaving] = useState(false);
+  // Cash compliance — same rules as a bill payment apply to a cash deposit.
+  const [thresholds, setThresholds] = useState<{ pan_threshold: number; cash_limit: number }>(CASH_COMPLIANCE_DEFAULTS);
+  const [panNumber, setPanNumber] = useState("");
+  const [panName, setPanName] = useState("");
+  useEffect(() => {
+    getCashComplianceConfig().then((res) => {
+      if (res.success && res.data) setThresholds({ pan_threshold: res.data.pan_threshold, cash_limit: res.data.cash_limit });
+    });
+  }, []);
+
+  const depAmt = Number(form.amount) || 0;
+  const depIsCash = form.payment_method === "Cash";
+  const depCashBlocked = depIsCash && depAmt > thresholds.cash_limit;
+  const depPanRequired = depIsCash && depAmt >= thresholds.pan_threshold && !depCashBlocked;
+  const depRegisteredPan = resolveRegisteredPan(patient);
+  const depHasRegisteredPan = isValidPan(depRegisteredPan);
+  const depPanNeedsCapture = depPanRequired && !depHasRegisteredPan;
+  const depPanProvidedValid = isValidPan(panNumber) && panName.trim().length > 0;
+  const depBlocked = depCashBlocked || (depPanNeedsCapture && !depPanProvidedValid);
 
   async function submit() {
     if (!form.amount || Number(form.amount) <= 0) { toast.error("Enter a valid amount."); return; }
+    if (depBlocked) {
+      toast.error(depCashBlocked
+        ? `Cash deposits above ₹${fmtMoney(thresholds.cash_limit)} are not permitted. Use another method.`
+        : "PAN Number and PAN Holder Name are required for this cash deposit.");
+      return;
+    }
     setSaving(true);
     const res = await collectDeposit({
       patient_id: patient.patient_id,
       amount: Number(form.amount),
       payment_method: form.payment_method,
       payment_ref: form.payment_ref || undefined,
+      payer_pan_number: depIsCash ? panNumber.trim().toUpperCase() || undefined : undefined,
+      payer_pan_name: depIsCash ? panName.trim() || undefined : undefined,
       notes: form.notes || undefined,
     });
     setSaving(false);
@@ -1170,6 +1197,7 @@ function DepositsTab({ deposits, patient, onSaved }: { deposits: any[]; patient:
       toast.success("Deposit collected.");
       if (res.data?.id) window.open(`/api/deposit/${res.data.id}/receipt`, "_blank");
       setForm({ amount: "", payment_method: "Cash", payment_ref: "", notes: "" });
+      setPanNumber(""); setPanName("");
       setOpen(false);
       onSaved();
     } else {
@@ -1214,6 +1242,34 @@ function DepositsTab({ deposits, patient, onSaved }: { deposits: any[]; patient:
               <option>Cash</option><option>Card</option><option>UPI</option><option>Bank</option><option>Cheque</option>
             </select>
           </div>
+
+          {/* Cash compliance — block over limit / capture PAN at threshold */}
+          {depCashBlocked && (
+            <div className="flex items-start gap-2 px-3 py-2 bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-medium rounded-lg">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>Cash deposits above ₹{fmtMoney(thresholds.cash_limit)} are not permitted. Use another method.</span>
+            </div>
+          )}
+          {depPanRequired && depHasRegisteredPan && (
+            <div className="flex items-start gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-medium rounded-lg">
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>PAN on file from registration ({normalizePan(depRegisteredPan)}) will be recorded — no re-entry needed.</span>
+            </div>
+          )}
+          {depPanNeedsCapture && (
+            <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/60 p-2.5">
+              <p className="text-[11px] font-medium text-amber-800">PAN is mandatory for cash deposits of ₹{fmtMoney(thresholds.pan_threshold)} or more.</p>
+              <input type="text" value={panNumber} onChange={e => setPanNumber(e.target.value.toUpperCase())}
+                placeholder="PAN Number * (ABCDE1234F)" maxLength={10}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono uppercase" />
+              {panNumber.length > 0 && !isValidPan(panNumber) && (
+                <p className="text-[11px] text-rose-500">Invalid PAN format.</p>
+              )}
+              <input type="text" value={panName} onChange={e => setPanName(e.target.value)}
+                placeholder="PAN Holder Name *" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            </div>
+          )}
+
           <div>
             <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Reference (optional)</label>
             <input value={form.payment_ref} onChange={e => setForm({ ...form, payment_ref: e.target.value })}
@@ -1227,7 +1283,7 @@ function DepositsTab({ deposits, patient, onSaved }: { deposits: any[]; patient:
         </div>
         <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
           <button onClick={() => setOpen(false)} disabled={saving} className="px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
-          <button onClick={submit} disabled={saving} className="px-5 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50">
+          <button onClick={submit} disabled={saving || depBlocked} className="px-5 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50">
             {saving ? "Saving…" : "Collect Deposit"}
           </button>
         </div>

@@ -35,6 +35,8 @@ export async function collectDeposit(data: {
     amount: number;
     payment_method: string;
     payment_ref?: string;
+    payer_pan_number?: string;
+    payer_pan_name?: string;
     notes?: string;
 }) {
     try {
@@ -49,10 +51,46 @@ export async function collectDeposit(data: {
         if (!patientId) return { success: false, error: 'Patient UHID is required' };
         const patient = await db.OPD_REG.findFirst({
             where: { patient_id: patientId, organizationId },
-            select: { patient_id: true },
+            select: { patient_id: true, full_name: true, pan_number: true, govt_id_type: true, govt_id_number: true },
         });
         if (!patient) {
             return { success: false, error: `No patient found with UHID "${patientId}". Enter a valid patient UHID (e.g. AVS-2026-00001).` };
+        }
+
+        // Cash compliance (Rule 1 PAN / Rule 2 limit) — a deposit is a single cash
+        // receipt, so the same rules as a bill payment apply. PAN already on file from
+        // registration is used automatically (no re-capture).
+        const isCash = data.payment_method === CASH_METHOD;
+        let effectivePan: string | null = normalizePan(data.payer_pan_number) || null;
+        let effectivePanName: string | null = (data.payer_pan_name || '').trim() || null;
+        if (isCash) {
+            const thresholds = await getCashThresholds(db);
+            const registeredPan = resolveRegisteredPan(patient);
+            const compliance = validateCashCompliance({
+                thresholds,
+                cashTotal: Number(data.amount) || 0,
+                panNumber: data.payer_pan_number,
+                panName: data.payer_pan_name,
+                registeredPan,
+                registeredPanName: registeredPan ? patient.full_name : null,
+            });
+            if (!compliance.ok) {
+                await db.system_audit_logs.create({
+                    data: {
+                        action: 'CASH_COMPLIANCE_BLOCK',
+                        module: 'finance',
+                        entity_type: 'deposit',
+                        entity_id: patientId,
+                        details: JSON.stringify({ rule: compliance.rule, cash_amount: Number(data.amount) || 0, ...thresholds }),
+                        organizationId,
+                    },
+                }).catch(() => {});
+                return { success: false, error: compliance.error };
+            }
+            if (compliance.effectivePan) {
+                effectivePan = compliance.effectivePan;
+                effectivePanName = compliance.effectivePanName || null;
+            }
         }
 
         const deposit = await db.patientDeposit.create({
@@ -63,6 +101,8 @@ export async function collectDeposit(data: {
                 amount: data.amount,
                 payment_method: data.payment_method,
                 payment_ref: data.payment_ref || null,
+                payer_pan_number: isCash ? effectivePan : null,
+                payer_pan_name: isCash ? effectivePanName : null,
                 collected_by: session.username,
                 notes: data.notes || null,
                 status: 'Active',
@@ -81,6 +121,25 @@ export async function collectDeposit(data: {
         });
 
         return { success: true, data: serialize(deposit) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+// Resolve the PAN already on file for a patient (by UHID) so the deposit screen
+// can skip PAN re-capture when one was provided at registration. Returns
+// { found, pan } — pan is null when none is on file.
+export async function getRegisteredPanForPatient(patientId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const id = (patientId || '').trim();
+        if (!id) return { success: true, data: { found: false, pan: null } };
+        const patient = await db.OPD_REG.findFirst({
+            where: { patient_id: id, organizationId },
+            select: { pan_number: true, govt_id_type: true, govt_id_number: true },
+        });
+        if (!patient) return { success: true, data: { found: false, pan: null } };
+        return { success: true, data: { found: true, pan: resolveRegisteredPan(patient) } };
     } catch (error: any) {
         return { success: false, error: error.message };
     }

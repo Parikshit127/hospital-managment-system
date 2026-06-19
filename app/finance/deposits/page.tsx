@@ -6,10 +6,13 @@ import {
     applyDepositToInvoice, refundDeposit, getDepositStats,
 } from '@/app/actions/deposit-actions';
 import { getInvoices } from '@/app/actions/finance-actions';
+import { getRegisteredPanForPatient } from '@/app/actions/deposit-actions';
+import { getCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
+import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan } from '@/app/lib/cash-compliance';
 import {
     Loader2, Search, Plus, Wallet, ArrowUpRight, ArrowDownRight,
     CheckCircle, XCircle, IndianRupee, Receipt, CreditCard, RefreshCw,
-    ChevronDown, X, Printer,
+    ChevronDown, X, Printer, AlertTriangle,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useToast } from '@/app/components/ui/Toast';
@@ -28,6 +31,11 @@ export default function DepositsPage() {
         patient_id: '', amount: '', payment_method: 'Cash', payment_ref: '', notes: '', admission_id: '',
     });
     const [collectLoading, setCollectLoading] = useState(false);
+    // Cash compliance (PAN capture + limit) — thresholds from Finance Settings
+    const [cashThresholds, setCashThresholds] = useState<{ pan_threshold: number; cash_limit: number }>(CASH_COMPLIANCE_DEFAULTS);
+    const [panNumber, setPanNumber] = useState('');
+    const [panName, setPanName] = useState('');
+    const [registeredPan, setRegisteredPan] = useState<string | null>(null);
 
     // Apply modal
     const [applyModal, setApplyModal] = useState<any>(null);
@@ -43,6 +51,32 @@ export default function DepositsPage() {
 
     useEffect(() => { loadData(); }, []);
 
+    useEffect(() => {
+        getCashComplianceConfig().then((res) => {
+            if (res.success && res.data) setCashThresholds({ pan_threshold: res.data.pan_threshold, cash_limit: res.data.cash_limit });
+        });
+    }, []);
+
+    // Resolve the patient's PAN already on file so high-value cash deposits skip re-capture.
+    useEffect(() => {
+        const id = collectForm.patient_id.trim();
+        if (!id) { setRegisteredPan(null); return; }
+        const t = setTimeout(async () => {
+            const res = await getRegisteredPanForPatient(id);
+            setRegisteredPan(res.success ? (res.data?.pan ?? null) : null);
+        }, 400);
+        return () => clearTimeout(t);
+    }, [collectForm.patient_id]);
+
+    const depositAmt = parseFloat(collectForm.amount) || 0;
+    const depositIsCash = collectForm.payment_method === 'Cash';
+    const depositCashBlocked = depositIsCash && depositAmt > cashThresholds.cash_limit;
+    const depositPanRequired = depositIsCash && depositAmt >= cashThresholds.pan_threshold && !depositCashBlocked;
+    const depositHasRegisteredPan = isValidPan(registeredPan);
+    const depositPanNeedsCapture = depositPanRequired && !depositHasRegisteredPan;
+    const depositPanProvidedValid = isValidPan(panNumber) && panName.trim().length > 0;
+    const collectBlocked = depositCashBlocked || (depositPanNeedsCapture && !depositPanProvidedValid);
+
     async function loadData() {
         setLoading(true);
         const [dRes, sRes] = await Promise.all([
@@ -56,6 +90,7 @@ export default function DepositsPage() {
 
     async function handleCollect() {
         if (!collectForm.patient_id || !collectForm.amount) return;
+        if (collectBlocked) return;
         setCollectLoading(true);
         const res = await collectDeposit({
             patient_id: collectForm.patient_id,
@@ -63,11 +98,14 @@ export default function DepositsPage() {
             amount: parseFloat(collectForm.amount),
             payment_method: collectForm.payment_method,
             payment_ref: collectForm.payment_ref || undefined,
+            payer_pan_number: depositIsCash ? panNumber.trim().toUpperCase() : undefined,
+            payer_pan_name: depositIsCash ? panName.trim() : undefined,
             notes: collectForm.notes || undefined,
         });
         if (res.success) {
             setShowCollect(false);
             setCollectForm({ patient_id: '', amount: '', payment_method: 'Cash', payment_ref: '', notes: '', admission_id: '' });
+            setPanNumber(''); setPanName(''); setRegisteredPan(null);
             loadData();
             if (res.data?.id) {
                 window.open(`/api/deposit/${res.data.id}/receipt`, '_blank');
@@ -322,6 +360,44 @@ export default function DepositsPage() {
                                 <input type="text" value={collectForm.payment_ref} onChange={e => setCollectForm({ ...collectForm, payment_ref: e.target.value })}
                                     placeholder="Cheque #, UPI ref, etc." className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500" />
                             </div>
+
+                            {/* Cash compliance — block over limit / capture PAN at threshold */}
+                            {depositCashBlocked && (
+                                <div className="flex items-start gap-2 px-3 py-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium rounded-lg">
+                                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                                    <span>Cash deposits above ₹{cashThresholds.cash_limit.toLocaleString('en-IN')} are not permitted. Please use UPI, Card, Bank Transfer, or another approved method.</span>
+                                </div>
+                            )}
+                            {depositPanRequired && depositHasRegisteredPan && (
+                                <div className="flex items-start gap-2 px-3 py-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium rounded-lg">
+                                    <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                                    <span>PAN on file from registration ({normalizePan(registeredPan)}) will be recorded on this deposit — no re-entry needed.</span>
+                                </div>
+                            )}
+                            {depositPanNeedsCapture && (
+                                <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                                    <div className="flex items-start gap-2 text-xs font-medium text-amber-800">
+                                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+                                        <span>PAN details are mandatory for cash deposits of ₹{cashThresholds.pan_threshold.toLocaleString('en-IN')} or more.</span>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">PAN Number *</label>
+                                        <input type="text" value={panNumber} onChange={e => setPanNumber(e.target.value.toUpperCase())}
+                                            placeholder="ABCDE1234F" maxLength={10}
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm font-mono uppercase focus:ring-2 focus:ring-amber-500" />
+                                        {panNumber.length > 0 && !isValidPan(panNumber) && (
+                                            <p className="text-[11px] text-rose-500 mt-1">Invalid PAN format. Expected: ABCDE1234F.</p>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">PAN Holder Name *</label>
+                                        <input type="text" value={panName} onChange={e => setPanName(e.target.value)}
+                                            placeholder="As per PAN card"
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-500" />
+                                    </div>
+                                </div>
+                            )}
+
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                                 <textarea value={collectForm.notes} onChange={e => setCollectForm({ ...collectForm, notes: e.target.value })}
@@ -330,7 +406,7 @@ export default function DepositsPage() {
                         </div>
                         <div className="flex justify-end gap-3 mt-6">
                             <button onClick={() => setShowCollect(false)} className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition">Cancel</button>
-                            <button onClick={handleCollect} disabled={collectLoading || !collectForm.patient_id || !collectForm.amount}
+                            <button onClick={handleCollect} disabled={collectLoading || !collectForm.patient_id || !collectForm.amount || collectBlocked}
                                 className="px-5 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition disabled:opacity-50 flex items-center gap-2">
                                 {collectLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                                 Collect Deposit
