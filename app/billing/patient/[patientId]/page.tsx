@@ -41,11 +41,13 @@ import {
   getPatientTimeline,
 } from "@/app/actions/master-billing-actions";
 import { recordPayment } from "@/app/actions/finance-actions";
+import { collectDeposit } from "@/app/actions/deposit-actions";
 import { getCashComplianceConfig } from "@/app/actions/cash-compliance-actions";
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan } from "@/app/lib/cash-compliance";
 import { EditInvoiceModal } from "@/app/components/finance/EditInvoiceModal";
 import { RefundModal } from "@/app/components/finance/RefundModal";
 import { Pencil } from "lucide-react";
+import toast from "react-hot-toast";
 
 // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -186,7 +188,7 @@ export default function PatientFinancialProfilePage() {
                 />
               )}
               {tab === "payments" && <PaymentsTab invoices={profile.invoices} />}
-              {tab === "deposits" && <DepositsTab deposits={profile.deposits} />}
+              {tab === "deposits" && <DepositsTab deposits={profile.deposits} patient={profile.patient} onSaved={load} />}
               {tab === "insurance" && <InsuranceTab claims={profile.claims} preauths={profile.preauths} policies={profile.patient.insurance_policies} />}
               {tab === "refunds" && <RefundsTab refunds={profile.refunds} />}
               {tab === "credit_notes" && <CreditNotesTab invoices={profile.invoices} />}
@@ -1128,12 +1130,97 @@ function PaymentsTab({ invoices }: { invoices: any[] }) {
 // SECTION F — Deposits Tab
 // ──────────────────────────────────────────────────────────────────────────
 
-function DepositsTab({ deposits }: { deposits: any[] }) {
+function DepositsTab({ deposits, patient, onSaved }: { deposits: any[]; patient: any; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ amount: "", payment_method: "Cash", payment_ref: "", notes: "" });
+  const [saving, setSaving] = useState(false);
+
+  async function submit() {
+    if (!form.amount || Number(form.amount) <= 0) { toast.error("Enter a valid amount."); return; }
+    setSaving(true);
+    const res = await collectDeposit({
+      patient_id: patient.patient_id,
+      amount: Number(form.amount),
+      payment_method: form.payment_method,
+      payment_ref: form.payment_ref || undefined,
+      notes: form.notes || undefined,
+    });
+    setSaving(false);
+    if (res.success) {
+      toast.success("Deposit collected.");
+      if (res.data?.id) window.open(`/api/deposit/${res.data.id}/receipt`, "_blank");
+      setForm({ amount: "", payment_method: "Cash", payment_ref: "", notes: "" });
+      setOpen(false);
+      onSaved();
+    } else {
+      toast.error(res.error || "Failed to collect deposit.");
+    }
+  }
+
+  const collectBtn = (
+    <button
+      onClick={() => setOpen(true)}
+      className="px-2.5 py-1 bg-white border border-gray-200 hover:border-emerald-300 hover:bg-emerald-50 text-xs font-bold text-gray-700 rounded"
+    >
+      Collect Deposit
+    </button>
+  );
+
+  // Inline (minimized) modal — patient is prefilled, no UHID entry needed.
+  const modal = open && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !saving && setOpen(false)}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+          <h3 className="font-bold text-gray-900 text-sm">Collect Deposit</h3>
+          <button onClick={() => !saving && setOpen(false)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">&times;</button>
+        </div>
+        <div className="p-5 space-y-3">
+          <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+            <p className="text-sm font-bold text-gray-900">{patient?.full_name || "—"}</p>
+            <p className="text-[11px] text-gray-500 font-mono">
+              {patient?.patient_id}{patient?.phone ? ` · ${patient.phone}` : ""}
+            </p>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Amount (₹)</label>
+            <input type="number" autoFocus min={0} step="any" value={form.amount}
+              onChange={e => setForm({ ...form, amount: e.target.value })}
+              className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="0.00" />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Payment Method</label>
+            <select value={form.payment_method} onChange={e => setForm({ ...form, payment_method: e.target.value })}
+              className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <option>Cash</option><option>Card</option><option>UPI</option><option>Bank</option><option>Cheque</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Reference (optional)</label>
+            <input value={form.payment_ref} onChange={e => setForm({ ...form, payment_ref: e.target.value })}
+              className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="UTR / Txn / Cheque no." />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Notes (optional)</label>
+            <input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
+              className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+          </div>
+        </div>
+        <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+          <button onClick={() => setOpen(false)} disabled={saving} className="px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+          <button onClick={submit} disabled={saving} className="px-5 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50">
+            {saving ? "Saving…" : "Collect Deposit"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   if (!deposits.length)
     return (
       <div className="space-y-3">
         <div className="text-xs text-gray-400">No deposits collected.</div>
-        <ActionLink href="/finance/deposits">Collect Deposit</ActionLink>
+        {collectBtn}
+        {modal}
       </div>
     );
 
@@ -1187,10 +1274,11 @@ function DepositsTab({ deposits }: { deposits: any[] }) {
         </tbody>
       </table>
       <div className="flex gap-1.5">
-        <ActionLink href="/finance/deposits">Collect Deposit</ActionLink>
+        {collectBtn}
         <ActionLink href="/finance/deposits">Apply Deposit</ActionLink>
         <ActionLink href="/finance/deposits">Refund Deposit</ActionLink>
       </div>
+      {modal}
     </div>
   );
 }
