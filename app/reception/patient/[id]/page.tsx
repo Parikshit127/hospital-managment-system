@@ -559,7 +559,8 @@ export default function PatientProfilePage() {
                                     setActiveTab('billing');
                                     setAutoOpenBillBuilder(true);
                                     setShowBillBuilder(true);
-                                    dismissWelcome();
+                                    // Keep the "Registration complete" banner visible — it stays until
+                                    // the user dismisses it (✕) or switches to a different patient.
                                 }}
                                 className="flex items-center justify-center gap-2 px-3 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all active:scale-[0.98]"
                             >
@@ -567,7 +568,6 @@ export default function PatientProfilePage() {
                             </button>
                             <button
                                 onClick={() => {
-                                    dismissWelcome();
                                     router.push(`/reception/appointments?patientId=${patientId}`);
                                 }}
                                 className="flex items-center justify-center gap-2 px-3 py-2.5 bg-white hover:bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded-xl transition-all active:scale-[0.98]"
@@ -576,7 +576,6 @@ export default function PatientProfilePage() {
                             </button>
                             <button
                                 onClick={() => {
-                                    dismissWelcome();
                                     router.push(`/reception/check-in?patientId=${patientId}`);
                                 }}
                                 className="flex items-center justify-center gap-2 px-3 py-2.5 bg-white hover:bg-teal-50 border border-teal-200 text-teal-700 text-xs font-bold rounded-xl transition-all active:scale-[0.98]"
@@ -586,7 +585,6 @@ export default function PatientProfilePage() {
                             <button
                                 onClick={() => {
                                     window.open(`/api/opd/${patientId}/registration-slip`, '_blank');
-                                    dismissWelcome();
                                 }}
                                 className="flex items-center justify-center gap-2 px-3 py-2.5 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-xs font-bold rounded-xl transition-all active:scale-[0.98]"
                             >

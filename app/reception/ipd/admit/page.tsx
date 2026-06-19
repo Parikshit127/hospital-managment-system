@@ -190,7 +190,7 @@ export default function AdmitPatientPage() {
     const result = await admitPatientIPD(payload);
 
     if (result.success && result.data) {
-      router.push(`/reception/ipd/${(result.data as any).admission_id}`);
+      router.push(`/ipd/admission/${(result.data as any).admission_id}`);
     } else {
       setErrorMessage((result as any).error ?? 'Admission failed. Please try again.');
       setIsSubmitting(false);
