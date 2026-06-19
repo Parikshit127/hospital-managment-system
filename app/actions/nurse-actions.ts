@@ -421,3 +421,118 @@ export async function getWardsList() {
         return { success: false, data: [] };
     }
 }
+
+// ========================================
+// PHARMACY — MEDICINE SEARCH & STOCK CHECK
+// ========================================
+
+export async function searchMedicines(query: string) {
+    try {
+        const { db } = await requireTenantContext();
+        const medicines = await db.pharmacy_medicine_master.findMany({
+            where: {
+                is_active: true,
+                OR: [
+                    { brand_name: { contains: query, mode: 'insensitive' } },
+                    { generic_name: { contains: query, mode: 'insensitive' } },
+                ],
+            },
+            select: { id: true, brand_name: true, generic_name: true, form: true, strength: true },
+            take: 20,
+        });
+        return { success: true, data: medicines };
+    } catch (error) {
+        console.error('Search Medicines Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+export async function checkMedicineStock(medicineId: number) {
+    try {
+        const { db } = await requireTenantContext();
+        const now = new Date();
+
+        const batches = await db.pharmacy_batch_inventory.findMany({
+            where: {
+                medicine_id: medicineId,
+                is_quarantined: false,
+                expiry_date: { gt: now },
+                current_stock: { gt: 0 },
+            },
+            select: { id: true, batch_no: true, current_stock: true, expiry_date: true },
+        });
+
+        const totalStock = batches.reduce((sum: number, b: any) => sum + (b.current_stock || 0), 0);
+
+        return {
+            success: true,
+            data: {
+                totalStock,
+                batches,
+                isAvailable: totalStock > 0,
+            },
+        };
+    } catch (error) {
+        console.error('Check Medicine Stock Error:', error);
+        return { success: false, data: { totalStock: 0, batches: [], isAvailable: false } };
+    }
+}
+
+// ========================================
+// PHARMACY — MEDICAL INTENT (NURSE ORDER)
+// ========================================
+
+export interface MedicalIntentItem {
+    medicineId: number;
+    medicineName: string;
+    quantityRequested: number;
+    quantityApproved: number; // may be less if stock is low
+    notes?: string;
+}
+
+export async function createMedicalIntent(data: {
+    patientId: string;
+    admissionId: string;
+    nurseId: string;
+    doctorName: string;
+    items: MedicalIntentItem[];
+}) {
+    try {
+        const { db } = await requireTenantContext();
+
+        // Create the pharmacy order (intent) for IPD
+        const order = await db.pharmacy_orders.create({
+            data: {
+                patient_id: data.patientId,
+                doctor_id: data.nurseId,       // nurse raising the intent
+                admission_id: data.admissionId,
+                is_ipd_linked: true,
+                status: 'Pending',
+                total_items_requested: data.items.length,
+                items_dispensed: 0,
+                items_missing: data.items.filter((i) => i.quantityApproved < i.quantityRequested).length,
+                total_amount: 0,
+                items: {
+                    create: data.items.map((item) => ({
+                        medicine_id: item.medicineId,
+                        medicine_name: item.medicineName,
+                        quantity_requested: item.quantityRequested,
+                        quantity_dispensed: item.quantityApproved,
+                        status: item.quantityApproved === 0
+                            ? 'OutOfStock'
+                            : item.quantityApproved < item.quantityRequested
+                            ? 'PartialStock'
+                            : 'Pending',
+                    })),
+                },
+            },
+        });
+
+        revalidatePath('/nurse/patients');
+        revalidatePath('/pharmacy');
+        return { success: true, orderId: order.id };
+    } catch (error) {
+        console.error('Create Medical Intent Error:', error);
+        return { success: false, error: 'Failed to create medical intent' };
+    }
+}
