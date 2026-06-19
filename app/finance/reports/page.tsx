@@ -685,7 +685,14 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                                     className="hover:bg-emerald-50/60 cursor-pointer transition-colors">
                                     <td className="px-6 py-3 text-sm font-mono text-emerald-700 hover:underline">{p.receipt_number}</td>
                                     <td className="px-6 py-3 text-sm text-gray-900">{p.invoice?.patient?.full_name || '-'}</td>
-                                    <td className="px-6 py-3 text-sm text-gray-600">{p.payment_method}</td>
+                                    <td className="px-6 py-3 text-sm text-gray-600">{(() => {
+                                        if (p.payment_method !== 'Deposit') return p.payment_method;
+                                        const parts = [
+                                            p.deposit_is_ipd != null ? (p.deposit_is_ipd ? 'IPD' : 'OPD') : null,
+                                            p.deposit_tender,
+                                        ].filter(Boolean);
+                                        return parts.length ? `Deposit (${parts.join(' · ')})` : 'Deposit';
+                                    })()}</td>
                                     <td className="px-6 py-3 text-sm font-semibold text-gray-900 text-right">{fmt(Number(p.amount))}</td>
                                     <td className="px-6 py-3 text-sm text-gray-500">{new Date(p.created_at).toLocaleDateString('en-GB')}</td>
                                 </tr>

@@ -106,7 +106,7 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
         // across all tenders regardless of the payments method filter.
         const depositRows = await db.patientDeposit.findMany({
             where: { created_at: { gte: fromDate, lte: toDate } },
-            select: { id: true, deposit_number: true, patient_id: true, amount: true, payment_method: true, collected_by: true, created_at: true },
+            select: { id: true, deposit_number: true, patient_id: true, amount: true, payment_method: true, admission_id: true, collected_by: true, created_at: true },
         });
 
         // Resolve patient names for deposits
@@ -129,6 +129,20 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
                 cashier_name: fullName
             };
         });
+
+        // Trace each "Deposit"-applied payment back to its source deposit so the
+        // report can label the deposit's real type — IPD/OPD (admission-linked) and
+        // the original tender it was collected in. The apply step stamps the payment
+        // with created_at = deposit.created_at and notes "Applied from deposit <num>",
+        // so the source deposit is in depositRows for the same period.
+        const depByNumber = new Map<string, any>(depositRows.map((d: any) => [d.deposit_number, d]));
+        for (const p of enrichedPayments as any[]) {
+            if (p.payment_method !== 'Deposit') continue;
+            const m = /deposit\s+(\S+)/i.exec(p.notes || '');
+            const src = m ? depByNumber.get(m[1]) : null;
+            p.deposit_tender = src?.payment_method ?? null;
+            p.deposit_is_ipd = src ? !!src.admission_id : null;
+        }
 
         const depositsCollectedMap = enrichedDeposits.reduce((acc: any, d: any) => {
             const method = d.payment_method || 'Unknown';
