@@ -13,7 +13,7 @@ const PORTALS = [
     { role: 'pharmacist',       label: 'Pharmacy',        color: 'bg-orange-500',  dot: 'bg-orange-400',  path: '/pharmacy/billing' },
     { role: 'finance',          label: 'Finance',         color: 'bg-green-500',   dot: 'bg-green-400',   path: '/finance/dashboard' },
     { role: 'hr',               label: 'HR',              color: 'bg-rose-500',    dot: 'bg-rose-400',    path: '/hr/dashboard' },
-    { role: 'coordinator',      label: 'Coordinator',     color: 'bg-cyan-500',    dot: 'bg-cyan-400',    path: '/doctor/pending-approvals' },
+    { role: 'coordinator',      label: 'Coordinator',     color: 'bg-cyan-500',    dot: 'bg-cyan-400',    path: '/coordinator/dashboard' },
 ];
 
 type StaffUser = {

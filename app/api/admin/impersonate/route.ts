@@ -21,7 +21,7 @@ const ROLE_REDIRECT: Record<string, string> = {
     nurse:          '/nurse/dashboard',
     opd_manager:    '/opd-manager/dashboard',
     hr:             '/hr/dashboard',
-    coordinator:    '/doctor/pending-approvals',
+    coordinator:    '/coordinator/dashboard',
     admin:          '/admin/dashboard',
 };
 

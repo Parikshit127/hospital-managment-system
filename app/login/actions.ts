@@ -27,9 +27,11 @@ export async function login(prevState: any, formData: FormData) {
     const { username, password } = parsed.data;
 
     // ----- DEMO MODE BYPASS -----
-    // Bypasses the missing DATABASE_URL issue so the user can view the UI
-    if (password === 'admin') {
-        const role = ['doctor', 'receptionist', 'admin', 'hr', 'finance', 'ipd_manager', 'nurse', 'opd_manager', 'lab_technician', 'pharmacist'].includes(username) ? username : 'admin';
+    // Bypasses the missing DATABASE_URL issue so the user can view the UI.
+    // SECURITY: this is a no-password login and must NEVER run in production.
+    // Gated to non-production builds only (next start sets NODE_ENV=production).
+    if (process.env.NODE_ENV !== 'production' && password === 'admin') {
+        const role = ['doctor', 'receptionist', 'admin', 'hr', 'finance', 'ipd_manager', 'nurse', 'opd_manager', 'lab_technician', 'pharmacist', 'coordinator'].includes(username) ? username : 'admin';
         await createSession({
             id: 'demo-id',
             username: username,
@@ -52,6 +54,7 @@ export async function login(prevState: any, formData: FormData) {
             case 'nurse': redirect('/nurse/dashboard');
             case 'opd_manager': redirect('/opd-manager/dashboard');
             case 'hr': redirect('/hr/dashboard');
+            case 'coordinator': redirect('/coordinator/dashboard');
             default: redirect('/admin/dashboard');
         }
     }
@@ -155,6 +158,7 @@ export async function login(prevState: any, formData: FormData) {
         case 'nurse': redirect('/nurse/dashboard');
         case 'opd_manager': redirect('/opd-manager/dashboard');
         case 'hr': redirect('/hr/dashboard');
+        case 'coordinator': redirect('/coordinator/dashboard');
         default: redirect('/');
     }
 }

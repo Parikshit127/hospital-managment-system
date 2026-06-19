@@ -525,6 +525,14 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       ],
     },
   ],
+  coordinator: [
+    {
+      title: "Care Coordination",
+      items: [
+        { label: "My EMR Entries", href: "/coordinator/dashboard", icon: ClipboardList },
+      ],
+    },
+  ],
 };
 
 interface SidebarProps {
@@ -551,6 +559,7 @@ const roleLabelMap: Record<string, string> = {
   nurse: "Nurse",
   opd_manager: "OPD Manager",
   counsellor: "Counsellor",
+  coordinator: "Care Coordinator",
   hr: "HR Manager",
   ot_manager: "OT Manager",
   er_staff: "ER Staff",
