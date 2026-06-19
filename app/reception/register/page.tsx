@@ -63,6 +63,64 @@ const PATIENT_TYPES = [
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;
 const RELATIONSHIPS = ['Spouse', 'Parent', 'Child', 'Sibling', 'Friend', 'Other'] as const;
 
+const COUNTRIES = [
+    'India', 'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany',
+    'France', 'Japan', 'China', 'Singapore', 'UAE', 'Saudi Arabia', 'Kuwait',
+    'Qatar', 'Bahrain', 'Oman', 'Bangladesh', 'Pakistan', 'Nepal', 'Sri Lanka',
+    'Myanmar', 'Thailand', 'Malaysia', 'Indonesia', 'Philippines', 'South Africa',
+    'Kenya', 'Nigeria', 'New Zealand', 'Ireland', 'Other',
+];
+
+const INDIA_STATES = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',
+    'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
+    'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
+    'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    'Andaman and Nicobar Islands', 'Chandigarh',
+    'Dadra and Nagar Haveli and Daman and Diu',
+    'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+];
+
+const INDIA_CITIES: Record<string, string[]> = {
+    'Andhra Pradesh': ['Visakhapatnam', 'Vijayawada', 'Guntur', 'Tirupati', 'Kurnool', 'Nellore', 'Rajahmundry', 'Kakinada', 'Kadapa', 'Anantapur', 'Eluru', 'Ongole', 'Vizianagaram', 'Srikakulam', 'Chittoor'],
+    'Arunachal Pradesh': ['Itanagar', 'Naharlagun', 'Pasighat', 'Tezpur', 'Ziro'],
+    'Assam': ['Guwahati', 'Silchar', 'Dibrugarh', 'Jorhat', 'Nagaon', 'Tinsukia', 'Tezpur', 'Bongaigaon', 'Dhubri', 'Karimganj'],
+    'Bihar': ['Patna', 'Gaya', 'Bhagalpur', 'Muzaffarpur', 'Darbhanga', 'Purnia', 'Arrah', 'Begusarai', 'Katihar', 'Munger', 'Chapra', 'Samastipur', 'Hajipur'],
+    'Chhattisgarh': ['Raipur', 'Bhilai', 'Bilaspur', 'Korba', 'Durg', 'Rajnandgaon', 'Raigarh', 'Jagdalpur', 'Ambikapur'],
+    'Goa': ['Panaji', 'Vasco da Gama', 'Margao', 'Mapusa', 'Ponda', 'Calangute', 'Bicholim'],
+    'Gujarat': ['Ahmedabad', 'Surat', 'Vadodara', 'Rajkot', 'Bhavnagar', 'Jamnagar', 'Gandhinagar', 'Junagadh', 'Anand', 'Navsari', 'Mehsana', 'Morbi', 'Bharuch', 'Surendranagar', 'Amreli'],
+    'Haryana': ['Faridabad', 'Gurugram', 'Panipat', 'Ambala', 'Yamunanagar', 'Rohtak', 'Hisar', 'Karnal', 'Sonipat', 'Panchkula', 'Bhiwani', 'Sirsa', 'Bahadurgarh', 'Rewari'],
+    'Himachal Pradesh': ['Shimla', 'Dharamshala', 'Manali', 'Solan', 'Mandi', 'Nahan', 'Hamirpur', 'Una', 'Bilaspur', 'Palampur'],
+    'Jharkhand': ['Ranchi', 'Jamshedpur', 'Dhanbad', 'Bokaro', 'Deoghar', 'Hazaribagh', 'Giridih', 'Ramgarh', 'Phusro', 'Medininagar'],
+    'Karnataka': ['Bengaluru', 'Mysuru', 'Hubli', 'Mangaluru', 'Belagavi', 'Kalaburagi', 'Davanagere', 'Ballari', 'Vijayapura', 'Shivamogga', 'Tumkur', 'Udupi', 'Raichur', 'Bidar', 'Hassan'],
+    'Kerala': ['Thiruvananthapuram', 'Kochi', 'Kozhikode', 'Thrissur', 'Kollam', 'Kannur', 'Alappuzha', 'Palakkad', 'Malappuram', 'Kottayam', 'Pathanamthitta', 'Idukki', 'Kasaragod'],
+    'Madhya Pradesh': ['Bhopal', 'Indore', 'Gwalior', 'Jabalpur', 'Ujjain', 'Sagar', 'Dewas', 'Ratlam', 'Rewa', 'Satna', 'Burhanpur', 'Singrauli', 'Chhindwara', 'Morena', 'Bhind'],
+    'Maharashtra': ['Mumbai', 'Pune', 'Nagpur', 'Thane', 'Nashik', 'Aurangabad', 'Solapur', 'Kolhapur', 'Amravati', 'Nanded', 'Sangli', 'Jalgaon', 'Akola', 'Latur', 'Dhule', 'Ahmednagar', 'Raigad', 'Ratnagiri', 'Navi Mumbai'],
+    'Manipur': ['Imphal', 'Thoubal', 'Bishnupur', 'Churachandpur', 'Kakching', 'Senapati'],
+    'Meghalaya': ['Shillong', 'Tura', 'Jowai', 'Nongpoh', 'Baghmara'],
+    'Mizoram': ['Aizawl', 'Lunglei', 'Champhai', 'Serchhip', 'Kolasib'],
+    'Nagaland': ['Kohima', 'Dimapur', 'Mokokchung', 'Tuensang', 'Wokha'],
+    'Odisha': ['Bhubaneswar', 'Cuttack', 'Rourkela', 'Brahmapur', 'Sambalpur', 'Puri', 'Balasore', 'Bhadrak', 'Baripada', 'Jharsuguda', 'Rayagada', 'Koraput'],
+    'Punjab': ['Ludhiana', 'Amritsar', 'Jalandhar', 'Patiala', 'Bathinda', 'Mohali', 'Hoshiarpur', 'Pathankot', 'Moga', 'Firozpur', 'Sangrur', 'Fazilka'],
+    'Rajasthan': ['Jaipur', 'Jodhpur', 'Kota', 'Bikaner', 'Ajmer', 'Udaipur', 'Alwar', 'Bhilwara', 'Bharatpur', 'Sri Ganganagar', 'Sikar', 'Pali', 'Beawar', 'Hanumangarh'],
+    'Sikkim': ['Gangtok', 'Namchi', 'Geyzing', 'Mangan', 'Soreng'],
+    'Tamil Nadu': ['Chennai', 'Coimbatore', 'Madurai', 'Tiruchirappalli', 'Salem', 'Tirunelveli', 'Vellore', 'Erode', 'Tiruppur', 'Thoothukudi', 'Ambattur', 'Avadi', 'Thanjavur', 'Dindigul', 'Kanchipuram', 'Cuddalore', 'Hosur'],
+    'Telangana': ['Hyderabad', 'Warangal', 'Nizamabad', 'Karimnagar', 'Khammam', 'Secunderabad', 'Ramagundam', 'Mahbubnagar', 'Nalgonda', 'Suryapet', 'Adilabad', 'Siddipet'],
+    'Tripura': ['Agartala', 'Udaipur', 'Dharmanagar', 'Kailasahar', 'Belonia'],
+    'Uttar Pradesh': ['Lucknow', 'Kanpur', 'Agra', 'Varanasi', 'Prayagraj', 'Meerut', 'Noida', 'Ghaziabad', 'Bareilly', 'Aligarh', 'Moradabad', 'Gorakhpur', 'Saharanpur', 'Firozabad', 'Mathura', 'Muzaffarnagar', 'Jhansi', 'Hapur', 'Ayodhya', 'Shahjahanpur', 'Rampur', 'Loni'],
+    'Uttarakhand': ['Dehradun', 'Haridwar', 'Roorkee', 'Nainital', 'Haldwani', 'Rudrapur', 'Rishikesh', 'Kashipur', 'Kotdwara', 'Pithoragarh'],
+    'West Bengal': ['Kolkata', 'Howrah', 'Asansol', 'Siliguri', 'Durgapur', 'Bardhaman', 'Malda', 'Baranagar', 'Medinipur', 'Haldia', 'Krishnanagar', 'Baharampur', 'Jalpaiguri'],
+    'Andaman and Nicobar Islands': ['Port Blair', 'Bamboo Flat', 'Garacharma'],
+    'Chandigarh': ['Chandigarh'],
+    'Dadra and Nagar Haveli and Daman and Diu': ['Daman', 'Diu', 'Silvassa'],
+    'Delhi': ['New Delhi', 'Dwarka', 'Rohini', 'Saket', 'Janakpuri', 'Laxmi Nagar', 'Shahdara', 'Pitampura', 'Karol Bagh', 'Connaught Place', 'Nehru Place', 'Vasant Kunj', 'Mayur Vihar', 'Preet Vihar', 'Rajouri Garden'],
+    'Jammu and Kashmir': ['Srinagar', 'Jammu', 'Anantnag', 'Baramulla', 'Sopore', 'Kathua', 'Udhampur', 'Pulwama'],
+    'Ladakh': ['Leh', 'Kargil'],
+    'Lakshadweep': ['Kavaratti', 'Agatti', 'Amini'],
+    'Puducherry': ['Puducherry', 'Karaikal', 'Mahe', 'Yanam'],
+};
+
 function calculateAge(dob: string): string {
     if (!dob) return '';
     const birth = new Date(dob);
@@ -91,6 +149,12 @@ export default function ReceptionPage() {
     const [isLookingUpInsurance, setIsLookingUpInsurance] = useState(false);
     const [insuranceFoundAlert, setInsuranceFoundAlert] = useState<string | null>(null);
     const [allowDuplicate, setAllowDuplicate] = useState(false);
+
+    // Cascading address dropdowns
+    const [selectedCountry, setSelectedCountry] = useState('India');
+    const [selectedState, setSelectedState] = useState('');
+    const [selectedCity, setSelectedCity] = useState('');
+    const [customCity, setCustomCity] = useState('');
 
     // Load corporates + TPA providers on mount
     useEffect(() => {
@@ -266,6 +330,10 @@ export default function ReceptionPage() {
             setAgeValue('');
             setPatientType('cash');
             setSelectedCorporate(null);
+            setSelectedCountry('India');
+            setSelectedState('');
+            setSelectedCity('');
+            setCustomCity('');
             router.push(`/reception/patient/${result.patient_id}?welcome=1&tab=billing`);
             return;
         } else if (result.duplicate) {
@@ -538,6 +606,11 @@ export default function ReceptionPage() {
                                             <MapPin className="h-4 w-4 text-teal-500" />
                                             <span className="text-xs font-black text-gray-500">Address Details *</span>
                                         </div>
+                                        {/* Hidden fields carry the selected values into FormData */}
+                                        <input type="hidden" name="country" value={selectedCountry} />
+                                        <input type="hidden" name="state" value={selectedState} />
+                                        <input type="hidden" name="city" value={selectedCity === '__other' ? customCity : selectedCity} />
+
                                         <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
                                             {/* Street / House / Landmark */}
                                             <div className="md:col-span-4 space-y-1.5">
@@ -555,59 +628,117 @@ export default function ReceptionPage() {
                                                 </div>
                                             </div>
 
-                                            {/* City */}
+                                            {/* Country */}
                                             <div className="md:col-span-2 space-y-1.5">
-                                                <label className={labelClass}>City *</label>
-                                                <input
-                                                    name="city"
-                                                    required
-                                                    minLength={2}
-                                                    maxLength={60}
-                                                    className={inputClass}
-                                                    placeholder="e.g. Mumbai"
-                                                />
+                                                <label className={labelClass}>Country *</label>
+                                                <select
+                                                    value={selectedCountry}
+                                                    onChange={e => {
+                                                        setSelectedCountry(e.target.value);
+                                                        setSelectedState('');
+                                                        setSelectedCity('');
+                                                        setCustomCity('');
+                                                    }}
+                                                    className={selectClass}
+                                                >
+                                                    {COUNTRIES.map(c => (
+                                                        <option key={c} value={c}>{c}</option>
+                                                    ))}
+                                                </select>
                                             </div>
 
-                                            {/* State */}
+                                            {/* State — dropdown for India, text input for others */}
                                             <div className="space-y-1.5">
                                                 <label className={labelClass}>State <span className="text-gray-400 font-normal">(Optional)</span></label>
-                                                <input
-                                                    name="state"
-                                                    maxLength={60}
-                                                    className={inputClass}
-                                                    placeholder="e.g. Maharashtra"
-                                                />
+                                                {selectedCountry === 'India' ? (
+                                                    <select
+                                                        value={selectedState}
+                                                        onChange={e => {
+                                                            setSelectedState(e.target.value);
+                                                            setSelectedCity('');
+                                                            setCustomCity('');
+                                                        }}
+                                                        className={selectClass}
+                                                    >
+                                                        <option value="">Select State</option>
+                                                        {INDIA_STATES.map(s => (
+                                                            <option key={s} value={s}>{s}</option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
+                                                    <input
+                                                        value={selectedState}
+                                                        onChange={e => setSelectedState(e.target.value)}
+                                                        className={inputClass}
+                                                        placeholder="State / Province"
+                                                        maxLength={60}
+                                                    />
+                                                )}
                                             </div>
 
                                             {/* Pincode */}
                                             <div className="space-y-1.5">
-                                                <label className={labelClass}>Pincode *</label>
+                                                <label className={labelClass}>
+                                                    {selectedCountry === 'India' ? 'Pincode *' : 'Postal Code *'}
+                                                </label>
                                                 <input
                                                     name="pincode"
                                                     required
                                                     type="text"
                                                     inputMode="numeric"
-                                                    pattern="[0-9]{6}"
-                                                    maxLength={6}
+                                                    pattern={selectedCountry === 'India' ? '[0-9]{6}' : undefined}
+                                                    maxLength={selectedCountry === 'India' ? 6 : 10}
                                                     onChange={(e) => {
-                                                        e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                                                        if (selectedCountry === 'India') {
+                                                            e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                                                        }
                                                     }}
                                                     className={`${inputClass} font-mono tracking-wider`}
-                                                    placeholder="6-digit PIN"
+                                                    placeholder={selectedCountry === 'India' ? '6-digit PIN' : 'Postal code'}
                                                 />
                                             </div>
 
-                                            {/* Country */}
+                                            {/* City — dropdown when India + state selected, text input otherwise */}
                                             <div className="md:col-span-2 space-y-1.5">
-                                                <label className={labelClass}>Country *</label>
-                                                <input
-                                                    name="country"
-                                                    required
-                                                    defaultValue="India"
-                                                    maxLength={60}
-                                                    className={inputClass}
-                                                    placeholder="e.g. India"
-                                                />
+                                                <label className={labelClass}>City *</label>
+                                                {selectedCountry === 'India' && selectedState && INDIA_CITIES[selectedState] ? (
+                                                    <div className="space-y-2">
+                                                        <select
+                                                            value={selectedCity}
+                                                            onChange={e => {
+                                                                setSelectedCity(e.target.value);
+                                                                if (e.target.value !== '__other') setCustomCity('');
+                                                            }}
+                                                            required
+                                                            className={selectClass}
+                                                        >
+                                                            <option value="">Select City</option>
+                                                            {INDIA_CITIES[selectedState].map(c => (
+                                                                <option key={c} value={c}>{c}</option>
+                                                            ))}
+                                                            <option value="__other">Other (type below)</option>
+                                                        </select>
+                                                        {selectedCity === '__other' && (
+                                                            <input
+                                                                value={customCity}
+                                                                onChange={e => setCustomCity(e.target.value)}
+                                                                required
+                                                                className={inputClass}
+                                                                placeholder="Enter city name"
+                                                                maxLength={60}
+                                                            />
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <input
+                                                        value={selectedCity === '__other' ? customCity : selectedCity}
+                                                        onChange={e => setSelectedCity(e.target.value)}
+                                                        required
+                                                        className={inputClass}
+                                                        placeholder="e.g. Mumbai"
+                                                        maxLength={60}
+                                                    />
+                                                )}
                                             </div>
                                         </div>
                                     </div>
