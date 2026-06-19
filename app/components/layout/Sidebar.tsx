@@ -226,6 +226,12 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Admit Patient", href: "/reception/ipd/admit", icon: UserPlus },
       ],
     },
+    {
+      title: "Reports",
+      items: [
+        { label: "Patient Reports", href: "/reception/reports", icon: BarChart3 },
+      ],
+    },
   ],
   lab_technician: [
     {
