@@ -12,6 +12,26 @@ function serialize<T>(data: T): T {
     ));
 }
 
+// Payment-method labels were entered inconsistently over time (e.g. "BankTransfer"
+// vs "Bank Transfer", "NEFT_RTGS" vs "NEFT/RTGS"), which splits one real tender
+// into two report buckets. Collapse known spellings to a single canonical label.
+function canonicalTender(method: string | null | undefined): string {
+    const k = String(method || '').replace(/[\s_/-]+/g, '').toLowerCase();
+    const map: Record<string, string> = {
+        cash: 'Cash',
+        upi: 'UPI',
+        card: 'Card',
+        banktransfer: 'Bank Transfer',
+        neftrtgs: 'NEFT/RTGS',
+        neft: 'NEFT/RTGS',
+        rtgs: 'NEFT/RTGS',
+        cheque: 'Cheque',
+        razorpay: 'Razorpay',
+        deposit: 'Deposit',
+    };
+    return map[k] || (method || 'Unknown');
+}
+
 export async function getCollectionsReport(filters: { from: string; to: string; method?: string; invoiceType?: string; admissionStatus?: string }) {
     try {
         const { db } = await requireTenantContext();
@@ -145,7 +165,7 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
         }
 
         const depositsCollectedMap = enrichedDeposits.reduce((acc: any, d: any) => {
-            const method = d.payment_method || 'Unknown';
+            const method = canonicalTender(d.payment_method);
             acc[method] = (acc[method] || 0) + Number(d.amount);
             acc.total = (acc.total || 0) + Number(d.amount);
             return acc;
@@ -163,14 +183,15 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
         const received: Record<string, number> = {};
         for (const [m, amt] of Object.entries(totals)) {
             if (m === 'total' || m === 'Deposit') continue;
-            received[m] = (received[m] || 0) + Number(amt);
+            const key = canonicalTender(m);
+            received[key] = (received[key] || 0) + Number(amt);
         }
         if (includeAdvances) {
             for (const d of enrichedDeposits) {
-                const m = d.payment_method || 'Unknown';
+                const m = canonicalTender(d.payment_method);
                 if (filters.method && filters.method !== 'all') {
                     if (filters.method === 'others') { if (['Cash', 'UPI'].includes(m)) continue; }
-                    else if (m !== filters.method) continue;
+                    else if (m !== canonicalTender(filters.method)) continue;
                 }
                 received[m] = (received[m] || 0) + Number(d.amount);
             }

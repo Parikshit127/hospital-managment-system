@@ -170,6 +170,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
     const methods = Object.entries(received).filter(([, a]) => Number(a) !== 0);
     const receivedTotal = Number(data?.receivedTotal || 0);
     const depositApplied = Number(data?.depositApplied || 0);
+    const depositCollectedTotal = Number(depositsCollected?.total || 0);
 
     const [excelExporting, setExcelExporting] = useState(false);
 
@@ -615,8 +616,11 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                 {methods.map(([method, amount]) => (
                     <SummaryCard key={method} label={methodLabel(method)} value={fmt(amount as number)} color="gray" />
                 ))}
+                {depositCollectedTotal > 0 && (
+                    <SummaryCard label="Deposit Collected (advances received · already in total)" value={fmt(depositCollectedTotal)} color="gray" />
+                )}
                 {depositApplied > 0 && (
-                    <SummaryCard label="Deposit Applied (from earlier advances · not added)" value={fmt(depositApplied)} color="gray" />
+                    <SummaryCard label="Deposit Applied (earlier advances settled to bills · not added)" value={fmt(depositApplied)} color="gray" />
                 )}
             </div>
             {methods.length > 0 && (
