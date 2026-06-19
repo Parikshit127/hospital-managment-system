@@ -6,7 +6,7 @@ import { logAudit } from '@/app/lib/audit';
 import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
 import { billingInvoiceMsg, paymentReceiptMsg } from '@/app/lib/whatsapp-templates';
 import { postInvoiceToGL, postPaymentToGL, reverseJournalEntry } from './gl-actions';
-import { getCashThresholds, validateCashCompliance, normalizePan, CASH_METHOD } from '@/app/lib/cash-compliance';
+import { getCashThresholds, validateCashCompliance, normalizePan, resolveRegisteredPan, CASH_METHOD } from '@/app/lib/cash-compliance';
 import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
 import { validateBackdate } from '@/app/lib/backdate';
 
@@ -791,6 +791,35 @@ export async function revertInvoice(invoiceId: number, reason?: string) {
 // PAYMENT PROCESSING
 // ============================================
 
+// Look up the PAN already on file from registration for an invoice's patient.
+// Used as a fallback so high-value cash receipts don't force re-entry of a PAN
+// the patient already provided. The PAN holder is the patient themselves, so the
+// patient's full name is used as the PAN holder name.
+async function getRegisteredPanForInvoice(
+    db: any,
+    invoiceId: number,
+): Promise<{ pan: string | null; name: string | null }> {
+    try {
+        const inv = await db.invoices.findUnique({
+            where: { id: invoiceId },
+            select: {
+                patient: {
+                    select: {
+                        full_name: true,
+                        pan_number: true,
+                        govt_id_type: true,
+                        govt_id_number: true,
+                    },
+                },
+            },
+        });
+        const pan = resolveRegisteredPan(inv?.patient);
+        return { pan, name: pan ? (inv?.patient?.full_name || null) : null };
+    } catch {
+        return { pan: null, name: null };
+    }
+}
+
 // Record a payment (Advance, Settlement, etc.)
 export async function recordPayment(data: {
     invoice_id: number;
@@ -812,13 +841,20 @@ export async function recordPayment(data: {
         // Cash compliance (Rule 1 PAN / Rule 2 limit) — only the cash portion.
         const isCash = data.payment_method === CASH_METHOD;
         const cashTotal = isCash ? Number(data.amount) || 0 : 0;
+        // PAN to persist on the receipt — captured at the counter, or the patient's
+        // registered PAN when capture was skipped because one is already on file.
+        let effectivePan: string | null = normalizePan(data.payer_pan_number) || null;
+        let effectivePanName: string | null = (data.payer_pan_name || '').trim() || null;
         if (cashTotal > 0) {
             const thresholds = await getCashThresholds(db);
+            const reg = await getRegisteredPanForInvoice(db, data.invoice_id);
             const compliance = validateCashCompliance({
                 thresholds,
                 cashTotal,
                 panNumber: data.payer_pan_number,
                 panName: data.payer_pan_name,
+                registeredPan: reg.pan,
+                registeredPanName: reg.name,
             });
             if (!compliance.ok) {
                 await logAudit({
@@ -829,6 +865,10 @@ export async function recordPayment(data: {
                     details: JSON.stringify({ rule: compliance.rule, cash_amount: cashTotal, ...thresholds }),
                 }).catch(() => {});
                 return { success: false, error: compliance.error };
+            }
+            if (compliance.effectivePan) {
+                effectivePan = compliance.effectivePan;
+                effectivePanName = compliance.effectivePanName || null;
             }
         }
 
@@ -841,8 +881,8 @@ export async function recordPayment(data: {
                 payment_type: data.payment_type,
                 razorpay_order_id: data.razorpay_order_id || null,
                 razorpay_payment_id: data.razorpay_payment_id || null,
-                payer_pan_number: isCash ? (normalizePan(data.payer_pan_number) || null) : null,
-                payer_pan_name: isCash ? ((data.payer_pan_name || '').trim() || null) : null,
+                payer_pan_number: isCash ? effectivePan : null,
+                payer_pan_name: isCash ? effectivePanName : null,
                 status: 'Completed',
                 notes: data.notes || null,
                 organizationId,
@@ -955,13 +995,18 @@ export async function recordSplitPayment(data: {
         const cashTotal = data.splits
             .filter((s) => s.payment_method === CASH_METHOD)
             .reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+        let panNumber = normalizePan(data.payer_pan_number) || null;
+        let panName = (data.payer_pan_name || '').trim() || null;
         if (cashTotal > 0) {
             const thresholds = await getCashThresholds(db);
+            const reg = await getRegisteredPanForInvoice(db, data.invoice_id);
             const compliance = validateCashCompliance({
                 thresholds,
                 cashTotal,
                 panNumber: data.payer_pan_number,
                 panName: data.payer_pan_name,
+                registeredPan: reg.pan,
+                registeredPanName: reg.name,
             });
             if (!compliance.ok) {
                 await logAudit({
@@ -973,10 +1018,12 @@ export async function recordSplitPayment(data: {
                 }).catch(() => {});
                 return { success: false, error: compliance.error };
             }
+            // Persist the registered PAN on the cash split when capture was skipped.
+            if (compliance.effectivePan) {
+                panNumber = compliance.effectivePan;
+                panName = compliance.effectivePanName || null;
+            }
         }
-
-        const panNumber = normalizePan(data.payer_pan_number) || null;
-        const panName = (data.payer_pan_name || '').trim() || null;
 
         const transactionGroupId = `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const payments: any[] = [];

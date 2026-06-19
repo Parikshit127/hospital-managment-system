@@ -5,7 +5,7 @@ import { getIPDAdmissions } from '@/app/actions/ipd-actions';
 import { generateInterimBill, postChargeToIpdBill, getGstSummary } from '@/app/actions/ipd-finance-actions';
 import { recordPayment, recordSplitPayment, removeInvoiceItem } from '@/app/actions/finance-actions';
 import { getCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
-import { CASH_COMPLIANCE_DEFAULTS, isValidPan } from '@/app/lib/cash-compliance';
+import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan, resolveRegisteredPan } from '@/app/lib/cash-compliance';
 import { collectDeposit, getPatientDeposits, applyDepositToInvoice } from '@/app/actions/deposit-actions';
 import { getIpdServices } from '@/app/actions/ipd-master-actions';
 import { DepositTracker } from '@/app/components/ipd/DepositTracker';
@@ -42,8 +42,12 @@ export default function IpdBillingPage() {
         .reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
     const ipdCashBlocked = ipdCashTotal > cashThresholds.cash_limit;
     const ipdPanRequired = ipdCashTotal >= cashThresholds.pan_threshold && !ipdCashBlocked;
+    // Skip PAN capture when the patient already has a valid PAN on file from registration.
+    const ipdRegisteredPan = resolveRegisteredPan(selectedAdmission?.patient);
+    const ipdHasRegisteredPan = isValidPan(ipdRegisteredPan);
+    const ipdPanNeedsCapture = ipdPanRequired && !ipdHasRegisteredPan;
     const ipdPanValid = isValidPan(panNumber) && panName.trim().length > 0;
-    const ipdPaymentBlocked = ipdCashBlocked || (ipdPanRequired && !ipdPanValid);
+    const ipdPaymentBlocked = ipdCashBlocked || (ipdPanNeedsCapture && !ipdPanValid);
 
     // Charge entry state
     const [showChargeModal, setShowChargeModal] = useState(false);
@@ -815,7 +819,12 @@ export default function IpdBillingPage() {
                                 Cash receipts above ₹{cashThresholds.cash_limit.toLocaleString('en-IN')} are not permitted. Please use UPI, Card, Bank Transfer, or another approved method.
                             </div>
                         )}
-                        {ipdPanRequired && (
+                        {ipdPanRequired && ipdHasRegisteredPan && (
+                            <div className="mb-3 p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium rounded">
+                                PAN on file from registration ({normalizePan(ipdRegisteredPan)}) will be recorded on this receipt — no re-entry needed.
+                            </div>
+                        )}
+                        {ipdPanNeedsCapture && (
                             <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded space-y-2">
                                 <p className="text-xs font-medium text-amber-800">
                                     PAN details are mandatory for cash payments of ₹{cashThresholds.pan_threshold.toLocaleString('en-IN')} or more (cash portion: ₹{ipdCashTotal.toLocaleString('en-IN')}).

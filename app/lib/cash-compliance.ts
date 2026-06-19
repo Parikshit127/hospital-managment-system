@@ -1,7 +1,9 @@
 /**
  * Cash compliance rules (server-side, single source of truth).
  *
- * Rule 1 — cash >= PAN threshold  => PAN Number + PAN Holder Name mandatory.
+ * Rule 1 — cash >= PAN threshold  => PAN Number + PAN Holder Name mandatory,
+ *          UNLESS the patient already has a valid PAN on file from registration
+ *          (in which case that PAN is used and re-capture is skipped).
  * Rule 2 — cash >  cash limit      => block the payment.
  * Only the CASH portion is validated; the summed cash across splits is used so a
  * payment cannot be split to dodge the limit/threshold. Non-cash methods skip.
@@ -50,6 +52,28 @@ export function isValidPan(pan?: string | null): boolean {
     return PAN_REGEX.test(normalizePan(pan));
 }
 
+/**
+ * Resolve the PAN already on file for a patient from registration, returning a
+ * valid PAN string or null. Checks the dedicated pan_number field first, then a
+ * PAN-type government proof (govt_id_type = 'PAN'), since reception registration
+ * captures PAN under the government-proof fields. Keep client and server in sync
+ * by always resolving the registered PAN through here.
+ */
+export function resolveRegisteredPan(patient?: {
+    pan_number?: string | null;
+    govt_id_type?: string | null;
+    govt_id_number?: string | null;
+} | null): string | null {
+    if (!patient) return null;
+    const direct = normalizePan(patient.pan_number);
+    if (isValidPan(direct)) return direct;
+    if ((patient.govt_id_type || '').trim().toUpperCase() === 'PAN') {
+        const gid = normalizePan(patient.govt_id_number);
+        if (isValidPan(gid)) return gid;
+    }
+    return null;
+}
+
 const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 
 export interface CashComplianceResult {
@@ -58,18 +82,27 @@ export interface CashComplianceResult {
     /** which rule fired — useful for audit logs */
     rule?: 'cash_limit_exceeded' | 'pan_required' | 'pan_invalid';
     panRequired: boolean;
+    /** PAN to persist on the receipt — the captured value, or the registered one when capture was skipped. */
+    effectivePan?: string | null;
+    effectivePanName?: string | null;
+    /** True when the PAN requirement was satisfied by the PAN already on file from registration. */
+    panFromRegistration?: boolean;
 }
 
 /**
  * Validate the cash portion of a payment.
- * @param cashTotal  summed amount paid in CASH (0 if no cash)
- * @param panNumber / panName  captured PAN details (only checked when required)
+ * @param cashTotal          summed amount paid in CASH (0 if no cash)
+ * @param panNumber / panName  PAN captured at the counter (only checked when required)
+ * @param registeredPan / registeredPanName  PAN already on file from patient registration;
+ *        used as a fallback so the biller does not have to re-enter it.
  */
 export function validateCashCompliance(args: {
     thresholds: CashThresholds;
     cashTotal: number;
     panNumber?: string | null;
     panName?: string | null;
+    registeredPan?: string | null;
+    registeredPanName?: string | null;
 }): CashComplianceResult {
     const { pan_threshold, cash_limit } = args.thresholds;
     const cash = Number(args.cashTotal) || 0;
@@ -89,8 +122,25 @@ export function validateCashCompliance(args: {
 
     // Rule 1 — PAN mandatory at/above the threshold.
     if (cash >= pan_threshold) {
-        const pan = normalizePan(args.panNumber);
-        const name = (args.panName || '').trim();
+        const capturedPan = normalizePan(args.panNumber);
+        const capturedName = (args.panName || '').trim();
+        const registeredPan = normalizePan(args.registeredPan);
+        const registeredName = (args.registeredPanName || '').trim();
+
+        // Prefer the PAN captured at the counter; otherwise fall back to a valid
+        // PAN already on file from registration (skip re-capture).
+        const capturedComplete = !!capturedPan && !!capturedName;
+        const registrationComplete = isValidPan(registeredPan) && registeredName.length > 0;
+
+        let pan = capturedPan;
+        let name = capturedName;
+        let panFromRegistration = false;
+        if (!capturedComplete && registrationComplete) {
+            pan = registeredPan;
+            name = registeredName;
+            panFromRegistration = true;
+        }
+
         if (!pan || !name) {
             return {
                 ok: false,
@@ -107,7 +157,7 @@ export function validateCashCompliance(args: {
                 error: `Invalid PAN format. Expected format: ABCDE1234F.`,
             };
         }
-        return { ok: true, panRequired: true };
+        return { ok: true, panRequired: true, effectivePan: pan, effectivePanName: name, panFromRegistration };
     }
 
     return { ok: true, panRequired: false };

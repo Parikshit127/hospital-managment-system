@@ -2,6 +2,13 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { generateDepositNumber as genDepNum } from '@/app/lib/sequence-generator';
+import {
+    getCashThresholds,
+    validateCashCompliance,
+    resolveRegisteredPan,
+    normalizePan,
+    CASH_METHOD,
+} from '@/app/lib/cash-compliance';
 
 function serialize<T>(data: T): T {
     return JSON.parse(JSON.stringify(data, (_, value) =>
