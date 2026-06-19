@@ -5,7 +5,7 @@ import {
     collectDeposit, getPatientDeposits, getActiveDeposits,
     applyDepositToInvoice, refundDeposit, getDepositStats,
 } from '@/app/actions/deposit-actions';
-import { getInvoices } from '@/app/actions/finance-actions';
+import { getInvoices, searchPatientsForBilling } from '@/app/actions/finance-actions';
 import { getRegisteredPanForPatient } from '@/app/actions/deposit-actions';
 import { getCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan } from '@/app/lib/cash-compliance';
@@ -31,6 +31,11 @@ export default function DepositsPage() {
         patient_id: '', amount: '', payment_method: 'Cash', payment_ref: '', notes: '', admission_id: '',
     });
     const [collectLoading, setCollectLoading] = useState(false);
+    // Patient picker (search by name / phone / ID instead of free-typed UHID)
+    const [patientSearch, setPatientSearch] = useState('');
+    const [patientResults, setPatientResults] = useState<any[]>([]);
+    const [searchingPatient, setSearchingPatient] = useState(false);
+    const [selectedPatient, setSelectedPatient] = useState<any>(null);
     // Cash compliance (PAN capture + limit) — thresholds from Finance Settings
     const [cashThresholds, setCashThresholds] = useState<{ pan_threshold: number; cash_limit: number }>(CASH_COMPLIANCE_DEFAULTS);
     const [panNumber, setPanNumber] = useState('');
@@ -67,6 +72,33 @@ export default function DepositsPage() {
         }, 400);
         return () => clearTimeout(t);
     }, [collectForm.patient_id]);
+
+    // Debounced patient search (by name / phone / UHID).
+    useEffect(() => {
+        if (selectedPatient || patientSearch.trim().length < 2) { setPatientResults([]); return; }
+        setSearchingPatient(true);
+        const t = setTimeout(async () => {
+            const res = await searchPatientsForBilling(patientSearch.trim());
+            setPatientResults(res.success ? (res.data || []) : []);
+            setSearchingPatient(false);
+        }, 350);
+        return () => clearTimeout(t);
+    }, [patientSearch, selectedPatient]);
+
+    function selectPatient(p: any) {
+        setSelectedPatient(p);
+        setCollectForm(f => ({ ...f, patient_id: p.patient_id }));
+        setPatientSearch('');
+        setPatientResults([]);
+    }
+
+    function clearPatient() {
+        setSelectedPatient(null);
+        setCollectForm(f => ({ ...f, patient_id: '' }));
+        setRegisteredPan(null);
+        setPatientSearch('');
+        setPatientResults([]);
+    }
 
     const depositAmt = parseFloat(collectForm.amount) || 0;
     const depositIsCash = collectForm.payment_method === 'Cash';
@@ -106,6 +138,7 @@ export default function DepositsPage() {
             setShowCollect(false);
             setCollectForm({ patient_id: '', amount: '', payment_method: 'Cash', payment_ref: '', notes: '', admission_id: '' });
             setPanNumber(''); setPanName(''); setRegisteredPan(null);
+            setSelectedPatient(null); setPatientSearch(''); setPatientResults([]);
             loadData();
             if (res.data?.id) {
                 window.open(`/api/deposit/${res.data.id}/receipt`, '_blank');
@@ -323,13 +356,49 @@ export default function DepositsPage() {
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6">
                         <div className="flex items-center justify-between mb-5">
                             <h3 className="text-lg font-bold text-gray-900">Collect Deposit</h3>
-                            <button onClick={() => setShowCollect(false)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="h-5 w-5 text-gray-400" /></button>
+                            <button onClick={() => { setShowCollect(false); clearPatient(); }} className="p-1 hover:bg-gray-100 rounded-lg"><X className="h-5 w-5 text-gray-400" /></button>
                         </div>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Patient ID *</label>
-                                <input type="text" value={collectForm.patient_id} onChange={e => setCollectForm({ ...collectForm, patient_id: e.target.value })}
-                                    placeholder="e.g. PAT-001" className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500" />
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Patient *</label>
+                                {selectedPatient ? (
+                                    <div className="flex items-center justify-between gap-3 px-3 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-gray-900 truncate">{selectedPatient.full_name}</p>
+                                            <p className="text-[11px] text-gray-500 font-mono truncate">
+                                                {selectedPatient.patient_id}
+                                                {selectedPatient.phone ? ` · ${selectedPatient.phone}` : ''}
+                                                {selectedPatient.age != null ? ` · ${selectedPatient.age}Y` : ''}
+                                                {selectedPatient.gender ? ` · ${selectedPatient.gender}` : ''}
+                                            </p>
+                                        </div>
+                                        <button onClick={clearPatient} className="shrink-0 text-xs font-bold text-emerald-700 hover:text-emerald-900 underline">Change</button>
+                                    </div>
+                                ) : (
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                        <input type="text" value={patientSearch} onChange={e => setPatientSearch(e.target.value)}
+                                            placeholder="Search by name, phone, or UHID…" autoComplete="off"
+                                            className="w-full pl-9 pr-9 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500" />
+                                        {searchingPatient && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500 animate-spin" />}
+                                        {patientResults.length > 0 && (
+                                            <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-56 overflow-y-auto divide-y divide-gray-100">
+                                                {patientResults.map(p => (
+                                                    <button key={p.patient_id} type="button" onClick={() => selectPatient(p)}
+                                                        className="w-full text-left px-3 py-2 hover:bg-emerald-50 transition">
+                                                        <p className="text-sm font-semibold text-gray-900">{p.full_name}</p>
+                                                        <p className="text-[11px] text-gray-500 font-mono">
+                                                            {p.patient_id}{p.phone ? ` · ${p.phone}` : ''}{p.age != null ? ` · ${p.age}Y` : ''}{p.gender ? ` · ${p.gender}` : ''}
+                                                        </p>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {patientSearch.trim().length >= 2 && !searchingPatient && patientResults.length === 0 && (
+                                            <p className="text-[11px] text-gray-400 mt-1">No matching patients.</p>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Admission ID (optional)</label>
@@ -405,7 +474,7 @@ export default function DepositsPage() {
                             </div>
                         </div>
                         <div className="flex justify-end gap-3 mt-6">
-                            <button onClick={() => setShowCollect(false)} className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition">Cancel</button>
+                            <button onClick={() => { setShowCollect(false); clearPatient(); }} className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition">Cancel</button>
                             <button onClick={handleCollect} disabled={collectLoading || !collectForm.patient_id || !collectForm.amount || collectBlocked}
                                 className="px-5 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition disabled:opacity-50 flex items-center gap-2">
                                 {collectLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
