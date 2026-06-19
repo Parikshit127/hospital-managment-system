@@ -34,7 +34,7 @@ export const OPD_COLUMNS: ReportColumn[] = [
     { key: 'ageGender', label: 'Age / Gender' },
     { key: 'dateTime', label: 'Date / Time' },
     { key: 'doctor', label: 'Doctor' },
-    { key: 'department', label: 'Department' },
+    { key: 'invoiceNo', label: 'Invoice No.' },
     { key: 'type', label: 'Type' },
     { key: 'status', label: 'Status' },
     { key: 'payment', label: 'Payment' },
@@ -126,34 +126,47 @@ export async function getIpdReportRows(
     }));
 }
 
-/** OPD consultations / appointments: doctor + department wise. */
+/**
+ * OPD visits. OPD here is walk-in and recorded as OPD invoices (the appointments
+ * table is effectively unused), so this lists OPD invoices — the same source and
+ * date filter as the finance "Daily Activity" OPD count, so the list and the
+ * count always agree.
+ */
 export async function getOpdReportRows(
     organizationId: string,
     fromStr: string,
     toStr: string,
 ): Promise<ReportRow[]> {
     const { from, to } = parseDateRange(fromStr, toStr);
-    const rows = await prisma.appointments.findMany({
+    const rows = await prisma.invoices.findMany({
         where: {
             organizationId,
-            appointment_date: { gte: from, lte: to },
+            invoice_type: { in: ['OPD', 'OPD_FEE'] },
+            created_at: { gte: from, lte: to },
         },
-        include: {
+        select: {
+            invoice_number: true,
+            invoice_type: true,
+            doctor_name: true,
+            status: true,
+            balance_due: true,
+            created_at: true,
+            patient_id: true,
             patient: { select: { full_name: true, age: true, gender: true } },
         },
-        orderBy: { appointment_date: 'desc' },
+        orderBy: { created_at: 'desc' },
     });
 
-    return rows.map(ap => ({
-        mrn: ap.patient_id,
-        patientName: ap.patient?.full_name ?? '-',
-        ageGender: ageGender(ap.patient?.age ?? null, ap.patient?.gender ?? null),
-        dateTime: fmtDateTime(ap.appointment_date),
-        doctor: ap.doctor_name ?? '-',
-        department: ap.department ?? '-',
-        type: ap.appointment_type ?? '-',
-        status: ap.status ?? '-',
-        payment: ap.payment_status ?? '-',
+    return rows.map(inv => ({
+        mrn: inv.patient_id,
+        patientName: inv.patient?.full_name ?? '-',
+        ageGender: ageGender(inv.patient?.age ?? null, inv.patient?.gender ?? null),
+        dateTime: fmtDateTime(inv.created_at),
+        doctor: inv.doctor_name ?? '-',
+        invoiceNo: inv.invoice_number ?? '-',
+        type: inv.invoice_type ?? 'OPD',
+        status: inv.status ?? '-',
+        payment: Number(inv.balance_due ?? 0) <= 0 ? 'Paid' : 'Pending',
     }));
 }
 
