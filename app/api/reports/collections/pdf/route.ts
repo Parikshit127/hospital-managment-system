@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getBillBranding } from '@/app/lib/bill-branding';
+import { canonicalTender, tenderVariants } from '@/app/lib/payment-tender';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance'];
 
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
             status: { in: ['Completed', 'Reversed'] }
         };
         if (methodFilter && methodFilter !== 'all') {
-            paymentWhere.payment_method = methodFilter;
+            paymentWhere.payment_method = { in: tenderVariants(methodFilter) };
         }
         if (invoiceTypeFilter && invoiceTypeFilter !== 'all') {
             paymentWhere.invoice = { invoice_type: invoiceTypeFilter };
@@ -76,7 +77,7 @@ export async function GET(req: NextRequest) {
         };
         // Deposits only count as advance collections
         if (methodFilter && methodFilter !== 'all') {
-            depositWhere.payment_method = methodFilter;
+            depositWhere.payment_method = { in: tenderVariants(methodFilter) };
         }
 
         const deposits = await prisma.patientDeposit.findMany({
@@ -163,7 +164,7 @@ export async function GET(req: NextRequest) {
             const patientName = p.invoice?.patient?.full_name || '-';
             const patientId = p.invoice?.patient?.patient_id || '-';
             const dept = getDept(p.invoice?.invoice_type || 'OPD');
-            const mode = p.payment_method || 'Unknown';
+            const mode = canonicalTender(p.payment_method);
             allModes.add(mode);
             cashierList.add(cashierUser);
 
@@ -214,7 +215,7 @@ export async function GET(req: NextRequest) {
             const cashierName = userMap.get(cashierUser.toLowerCase()) || cashierUser;
             const patientName = depositPatientMap.get(d.patient_id) || '-';
             const patientId = d.patient_id;
-            const mode = d.payment_method || 'Unknown';
+            const mode = canonicalTender(d.payment_method);
             allModes.add(mode);
             cashierList.add(cashierUser);
 

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { VoucherModal } from '@/app/components/finance/VoucherModal';
+import { canonicalTender } from '@/app/lib/payment-tender';
 import Link from 'next/link';
 
 type ReportType = 'collections' | 'daily' | 'aging' | 'cashflow' | 'pnl' | 'insurance' | 'department';
@@ -209,7 +210,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                 const patientName = p.invoice?.patient?.full_name || '-';
                 const patientId = p.invoice?.patient?.patient_id || '-';
                 const dept = getDept(p.invoice?.invoice_type || 'OPD');
-                const mode = p.payment_method || 'Unknown';
+                const mode = canonicalTender(p.payment_method);
                 allModesSet.add(mode);
                 cashierList.add(cashierUser);
 
@@ -260,7 +261,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                 const cashierName = d.cashier_name || cashierUser;
                 const patientName = d.patient_name || '-';
                 const patientId = d.patient_id;
-                const mode = d.payment_method || 'Unknown';
+                const mode = canonicalTender(d.payment_method);
                 allModesSet.add(mode);
                 cashierList.add(cashierUser);
 
@@ -690,10 +691,10 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                                     <td className="px-6 py-3 text-sm font-mono text-emerald-700 hover:underline">{p.receipt_number}</td>
                                     <td className="px-6 py-3 text-sm text-gray-900">{p.invoice?.patient?.full_name || '-'}</td>
                                     <td className="px-6 py-3 text-sm text-gray-600">{(() => {
-                                        if (p.payment_method !== 'Deposit') return p.payment_method;
+                                        if (p.payment_method !== 'Deposit') return canonicalTender(p.payment_method);
                                         const parts = [
                                             p.deposit_is_ipd != null ? (p.deposit_is_ipd ? 'IPD' : 'OPD') : null,
-                                            p.deposit_tender,
+                                            p.deposit_tender ? canonicalTender(p.deposit_tender) : null,
                                         ].filter(Boolean);
                                         return parts.length ? `Deposit (${parts.join(' · ')})` : 'Deposit';
                                     })()}</td>

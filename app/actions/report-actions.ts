@@ -3,6 +3,7 @@
 import { requireTenantContext } from '@/backend/tenant';
 import { resolveIncomeHeadCode, incomeHeadName } from '@/app/lib/gl-income-head-map';
 import { formatDoctorName } from '@/app/lib/format-name';
+import { canonicalTender, tenderVariants } from '@/app/lib/payment-tender';
 
 function serialize<T>(data: T): T {
     return JSON.parse(JSON.stringify(data, (_, value) =>
@@ -10,26 +11,6 @@ function serialize<T>(data: T): T {
             ? Number(value)
             : value
     ));
-}
-
-// Payment-method labels were entered inconsistently over time (e.g. "BankTransfer"
-// vs "Bank Transfer", "NEFT_RTGS" vs "NEFT/RTGS"), which splits one real tender
-// into two report buckets. Collapse known spellings to a single canonical label.
-function canonicalTender(method: string | null | undefined): string {
-    const k = String(method || '').replace(/[\s_/-]+/g, '').toLowerCase();
-    const map: Record<string, string> = {
-        cash: 'Cash',
-        upi: 'UPI',
-        card: 'Card',
-        banktransfer: 'Bank Transfer',
-        neftrtgs: 'NEFT/RTGS',
-        neft: 'NEFT/RTGS',
-        rtgs: 'NEFT/RTGS',
-        cheque: 'Cheque',
-        razorpay: 'Razorpay',
-        deposit: 'Deposit',
-    };
-    return map[k] || (method || 'Unknown');
 }
 
 export async function getCollectionsReport(filters: { from: string; to: string; method?: string; invoiceType?: string; admissionStatus?: string }) {
@@ -41,8 +22,9 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
             status: { in: ['Completed', 'Reversed'] },
             created_at: { gte: fromDate, lte: toDate },
         };
-        if (filters.method && filters.method !== 'others') {
-            where.payment_method = filters.method;
+        if (filters.method && filters.method !== 'others' && filters.method !== 'all') {
+            // Match every raw spelling of the chosen tender (BankTransfer / Bank Transfer / …).
+            where.payment_method = { in: tenderVariants(filters.method) };
         } else if (filters.method === 'others') {
             where.payment_method = { notIn: ['Cash', 'UPI'] };
         }
