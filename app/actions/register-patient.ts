@@ -118,7 +118,7 @@ export async function registerPatient(formData: FormData) {
     };
 
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, session, organizationId } = await requireTenantContext();
 
         let agentPatientId = null;
         let appointmentId = null;
@@ -262,6 +262,22 @@ export async function registerPatient(formData: FormData) {
                     ]
                 }).catch((err: unknown) => console.error("WA Welcome Template Error:", err));
             }
+        }
+
+        // Registration note → patient notes timeline (shown on patient profile)
+        const registrationNote = ((formData.get('patient_note') as string) || '').trim();
+        if (agentPatientId && registrationNote) {
+            await db.patientNote.create({
+                data: {
+                    patient_id: agentPatientId,
+                    note: registrationNote.slice(0, 2000),
+                    source: 'registration',
+                    created_by: session?.username ?? null,
+                    created_by_name: session?.name ?? null,
+                    created_by_role: session?.role ?? null,
+                    organizationId,
+                },
+            }).catch((err: unknown) => console.error('PatientNote (registration) create error:', err));
         }
 
         // 3. Create Appointment (If not exists and not skipped)

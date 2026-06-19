@@ -773,6 +773,21 @@ export default function ReceptionPage() {
                                         )}
                                     </div>
 
+                                    {/* Notes */}
+                                    <div className="mb-6 border-t border-gray-200 pt-6">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <FileText className="h-4 w-4 text-amber-500" />
+                                            <span className="text-xs font-black text-gray-500">Note <span className="font-medium text-gray-400 normal-case">(optional)</span></span>
+                                        </div>
+                                        <textarea
+                                            name="patient_note"
+                                            rows={2}
+                                            maxLength={2000}
+                                            className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3.5 text-sm text-gray-900 font-medium placeholder:text-gray-400 focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/10 outline-none transition-all resize-none"
+                                            placeholder="Add a note about this patient (visible on the patient profile)…"
+                                        />
+                                    </div>
+
                                     {/* Consent */}
                                     <div className="mb-6 border-t border-gray-200 pt-6">
                                         <label className="flex items-start gap-3 cursor-pointer group">
