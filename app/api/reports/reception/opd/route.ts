@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { renderReportHtml } from '@/app/lib/reports/reception-reports';
 
-const ALLOWED_STAFF_ROLES = ['receptionist', 'admin'];
+const ALLOWED_STAFF_ROLES = ['receptionist', 'admin', 'finance'];
 
 export async function GET(req: NextRequest) {
     try {

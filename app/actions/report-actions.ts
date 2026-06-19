@@ -137,6 +137,32 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
             return acc;
         }, {});
 
+        // ── Money actually RECEIVED this period, by tender ──────────────────
+        // = real-tender invoice payments (Cash/UPI/Card…) + advances collected
+        //   in the same tender. The "Deposit" pseudo-tender inside `totals` is
+        //   an advance received earlier being *applied* to a bill, so it is
+        //   excluded here to avoid counting the same money twice.
+        // Advances are patient-level (not tied to a bill type), so they are only
+        // folded in for the unfiltered "All bill types" view.
+        const depositApplied = Number((totals as any).Deposit || 0);
+        const includeAdvances = !filters.invoiceType && !filters.admissionStatus;
+        const received: Record<string, number> = {};
+        for (const [m, amt] of Object.entries(totals)) {
+            if (m === 'total' || m === 'Deposit') continue;
+            received[m] = (received[m] || 0) + Number(amt);
+        }
+        if (includeAdvances) {
+            for (const d of enrichedDeposits) {
+                const m = d.payment_method || 'Unknown';
+                if (filters.method && filters.method !== 'all') {
+                    if (filters.method === 'others') { if (['Cash', 'UPI'].includes(m)) continue; }
+                    else if (m !== filters.method) continue;
+                }
+                received[m] = (received[m] || 0) + Number(d.amount);
+            }
+        }
+        const receivedTotal = Object.values(received).reduce((s, v) => s + v, 0);
+
         // Fetch refunds from Refund table
         const refundRows = await db.refund.findMany({
             where: {
@@ -162,6 +188,9 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
             data: {
                 payments: serialize(enrichedPayments),
                 totals,
+                received: serialize(received),
+                receivedTotal,
+                depositApplied,
                 depositsCollected: serialize(depositsCollectedMap),
                 depositsList: serialize(enrichedDeposits),
                 refunds: serialize(enrichedRefunds)
@@ -665,27 +694,32 @@ export async function getDailyActivityReport(filters: { from: string; to: string
         const end = new Date(filters.to + 'T23:59:59.999+05:30');
         const istDay = (d: any) => new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
 
-        const [opdInvoices, admits, discharges, payments] = await Promise.all([
+        const [opdInvoices, admits, discharges, walkins, payments] = await Promise.all([
             // OPD visits are recorded as OPD invoices (appointments table is not used for walk-in OPD).
             db.invoices.findMany({ where: { invoice_type: { in: ['OPD', 'OPD_FEE'] }, created_at: { gte: start, lte: end } }, select: { created_at: true, invoice_number: true, patient: { select: { full_name: true, patient_id: true } } } }),
             db.admissions.findMany({ where: { admission_date: { gte: start, lte: end } }, select: { admission_date: true, admission_id: true, patient: { select: { full_name: true, patient_id: true } } } }),
             db.admissions.findMany({ where: { discharge_date: { gte: start, lte: end } }, select: { discharge_date: true, admission_id: true, patient: { select: { full_name: true, patient_id: true } } } }),
+            // Walk-in / casualty: desk appointments with booking_channel = walk_in
+            // (same definition the reception Walk-in report uses).
+            db.appointments.findMany({ where: { booking_channel: 'walk_in', appointment_date: { gte: start, lte: end } }, select: { appointment_date: true, patient_id: true, doctor_name: true, patient: { select: { full_name: true } } } }),
             db.payments.findMany({ where: { status: 'Completed', created_at: { gte: start, lte: end } }, select: { amount: true, created_at: true } }),
         ]);
 
-        type DayRow = { date: string; opd: number; admissions: number; discharges: number; collections: number; opdList: any[]; admitList: any[]; dischargeList: any[] };
+        type DayRow = { date: string; opd: number; admissions: number; discharges: number; walkin: number; collections: number; opdList: any[]; admitList: any[]; dischargeList: any[]; walkinList: any[] };
         const map: Record<string, DayRow> = {};
-        const row = (day: string) => (map[day] ||= { date: day, opd: 0, admissions: 0, discharges: 0, collections: 0, opdList: [], admitList: [], dischargeList: [] });
+        const row = (day: string) => (map[day] ||= { date: day, opd: 0, admissions: 0, discharges: 0, walkin: 0, collections: 0, opdList: [], admitList: [], dischargeList: [], walkinList: [] });
         opdInvoices.forEach((a: any) => { const r = row(istDay(a.created_at)); r.opd += 1; r.opdList.push({ name: a.patient?.full_name || 'Unknown', patient_id: a.patient?.patient_id || '', ref: a.invoice_number || '' }); });
         admits.forEach((a: any) => { const r = row(istDay(a.admission_date)); r.admissions += 1; r.admitList.push({ name: a.patient?.full_name || 'Unknown', patient_id: a.patient?.patient_id || '', admission_id: a.admission_id }); });
         discharges.forEach((a: any) => { const r = row(istDay(a.discharge_date)); r.discharges += 1; r.dischargeList.push({ name: a.patient?.full_name || 'Unknown', patient_id: a.patient?.patient_id || '', admission_id: a.admission_id }); });
+        walkins.forEach((a: any) => { const r = row(istDay(a.appointment_date)); r.walkin += 1; r.walkinList.push({ name: a.patient?.full_name || 'Unknown', patient_id: a.patient_id || '', ref: a.doctor_name || '' }); });
         payments.forEach((p: any) => { row(istDay(p.created_at)).collections += Number(p.amount); });
 
         const daily = Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
         const totals = daily.reduce((t, d) => ({
             opd: t.opd + d.opd, admissions: t.admissions + d.admissions,
-            discharges: t.discharges + d.discharges, collections: t.collections + d.collections,
-        }), { opd: 0, admissions: 0, discharges: 0, collections: 0 });
+            discharges: t.discharges + d.discharges, walkin: t.walkin + d.walkin,
+            collections: t.collections + d.collections,
+        }), { opd: 0, admissions: 0, discharges: 0, walkin: 0, collections: 0 });
 
         return { success: true, data: { daily, totals } };
     } catch (error: any) {
