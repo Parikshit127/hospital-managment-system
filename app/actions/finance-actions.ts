@@ -488,6 +488,7 @@ export async function getInvoices(filters?: {
                 invoice_number: pharm.invoice_number,
                 patient_id: pharm.patient_id,
                 patient: pharm.patient,
+                notes: pharm.notes,
                 invoice_type: 'PHARMACY',
                 net_amount: pharm._isIpdPharmacy ? pharm._pharmTotal : pharm.net_amount,
                 total_amount: pharm._isIpdPharmacy ? pharm._pharmTotal : pharm.total_amount,
