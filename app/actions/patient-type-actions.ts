@@ -101,7 +101,7 @@ export async function getTpaProviders() {
         where: { organizationId, is_active: true },
         orderBy: { provider_name: 'asc' },
     });
-    return { success: true, data: providers };
+    return { success: true, data: providers.map(serializeTpaProvider) };
 }
 
 export async function getAllTpaProviders() {
@@ -110,7 +110,18 @@ export async function getAllTpaProviders() {
         where: { organizationId },
         orderBy: { provider_name: 'asc' },
     });
-    return { success: true, data: providers };
+    return { success: true, data: providers.map(serializeTpaProvider) };
+}
+
+// Prisma returns Decimal columns as Decimal objects, which cannot be passed
+// from a Server Component / Server Action to a Client Component. Convert the
+// decimal to a plain number so the row is JSON-serializable.
+function serializeTpaProvider<T extends { default_discount_percentage: unknown }>(p: T) {
+    return {
+        ...p,
+        default_discount_percentage:
+            p.default_discount_percentage == null ? null : Number(p.default_discount_percentage),
+    };
 }
 
 export async function createTpaProvider(data: {
