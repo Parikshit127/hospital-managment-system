@@ -356,44 +356,31 @@ export default function PharmacyPage() {
                 }
             `}</style>
 
-            <div className="flex h-[calc(100vh-4rem)] overflow-hidden relative">
+            <div className="h-[calc(100vh-4rem)] overflow-auto bg-gray-50">
+                <div className="max-w-4xl mx-auto w-full p-6 space-y-5">
 
-                {/* LEFT PANEL */}
-                <section className="flex-[3] flex flex-col min-w-0 bg-white border-r border-gray-200 relative z-10">
-                    <div className="p-6 border-b border-gray-200 bg-white">
-                        <div className="flex items-center justify-between mb-6">
-                            <div>
-                                <h1 className="text-lg font-black tracking-tight text-gray-900">Pharmacy & Billing</h1>
-                                <div className="flex gap-6 mt-1 text-sm font-bold text-gray-400">
-                                    <button onClick={() => setActiveTab('billing')} className={`pb-1 border-b-2 transition-all ${activeTab === 'billing' ? 'text-orange-500 border-orange-500' : 'border-transparent hover:text-gray-500'}`}>Inventory</button>
-                                    <button onClick={() => setActiveTab('orders')} className={`pb-1 border-b-2 transition-all ${activeTab === 'orders' ? 'text-orange-500 border-orange-500' : 'border-transparent hover:text-gray-500'}`}>
-                                        Doctor Orders
-                                        {orderQueue.length > 0 && <span className="ml-2 bg-rose-500 text-white px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm">{orderQueue.length}</span>}
-                                    </button>
-                                </div>
+                    {/* PAGE HEADER */}
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h1 className="text-lg font-black tracking-tight text-gray-900">Pharmacy & Billing</h1>
+                            <div className="flex gap-6 mt-1 text-sm font-bold text-gray-400">
+                                <button onClick={() => setActiveTab('billing')} className={`pb-1 border-b-2 transition-all ${activeTab === 'billing' ? 'text-orange-500 border-orange-500' : 'border-transparent hover:text-gray-500'}`}>Inventory</button>
+                                <button onClick={() => setActiveTab('orders')} className={`pb-1 border-b-2 transition-all ${activeTab === 'orders' ? 'text-orange-500 border-orange-500' : 'border-transparent hover:text-gray-500'}`}>
+                                    Doctor Orders
+                                    {orderQueue.length > 0 && <span className="ml-2 bg-rose-500 text-white px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm">{orderQueue.length}</span>}
+                                </button>
                             </div>
-                            <button
-                                onClick={() => setShowInventoryModal(true)}
-                                className="bg-gradient-to-r from-teal-500 to-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:from-teal-400 hover:to-emerald-500 shadow-xl shadow-teal-500/20 transform hover:-translate-y-0.5 transition-all"
-                            >
-                                <Plus className="h-4 w-4" /> Add Stock
-                            </button>
                         </div>
-
-                        {activeTab === 'billing' && (
-                            <div className="relative w-full group">
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 h-4 w-4 group-focus-within:text-orange-500 transition-colors" />
-                                <input
-                                    value={search} onChange={e => setSearch(e.target.value)}
-                                    className="w-full pl-11 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none text-sm transition-all placeholder:text-gray-400 font-medium text-gray-900"
-                                    placeholder="Search medicine by name or batch..."
-                                />
-                            </div>
-                        )}
+                        <button
+                            onClick={() => setShowInventoryModal(true)}
+                            className="bg-gradient-to-r from-teal-500 to-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:from-teal-400 hover:to-emerald-500 shadow-xl shadow-teal-500/20 transform hover:-translate-y-0.5 transition-all"
+                        >
+                            <Plus className="h-4 w-4" /> Add Stock
+                        </button>
                     </div>
 
                     {activeTab === 'orders' ? (
-                        <div className="flex-1 overflow-auto p-6">
+                        <div>
                             {orderQueue.length === 0 ? (
                                 <div className="text-center p-20 flex flex-col items-center">
                                     <div className="h-16 w-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-4">
@@ -451,162 +438,122 @@ export default function PharmacyPage() {
                             ))}
                         </div>
                     ) : (
-                        <div className="flex-1 overflow-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead className="sticky top-0 bg-white z-20 border-b border-gray-200">
-                                    <tr>
-                                        {['Medicine', 'Batch', 'Expiry', 'Stock', 'Price', 'GST', ''].map((h, i) => (
-                                            <th key={i} className={`px-5 py-3.5 text-[10px] font-black uppercase tracking-[0.12em] text-gray-400 ${i === 6 ? 'w-12' : ''}`}>{h}</th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50 text-sm">
-                                    {loading ? (
-                                        Array(5).fill(0).map((_, i) => (
-                                            <tr key={i}><td colSpan={7} className="px-5 py-5"><div className="h-4 bg-gray-100 rounded w-full animate-pulse" /></td></tr>
-                                        ))
-                                    ) : filteredInventory.length === 0 ? (
-                                        <tr><td colSpan={7} className="text-center py-16 text-gray-400 font-medium">No medicines found</td></tr>
-                                    ) : filteredInventory.map(item => {
-                                        const expStatus = getExpiryStatus(item.expiry_date);
-                                        const isExpired = !item.is_catalog && item.expiry_date ? new Date(item.expiry_date) < new Date() : false;
-                                        return (
-                                            <tr key={item.batch_id} className={`hover:bg-gray-50/50 transition-colors ${isExpired ? 'opacity-50' : ''}`}>
-                                                <td className="px-5 py-4">
-                                                    <span className="font-bold text-gray-700">{item.medicine_name}</span>
-                                                </td>
-                                                <td className="px-5 py-4">
-                                                    {item.is_catalog ? (
-                                                        <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded border border-indigo-200 font-bold">Catalog</span>
-                                                    ) : (
-                                                        <span className="font-mono text-gray-500 text-xs bg-gray-50 px-2 py-0.5 rounded border border-gray-200">{item.batch_id}</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-5 py-4">
-                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${expStatus.color}`}>
-                                                        {expStatus.urgent && <AlertTriangle className="h-3 w-3 inline mr-0.5 -mt-0.5" />}
-                                                        {expStatus.label}
-                                                    </span>
-                                                </td>
-                                                <td className="px-5 py-4">
-                                                    {item.is_catalog ? (
-                                                        <span className="px-2 py-0.5 rounded-lg text-xs font-bold border bg-indigo-50 text-indigo-600 border-indigo-200">No Stock</span>
-                                                    ) : (
-                                                        <span className={`px-2 py-0.5 rounded-lg text-xs font-bold border ${item.stock_count <= 0 ? 'bg-red-50 text-red-500 border-red-200' : item.stock_count < 10 ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                                                            {item.stock_count}
-                                                        </span>
-                                                    )}
-                                                </td>
-                                                <td className="px-5 py-4">
-                                                    <span className="font-bold text-gray-700">₹{item.unit_price.toFixed(2)}</span>
-                                                    {item.mrp > item.unit_price && (
-                                                        <span className="block line-through text-gray-400 text-[10px]">MRP ₹{item.mrp}</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-5 py-4">
-                                                    <span className="text-xs text-gray-500 font-medium">{item.gst_percent}%</span>
-                                                </td>
-                                                <td className="px-5 py-4">
-                                                    <button
-                                                        onClick={() => addToCart(item)}
-                                                        disabled={!item.is_catalog && (item.stock_count <= 0 || isExpired)}
-                                                        className="bg-orange-50 border border-orange-200 hover:bg-orange-100 text-orange-600 p-1.5 rounded-lg transition-all disabled:opacity-20 disabled:cursor-not-allowed"
-                                                    >
-                                                        <Plus className="h-3.5 w-3.5" />
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </section>
-
-                {/* BILLING CART */}
-                <aside className="flex-[1.2] flex flex-col bg-white border-l border-gray-200 min-w-[380px] z-30 relative">
-                    <div className="p-5 border-b border-gray-200">
-                        <h2 className="text-sm font-black text-gray-700 mb-3 flex items-center gap-2 uppercase tracking-[0.12em]">
-                            <ShoppingCart className="h-4 w-4 text-orange-500" /> Current Bill
-                        </h2>
-
-                        {/* Patient selection */}
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Patient</span>
-                                <button
-                                    type="button"
-                                    onClick={() => { setIsWalkIn(!isWalkIn); clearPatient(); setWalkInName(''); setWalkInContact(''); setDiscount(''); }}
-                                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors ${
-                                        isWalkIn ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                    }`}
-                                >
-                                    {isWalkIn ? '⚡ Walk-in / OTC' : 'Walk-in / OTC'}
-                                </button>
-                            </div>
-
-                            {isWalkIn ? (
-                                <div className="space-y-1.5">
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-400" />
-                                        <input
-                                            value={walkInName}
-                                            onChange={e => setWalkInName(e.target.value)}
-                                            className="w-full pl-9 pr-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-400/30 focus:border-amber-300 outline-none font-medium text-amber-900 placeholder:text-amber-400"
-                                            placeholder="Customer name (optional)"
-                                        />
-                                    </div>
-                                    <div className="relative">
-                                        <input
-                                            value={walkInContact}
-                                            onChange={e => setWalkInContact(e.target.value.replace(/[^0-9+\-\s]/g, ''))}
-                                            inputMode="tel"
-                                            maxLength={15}
-                                            className="w-full pl-3 pr-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-400/30 focus:border-amber-300 outline-none font-medium text-amber-900 placeholder:text-amber-400"
-                                            placeholder="Contact number (optional)"
-                                        />
-                                    </div>
-                                    <p className="text-[10px] font-bold text-amber-600 px-1">Walk-in / OTC — no registration needed. Name &amp; contact appear on the bill.</p>
-                                </div>
-                            ) : (
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                                    <input
-                                        value={patientSearch}
-                                        onChange={e => { setPatientSearch(e.target.value); setSelectedPatient(null); setPatientId(''); }}
-                                        className="w-full pl-9 pr-8 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400"
-                                        placeholder="Search by name, ID, phone..."
-                                    />
-                                    {selectedPatient && (
-                                        <button onClick={clearPatient} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                                            <X className="h-3.5 w-3.5" />
+                        <>
+                            {/* STEP 1 — Patient FIRST */}
+                            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
+                                {/* Patient selection */}
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Step 1 · Patient</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => { setIsWalkIn(!isWalkIn); clearPatient(); setWalkInName(''); setWalkInContact(''); setDiscount(''); }}
+                                            className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors ${
+                                                isWalkIn ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                            }`}
+                                        >
+                                            {isWalkIn ? '⚡ Walk-in / OTC' : 'Walk-in / OTC'}
                                         </button>
-                                    )}
-                                    {patientSuggestions.length > 0 && !selectedPatient && (
-                                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-44 overflow-y-auto">
-                                            {patientSuggestions.map((p: any) => (
-                                                <button key={p.patient_id} type="button"
-                                                    onClick={() => selectPatient(p)}
-                                                    className="w-full text-left px-4 py-2.5 hover:bg-orange-50 border-b border-gray-50 last:border-0 transition-colors"
-                                                >
-                                                    <div className="flex items-center justify-between">
-                                                        <div>
-                                                            <p className="text-sm font-bold text-gray-900">{p.full_name}</p>
-                                                            <p className="text-[10px] text-gray-400 font-mono">{p.patient_id} · {p.phone}</p>
-                                                        </div>
-                                                        {p.is_admitted && (
-                                                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full shrink-0">IPD</span>
+                                    </div>
+
+                                    {isWalkIn ? (
+                                        <div className="space-y-1.5">
+                                            <div className="relative">
+                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-400" />
+                                                <input
+                                                    value={walkInName}
+                                                    onChange={e => setWalkInName(e.target.value)}
+                                                    className="w-full pl-9 pr-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-400/30 focus:border-amber-300 outline-none font-medium text-amber-900 placeholder:text-amber-400"
+                                                    placeholder="Customer name (optional)"
+                                                />
+                                            </div>
+                                            <div className="relative">
+                                                <input
+                                                    value={walkInContact}
+                                                    onChange={e => setWalkInContact(e.target.value.replace(/[^0-9+\-\s]/g, ''))}
+                                                    inputMode="tel"
+                                                    maxLength={15}
+                                                    className="w-full pl-3 pr-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-400/30 focus:border-amber-300 outline-none font-medium text-amber-900 placeholder:text-amber-400"
+                                                    placeholder="Contact number (optional)"
+                                                />
+                                            </div>
+                                            <p className="text-[10px] font-bold text-amber-600 px-1">Walk-in / OTC — no registration needed. Name &amp; contact appear on the bill.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="relative">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                                            <input
+                                                value={patientSearch}
+                                                onChange={e => { setPatientSearch(e.target.value); setSelectedPatient(null); setPatientId(''); }}
+                                                className="w-full pl-9 pr-8 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400"
+                                                placeholder="Search by name, ID, phone..."
+                                            />
+                                            {selectedPatient && (
+                                                <button onClick={clearPatient} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                                    <X className="h-3.5 w-3.5" />
+                                                </button>
+                                            )}
+                                            {patientSuggestions.length > 0 && !selectedPatient && (
+                                                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-44 overflow-y-auto">
+                                                    {patientSuggestions.map((p: any) => (
+                                                        <button key={p.patient_id} type="button"
+                                                            onClick={() => selectPatient(p)}
+                                                            className="w-full text-left px-4 py-2.5 hover:bg-orange-50 border-b border-gray-50 last:border-0 transition-colors"
+                                                        >
+                                                            <div className="flex items-center justify-between">
+                                                                <div>
+                                                                    <p className="text-sm font-bold text-gray-900">{p.full_name}</p>
+                                                                    <p className="text-[10px] text-gray-400 font-mono">{p.patient_id} · {p.phone}</p>
+                                                                </div>
+                                                                {p.is_admitted && (
+                                                                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full shrink-0">IPD</span>
+                                                                )}
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {selectedPatient && (
+                                                <div className={`mt-1.5 px-3 py-2 border rounded-lg flex items-center justify-between ${selectedPatient.is_admitted ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'}`}>
+                                                    <div>
+                                                        <p className="text-xs font-bold text-teal-800">{selectedPatient.full_name}</p>
+                                                        <p className="text-[10px] font-mono text-orange-500">{selectedPatient.patient_id}</p>
+                                                        {selectedPatient.is_admitted && (
+                                                            <p className="text-[10px] font-bold text-blue-700 mt-0.5">
+                                                                🏥 IPD Admitted — medicines will be posted to IPD bill
+                                                            </p>
                                                         )}
                                                     </div>
-                                                </button>
-                                            ))}
+                                                    <CheckCircle className={`h-4 w-4 flex-shrink-0 ${selectedPatient.is_admitted ? 'text-blue-500' : 'text-orange-500'}`} />
+                                                </div>
+                                            )}
                                         </div>
                                     )}
-                                    {selectedPatient && (
-                                        <div className={`mt-1.5 px-3 py-2 border rounded-lg flex items-center justify-between ${selectedPatient.is_admitted ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'}`}>
+                                </div>
+                            </div>
+
+                            {!(isWalkIn || selectedPatient) ? (
+                                /* NOT ready — patient must be chosen first */
+                                <div className="text-center py-12 text-gray-400 font-medium text-sm">
+                                    Select a patient (or switch to Walk-in / OTC) to start billing.
+                                </div>
+                            ) : (
+                                <>
+                                    {/* a. Selected patient details */}
+                                    {isWalkIn ? (
+                                        <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-center justify-between">
                                             <div>
-                                                <p className="text-xs font-bold text-teal-800">{selectedPatient.full_name}</p>
+                                                <p className="text-[10px] font-black text-amber-600 uppercase tracking-wider">Billing — Walk-in / OTC</p>
+                                                <p className="text-sm font-bold text-amber-900 mt-0.5">{walkInName.trim() || 'Walk-in / OTC'}</p>
+                                                {walkInContact.trim() && <p className="text-[10px] font-mono text-amber-700">{walkInContact}</p>}
+                                            </div>
+                                            <CheckCircle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                                        </div>
+                                    ) : (
+                                        <div className={`rounded-2xl px-4 py-3 border flex items-center justify-between ${selectedPatient.is_admitted ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'}`}>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Billing</p>
+                                                <p className="text-sm font-bold text-teal-800 mt-0.5">{selectedPatient.full_name}</p>
                                                 <p className="text-[10px] font-mono text-orange-500">{selectedPatient.patient_id}</p>
                                                 {selectedPatient.is_admitted && (
                                                     <p className="text-[10px] font-bold text-blue-700 mt-0.5">
@@ -617,203 +564,299 @@ export default function PharmacyPage() {
                                             <CheckCircle className={`h-4 w-4 flex-shrink-0 ${selectedPatient.is_admitted ? 'text-blue-500' : 'text-orange-500'}`} />
                                         </div>
                                     )}
-                                </div>
-                            )}
-                        </div>
-                    </div>
 
-                    <div className="flex-1 overflow-auto p-4 space-y-2">
-                        {cart.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-center p-8">
-                                <div className="h-14 w-14 bg-gray-100 rounded-2xl flex items-center justify-center mb-3">
-                                    <ShoppingCart className="h-7 w-7 text-gray-300" />
-                                </div>
-                                <p className="font-bold text-gray-400 text-sm">Cart is empty</p>
-                                <p className="text-xs text-gray-300 mt-1">Add items from inventory</p>
-                            </div>
-                        ) : cart.map(item => {
-                            const itemTax = item.unit_price * item.quantity * item.gst_percent / 100;
-                            return (
-                                <div key={item.batch_id} className="p-3 bg-gray-50 rounded-xl border border-gray-200 group hover:border-orange-200 transition-colors">
-                                    <div className="flex justify-between items-start">
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className="text-sm font-bold text-gray-700 truncate">{item.medicine_name}</h4>
-                                            <div className="flex items-center gap-2 mt-0.5">
-                                                <span className="text-[10px] text-gray-400 font-mono">{item.is_catalog ? 'Catalog' : item.batch_id}</span>
-                                                {item.gst_percent > 0 && (
-                                                    <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold border border-blue-100">GST {item.gst_percent}%</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <button onClick={() => removeFromCart(item.batch_id)} className="text-gray-300 hover:text-rose-400 p-1 hover:bg-rose-50 rounded transition-colors ml-2">
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                        </button>
-                                    </div>
-                                    {/* Editable price per unit */}
-                                    <div className="flex items-center gap-1.5 mt-2">
-                                        <span className="text-[10px] text-gray-400 shrink-0">₹/unit</span>
+                                    {/* b. Medicine search bar */}
+                                    <div className="relative w-full group">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 h-4 w-4 group-focus-within:text-orange-500 transition-colors" />
                                         <input
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            value={item.unit_price}
-                                            onChange={e => updatePrice(item.batch_id, e.target.value)}
-                                            className="w-24 px-2 py-1 text-xs font-bold text-gray-700 bg-white border border-orange-200 rounded-lg focus:ring-1 focus:ring-orange-400 focus:border-orange-400 outline-none"
+                                            value={search} onChange={e => setSearch(e.target.value)}
+                                            className="w-full pl-11 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none text-sm transition-all placeholder:text-gray-400 font-medium text-gray-900"
+                                            placeholder="Search medicine by name or batch..."
                                         />
                                     </div>
-                                    <div className="flex justify-between items-center mt-2">
-                                        <div className="flex items-center bg-white rounded-lg border border-gray-200 p-0.5">
-                                            <button onClick={() => updateQty(item.batch_id, -1)} className="h-6 w-6 flex items-center justify-center hover:bg-gray-100 rounded text-gray-500 transition-colors"><Minus className="h-3 w-3" /></button>
-                                            <span className="w-7 text-center text-xs font-bold text-gray-700">{item.quantity}</span>
-                                            <button onClick={() => updateQty(item.batch_id, 1)} className="h-6 w-6 flex items-center justify-center hover:bg-gray-100 rounded text-gray-500 transition-colors"><Plus className="h-3 w-3" /></button>
+
+                                    {/* c. Medicine search RESULTS — only when search is non-empty */}
+                                    {search.trim() === '' ? (
+                                        <div className="text-center py-8 text-gray-400 text-xs font-medium">
+                                            Type a medicine name to search and add.
                                         </div>
-                                        <div className="text-right">
-                                            <span className="font-bold text-gray-700 text-sm">₹{(item.unit_price * item.quantity).toFixed(2)}</span>
-                                            {itemTax > 0 && <span className="block text-[10px] text-gray-400">+₹{itemTax.toFixed(2)} tax</span>}
+                                    ) : (
+                                        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                                            <table className="w-full text-left border-collapse">
+                                                <thead className="bg-white border-b border-gray-200">
+                                                    <tr>
+                                                        {['Medicine', 'Batch', 'Expiry', 'Stock', 'Price', 'GST', ''].map((h, i) => (
+                                                            <th key={i} className={`px-5 py-3.5 text-[10px] font-black uppercase tracking-[0.12em] text-gray-400 ${i === 6 ? 'w-12' : ''}`}>{h}</th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-50 text-sm">
+                                                    {loading ? (
+                                                        Array(5).fill(0).map((_, i) => (
+                                                            <tr key={i}><td colSpan={7} className="px-5 py-5"><div className="h-4 bg-gray-100 rounded w-full animate-pulse" /></td></tr>
+                                                        ))
+                                                    ) : filteredInventory.length === 0 ? (
+                                                        <tr><td colSpan={7} className="text-center py-16 text-gray-400 font-medium">No medicines found</td></tr>
+                                                    ) : filteredInventory.map(item => {
+                                                        const expStatus = getExpiryStatus(item.expiry_date);
+                                                        const isExpired = !item.is_catalog && item.expiry_date ? new Date(item.expiry_date) < new Date() : false;
+                                                        return (
+                                                            <tr key={item.batch_id} className={`hover:bg-gray-50/50 transition-colors ${isExpired ? 'opacity-50' : ''}`}>
+                                                                <td className="px-5 py-4">
+                                                                    <span className="font-bold text-gray-700">{item.medicine_name}</span>
+                                                                </td>
+                                                                <td className="px-5 py-4">
+                                                                    {item.is_catalog ? (
+                                                                        <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded border border-indigo-200 font-bold">Catalog</span>
+                                                                    ) : (
+                                                                        <span className="font-mono text-gray-500 text-xs bg-gray-50 px-2 py-0.5 rounded border border-gray-200">{item.batch_id}</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-5 py-4">
+                                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${expStatus.color}`}>
+                                                                        {expStatus.urgent && <AlertTriangle className="h-3 w-3 inline mr-0.5 -mt-0.5" />}
+                                                                        {expStatus.label}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-5 py-4">
+                                                                    {item.is_catalog ? (
+                                                                        <span className="px-2 py-0.5 rounded-lg text-xs font-bold border bg-indigo-50 text-indigo-600 border-indigo-200">No Stock</span>
+                                                                    ) : (
+                                                                        <span className={`px-2 py-0.5 rounded-lg text-xs font-bold border ${item.stock_count <= 0 ? 'bg-red-50 text-red-500 border-red-200' : item.stock_count < 10 ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                                                                            {item.stock_count}
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-5 py-4">
+                                                                    <span className="font-bold text-gray-700">₹{item.unit_price.toFixed(2)}</span>
+                                                                    {item.mrp > item.unit_price && (
+                                                                        <span className="block line-through text-gray-400 text-[10px]">MRP ₹{item.mrp}</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-5 py-4">
+                                                                    <span className="text-xs text-gray-500 font-medium">{item.gst_percent}%</span>
+                                                                </td>
+                                                                <td className="px-5 py-4">
+                                                                    <button
+                                                                        onClick={() => addToCart(item)}
+                                                                        disabled={!item.is_catalog && (item.stock_count <= 0 || isExpired)}
+                                                                        className="bg-orange-50 border border-orange-200 hover:bg-orange-100 text-orange-600 p-1.5 rounded-lg transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                                                                    >
+                                                                        <Plus className="h-3.5 w-3.5" />
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+
+                                    {/* d. Cart */}
+                                    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm">
+                                        <div className="p-5 border-b border-gray-200">
+                                            <h2 className="text-sm font-black text-gray-700 flex items-center gap-2 uppercase tracking-[0.12em]">
+                                                <ShoppingCart className="h-4 w-4 text-orange-500" /> Current Bill
+                                            </h2>
+                                        </div>
+                                        <div className="p-4 space-y-2">
+                                            {cart.length === 0 ? (
+                                                <div className="flex flex-col items-center justify-center text-center p-8">
+                                                    <div className="h-14 w-14 bg-gray-100 rounded-2xl flex items-center justify-center mb-3">
+                                                        <ShoppingCart className="h-7 w-7 text-gray-300" />
+                                                    </div>
+                                                    <p className="font-bold text-gray-400 text-sm">Cart is empty</p>
+                                                    <p className="text-xs text-gray-300 mt-1">Add items from inventory</p>
+                                                </div>
+                                            ) : cart.map(item => {
+                                                const itemTax = item.unit_price * item.quantity * item.gst_percent / 100;
+                                                return (
+                                                    <div key={item.batch_id} className="p-3 bg-gray-50 rounded-xl border border-gray-200 group hover:border-orange-200 transition-colors">
+                                                        <div className="flex justify-between items-start">
+                                                            <div className="flex-1 min-w-0">
+                                                                <h4 className="text-sm font-bold text-gray-700 truncate">{item.medicine_name}</h4>
+                                                                <div className="flex items-center gap-2 mt-0.5">
+                                                                    <span className="text-[10px] text-gray-400 font-mono">{item.is_catalog ? 'Catalog' : item.batch_id}</span>
+                                                                    {item.gst_percent > 0 && (
+                                                                        <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold border border-blue-100">GST {item.gst_percent}%</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <button onClick={() => removeFromCart(item.batch_id)} className="text-gray-300 hover:text-rose-400 p-1 hover:bg-rose-50 rounded transition-colors ml-2">
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </div>
+                                                        {/* Editable price per unit */}
+                                                        <div className="flex items-center gap-1.5 mt-2">
+                                                            <span className="text-[10px] text-gray-400 shrink-0">₹/unit</span>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                step="0.01"
+                                                                value={item.unit_price}
+                                                                onChange={e => updatePrice(item.batch_id, e.target.value)}
+                                                                className="w-24 px-2 py-1 text-xs font-bold text-gray-700 bg-white border border-orange-200 rounded-lg focus:ring-1 focus:ring-orange-400 focus:border-orange-400 outline-none"
+                                                            />
+                                                        </div>
+                                                        <div className="flex justify-between items-center mt-2">
+                                                            <div className="flex items-center bg-white rounded-lg border border-gray-200 p-0.5">
+                                                                <button onClick={() => updateQty(item.batch_id, -1)} className="h-6 w-6 flex items-center justify-center hover:bg-gray-100 rounded text-gray-500 transition-colors"><Minus className="h-3 w-3" /></button>
+                                                                <span className="w-7 text-center text-xs font-bold text-gray-700">{item.quantity}</span>
+                                                                <button onClick={() => updateQty(item.batch_id, 1)} className="h-6 w-6 flex items-center justify-center hover:bg-gray-100 rounded text-gray-500 transition-colors"><Plus className="h-3 w-3" /></button>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <span className="font-bold text-gray-700 text-sm">₹{(item.unit_price * item.quantity).toFixed(2)}</span>
+                                                                {itemTax > 0 && <span className="block text-[10px] text-gray-400">+₹{itemTax.toFixed(2)} tax</span>}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
-                                </div>
-                            );
-                        })}
-                    </div>
 
-                    {/* Bill Summary */}
-                    <div className="p-5 bg-gray-50 border-t border-gray-200 z-20">
-                        {cart.length > 0 && (
-                            <div className="space-y-1.5 mb-4 text-sm">
-                                <div className="flex justify-between text-gray-500">
-                                    <span>Subtotal</span>
-                                    <span className="font-medium">₹{subtotal.toFixed(2)}</span>
-                                </div>
-                                {totalTax > 0 && (
-                                    <>
-                                        <div className="flex justify-between text-gray-400 text-xs">
-                                            <span>CGST</span>
-                                            <span>₹{cgst.toFixed(2)}</span>
-                                        </div>
-                                        <div className="flex justify-between text-gray-400 text-xs">
-                                            <span>SGST</span>
-                                            <span>₹{sgst.toFixed(2)}</span>
-                                        </div>
-                                    </>
-                                )}
-                                {isWalkIn && (
-                                    <div className="flex justify-between items-center pt-1">
-                                        <span className="text-gray-500">Discount (%)</span>
-                                        <div className="flex items-center gap-1">
-                                            <input
-                                                type="number" min="0" max="100" step="0.01"
-                                                value={discount}
-                                                onChange={e => setDiscount(e.target.value)}
-                                                placeholder="0"
-                                                className="w-20 text-right text-sm p-1.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
-                                            />
-                                            <span className="text-gray-400 text-sm">%</span>
-                                        </div>
-                                    </div>
-                                )}
-                                {discountAmt > 0 && (
-                                    <div className="flex justify-between text-emerald-600 text-xs">
-                                        <span>Discount ({discountPct}%)</span>
-                                        <span>−₹{discountAmt.toFixed(2)}</span>
-                                    </div>
-                                )}
-                                <div className="flex justify-between pt-2 border-t border-gray-200">
-                                    <span className="font-bold text-gray-700">Total</span>
-                                    <span className="text-2xl font-black text-gray-900">₹{payableTotal.toFixed(2)}</span>
-                                </div>
-                            </div>
-                        )}
+                                    {/* e. Bill Summary + Bill Date/Doctor + Payment + Checkout */}
+                                    <div className="p-5 bg-white border border-gray-200 rounded-2xl shadow-sm">
+                                        {cart.length > 0 && (
+                                            <div className="space-y-1.5 mb-4 text-sm">
+                                                <div className="flex justify-between text-gray-500">
+                                                    <span>Subtotal</span>
+                                                    <span className="font-medium">₹{subtotal.toFixed(2)}</span>
+                                                </div>
+                                                {totalTax > 0 && (
+                                                    <>
+                                                        <div className="flex justify-between text-gray-400 text-xs">
+                                                            <span>CGST</span>
+                                                            <span>₹{cgst.toFixed(2)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between text-gray-400 text-xs">
+                                                            <span>SGST</span>
+                                                            <span>₹{sgst.toFixed(2)}</span>
+                                                        </div>
+                                                    </>
+                                                )}
+                                                {isWalkIn && (
+                                                    <div className="flex justify-between items-center pt-1">
+                                                        <span className="text-gray-500">Discount (%)</span>
+                                                        <div className="flex items-center gap-1">
+                                                            <input
+                                                                type="number" min="0" max="100" step="0.01"
+                                                                value={discount}
+                                                                onChange={e => setDiscount(e.target.value)}
+                                                                placeholder="0"
+                                                                className="w-20 text-right text-sm p-1.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                                            />
+                                                            <span className="text-gray-400 text-sm">%</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {discountAmt > 0 && (
+                                                    <div className="flex justify-between text-emerald-600 text-xs">
+                                                        <span>Discount ({discountPct}%)</span>
+                                                        <span>−₹{discountAmt.toFixed(2)}</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex justify-between pt-2 border-t border-gray-200">
+                                                    <span className="font-bold text-gray-700">Total</span>
+                                                    <span className="text-2xl font-black text-gray-900">₹{payableTotal.toFixed(2)}</span>
+                                                </div>
+                                            </div>
+                                        )}
 
-                        {/* Bill Date (optional backdate) + Prescribing Doctor */}
-                        <div className="grid grid-cols-2 gap-1.5 mb-3">
-                            <div>
-                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1 block">Bill Date</label>
-                                <input
-                                    type="datetime-local"
-                                    value={billDateTime}
-                                    max={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
-                                    onChange={e => setBillDateTime(e.target.value)}
-                                    className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
-                                    placeholder="Defaults to now"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1 block">Doctor</label>
-                                <select
-                                    value={doctorId}
-                                    onChange={e => {
-                                        const picked = doctorOptions.find(d => d.id === e.target.value);
-                                        setDoctorId(picked?.id || '');
-                                        setDoctorName(picked?.name || '');
-                                    }}
-                                    className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
-                                >
-                                    <option value="">— None —</option>
-                                    {doctorOptions.map(d => (
-                                        <option key={d.id} value={d.id}>{formatDoctorName(d.name)}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
+                                        {/* Bill Date (optional backdate) + Prescribing Doctor */}
+                                        <div className="grid grid-cols-2 gap-1.5 mb-3">
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1 block">Bill Date</label>
+                                                <input
+                                                    type="datetime-local"
+                                                    value={billDateTime}
+                                                    max={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
+                                                    onChange={e => setBillDateTime(e.target.value)}
+                                                    className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                                    placeholder="Defaults to now"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1 block">Doctor</label>
+                                                <select
+                                                    value={doctorId}
+                                                    onChange={e => {
+                                                        const picked = doctorOptions.find(d => d.id === e.target.value);
+                                                        setDoctorId(picked?.id || '');
+                                                        setDoctorName(picked?.name || '');
+                                                    }}
+                                                    className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                                >
+                                                    <option value="">— None —</option>
+                                                    {doctorOptions.map(d => (
+                                                        <option key={d.id} value={d.id}>{formatDoctorName(d.name)}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
 
-                        {/* Payment Method — show Credit option for IPD patients */}
-                        {selectedPatient?.is_admitted ? (
-                            <div className="mb-3 space-y-2">
-                                <div className="flex flex-wrap gap-1.5">
-                                    {IPD_PAYMENT_METHODS.map(m => (
+                                        {/* Payment Method — show Credit option for IPD patients */}
+                                        {selectedPatient?.is_admitted ? (
+                                            <div className="mb-3 space-y-2">
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {IPD_PAYMENT_METHODS.map(m => (
+                                                        <button
+                                                            key={m.id}
+                                                            onClick={() => setPaymentMethod(m.id)}
+                                                            className={`flex-1 min-w-[70px] py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${
+                                                                paymentMethod === m.id
+                                                                    ? m.id === 'Credit'
+                                                                        ? 'bg-amber-50 border-amber-400 text-amber-700'
+                                                                        : 'bg-orange-50 border-teal-300 text-orange-700'
+                                                                    : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                                                            }`}
+                                                        >
+                                                            <m.icon className="h-3.5 w-3.5" /> {m.id === 'Credit' ? 'Credit' : m.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                {paymentMethod === 'Credit' ? (
+                                                    <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium">
+                                                        🏥 <strong>Credit:</strong> Medicines posted to IPD bill. Payment pending — tracked under patient&apos;s admission.
+                                                    </div>
+                                                ) : (
+                                                    <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 font-medium">
+                                                        🏥 <strong>IPD Patient</strong> — medicines will also be posted to the IPD bill.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            /* Payment Method */
+                                            <div className="flex gap-1.5 mb-3">
+                                                {PAYMENT_METHODS.map(m => (
+                                                    <button
+                                                        key={m.id}
+                                                        onClick={() => setPaymentMethod(m.id)}
+                                                        className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${paymentMethod === m.id ? 'bg-orange-50 border-teal-300 text-orange-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                                                    >
+                                                        <m.icon className="h-3.5 w-3.5" /> {m.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+
                                         <button
-                                            key={m.id}
-                                            onClick={() => setPaymentMethod(m.id)}
-                                            className={`flex-1 min-w-[70px] py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${
-                                                paymentMethod === m.id
-                                                    ? m.id === 'Credit'
-                                                        ? 'bg-amber-50 border-amber-400 text-amber-700'
-                                                        : 'bg-orange-50 border-teal-300 text-orange-700'
-                                                    : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
-                                            }`}
+                                            onClick={handleCheckout}
+                                            disabled={cart.length === 0 || (!isWalkIn && !patientId)}
+                                            className={`w-full font-bold py-3.5 rounded-xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98] ${selectedPatient?.is_admitted ? (paymentMethod === 'Credit' ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white shadow-amber-500/20' : 'bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white shadow-blue-500/20') : 'bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white shadow-teal-500/20'}`}
                                         >
-                                            <m.icon className="h-3.5 w-3.5" /> {m.id === 'Credit' ? 'Credit' : m.label}
+                                            <Receipt className="h-5 w-5" />
+                                            {selectedPatient?.is_admitted
+                                                ? (paymentMethod === 'Credit' ? 'Add to IPD Bill (Credit)' : 'Post to IPD Bill')
+                                                : 'Generate Invoice'}
                                         </button>
-                                    ))}
-                                </div>
-                                {paymentMethod === 'Credit' ? (
-                                    <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium">
-                                        🏥 <strong>Credit:</strong> Medicines posted to IPD bill. Payment pending — tracked under patient&apos;s admission.
                                     </div>
-                                ) : (
-                                    <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 font-medium">
-                                        🏥 <strong>IPD Patient</strong> — medicines will also be posted to the IPD bill.
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            /* Payment Method */
-                            <div className="flex gap-1.5 mb-3">
-                                {PAYMENT_METHODS.map(m => (
-                                    <button
-                                        key={m.id}
-                                        onClick={() => setPaymentMethod(m.id)}
-                                        className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all border ${paymentMethod === m.id ? 'bg-orange-50 border-teal-300 text-orange-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
-                                    >
-                                        <m.icon className="h-3.5 w-3.5" /> {m.label}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-
-                        <button
-                            onClick={handleCheckout}
-                            disabled={cart.length === 0 || (!isWalkIn && !patientId)}
-                            className={`w-full font-bold py-3.5 rounded-xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98] ${selectedPatient?.is_admitted ? (paymentMethod === 'Credit' ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white shadow-amber-500/20' : 'bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white shadow-blue-500/20') : 'bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white shadow-teal-500/20'}`}
-                        >
-                            <Receipt className="h-5 w-5" />
-                            {selectedPatient?.is_admitted
-                                ? (paymentMethod === 'Credit' ? 'Add to IPD Bill (Credit)' : 'Post to IPD Bill')
-                                : 'Generate Invoice'}
-                        </button>
-                    </div>
-                </aside>
+                                </>
+                            )}
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* INVOICE MODAL */}
