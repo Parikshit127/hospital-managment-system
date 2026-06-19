@@ -331,7 +331,7 @@ export function InlineBillBuilder({ patient, onCreated, onCancel, autoPrint = tr
     // Auto-print receipt
     if (autoPrint) {
       try {
-        window.open(`/api/invoices/${invoiceId}/print`, '_blank');
+        window.open(`/api/invoice/${invoiceId}/summary-bill`, '_blank');
       } catch { /* popup blocked — user can print manually */ }
     }
 
