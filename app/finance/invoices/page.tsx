@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { FileText, Search, Filter, Eye, CheckCircle2, Phone } from 'lucide-react';
 import { getInvoices, approveInvoice } from '@/app/actions/finance-actions';
+import { parseWalkinNote } from '@/app/lib/walkin-note';
 import Link from 'next/link';
 
 export default function InvoicesPage() {
@@ -42,15 +43,21 @@ export default function InvoicesPage() {
 
     useEffect(() => { loadData(); }, [statusFilter]);
 
+
     const filtered = invoices.filter(inv => {
+        const walkinName = inv.patient_id === 'WALKIN' ? parseWalkinNote(inv.notes).name : '';
+        const walkinContact = inv.patient_id === 'WALKIN' ? parseWalkinNote(inv.notes).contact : '';
         const matchesSearch = inv.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
             inv.patient?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            inv.patient?.phone?.includes(searchTerm);
+            walkinName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            inv.patient?.phone?.includes(searchTerm) ||
+            walkinContact.includes(searchTerm);
         // OPD = everything that isn't IPD (matches the reception revenue card split).
         const matchesRev = !revFilter
             || (revFilter === 'ipd' ? inv.source === 'IPD' : inv.source !== 'IPD');
         return matchesSearch && matchesRev;
     });
+
 
     return (
         <AppShell
@@ -130,11 +137,19 @@ export default function InvoicesPage() {
                                     <td className="px-3 py-4 font-medium text-gray-500 text-[13px]">{new Date(inv.created_at).toLocaleDateString('en-GB')}</td>
                                     <td className="px-3 py-4">
                                         <div className="flex items-center gap-2">
-                                            <p className="font-extrabold text-gray-900 leading-tight text-[13px]">{inv.patient?.full_name}</p>
+                                            <p className="font-extrabold text-gray-900 leading-tight text-[13px]">
+                                                {inv.patient_id === 'WALKIN'
+                                                    ? (parseWalkinNote(inv.notes).name || 'Walk-in Patient')
+                                                    : (inv.patient?.full_name || 'Walk-in Patient')}
+                                            </p>
                                         </div>
                                         <div className="flex items-center gap-1 text-[10px] text-gray-500 font-bold mt-0.5">
                                             <Phone className="h-2 w-2" />
-                                            <span>{inv.patient?.phone || 'N/A'}</span>
+                                            <span>
+                                                {inv.patient_id === 'WALKIN'
+                                                    ? (parseWalkinNote(inv.notes).contact || inv.patient?.phone || 'N/A')
+                                                    : (inv.patient?.phone || 'N/A')}
+                                            </span>
                                         </div>
                                     </td>
                                     <td className="px-3 py-4 font-black text-gray-900 text-right text-[15px] leading-none">

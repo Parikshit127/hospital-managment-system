@@ -455,6 +455,7 @@ export async function getInvoices(filters?: {
                 invoice_number: inv.invoice_number,
                 patient_id: inv.patient_id,
                 patient: inv.patient,
+                notes: inv.notes,
                 invoice_type: inv.invoice_type,
                 net_amount: inv.net_amount,
                 balance_due: inv.balance_due,
