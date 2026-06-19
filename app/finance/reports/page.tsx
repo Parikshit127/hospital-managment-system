@@ -707,8 +707,8 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
 
 function DailyActivityReport({ data, fmt, from, to }: { data: any; fmt: (n: number) => string; from: string; to: string }) {
     const daily = data?.daily || [];
-    const totals = data?.totals || { opd: 0, admissions: 0, discharges: 0, walkin: 0, collections: 0 };
-    const totalPatients = (totals.opd || 0) + (totals.admissions || 0) + (totals.walkin || 0);
+    const totals = data?.totals || { opd: 0, admissions: 0, discharges: 0, collections: 0 };
+    const totalPatients = (totals.opd || 0) + (totals.admissions || 0);
     const fmtDay = (s: string) => { const [y, m, d] = (s || '').split('-'); return d ? `${d}/${m}/${y}` : s; };
     const [open, setOpen] = useState<string | null>(null);
 
@@ -727,11 +727,10 @@ function DailyActivityReport({ data, fmt, from, to }: { data: any; fmt: (n: numb
 
     return (
         <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                 <SummaryCard label="Total Patients" value={String(totalPatients)} color="emerald" />
                 <SummaryCard label="OPD Visits" value={String(totals.opd)} color="gray" />
                 <SummaryCard label="IPD Admissions" value={String(totals.admissions)} color="gray" />
-                <SummaryCard label="Walk-in" value={String(totals.walkin || 0)} color="gray" />
                 <SummaryCard label="IPD Discharges" value={String(totals.discharges)} color="gray" />
                 <SummaryCard label="Total Collections" value={fmt(totals.collections)} color="gray" />
             </div>
@@ -740,7 +739,6 @@ function DailyActivityReport({ data, fmt, from, to }: { data: any; fmt: (n: numb
                 {[
                     { key: 'ipd', label: 'IPD Patients' },
                     { key: 'opd', label: 'OPD Patients' },
-                    { key: 'walkin', label: 'Walk-in Patients' },
                 ].map(r => (
                     <button key={r.key}
                         onClick={() => window.open(`/api/reports/reception/${r.key}?from=${from}&to=${to}`, '_blank')}
@@ -753,13 +751,12 @@ function DailyActivityReport({ data, fmt, from, to }: { data: any; fmt: (n: numb
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                     <h3 className="font-semibold text-gray-900">Day-wise Activity ({daily.length} day{daily.length !== 1 ? 's' : ''})</h3>
                     <ExportButton
-                        data={daily.map((d: any) => ({ date: fmtDay(d.date), opd: d.opd, admissions: d.admissions, walkin: d.walkin, discharges: d.discharges, total: (d.opd || 0) + (d.admissions || 0) + (d.walkin || 0), collections: d.collections }))}
+                        data={daily.map((d: any) => ({ date: fmtDay(d.date), opd: d.opd, admissions: d.admissions, discharges: d.discharges, total: (d.opd || 0) + (d.admissions || 0), collections: d.collections }))}
                         filename={`daily-activity-${from}-${to}`}
                         columns={[
                             { key: 'date', label: 'Date' }, { key: 'opd', label: 'OPD Visits' },
-                            { key: 'admissions', label: 'Admissions' }, { key: 'walkin', label: 'Walk-in' },
-                            { key: 'discharges', label: 'Discharges' }, { key: 'total', label: 'Total Patients' },
-                            { key: 'collections', label: 'Collections' },
+                            { key: 'admissions', label: 'Admissions' }, { key: 'discharges', label: 'Discharges' },
+                            { key: 'total', label: 'Total Patients' }, { key: 'collections', label: 'Collections' },
                         ]}
                     />
                 </div>
@@ -769,17 +766,16 @@ function DailyActivityReport({ data, fmt, from, to }: { data: any; fmt: (n: numb
                             <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
                             <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">OPD Visits</th>
                             <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Admissions</th>
-                            <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Walk-in</th>
                             <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Discharges</th>
                             <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Total Patients</th>
                             <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Collections</th>
                         </tr></thead>
                         <tbody className="divide-y divide-gray-100">
                             {daily.length === 0 ? (
-                                <tr><td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-400">No activity in this date range</td></tr>
+                                <tr><td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-400">No activity in this date range</td></tr>
                             ) : daily.map((d: any) => {
                                 const isOpen = open === d.date;
-                                const dayTotal = (d.opd || 0) + (d.admissions || 0) + (d.walkin || 0);
+                                const dayTotal = (d.opd || 0) + (d.admissions || 0);
                                 return (
                                     <Fragment key={d.date}>
                                         <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => setOpen(isOpen ? null : d.date)} title="Click to see patient names">
@@ -791,21 +787,18 @@ function DailyActivityReport({ data, fmt, from, to }: { data: any; fmt: (n: numb
                                             </td>
                                             <td className="px-6 py-3 text-sm text-gray-700 text-right">{d.opd}</td>
                                             <td className="px-6 py-3 text-sm text-emerald-700 font-semibold text-right">{d.admissions}</td>
-                                            <td className="px-6 py-3 text-sm text-indigo-600 font-semibold text-right">{d.walkin || 0}</td>
                                             <td className="px-6 py-3 text-sm text-rose-600 font-semibold text-right">{d.discharges}</td>
                                             <td className="px-6 py-3 text-sm font-bold text-gray-900 text-right">{dayTotal}</td>
                                             <td className="px-6 py-3 text-sm font-bold text-gray-900 text-right">{fmt(d.collections)}</td>
                                         </tr>
                                         {isOpen && (
                                             <tr className="bg-gray-50/60">
-                                                <td colSpan={7} className="px-6 py-4">
+                                                <td colSpan={6} className="px-6 py-4">
                                                     <div className="flex flex-wrap gap-6">
                                                         <NameList title="OPD Visits" color="text-gray-500" items={d.opdList || []}
                                                             render={(i) => <span>{i.name}{i.ref ? <span className="text-gray-400 font-mono"> · {i.ref}</span> : null}</span>} />
                                                         <NameList title="Admissions" color="text-emerald-700" items={d.admitList || []}
                                                             render={(i) => <span>{i.name} <span className="text-gray-400 font-mono">({i.patient_id})</span></span>} />
-                                                        <NameList title="Walk-in" color="text-indigo-600" items={d.walkinList || []}
-                                                            render={(i) => <span>{i.name}{i.ref ? <span className="text-gray-400 font-mono"> · {i.ref}</span> : null}</span>} />
                                                         <NameList title="Discharges" color="text-rose-600" items={d.dischargeList || []}
                                                             render={(i) => <span>{i.name} <span className="text-gray-400 font-mono">({i.patient_id})</span></span>} />
                                                     </div>
