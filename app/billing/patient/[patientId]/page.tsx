@@ -23,6 +23,7 @@ import {
   Loader2,
   Mail,
   Phone,
+  Printer,
   ReceiptText,
   RotateCcw,
   Scale,
@@ -130,12 +131,20 @@ export default function PatientFinancialProfilePage() {
       onRefresh={load}
       refreshing={loading}
       headerActions={
-        <Link
-          href="/billing"
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-lg"
-        >
-          <ChevronLeft className="h-3.5 w-3.5" /> Back to Master Billing
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => window.open(`/api/patient/${patientId}/stickers`, '_blank')}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-lg"
+          >
+            <Printer className="h-3.5 w-3.5" /> Print Stickers
+          </button>
+          <Link
+            href="/billing"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-lg"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" /> Back to Master Billing
+          </Link>
+        </div>
       }
     >
       {loading && !profile ? (

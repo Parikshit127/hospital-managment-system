@@ -10,7 +10,7 @@ import {
     FileText, CheckCircle2, Pencil, Receipt, AlertTriangle,
     Loader2, Plus, X, DollarSign, Activity, LogOut, HeartPulse,
     ArrowLeftRight, CreditCard, TrendingUp, CalendarDays,
-    ShieldAlert, Info, ChevronRight, RotateCcw
+    ShieldAlert, Info, ChevronRight, RotateCcw, Printer
 } from 'lucide-react';
 import {
     getAdmissionFullDetails, createNursingTask, changeAdmissionDoctor,
@@ -682,6 +682,12 @@ export default function AdmissionDetailPage() {
                             </div>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
+                            <button
+                                onClick={() => window.open(`/api/patient/${data.patient_id}/stickers`, '_blank')}
+                                className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 bg-white text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition-colors"
+                            >
+                                <Printer className="h-3.5 w-3.5" /> Print Stickers
+                            </button>
                             {data.status === 'Admitted' && (
                                 <>
                                     <button
