@@ -620,6 +620,7 @@ export function Sidebar({ session }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [portalMenuOpen, setPortalMenuOpen] = useState(false);
+  const [logoError, setLogoError] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -722,10 +723,11 @@ export function Sidebar({ session }: SidebarProps) {
         {/* Organization logo — dynamic per org, falls back to Axten SVG */}
         {collapsed ? (
           <div className="shrink-0 flex items-center justify-center w-9 h-9">
-            {branding?.logoUrl ? (
+            {branding?.logoUrl && !logoError ? (
               <img
                 src={branding.logoUrl}
                 alt={branding.orgName}
+                onError={() => setLogoError(true)}
                 style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: '50%' }}
               />
             ) : (
@@ -740,12 +742,17 @@ export function Sidebar({ session }: SidebarProps) {
               </svg>
             )}
           </div>
-        ) : branding?.logoUrl ? (
+        ) : branding?.logoUrl && !logoError ? (
           <img
             src={branding.logoUrl}
             alt={branding.orgName}
-            style={{ height: 44, width: 'auto', flexShrink: 0 }}
+            onError={() => setLogoError(true)}
+            style={{ height: 44, width: 'auto', maxWidth: 150, objectFit: 'contain', flexShrink: 0 }}
           />
+        ) : logoError && branding?.orgName ? (
+          <span className="text-white font-bold text-[14px] leading-tight truncate" style={{ maxWidth: 150 }}>
+            {branding.orgName}
+          </span>
         ) : (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 80" style={{ height: '44px', width: 'auto', flexShrink: 0 }} aria-label="Axten Hospitals">
             <text x="0" y="52" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="56" fill="#ffffff" letterSpacing="-1">Axten</text>
@@ -763,40 +770,6 @@ export function Sidebar({ session }: SidebarProps) {
           </div>
         )}
 
-        {/* Admin-only portal switcher — jump between portals, staying admin */}
-        {isAdmin && !collapsed && (
-          <div className="relative ml-auto">
-            <button
-              onClick={() => setPortalMenuOpen(o => !o)}
-              title="Switch portal"
-              aria-label="Switch portal"
-              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-            {portalMenuOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setPortalMenuOpen(false)} />
-                <div className="absolute left-0 top-full mt-1.5 z-50 w-52 rounded-xl bg-white shadow-2xl border border-gray-200 overflow-hidden">
-                  <p className="px-3 py-2 text-[11px] font-semibold text-gray-500 border-b border-gray-100">Switch Portal</p>
-                  <div className="max-h-[60vh] overflow-y-auto py-1">
-                    {ADMIN_SWITCH_PORTALS.map(p => (
-                      <button
-                        key={p.path}
-                        onClick={() => { setPortalMenuOpen(false); setMobileOpen(false); router.push(p.path); }}
-                        className="block w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="px-3 py-1.5 text-[10px] text-gray-400 border-t border-gray-100">Opens as admin — session unchanged</p>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
         <button
           onClick={() => setMobileOpen(false)}
           className="lg:hidden ml-auto p-1 text-gray-500 hover:text-white transition-colors"
@@ -807,6 +780,32 @@ export function Sidebar({ session }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-2.5 space-y-5">
+        {/* Admin-only portal switcher — jump between portals, staying admin */}
+        {isAdmin && !collapsed && (
+          <div className="pb-3 -mt-1 border-b border-white/10">
+            <button
+              onClick={() => setPortalMenuOpen(o => !o)}
+              className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-lg text-[13px] font-semibold text-white bg-white/[0.06] hover:bg-white/[0.12] transition-colors"
+            >
+              <LayoutGrid className="h-4 w-4" style={{ color: "var(--admin-primary-light, #fff)" }} />
+              <span className="flex-1 text-left">Switch Portal</span>
+              <span className="text-gray-400 text-xs">{portalMenuOpen ? "▲" : "▼"}</span>
+            </button>
+            {portalMenuOpen && (
+              <div className="mt-1.5 space-y-0.5">
+                {ADMIN_SWITCH_PORTALS.map(p => (
+                  <button
+                    key={p.path}
+                    onClick={() => { setPortalMenuOpen(false); setMobileOpen(false); router.push(p.path); }}
+                    className="block w-full text-left pl-9 pr-2.5 py-1.5 rounded-lg text-[12px] text-gray-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {sections.map((section) => (
           <div key={section.title}>
             {!collapsed && (
