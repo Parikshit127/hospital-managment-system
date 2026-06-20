@@ -200,6 +200,12 @@ export default function AdminPatientDetailsPage() {
     activeAdmission?.doctor_name ||
     (data?.invoices || [])[0]?.doctor_name ||
     "";
+  // Show "Dr." exactly once (stored names sometimes already include the prefix).
+  const treatingDoctorLabel = (() => {
+    const s = (treatingDoctor || "").trim();
+    if (!s) return "—";
+    return /^dr\.?\s/i.test(s) ? s : `Dr. ${s}`;
+  })();
 
   const openDocEdit = async () => {
     setDocVal(treatingDoctor || "");
@@ -391,7 +397,7 @@ export default function AdminPatientDetailsPage() {
                           <Stethoscope className="h-3.5 w-3.5" />
                           {!docEditing ? (
                             <>
-                              Dr: {treatingDoctor || "—"}
+                              {treatingDoctorLabel}
                               {activeAdmission && (
                                 <button onClick={openDocEdit} title="Change treating doctor" className="ml-0.5 hover:text-indigo-900">
                                   <Pencil className="h-3 w-3" />
