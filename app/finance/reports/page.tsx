@@ -215,8 +215,8 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                 cashierList.add(cashierUser);
 
                 const dt = new Date(p.created_at);
-                const dateStr = dt.toLocaleDateString('en-GB');
-                const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                const dateStr = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' });
+                const timeStr = dt.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
 
                 if (p.status === 'Completed') {
                     itemsList.push({
@@ -266,8 +266,8 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                 cashierList.add(cashierUser);
 
                 const dt = new Date(d.created_at);
-                const dateStr = dt.toLocaleDateString('en-GB');
-                const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                const dateStr = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' });
+                const timeStr = dt.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
 
                 itemsList.push({
                     srNo: sr++,
@@ -296,8 +296,8 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                 cashierList.add(cashierUser);
 
                 const dt = new Date(r.created_at);
-                const dateStr = dt.toLocaleDateString('en-GB');
-                const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                const dateStr = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' });
+                const timeStr = dt.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
 
                 itemsList.push({
                     srNo: sr++,
