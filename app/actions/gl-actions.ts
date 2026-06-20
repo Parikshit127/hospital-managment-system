@@ -274,8 +274,11 @@ export async function createJournalEntry(data: CreateJournalEntryInput) {
       return journal;
     });
 
-    revalidatePath('/finance/journal-entries');
-    revalidatePath('/finance/gl-reports');
+    // revalidatePath can throw when called from an internal helper chain rather than
+    // a top-level server action (e.g. postPaymentToGL → createJournalEntry). Wrap so
+    // a failed cache invalidation never rolls back an already-committed journal entry.
+    try { revalidatePath('/finance/journal-entries'); } catch { /* non-critical */ }
+    try { revalidatePath('/finance/gl-reports'); } catch { /* non-critical */ }
     return { success: true, journal: result };
   } catch (error) {
     console.error('Error creating journal entry:', error);
