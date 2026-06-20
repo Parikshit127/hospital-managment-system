@@ -659,6 +659,41 @@ export async function getMyRole() {
     }
 }
 
+/**
+ * Set/change the consulting doctor on an invoice (OPD bills). This is
+ * non-financial metadata — no totals, tax or GL impact — so it is allowed even
+ * when the bill is fully paid or locked (which block normal financial edits).
+ * Restricted to admin and finance.
+ */
+export async function updateInvoiceDoctor(invoiceId: number, doctor_id: string | null, doctor_name: string | null) {
+    try {
+        const { db, organizationId } = await requireRoleAndTenant(['admin', 'finance']);
+        const invoice = await db.invoices.findFirst({ where: { id: invoiceId, organizationId } });
+        if (!invoice) return { success: false, error: 'Invoice not found' };
+
+        const cleanName = (doctor_name || '').trim() || null;
+        await db.invoices.update({
+            where: { id: invoiceId },
+            data: { doctor_id: doctor_id || null, doctor_name: cleanName },
+        });
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'UPDATE_INVOICE_DOCTOR',
+                module: 'finance',
+                entity_type: 'invoice',
+                entity_id: invoice.invoice_number,
+                details: JSON.stringify({ doctor_id: doctor_id || null, doctor_name: cleanName }),
+                organizationId,
+            },
+        });
+
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
 // Cancel invoice (soft cancellation — never deletes)
 /**
  * Cancel an invoice with a MANDATORY reason. Sets status = "Cancelled" and
@@ -2345,6 +2380,8 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
     concession_reason?: string;
     is_inter_state?: boolean;
     bill_discount?: number;
+    doctor_id?: string | null;
+    doctor_name?: string | null;
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
@@ -2370,6 +2407,8 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
         if (patch.concession_reason !== undefined) data.concession_reason = patch.concession_reason;
         if (patch.is_inter_state !== undefined) data.is_inter_state = patch.is_inter_state;
         if (patch.bill_discount !== undefined) data.bill_discount = Math.max(0, Number(patch.bill_discount) || 0);
+        if (patch.doctor_id !== undefined) data.doctor_id = patch.doctor_id || null;
+        if (patch.doctor_name !== undefined) data.doctor_name = (patch.doctor_name || '').trim() || null;
         data.version = { increment: 1 };
 
         await db.invoices.update({ where: { id: invoiceId }, data });

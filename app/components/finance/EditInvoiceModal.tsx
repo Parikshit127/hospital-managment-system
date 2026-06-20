@@ -11,7 +11,9 @@ import {
     saveInvoiceEdits,
     unlockInvoice,
     getMyRole,
+    updateInvoiceDoctor,
 } from '@/app/actions/finance-actions';
+import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 
 interface EditInvoiceModalProps {
     invoiceId: number;
@@ -55,6 +57,8 @@ type HeaderState = {
     concession_reason: string;
     is_inter_state: boolean;
     bill_discount: number;
+    doctor_id: string;
+    doctor_name: string;
 };
 
 const fmtINR = (n: number) =>
@@ -115,10 +119,15 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
     const [isLocked, setIsLocked] = useState(false);
     const [myRole, setMyRole] = useState<string | null>(null);
     const [unlocking, setUnlocking] = useState(false);
+    const [doctors, setDoctors] = useState<Array<{ id: string; name: string; specialty?: string | null }>>([]);
+    const [savingDoctor, setSavingDoctor] = useState(false);
     const canUnlock = ['admin', 'finance', 'superadmin'].includes(myRole || '');
 
     useEffect(() => {
-        if (isOpen) getMyRole().then(r => setMyRole(r.role));
+        if (isOpen) {
+            getMyRole().then(r => setMyRole(r.role));
+            getDoctorsForDropdown().then(r => { if (r.success) setDoctors(r.data as any); });
+        }
     }, [isOpen]);
 
     const handleUnlock = async () => {
@@ -128,6 +137,22 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
         setUnlocking(false);
         if (res.success) { toast.success('Bill unlocked.'); load(); }
         else toast.error(res.error || 'Failed to unlock.');
+    };
+
+    // Consulting doctor is non-financial metadata — saved on its own (admin/finance),
+    // so it can be changed even on a fully-paid/locked OPD bill.
+    const handleSaveDoctor = async () => {
+        if (!invoiceMeta || !header) return;
+        setSavingDoctor(true);
+        const res = await updateInvoiceDoctor(invoiceMeta.id, header.doctor_id || null, header.doctor_name || null);
+        setSavingDoctor(false);
+        if (res.success) {
+            toast.success('Consulting doctor updated.');
+            setHeaderOrig(prev => prev ? { ...prev, doctor_id: header.doctor_id, doctor_name: header.doctor_name } : prev);
+            onSaved?.();
+        } else {
+            toast.error(res.error || 'Failed to update doctor.');
+        }
     };
 
     const load = useCallback(async () => {
@@ -184,6 +209,8 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                 concession_reason: inv.concession_reason ?? '',
                 is_inter_state: !!inv.is_inter_state,
                 bill_discount: Number(inv.bill_discount ?? 0),
+                doctor_id: inv.doctor_id ?? '',
+                doctor_name: inv.doctor_name ?? '',
             };
             setHeader(h);
             setHeaderOrig(h);
@@ -671,6 +698,47 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                         </div>
                         <p className="text-[10px] text-gray-500 leading-snug max-w-[260px]">
                             A flat discount on the final bill total. Line-item prices stay unchanged — it shows as a discount on the bill.
+                        </p>
+                    </div>
+
+                    {/* Consulting Doctor — non-financial; admin/finance can change it even on a paid/locked OPD bill */}
+                    <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/60 px-3 py-2.5">
+                        <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wide text-sky-700 mb-1">
+                                Consulting Doctor
+                            </label>
+                            {(myRole === 'admin' || myRole === 'finance') ? (
+                                <div className="flex items-center gap-1.5">
+                                    <select
+                                        value={header.doctor_id || ''}
+                                        onChange={e => {
+                                            const id = e.target.value;
+                                            const doc = doctors.find(d => d.id === id);
+                                            setHeader({ ...header, doctor_id: id, doctor_name: doc?.name || '' });
+                                        }}
+                                        disabled={savingDoctor}
+                                        className="w-56 px-2 py-1.5 border border-sky-200 rounded text-xs bg-white"
+                                    >
+                                        <option value="">{header.doctor_name ? `Current: ${header.doctor_name}` : '— Select doctor —'}</option>
+                                        {doctors.map(d => (
+                                            <option key={d.id} value={d.id}>{d.name}{d.specialty ? ` (${d.specialty})` : ''}</option>
+                                        ))}
+                                    </select>
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={handleSaveDoctor}
+                                        disabled={savingDoctor || (header.doctor_id === (headerOrig?.doctor_id ?? '') && header.doctor_name === (headerOrig?.doctor_name ?? ''))}
+                                    >
+                                        {savingDoctor ? 'Saving…' : 'Save'}
+                                    </Button>
+                                </div>
+                            ) : (
+                                <p className="text-sm font-medium text-gray-800">{header.doctor_name || '—'}</p>
+                            )}
+                        </div>
+                        <p className="text-[10px] text-gray-500 leading-snug max-w-[260px]">
+                            Shown on the bill. Saved on its own — admin/finance can change it even after the bill is paid. IPD bills take their doctor from the admission (edit on the IPD chart).
                         </p>
                     </div>
 
