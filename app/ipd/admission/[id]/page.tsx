@@ -683,6 +683,12 @@ export default function AdmissionDetailPage() {
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                             <button
+                                onClick={() => window.open(`/api/admission/${data.admission_id}/admission-form`, '_blank')}
+                                className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 bg-white text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition-colors"
+                            >
+                                <FileText className="h-3.5 w-3.5" /> Admission Form
+                            </button>
+                            <button
                                 onClick={() => window.open(`/api/patient/${data.patient_id}/stickers`, '_blank')}
                                 className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 bg-white text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition-colors"
                             >

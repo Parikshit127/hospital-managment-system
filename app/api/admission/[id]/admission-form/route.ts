@@ -9,7 +9,7 @@ import {
     type BillBranding,
 } from '@/app/lib/bill-branding';
 
-const ALLOWED_STAFF_ROLES = ['admin', 'receptionist', 'doctor', 'ipd_manager', 'nurse'];
+const ALLOWED_STAFF_ROLES = ['admin', 'receptionist', 'doctor', 'ipd_manager', 'nurse', 'finance'];
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
