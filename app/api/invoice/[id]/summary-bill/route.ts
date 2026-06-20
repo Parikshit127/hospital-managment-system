@@ -145,7 +145,13 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     const isFinal = isIPD ? isDischarged : (invoice.status === 'Paid' || invoice.status === 'Final');
     const billType = isIPD ? (isFinal ? 'FINAL SUMMARY BILL' : 'INTERIM SUMMARY') : 'TAX INVOICE';
     const billColor = isFinal ? branding.accentColor : '#f97316';
-    const invoiceDate = fmtBillDate(invoice.created_at);
+    // For final IPD bills use the discharge date (when the bill was finalised),
+    // not the invoice creation date (when the first charge was posted).
+    const invoiceDate = fmtBillDate(
+        isIPD && isFinal && admission?.discharge_date
+            ? admission.discharge_date
+            : invoice.created_at
+    );
 
     let admissionDate = '';
     let dischargeDate = '';

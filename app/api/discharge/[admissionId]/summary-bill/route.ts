@@ -173,7 +173,7 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                                 <h2 style="font-size:16px;font-weight:800;color:${billColor};">${isFinal ? 'FINAL SUMMARY BILL' : 'INTERIM SUMMARY'}</h2>
                                 <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${invoice.invoice_number}</p>
                                 <p style="font-size:10px;color:#6b7280;">Type: <strong>${invoice.invoice_type || 'IPD'}</strong></p>
-                                <p style="font-size:10px;color:#6b7280;">Date: ${fmtBillDate(new Date())}</p>
+                                <p style="font-size:10px;color:#6b7280;">Date: ${fmtBillDate(isFinal && admission.discharge_date ? admission.discharge_date : invoice.created_at)}</p>
                                 <p style="font-size:10px;color:#6b7280;">GSTIN: ${gstin}</p>
                             </div>
                         </div>
