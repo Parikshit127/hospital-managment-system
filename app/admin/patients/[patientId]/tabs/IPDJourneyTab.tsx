@@ -13,6 +13,7 @@ import {
   FileText,
   AlertTriangle,
   Users,
+  ExternalLink,
 } from 'lucide-react';
 
 interface IPDJourneyTabProps {
@@ -140,6 +141,20 @@ export default function IPDJourneyTab({ admissions }: IPDJourneyTabProps) {
                 {admission.ward && <span>Ward: {admission.ward.ward_name || 'N/A'}</span>}
               </div>
             </button>
+
+            {/* Quick link to the full IPD Patient Chart (admin / clinical) */}
+            {admission.admission_id && (
+              <div className="px-5 pb-3 -mt-1">
+                <a
+                  href={`/ipd/admission/${admission.admission_id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> Open full IPD Chart
+                </a>
+              </div>
+            )}
 
             {/* EXPANDED CONTENT */}
             {isExpanded && (

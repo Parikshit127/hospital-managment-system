@@ -159,7 +159,7 @@ export default function BillingPaymentsTab({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50/80">
-                  {['Invoice #', 'Type', 'Date', 'Net Amount', 'Paid', 'Balance', 'Status', ''].map(
+                  {['Invoice #', 'Type', 'Doctor', 'Date', 'Net Amount', 'Paid', 'Balance', 'Status', ''].map(
                     (h, i) => (
                       <th
                         key={i}
@@ -174,7 +174,7 @@ export default function BillingPaymentsTab({
               <tbody className="divide-y divide-gray-100">
                 {invoices.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-12">
+                    <td colSpan={9} className="text-center py-12">
                       <FileText className="h-8 w-8 text-gray-300 mx-auto mb-2" />
                       <p className="text-gray-400 text-sm font-medium">No invoices found</p>
                     </td>
@@ -197,6 +197,9 @@ export default function BillingPaymentsTab({
                           </td>
                           <td className="px-4 py-3 text-gray-600">
                             {inv.invoice_type || inv.type || 'N/A'}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                            {inv.doctor_name || inv.doctor?.full_name || '—'}
                           </td>
                           <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
                             {fmtDate(inv.invoice_date || inv.created_at)}
