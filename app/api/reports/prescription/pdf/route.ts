@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
         const hospitalPhone = branding.hospitalPhone;
 
         const patientName = patient?.full_name || 'Unknown';
-        const orderDate = order.created_at ? new Date(order.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+        const orderDate = order.created_at ? new Date(order.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
         const items = order.items || [];
 
         const itemsHTML = items.map((item: any, idx: number) => `
@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
     </div>
 
     <div class="footer" style="text-align:center;font-size:9px;color:#9ca3af;">
-        <p>This is a computer-generated prescription. Generated on ${new Date().toLocaleString('en-IN')}</p>
+        <p>This is a computer-generated prescription. Generated on ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
     </div>
 </body>
 </html>`;

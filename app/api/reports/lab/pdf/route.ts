@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
 function renderLabReport(order: any, patient: any, barcode: string, branding: BillBranding): NextResponse {
     const patientName = patient?.full_name || 'Unknown';
     const orderDate = order.created_at
-        ? new Date(order.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        ? new Date(order.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })
         : 'N/A';
 
     const html = `<!DOCTYPE html>
@@ -169,7 +169,7 @@ function renderLabReport(order: any, patient: any, barcode: string, branding: Bi
 
     <div class="footer">
         <p>This is a computer-generated report. No signature required.</p>
-        <p style="margin-top:4px;">Generated on ${new Date().toLocaleString('en-IN')}</p>
+        <p style="margin-top:4px;">Generated on ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
     </div>
 </body>
 </html>`;

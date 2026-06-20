@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
         const totalOutstanding = totalRevenue - totalPaid;
         const invoiceCount = invoices.length;
 
-        const periodLabel = `${startDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} - ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+        const periodLabel = `${startDate.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })} - ${new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}`;
 
         const branding = await getBillBranding(auth.context.organizationId);
 
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
                 <td>&#8377; ${Number(inv.total_amount || 0).toLocaleString('en-IN')}</td>
                 <td>&#8377; ${Number(inv.amount_paid || 0).toLocaleString('en-IN')}</td>
                 <td><span style="color:${inv.status === 'Paid' ? '#065f46' : '#92400e'};font-weight:700;">${inv.status}</span></td>
-                <td style="color:#6b7280;">${new Date(inv.created_at).toLocaleDateString('en-GB')}</td>
+                <td style="color:#6b7280;">${new Date(inv.created_at).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' })}</td>
             </tr>
         `).join('');
 
@@ -149,7 +149,7 @@ export async function GET(req: NextRequest) {
     </div>
 
     <div class="footer">
-        <p>Confidential - For internal use only. Generated on ${new Date().toLocaleString('en-IN')}</p>
+        <p>Confidential - For internal use only. Generated on ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
     </div>
 </body>
 </html>`;
