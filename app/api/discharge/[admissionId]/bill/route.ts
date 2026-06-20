@@ -236,7 +236,46 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
         // Medicine-name toggle: when off, keep the Pharmacy total line but hide the
         // individual medicine rows. The amount stays in the totals (items not removed).
         const isBulkPharmacy = cat.toLowerCase() === 'pharmacy';
-        if (isBulkPharmacy && !includeMeds) continue;
+        if (isBulkPharmacy) {
+            // Pharmacy charges are grouped by SERVICE DATE — one summed line per day
+            // (e.g. all medicines dispensed on the 18th add up to a single "Pharmacy"
+            // row dated 18th; the 19th shows its own row). With medicine names on,
+            // the individual medicines are listed indented under each day.
+            const byDate = new Map<string, { dateStr: string; items: any[]; net: number; tax: number }>();
+            for (const item of data.items) {
+                const dt = item.created_at ? new Date(item.created_at) : null;
+                const key = dt ? dt.toISOString().slice(0, 10) : '-';
+                const dateStr = dt ? fmtBillDate(dt).split(',')[0] : '-';
+                if (!byDate.has(key)) byDate.set(key, { dateStr, items: [], net: 0, tax: 0 });
+                const g = byDate.get(key)!;
+                g.items.push(item);
+                g.net += Number(item.net_price || 0);
+                g.tax += Number(item.tax_amount || 0);
+            }
+            const groups = Array.from(byDate.entries()).sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(e => e[1]);
+            for (const g of groups) {
+                itemRows += `<tr>
+                    <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#6b7280;white-space:nowrap;">${g.dateStr}</td>
+                    <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;">Pharmacy${includeMeds ? '' : ` (${g.items.length} item${g.items.length > 1 ? 's' : ''})`}</td>
+                    <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#9ca3af;">-</td>
+                    <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:center;">${g.items.length}</td>
+                    <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:right;">-</td>
+                    <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:center;">-</td>
+                    <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:right;">${g.tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:right;font-weight:600;">${(g.net + g.tax).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                </tr>`;
+                if (includeMeds) {
+                    for (const item of g.items) {
+                        itemRows += `<tr>
+                            <td style="padding:3px 12px;border-bottom:1px solid #f9fafb;"></td>
+                            <td style="padding:3px 12px 3px 24px;border-bottom:1px solid #f9fafb;font-size:9px;color:#6b7280;" colspan="6">${item.description} × ${item.quantity}</td>
+                            <td style="padding:3px 12px;border-bottom:1px solid #f9fafb;font-size:9px;text-align:right;color:#6b7280;">${(Number(item.net_price) + Number(item.tax_amount || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                        </tr>`;
+                    }
+                }
+            }
+            continue;
+        }
         for (const item of data.items) {
             const serviceDate = item.created_at ? fmtBillDate(item.created_at).split(',')[0] : '-';
             itemRows += `<tr>

@@ -232,7 +232,40 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
         // Medicine-name toggle: when off, keep the Pharmacy total line but hide the
         // individual medicine rows. The amount stays in the totals (items not removed).
         const isBulkPharmacy = cat.toLowerCase() === 'pharmacy'
-        if (!isBulkPharmacy || includeMeds) {
+        if (isBulkPharmacy) {
+            // Pharmacy grouped by SERVICE DATE — one summed line per day. With
+            // medicine names on, individual medicines are listed under each day.
+            const byDate = new Map<string, { dateStr: string; items: any[]; net: number }>()
+            for (const item of catItems) {
+                const dt = item.created_at ? new Date(item.created_at) : null
+                const key = dt ? dt.toISOString().slice(0, 10) : '-'
+                if (!byDate.has(key)) byDate.set(key, { dateStr: fmtDate(item.created_at), items: [], net: 0 })
+                const g = byDate.get(key)!
+                g.items.push(item)
+                g.net += Number(item.net_price || 0)
+            }
+            const groups = Array.from(byDate.entries()).sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(e => e[1])
+            for (const g of groups) {
+                sno++
+                detailRows += `<tr>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;">${g.dateStr}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;">Pharmacy${includeMeds ? '' : ` (${g.items.length} item${g.items.length > 1 ? 's' : ''})`}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:right;">-</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:center;">${g.items.length}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:right;">-</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:right;">${g.net.toFixed(2)}</td>
+                </tr>`
+                if (includeMeds) {
+                    for (const item of g.items) {
+                        detailRows += `<tr>
+                            <td style="padding:3px 8px;border-bottom:1px solid #f3f4f6;"></td>
+                            <td style="padding:3px 8px 3px 22px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#6b7280;" colspan="4">${item.description} × ${item.quantity}</td>
+                            <td style="padding:3px 8px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:right;color:#6b7280;">${Number(item.net_price).toFixed(2)}</td>
+                        </tr>`
+                    }
+                }
+            }
+        } else {
             for (const item of catItems) {
                 sno++
                 const itemDate = fmtDate(item.created_at)
