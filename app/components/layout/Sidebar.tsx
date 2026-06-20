@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { logout } from "@/app/login/actions";
 import { getPortalBranding, type PortalBranding } from "@/app/lib/get-portal-branding";
 import { ChangePasswordModal } from "@/app/components/ChangePasswordModal";
@@ -572,8 +572,52 @@ const roleLabelMap: Record<string, string> = {
   crm_manager: "CRM Manager",
 };
 
+// Map a URL path to the portal role whose nav it belongs to. Used so an admin
+// browsing a portal sees that portal's sidebar (not the admin sidebar).
+const PATH_ROLE: { prefix: string; role: string }[] = [
+  { prefix: "/admin", role: "admin" },
+  { prefix: "/reception", role: "receptionist" },
+  { prefix: "/doctor", role: "doctor" },
+  { prefix: "/nurse", role: "nurse" },
+  { prefix: "/opd-manager", role: "opd_manager" },
+  { prefix: "/ipd", role: "ipd_manager" },
+  { prefix: "/lab", role: "lab_technician" },
+  { prefix: "/pharmacy", role: "pharmacist" },
+  { prefix: "/finance", role: "finance" },
+  { prefix: "/billing", role: "finance" },
+  { prefix: "/hr", role: "hr" },
+  { prefix: "/coordinator", role: "coordinator" },
+  { prefix: "/er", role: "er_staff" },
+  { prefix: "/ot", role: "ot_manager" },
+  { prefix: "/crm", role: "crm_manager" },
+  { prefix: "/counselling", role: "counsellor" },
+  { prefix: "/call-center", role: "call_center" },
+];
+
+function roleForPath(pathname: string): string | null {
+  const hit = PATH_ROLE.find(p => pathname === p.prefix || pathname.startsWith(p.prefix + "/"));
+  return hit ? hit.role : null;
+}
+
+// Portals an admin can jump to from the sidebar switcher (label + landing path).
+const ADMIN_SWITCH_PORTALS: { label: string; path: string }[] = [
+  { label: "Admin", path: "/admin/dashboard" },
+  { label: "Reception", path: "/reception" },
+  { label: "Doctor", path: "/doctor/dashboard" },
+  { label: "Nurse", path: "/nurse/dashboard" },
+  { label: "IPD", path: "/ipd" },
+  { label: "OPD Manager", path: "/opd-manager/dashboard" },
+  { label: "Lab", path: "/lab/technician" },
+  { label: "Pharmacy", path: "/pharmacy/billing" },
+  { label: "Finance", path: "/finance/dashboard" },
+  { label: "HR", path: "/hr/dashboard" },
+  { label: "Coordinator", path: "/coordinator/dashboard" },
+];
+
 export function Sidebar({ session }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [portalMenuOpen, setPortalMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -603,7 +647,13 @@ export function Sidebar({ session }: SidebarProps) {
     window.localStorage.setItem("sidebar-collapsed", String(collapsed));
   }, [collapsed]);
 
-  const sections = session ? NAV_BY_ROLE[session.role] || [] : [];
+  // An admin viewing a portal sees that portal's nav (derived from the URL);
+  // everyone else sees their own role's nav.
+  const isAdmin = session?.role === "admin";
+  const effectiveRole = session
+    ? (isAdmin ? (roleForPath(pathname) ?? "admin") : session.role)
+    : "";
+  const sections = effectiveRole ? NAV_BY_ROLE[effectiveRole] || [] : [];
   const orgName = session?.organization_name || "Hospital OS";
 
   const allHrefs = sections.flatMap((s) => s.items.map((i) => i.href));
@@ -706,10 +756,45 @@ export function Sidebar({ session }: SidebarProps) {
         {!collapsed && (
           <div className="overflow-hidden">
             <p className="text-[11px] text-gray-400 tracking-wider font-medium">
-              {roleLabelMap[session?.role || ""] || "PORTAL"}
+              {roleLabelMap[effectiveRole] || "PORTAL"}
             </p>
           </div>
         )}
+
+        {/* Admin-only portal switcher — jump between portals, staying admin */}
+        {isAdmin && !collapsed && (
+          <div className="relative ml-auto">
+            <button
+              onClick={() => setPortalMenuOpen(o => !o)}
+              title="Switch portal"
+              aria-label="Switch portal"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            {portalMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setPortalMenuOpen(false)} />
+                <div className="absolute left-0 top-full mt-1.5 z-50 w-52 rounded-xl bg-white shadow-2xl border border-gray-200 overflow-hidden">
+                  <p className="px-3 py-2 text-[11px] font-semibold text-gray-500 border-b border-gray-100">Switch Portal</p>
+                  <div className="max-h-[60vh] overflow-y-auto py-1">
+                    {ADMIN_SWITCH_PORTALS.map(p => (
+                      <button
+                        key={p.path}
+                        onClick={() => { setPortalMenuOpen(false); setMobileOpen(false); router.push(p.path); }}
+                        className="block w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="px-3 py-1.5 text-[10px] text-gray-400 border-t border-gray-100">Opens as admin — session unchanged</p>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         <button
           onClick={() => setMobileOpen(false)}
           className="lg:hidden ml-auto p-1 text-gray-500 hover:text-white transition-colors"

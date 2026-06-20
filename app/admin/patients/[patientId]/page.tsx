@@ -25,7 +25,8 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AdminPage } from "../../components/AdminPage";
-import { getAdminPatientFullDetails } from "@/app/actions/admin-actions";
+import { getAdminPatientFullDetails, getDoctorsForDropdown } from "@/app/actions/admin-actions";
+import { changeAdmissionDoctor } from "@/app/actions/ipd-actions";
 import { archivePatient, hardDeletePatient, updatePatient } from "@/app/actions/reception-actions";
 import { useToast } from "@/app/components/ui/Toast";
 
@@ -68,6 +69,12 @@ export default function AdminPatientDetailsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+
+  // Inline treating-doctor editor (active IPD admission) in the header
+  const [docEditing, setDocEditing] = useState(false);
+  const [docList, setDocList] = useState<Array<{ id: string; name: string; specialty?: string | null }>>([]);
+  const [docVal, setDocVal] = useState("");
+  const [docSaving, setDocSaving] = useState(false);
 
   const router = useRouter();
   const toast = useToast();
@@ -183,6 +190,39 @@ export default function AdminPatientDetailsPage() {
 
   const patient = data?.patient;
   const summary = data?.summary;
+
+  // Treating doctor in the header: active IPD admission's doctor when admitted,
+  // else the most recent invoice's consulting doctor. The IPD doctor is editable
+  // inline (changeAdmissionDoctor); OPD per-bill doctor is edited on the bill.
+  const activeAdmission = (data?.admissions || []).find((a: any) => a.status === "Admitted") || null;
+  const treatingDoctor =
+    activeAdmission?.doctor?.full_name ||
+    activeAdmission?.doctor_name ||
+    (data?.invoices || [])[0]?.doctor_name ||
+    "";
+
+  const openDocEdit = async () => {
+    setDocVal(treatingDoctor || "");
+    setDocEditing(true);
+    if (docList.length === 0) {
+      const r = await getDoctorsForDropdown();
+      if (r.success) setDocList(r.data as any);
+    }
+  };
+
+  const saveDoctor = async () => {
+    if (!activeAdmission) return;
+    setDocSaving(true);
+    const res = await changeAdmissionDoctor(activeAdmission.admission_id, docVal);
+    setDocSaving(false);
+    if (res.success) {
+      toast.success("Treating doctor updated");
+      setDocEditing(false);
+      loadData();
+    } else {
+      toast.error(res.error || "Failed to update doctor");
+    }
+  };
 
   const fmtDate = (v?: string | Date | null) => {
     if (!v) return "N/A";
@@ -345,6 +385,40 @@ export default function AdminPatientDetailsPage() {
                       <span className="bg-gray-100 border border-gray-200 rounded-lg px-2 py-1 text-gray-500">
                         Registered: {fmtDate(patient.created_at)}
                       </span>
+                      {/* Treating doctor — view here; IPD doctor editable inline, OPD edited per-bill */}
+                      {(treatingDoctor || activeAdmission) && (
+                        <span className="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg px-2 py-1">
+                          <Stethoscope className="h-3.5 w-3.5" />
+                          {!docEditing ? (
+                            <>
+                              Dr: {treatingDoctor || "—"}
+                              {activeAdmission && (
+                                <button onClick={openDocEdit} title="Change treating doctor" className="ml-0.5 hover:text-indigo-900">
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <select
+                                value={docVal}
+                                onChange={(e) => setDocVal(e.target.value)}
+                                disabled={docSaving}
+                                className="text-xs bg-white border border-indigo-200 rounded px-1 py-0.5 max-w-[180px]"
+                              >
+                                <option value="">{treatingDoctor ? `Current: ${treatingDoctor}` : "— Select doctor —"}</option>
+                                {docList.map((d) => (
+                                  <option key={d.id} value={d.name}>{d.name}{d.specialty ? ` (${d.specialty})` : ""}</option>
+                                ))}
+                              </select>
+                              <button onClick={saveDoctor} disabled={docSaving || !docVal.trim()} className="font-bold text-emerald-700 disabled:opacity-40">
+                                {docSaving ? "…" : "Save"}
+                              </button>
+                              <button onClick={() => setDocEditing(false)} disabled={docSaving} className="text-gray-400 hover:text-gray-600">✕</button>
+                            </>
+                          )}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
