@@ -194,6 +194,9 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
 
     const fmtDate = fmtBillDate
     const fmtTime = (d: any) => d ? new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h12' }) : ''
+    const isIPD = !!admission
+    const isDischarged = admission?.status === 'Discharged' || !!admission?.discharge_date
+    const isFinal = isIPD ? isDischarged : (invoice.status === 'Paid' || invoice.status === 'Final')
     // For final IPD bills use the discharge date (when the bill was finalised),
     // not the invoice creation date (when the first charge was posted).
     const invoiceDate = fmtDate(
@@ -201,9 +204,6 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
             ? admission.discharge_date
             : invoice.created_at
     )
-    const isIPD = !!admission
-    const isDischarged = admission?.status === 'Discharged' || !!admission?.discharge_date
-    const isFinal = isIPD ? isDischarged : (invoice.status === 'Paid' || invoice.status === 'Final')
     const billType = isIPD ? (isFinal ? 'FINAL BILL' : 'INTERIM BILL') : 'TAX INVOICE'
     const gstin = branding.gstin
 
