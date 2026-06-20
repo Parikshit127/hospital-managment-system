@@ -154,7 +154,10 @@ export default function DepositsPage() {
         setApplyAmount('');
         setApplyInvoiceId('');
         const invRes = await getInvoices({ patient_id: deposit.patient_id });
-        if (invRes.success) setInvoices((invRes.data || []).filter((i: any) => i.status !== 'Paid' && i.status !== 'Cancelled'));
+        // Applicable = invoices that still owe money. Filter on the actual
+        // outstanding balance, not status: a header can drift to "Paid" while a
+        // balance remains (e.g. a held deposit), and that must still be settleable.
+        if (invRes.success) setInvoices((invRes.data || []).filter((i: any) => Number(i.balance_due || 0) > 0 && i.status !== 'Cancelled'));
     }
 
     async function handleApply() {
