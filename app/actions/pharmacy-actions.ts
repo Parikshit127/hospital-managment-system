@@ -2771,17 +2771,20 @@ export async function createPurchaseInvoice(data: {
         unit_price: number;
         gst_rate: number;
         hsn_code?: string;
+        discount_pct?: number;
     }>;
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
 
         const lines = data.lines.map(line => {
-            const taxable = line.quantity * line.unit_price;
+            const discount = Number(line.discount_pct) || 0;
+            const taxable = line.quantity * line.unit_price * (1 - discount / 100);
             const gstAmt = taxable * line.gst_rate / 100;
             const isInter = false; // TODO: derive from vendor state vs org state
             return {
                 ...line,
+                discount_pct: discount,
                 line_total: taxable + gstAmt,
                 cgst_amount: isInter ? 0 : gstAmt / 2,
                 sgst_amount: isInter ? 0 : gstAmt / 2,
@@ -2789,7 +2792,10 @@ export async function createPurchaseInvoice(data: {
             };
         });
 
-        const subtotal = lines.reduce((s, l) => s + l.quantity * l.unit_price, 0);
+        const subtotal = lines.reduce((s, l) => {
+            const disc = Number(l.discount_pct) || 0;
+            return s + l.quantity * l.unit_price * (1 - disc / 100);
+        }, 0);
         const totalCgst = lines.reduce((s, l) => s + l.cgst_amount, 0);
         const totalSgst = lines.reduce((s, l) => s + l.sgst_amount, 0);
         const totalIgst = lines.reduce((s, l) => s + l.igst_amount, 0);
@@ -2818,6 +2824,7 @@ export async function createPurchaseInvoice(data: {
                         quantity: l.quantity,
                         unit_price: l.unit_price,
                         gst_rate: l.gst_rate,
+                        discount_pct: l.discount_pct,
                         cgst_amount: l.cgst_amount,
                         sgst_amount: l.sgst_amount,
                         igst_amount: l.igst_amount,

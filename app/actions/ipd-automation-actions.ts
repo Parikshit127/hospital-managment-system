@@ -261,6 +261,66 @@ export async function completeBedCleaning(bedId: string) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SLA_MINUTES = 45;
+const AUTO_AVAILABLE_HOURS = 24;
+
+// Auto-release beds that have been in "Cleaning" for ≥24h. Hard upper bound to
+// prevent forgotten beds from getting stranded out of inventory. Each released
+// bed gets a BED_CLEANING_AUTO_RELEASE audit entry for traceability.
+export async function autoReleaseStaleCleaningBeds() {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const cutoff = new Date(Date.now() - AUTO_AVAILABLE_HOURS * 60 * 60 * 1000);
+
+        const stale = await db.beds.findMany({
+            where: {
+                organizationId,
+                status: 'Cleaning',
+                cleaning_started_at: { lt: cutoff, not: null },
+            },
+            select: { bed_id: true, cleaning_started_at: true, ward_id: true },
+        });
+
+        if (stale.length === 0) {
+            return { success: true, released: 0 };
+        }
+
+        const now = new Date();
+        await db.beds.updateMany({
+            where: {
+                organizationId,
+                status: 'Cleaning',
+                cleaning_started_at: { lt: cutoff, not: null },
+            },
+            data: { status: 'Available', cleaning_completed_at: now },
+        });
+
+        await Promise.all(stale.map((b: any) => db.system_audit_logs.create({
+            data: {
+                user_id: 'system',
+                username: 'auto',
+                role: 'system',
+                action: 'BED_CLEANING_AUTO_RELEASE',
+                module: 'IPD',
+                entity_type: 'bed',
+                entity_id: b.bed_id,
+                details: JSON.stringify({
+                    bed_id: b.bed_id,
+                    cleaning_started_at: b.cleaning_started_at,
+                    auto_released_at: now.toISOString(),
+                    threshold_hours: AUTO_AVAILABLE_HOURS,
+                }),
+                ip_address: null,
+                organizationId,
+                created_at: now,
+            },
+        })));
+
+        return { success: true, released: stale.length };
+    } catch (error: any) {
+        console.error('autoReleaseStaleCleaningBeds error:', error);
+        return { success: false, error: error.message, released: 0 };
+    }
+}
 
 export async function escalateBedCleaningSLA() {
     try {

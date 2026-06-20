@@ -60,6 +60,12 @@ async function getAdmissionCancellationReasons(db: any, admissionIds: string[]) 
 export async function getWardsWithBeds() {
   try {
     const { db } = await requireTenantContext();
+    // Opportunistic cleanup: release any bed stuck in Cleaning ≥24h before the read.
+    // Best-effort — failure here must not block the bed matrix from loading.
+    try {
+      const { autoReleaseStaleCleaningBeds } = await import('./ipd-automation-actions');
+      await autoReleaseStaleCleaningBeds();
+    } catch { /* non-critical */ }
     const wards = await db.wards.findMany({
       include: {
         beds: {
@@ -102,6 +108,10 @@ export async function getWardsWithBeds() {
 export async function getAllBeds() {
   try {
     const { db } = await requireTenantContext();
+    try {
+      const { autoReleaseStaleCleaningBeds } = await import('./ipd-automation-actions');
+      await autoReleaseStaleCleaningBeds();
+    } catch { /* non-critical */ }
     const beds = await db.beds.findMany({
       include: {
         wards: true,

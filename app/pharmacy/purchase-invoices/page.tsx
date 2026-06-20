@@ -148,6 +148,7 @@ export default function PurchaseInvoicesPage() {
                 expiry: l.expiry || undefined,
                 pack: l.pack || undefined,
                 mrp: l.mrp ? parseFloat(l.mrp) : undefined,
+                discount_pct: l.discount_pct ? parseFloat(l.discount_pct) : 0,
             })),
         });
         setSaving(false);
@@ -187,7 +188,8 @@ export default function PurchaseInvoicesPage() {
     };
 
     const lineTotal = (l: any) => {
-        const taxable = (parseInt(l.quantity) || 0) * (parseFloat(l.unit_price) || 0);
+        const discount = parseFloat(l.discount_pct) || 0;
+        const taxable = (parseInt(l.quantity) || 0) * (parseFloat(l.unit_price) || 0) * (1 - discount / 100);
         return taxable + taxable * (parseFloat(l.gst_rate) || 0) / 100;
     };
     const grandTotal = lines.reduce((s, l) => s + lineTotal(l), 0);
@@ -441,7 +443,7 @@ export default function PurchaseInvoicesPage() {
                                             </div>
                                             {lines.length > 1 && <button onClick={() => removeLine(idx)} className="text-red-400 p-1"><X className="h-4 w-4" /></button>}
                                         </div>
-                                        <div className="grid grid-cols-4 gap-2">
+                                        <div className="grid grid-cols-5 gap-2">
                                             <div>
                                                 <label className="text-[9px] font-bold text-gray-400 uppercase">Qty</label>
                                                 <input type="number" value={line.quantity} onChange={e => { const u = [...lines]; u[idx].quantity = e.target.value; setLines(u); }} className="w-full p-2 border border-gray-300 rounded-lg text-sm" />
@@ -449,6 +451,10 @@ export default function PurchaseInvoicesPage() {
                                             <div>
                                                 <label className="text-[9px] font-bold text-gray-400 uppercase">Unit Price</label>
                                                 <input type="number" value={line.unit_price} onChange={e => { const u = [...lines]; u[idx].unit_price = e.target.value; setLines(u); }} className="w-full p-2 border border-gray-300 rounded-lg text-sm" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] font-bold text-gray-400 uppercase">Disc %</label>
+                                                <input type="number" value={line.discount_pct || 0} onChange={e => { const u = [...lines]; u[idx].discount_pct = e.target.value; setLines(u); }} className="w-full p-2 border border-gray-300 rounded-lg text-sm" />
                                             </div>
                                             <div>
                                                 <label className="text-[9px] font-bold text-gray-400 uppercase">GST %</label>

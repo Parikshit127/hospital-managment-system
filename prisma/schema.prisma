@@ -4768,6 +4768,7 @@ model PharmacyPurchaseInvoiceLine {
   cgst_amount     Float  @default(0)
   sgst_amount     Float  @default(0)
   igst_amount     Float  @default(0)
+  discount_pct    Float  @default(0)
   line_total      Float
   hsn_code        String?
 
