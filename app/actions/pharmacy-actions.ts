@@ -2915,6 +2915,31 @@ export async function matchPurchaseInvoice(invoiceId: number) {
     }
 }
 
+// Parse the free-text expiry captured on a PO line (e.g. "04/31", "04/2031",
+// "30/04/2031", "2031-04-30") into a Date. Returns null if unparseable.
+function parsePoExpiry(raw: any): Date | null {
+    if (!raw) return null;
+    const s = String(raw).trim();
+    if (!s) return null;
+    // ISO / native-parseable
+    const native = new Date(s);
+    if (!isNaN(native.getTime()) && native.getFullYear() > 2000 && native.getFullYear() < 2100) return native;
+    // DD/MM/YYYY or DD-MM-YYYY
+    let m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(s);
+    if (m) {
+        let dd = +m[1], mm = +m[2], yy = +m[3]; if (yy < 100) yy += 2000;
+        const dt = new Date(yy, mm - 1, dd);
+        if (!isNaN(dt.getTime()) && mm >= 1 && mm <= 12) return dt;
+    }
+    // MM/YY or MM/YYYY → last day of that month
+    m = /^(\d{1,2})[\/\-.](\d{2,4})$/.exec(s);
+    if (m) {
+        let mm = +m[1], yy = +m[2]; if (yy < 100) yy += 2000;
+        if (mm >= 1 && mm <= 12) return new Date(yy, mm, 0);
+    }
+    return null;
+}
+
 export async function postPurchaseInvoice(invoiceId: number) {
     try {
         const { db, organizationId } = await requireTenantContext();
@@ -2980,12 +3005,67 @@ export async function postPurchaseInvoice(invoiceId: number) {
             console.error('GST register failed for purchase invoice:', gstErr);
         }
 
-        await db.pharmacyPurchaseInvoice.update({
-            where: { id: invoiceId },
-            data: { status: 'Posted', gl_posted: true }
+        // Receive the goods into inventory automatically on posting. Batch No.,
+        // expiry and MRP are taken from the linked PO line; quantity & cost from
+        // the invoice line. Lines already received via a GRN are skipped to avoid
+        // double-counting. Done atomically with the status update.
+        const poItemIds = invoice.line_items.map((l: any) => l.po_item_id).filter(Boolean);
+        const poItemMap = new Map<number, any>();
+        if (poItemIds.length) {
+            const poItems = await db.purchaseOrderItem.findMany({ where: { id: { in: poItemIds } } });
+            for (const pi of poItems) poItemMap.set(pi.id, pi);
+        }
+
+        await db.$transaction(async (tx: any) => {
+            for (const line of invoice.line_items) {
+                if (line.grn_id) continue;                 // already received via GRN
+                if (Number(line.quantity) <= 0) continue;
+                const poItem = line.po_item_id ? poItemMap.get(line.po_item_id) : null;
+                const batchNo = (poItem?.batch_no || '').trim() || `PI-${invoice.invoice_number}`;
+                // Expiry: from PO line; fall back to ~2 years out so stock isn't lost.
+                const expiryDate = parsePoExpiry(poItem?.expiry) || new Date(Date.now() + 730 * 24 * 60 * 60 * 1000);
+                const mrp = poItem?.mrp != null ? Number(poItem.mrp) : null;
+
+                await tx.pharmacy_batch_inventory.upsert({
+                    where: { medicine_id_batch_no: { medicine_id: line.medicine_id, batch_no: batchNo } },
+                    update: {
+                        current_stock: { increment: Number(line.quantity) },
+                        cost_price: Number(line.unit_price),
+                        actual_cost: Number(line.unit_price),
+                        vendor_id: invoice.vendor_id,
+                        ...(mrp != null ? { mrp } : {}),
+                    },
+                    create: {
+                        medicine_id: line.medicine_id,
+                        batch_no: batchNo,
+                        current_stock: Number(line.quantity),
+                        expiry_date: expiryDate,
+                        cost_price: Number(line.unit_price),
+                        actual_cost: Number(line.unit_price),
+                        mrp,
+                        vendor_id: invoice.vendor_id,
+                        rack_location: 'PURCHASE-INVOICE',
+                    },
+                });
+
+                // Mark the PO line received so a later GRN won't double-receive it.
+                if (line.po_item_id) {
+                    await tx.purchaseOrderItem.update({
+                        where: { id: line.po_item_id },
+                        data: { quantity_received: { increment: Number(line.quantity) } },
+                    }).catch(() => { /* PO line may be gone — ignore */ });
+                }
+            }
+
+            await tx.pharmacyPurchaseInvoice.update({
+                where: { id: invoiceId },
+                data: { status: 'Posted', gl_posted: true },
+            });
         });
 
         revalidatePath('/pharmacy/purchase-invoices');
+        revalidatePath('/pharmacy/inventory');
+        invalidatePharmacyTags(['stock']);
         return { success: true };
     } catch (error: any) {
         return { success: false, error: error.message || 'Failed to post purchase invoice' };
