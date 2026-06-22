@@ -9,7 +9,7 @@ import { parseWalkinNote } from '@/app/lib/walkin-note';
 import { getInventory } from '@/app/actions/pharmacy-actions';
 import Link from 'next/link';
 
-const fmt = (n: number) => Number(n || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+const fmt = (n: number) => Number(n || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const STATUS_COLOR: Record<string, string> = {
     Draft: 'bg-gray-100 text-gray-700',

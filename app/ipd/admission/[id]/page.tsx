@@ -37,6 +37,7 @@ import {
 } from '@/app/actions/ipd-nursing-actions';
 import { NEWSScoreBadge } from '@/app/components/ipd/NEWSScoreBadge';
 import { PreDischargeChecklist } from '@/app/components/ipd/PreDischargeChecklist';
+import { DischargeSummaryEditor } from '@/app/components/ipd/DischargeSummaryEditor';
 import { formatDoctorName } from '@/app/lib/format-name';
 
 const TABS = [
@@ -2033,7 +2034,8 @@ export default function AdmissionDetailPage() {
 
                         {/* ════════════════════════════ DISCHARGE ════════════════════════════ */}
                         {activeTab === 'discharge' && (
-                            <div className="max-w-lg mx-auto space-y-6 py-4">
+                            <div className="space-y-8 py-4">
+                              <div className="max-w-lg mx-auto space-y-6">
                                 {data.status === 'Admitted' ? (
                                     <>
                                         <div className="bg-rose-50 border border-rose-200 rounded-2xl p-6 text-center space-y-4">
@@ -2075,6 +2077,12 @@ export default function AdmissionDetailPage() {
                                         </Link>
                                     </div>
                                 )}
+                              </div>
+
+                              {/* Discharge Summary — author + print the NABH-format summary */}
+                              <div className="max-w-4xl mx-auto">
+                                <DischargeSummaryEditor admissionId={data.admission_id} />
+                              </div>
                             </div>
                         )}
 

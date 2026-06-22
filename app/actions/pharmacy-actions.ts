@@ -2782,34 +2782,50 @@ export async function createPurchaseInvoice(data: {
         gst_rate: number;
         hsn_code?: string;
         discount_pct?: number;
+        discount_amount?: number;   // flat trade discount in ₹
+        scheme_amount?: number;     // scheme / free-goods value in ₹
     }>;
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
 
+        // Round to 2dp (paise) so each stored line matches the distributor bill.
+        const r2 = (n: number) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
+        // Taxable per line = gross - percentage discount - flat discount - scheme.
+        //   gross   = qty * rate
+        //   pctDisc = gross * discount_pct/100
+        //   taxable = gross - pctDisc - discount_amount - scheme_amount  (floored at 0)
+        const computeTaxable = (l: { quantity: number; unit_price: number; discount_pct?: number; discount_amount?: number; scheme_amount?: number; }) => {
+            const gross = Number(l.quantity) * Number(l.unit_price);
+            const pctDisc = gross * (Number(l.discount_pct) || 0) / 100;
+            const flat = Number(l.discount_amount) || 0;
+            const scheme = Number(l.scheme_amount) || 0;
+            return Math.max(0, gross - pctDisc - flat - scheme);
+        };
+
         const lines = data.lines.map(line => {
-            const discount = Number(line.discount_pct) || 0;
-            const taxable = line.quantity * line.unit_price * (1 - discount / 100);
-            const gstAmt = taxable * line.gst_rate / 100;
+            const taxable = r2(computeTaxable(line));
+            const gstAmt = r2(taxable * Number(line.gst_rate) / 100);
             const isInter = false; // TODO: derive from vendor state vs org state
             return {
                 ...line,
-                discount_pct: discount,
-                line_total: taxable + gstAmt,
-                cgst_amount: isInter ? 0 : gstAmt / 2,
-                sgst_amount: isInter ? 0 : gstAmt / 2,
+                discount_pct: Number(line.discount_pct) || 0,
+                discount_amount: Number(line.discount_amount) || 0,
+                scheme_amount: Number(line.scheme_amount) || 0,
+                taxable,
+                line_total: r2(taxable + gstAmt),
+                cgst_amount: isInter ? 0 : r2(gstAmt / 2),
+                sgst_amount: isInter ? 0 : r2(gstAmt / 2),
                 igst_amount: isInter ? gstAmt : 0,
             };
         });
 
-        const subtotal = lines.reduce((s, l) => {
-            const disc = Number(l.discount_pct) || 0;
-            return s + l.quantity * l.unit_price * (1 - disc / 100);
-        }, 0);
-        const totalCgst = lines.reduce((s, l) => s + l.cgst_amount, 0);
-        const totalSgst = lines.reduce((s, l) => s + l.sgst_amount, 0);
-        const totalIgst = lines.reduce((s, l) => s + l.igst_amount, 0);
-        const totalAmount = lines.reduce((s, l) => s + l.line_total, 0);
+        const subtotal = r2(lines.reduce((s, l) => s + l.taxable, 0));
+        const totalCgst = r2(lines.reduce((s, l) => s + l.cgst_amount, 0));
+        const totalSgst = r2(lines.reduce((s, l) => s + l.sgst_amount, 0));
+        const totalIgst = r2(lines.reduce((s, l) => s + l.igst_amount, 0));
+        const totalAmount = r2(lines.reduce((s, l) => s + l.line_total, 0));
 
         const invoice = await db.pharmacyPurchaseInvoice.create({
             data: {
@@ -2835,6 +2851,8 @@ export async function createPurchaseInvoice(data: {
                         unit_price: l.unit_price,
                         gst_rate: l.gst_rate,
                         discount_pct: l.discount_pct,
+                        discount_amount: l.discount_amount,
+                        scheme_amount: l.scheme_amount,
                         cgst_amount: l.cgst_amount,
                         sgst_amount: l.sgst_amount,
                         igst_amount: l.igst_amount,

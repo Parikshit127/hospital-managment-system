@@ -20,6 +20,7 @@ import {
   admitPatientIPD,
 } from '@/app/actions/ipd-actions';
 import { getActiveDoctors } from '@/app/actions/doctor-list-actions';
+import { getCorporateMasters, getTpaProviders } from '@/app/actions/patient-type-actions';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -93,6 +94,20 @@ export default function AdmitPatientPage() {
   const [depositAmount, setDepositAmount] = useState<string>('');
   const [depositMethod, setDepositMethod] = useState<string>('Cash');
 
+  // Patient type / payer (selected at admission)
+  const [patientType, setPatientType] = useState<'cash' | 'corporate' | 'tpa_insurance'>('cash');
+  const [corporates, setCorporates] = useState<any[]>([]);
+  const [tpaProviders, setTpaProviders] = useState<any[]>([]);
+  const [corporateId, setCorporateId] = useState('');
+  const [employeeId, setEmployeeId] = useState('');
+  const [corporateCard, setCorporateCard] = useState('');
+  const [tpaProviderId, setTpaProviderId] = useState('');
+  const [policyNumber, setPolicyNumber] = useState('');
+  const [validityStart, setValidityStart] = useState('');
+  const [validityEnd, setValidityEnd] = useState('');
+
+  const selectedCorporate = corporates.find((c) => c.id === corporateId) ?? null;
+
   // Submission
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -110,6 +125,12 @@ export default function AdmitPatientPage() {
       if (res.success && res.data) {
         setDoctors(res.data as { id: string; name: string | null; specialty: string | null }[]);
       }
+    });
+    getCorporateMasters().then((r) => {
+      if (r.success && r.data) setCorporates(r.data as any[]);
+    });
+    getTpaProviders().then((r) => {
+      if (r.success && r.data) setTpaProviders(r.data as any[]);
     });
   }, []);
 
@@ -170,6 +191,16 @@ export default function AdmitPatientPage() {
     e.preventDefault();
     if (!canSubmit || !selectedPatient || !selectedWardId) return;
 
+    // Payer validation
+    if (patientType === 'corporate' && !corporateId) {
+      setErrorMessage('Select a corporate company for corporate patients.');
+      return;
+    }
+    if (patientType === 'tpa_insurance' && (!tpaProviderId || !policyNumber.trim())) {
+      setErrorMessage('TPA provider and policy number are required for TPA / insurance patients.');
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage(null);
 
@@ -180,6 +211,18 @@ export default function AdmitPatientPage() {
       diagnosis: diagnosis.trim(),
       doctor_name: doctorName.trim(),
       admission_type: admissionType,
+      patient_type: patientType,
+      ...(patientType === 'corporate' && {
+        corporate_id: corporateId,
+        employee_id: employeeId.trim() || undefined,
+        corporate_card_number: corporateCard.trim() || undefined,
+      }),
+      ...(patientType === 'tpa_insurance' && {
+        tpa_provider_id: tpaProviderId,
+        insurance_policy_number: policyNumber.trim(),
+        insurance_validity_start: validityStart || undefined,
+        insurance_validity_end: validityEnd || undefined,
+      }),
       ...(admissionDateTime && { admission_date: admissionDateTime }),
       ...(depositNum > 0 && {
         deposit_amount: depositNum,
@@ -561,7 +604,140 @@ export default function AdmitPatientPage() {
             />
           )}
 
-          {/* ── 4. Deposit ────────────────────────────────────────────────── */}
+          {/* ── 4. Patient Type ───────────────────────────────────────────── */}
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
+            <div className="flex items-center gap-2 mb-5">
+              <CreditCard className="h-4 w-4 text-emerald-500" />
+              <span className="text-xs font-black text-gray-500 uppercase tracking-widest">
+                Patient Type
+              </span>
+            </div>
+
+            <div className="flex gap-3 flex-wrap mb-4">
+              {([
+                { value: 'cash', label: 'Cash' },
+                { value: 'corporate', label: 'Corporate' },
+                { value: 'tpa_insurance', label: 'TPA / Insurance' },
+              ] as const).map((pt) => (
+                <button
+                  key={pt.value}
+                  type="button"
+                  onClick={() => setPatientType(pt.value)}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-bold border transition-all ${
+                    patientType === pt.value
+                      ? 'bg-emerald-500 border-emerald-500 text-white shadow-md'
+                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  {pt.label}
+                </button>
+              ))}
+            </div>
+
+            {patientType === 'corporate' && (
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Building2 className="h-3.5 w-3.5 text-blue-500" />
+                  <span className="text-xs font-bold text-blue-700">Corporate Details</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className={labelClass}>Company *</label>
+                    <select
+                      value={corporateId}
+                      onChange={(e) => setCorporateId(e.target.value)}
+                      className={selectClass}
+                    >
+                      <option value="">Select Company</option>
+                      {corporates.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.company_name} ({c.company_code})
+                        </option>
+                      ))}
+                    </select>
+                    {selectedCorporate && (
+                      <p className="text-[10px] text-blue-600 font-bold ml-1">
+                        Discount: {Number(selectedCorporate.discount_percentage)}%
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className={labelClass}>Employee ID</label>
+                    <input
+                      value={employeeId}
+                      onChange={(e) => setEmployeeId(e.target.value)}
+                      className={inputClass}
+                      placeholder="EMP-001"
+                    />
+                  </div>
+                  <div className="space-y-1.5 md:col-span-2">
+                    <label className={labelClass}>Corporate Card Number (Optional)</label>
+                    <input
+                      value={corporateCard}
+                      onChange={(e) => setCorporateCard(e.target.value)}
+                      className={inputClass}
+                      placeholder="Card / ID number"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {patientType === 'tpa_insurance' && (
+              <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <FileText className="h-3.5 w-3.5 text-amber-600" />
+                  <span className="text-xs font-bold text-amber-700">TPA / Insurance Details</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className={labelClass}>TPA / Insurance Company *</label>
+                    <select
+                      value={tpaProviderId}
+                      onChange={(e) => setTpaProviderId(e.target.value)}
+                      className={selectClass}
+                    >
+                      <option value="">Select Provider</option>
+                      {tpaProviders.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.provider_name} ({p.provider_code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className={labelClass}>Policy Number *</label>
+                    <input
+                      value={policyNumber}
+                      onChange={(e) => setPolicyNumber(e.target.value)}
+                      className={inputClass}
+                      placeholder="Policy / Member ID"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className={labelClass}>Validity Start</label>
+                    <input
+                      type="date"
+                      value={validityStart}
+                      onChange={(e) => setValidityStart(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className={labelClass}>Validity End</label>
+                    <input
+                      type="date"
+                      value={validityEnd}
+                      onChange={(e) => setValidityEnd(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── 5. Deposit ────────────────────────────────────────────────── */}
           <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
             <div className="flex items-center gap-2 mb-5">
               <CreditCard className="h-4 w-4 text-emerald-500" />

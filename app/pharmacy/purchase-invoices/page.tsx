@@ -23,7 +23,7 @@ const STATUS_COLORS: Record<string, string> = {
     Cancelled: 'bg-red-100 text-red-700',
 };
 
-const fmt = (n: number) => Number(n || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+const fmt = (n: number) => Number(n || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function PurchaseInvoicesPage() {
     const toast = useToast();
@@ -149,6 +149,8 @@ export default function PurchaseInvoicesPage() {
                 pack: l.pack || undefined,
                 mrp: l.mrp ? parseFloat(l.mrp) : undefined,
                 discount_pct: l.discount_pct ? parseFloat(l.discount_pct) : 0,
+                discount_amount: l.discount_amount ? parseFloat(l.discount_amount) : 0,
+                scheme_amount: l.scheme_amount ? parseFloat(l.scheme_amount) : 0,
             })),
         });
         setSaving(false);
@@ -187,9 +189,15 @@ export default function PurchaseInvoicesPage() {
         else toast.error(res.error || 'Failed');
     };
 
+    const lineTaxable = (l: any) => {
+        const gross = (parseInt(l.quantity) || 0) * (parseFloat(l.unit_price) || 0);
+        const pctDisc = gross * (parseFloat(l.discount_pct) || 0) / 100;
+        const flat = parseFloat(l.discount_amount) || 0;
+        const scheme = parseFloat(l.scheme_amount) || 0;
+        return Math.max(0, gross - pctDisc - flat - scheme);
+    };
     const lineTotal = (l: any) => {
-        const discount = parseFloat(l.discount_pct) || 0;
-        const taxable = (parseInt(l.quantity) || 0) * (parseFloat(l.unit_price) || 0) * (1 - discount / 100);
+        const taxable = lineTaxable(l);
         return taxable + taxable * (parseFloat(l.gst_rate) || 0) / 100;
     };
     const grandTotal = lines.reduce((s, l) => s + lineTotal(l), 0);
@@ -443,22 +451,30 @@ export default function PurchaseInvoicesPage() {
                                             </div>
                                             {lines.length > 1 && <button onClick={() => removeLine(idx)} className="text-red-400 p-1"><X className="h-4 w-4" /></button>}
                                         </div>
-                                        <div className="grid grid-cols-5 gap-2">
+                                        <div className="grid grid-cols-7 gap-2">
                                             <div>
                                                 <label className="text-[9px] font-bold text-gray-400 uppercase">Qty</label>
                                                 <input type="number" value={line.quantity} onChange={e => { const u = [...lines]; u[idx].quantity = e.target.value; setLines(u); }} className="w-full p-2 border border-gray-300 rounded-lg text-sm" />
                                             </div>
                                             <div>
                                                 <label className="text-[9px] font-bold text-gray-400 uppercase">Unit Price</label>
-                                                <input type="number" value={line.unit_price} onChange={e => { const u = [...lines]; u[idx].unit_price = e.target.value; setLines(u); }} className="w-full p-2 border border-gray-300 rounded-lg text-sm" />
+                                                <input type="number" step="0.01" value={line.unit_price} onChange={e => { const u = [...lines]; u[idx].unit_price = e.target.value; setLines(u); }} className="w-full p-2 border border-gray-300 rounded-lg text-sm" />
                                             </div>
                                             <div>
                                                 <label className="text-[9px] font-bold text-gray-400 uppercase">Disc %</label>
-                                                <input type="number" value={line.discount_pct || 0} onChange={e => { const u = [...lines]; u[idx].discount_pct = e.target.value; setLines(u); }} className="w-full p-2 border border-gray-300 rounded-lg text-sm" />
+                                                <input type="number" step="0.01" value={line.discount_pct || 0} onChange={e => { const u = [...lines]; u[idx].discount_pct = e.target.value; setLines(u); }} className="w-full p-2 border border-gray-300 rounded-lg text-sm" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] font-bold text-gray-400 uppercase">Disc ₹</label>
+                                                <input type="number" step="0.01" value={line.discount_amount || ''} onChange={e => { const u = [...lines]; u[idx].discount_amount = e.target.value; setLines(u); }} className="w-full p-2 border border-gray-300 rounded-lg text-sm" placeholder="0.00" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] font-bold text-gray-400 uppercase">Scheme ₹</label>
+                                                <input type="number" step="0.01" value={line.scheme_amount || ''} onChange={e => { const u = [...lines]; u[idx].scheme_amount = e.target.value; setLines(u); }} className="w-full p-2 border border-gray-300 rounded-lg text-sm" placeholder="0.00" />
                                             </div>
                                             <div>
                                                 <label className="text-[9px] font-bold text-gray-400 uppercase">GST %</label>
-                                                <input type="number" value={line.gst_rate} onChange={e => { const u = [...lines]; u[idx].gst_rate = e.target.value; setLines(u); }} className="w-full p-2 border border-gray-300 rounded-lg text-sm" />
+                                                <input type="number" step="0.01" value={line.gst_rate} onChange={e => { const u = [...lines]; u[idx].gst_rate = e.target.value; setLines(u); }} className="w-full p-2 border border-gray-300 rounded-lg text-sm" />
                                             </div>
                                             <div>
                                                 <label className="text-[9px] font-bold text-gray-400 uppercase">Line Total</label>

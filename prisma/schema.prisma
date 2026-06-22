@@ -1119,6 +1119,13 @@ model discharge_summaries {
   admission_id      String
   patient_name      String?
   generated_summary String
+  // Structured NABH-format fields authored by the doctor (final diagnosis, complaints,
+  // investigations, procedure, operative notes, course, meds, instructions, follow-up,
+  // condition, prepared/verified by, + any header overrides). `generated_summary` keeps a
+  // rendered text version for backward-compatible consumers (e.g. the older PDF route).
+  data              Json?
+  prepared_by       String?
+  updated_at        DateTime @default(now()) @updatedAt
   organizationId    String
   created_at        DateTime @default(now())
 
@@ -1126,6 +1133,7 @@ model discharge_summaries {
   admission    admissions   @relation(fields: [admission_id], references: [admission_id])
 
   @@index([organizationId])
+  @@index([admission_id])
 }
 
 // ========================================
@@ -4844,6 +4852,10 @@ model PharmacyPurchaseInvoiceLine {
   sgst_amount     Float  @default(0)
   igst_amount     Float  @default(0)
   discount_pct    Float  @default(0)
+  // Flat trade discount and scheme/free-goods value in rupees, to match
+  // distributor bills exactly (taxable = qty*rate - pct_disc - discount_amount - scheme_amount).
+  discount_amount Float  @default(0)
+  scheme_amount   Float  @default(0)
   line_total      Float
   hsn_code        String?
 

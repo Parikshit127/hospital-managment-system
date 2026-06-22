@@ -142,6 +142,9 @@ export default function ReceptionPage() {
     const [dobValue, setDobValue] = useState('');      // ISO yyyy-mm-dd (submitted)
     const [dobText, setDobText] = useState('');         // dd/mm/yyyy (what the user sees)
     const [ageValue, setAgeValue] = useState('');
+    // Optional fine-grained age for infants (kept separate from years)
+    const [ageMonths, setAgeMonths] = useState('');
+    const [ageDays, setAgeDays] = useState('');
     // Phase 1 — Patient Type
     const [patientType, setPatientType] = useState<'cash' | 'corporate' | 'tpa_insurance'>('cash');
     const [corporates, setCorporates] = useState<CorporateItem[]>([]);
@@ -184,70 +187,11 @@ export default function ReceptionPage() {
             setDuplicates(result.data);
             setShowDuplicateWarning(true);
         } else {
+            // Patient type (incl. TPA/insurance) is captured at admission, not registration.
             setDuplicates([]);
             setShowDuplicateWarning(false);
-            
-            // NEW: If no duplicate found, check for insurance auto-discovery
-            setIsLookingUpInsurance(true);
-            const insResult = await lookupInsuranceByPhone(phone);
-            setIsLookingUpInsurance(false);
-
-            if (insResult.success && insResult.data) {
-                const data = insResult.data;
-                // Auto-fill form fields
-                setPatientType('tpa_insurance');
-                setInsuranceFoundAlert(data.message || 'Insurance record found');
-                
-                // We use setTimeout to ensure states are updated before we potentially trigger other effects
-                setTimeout(() => {
-                    const form = document.querySelector('form');
-                    if (form) {
-                        const nameInput = form.querySelector('input[name="full_name"]') as HTMLInputElement;
-                        const policyInput = form.querySelector('input[name="insurance_policy_number"]') as HTMLInputElement;
-                        const tpaSelect = form.querySelector('select[name="tpa_provider_id"]') as HTMLSelectElement;
-
-                        if (nameInput && !nameInput.value) nameInput.value = data.full_name || '';
-                        if (policyInput) policyInput.value = data.insurance_policy_number || '';
-                        if (tpaSelect) tpaSelect.value = String(data.tpa_provider_id);
-                    }
-                }, 100);
-            }
         }
-    }, [lookupInsuranceByPhone]);
-
-    const triggerInsuranceLookup = useCallback(async () => {
-        const form = document.querySelector('form');
-        const phoneInput = form?.querySelector('input[name="phone"]') as HTMLInputElement;
-        if (!phoneInput) return;
-
-        const val = phoneInput.value.replace(/\D/g, '');
-        if (val.length < 10) {
-            toast.error('Please enter a valid 10-digit phone number');
-            return;
-        }
-
-        setIsLookingUpInsurance(true);
-        const insResult = await lookupInsuranceByPhone(val);
-        setIsLookingUpInsurance(false);
-
-        if (insResult.success && insResult.data) {
-            const data = insResult.data;
-            setPatientType('tpa_insurance');
-            setInsuranceFoundAlert(data.message || 'Insurance record found');
-            
-            setTimeout(() => {
-                const nameInput = form?.querySelector('input[name="full_name"]') as HTMLInputElement;
-                const policyInput = form?.querySelector('input[name="insurance_policy_number"]') as HTMLInputElement;
-                const tpaSelect = form?.querySelector('select[name="tpa_provider_id"]') as HTMLSelectElement;
-
-                if (nameInput && !nameInput.value) nameInput.value = data.full_name || '';
-                if (policyInput) policyInput.value = data.insurance_policy_number || '';
-                if (tpaSelect) tpaSelect.value = String(data.tpa_provider_id);
-            }, 100);
-        } else {
-            toast.error(insResult.message || 'No insurance record found');
-        }
-    }, [lookupInsuranceByPhone, toast]);
+    }, [checkDuplicatePatient]);
 
     const handlePhoneChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         let val = e.target.value.replace(/\D/g, '').slice(0, 10);
@@ -329,6 +273,8 @@ export default function ReceptionPage() {
             setDobValue('');
             setDobText('');
             setAgeValue('');
+            setAgeMonths('');
+            setAgeDays('');
             setPatientType('cash');
             setSelectedCorporate(null);
             setSelectedCountry('India');
@@ -393,31 +339,6 @@ export default function ReceptionPage() {
                                         </div>
                                     </div>
 
-                                    {/* Insurance Discovery Alert */}
-                                    {insuranceFoundAlert && (
-                                        <div className="mb-6 bg-emerald-50 border border-emerald-200 rounded-xl p-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <Shield className="h-4 w-4 text-emerald-500" />
-                                                    <span className="text-sm font-bold text-emerald-700">
-                                                        {insuranceFoundAlert}
-                                                    </span>
-                                                </div>
-                                                <button 
-                                                    type="button"
-                                                    onClick={() => setInsuranceFoundAlert(null)}
-                                                    className="text-[10px] font-black text-emerald-600 uppercase tracking-widest hover:text-emerald-700"
-                                                >
-                                                    Dismiss
-                                                </button>
-                                            </div>
-                                            <p className="text-[10px] text-emerald-600 font-medium mt-1 ml-6">
-                                                TPA details and Policy Number have been auto-filled for you.
-                                            </p>
-                                        </div>
-                                    )}
-
-
                                     {/* Referred By — internal only, first field */}
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-6">
                                         <div className="md:col-span-2">
@@ -447,9 +368,6 @@ export default function ReceptionPage() {
                                             <label className={labelClass}>
                                                 Phone *
                                                 {isCheckingDuplicate && <span className="ml-2 text-teal-400 normal-case">checking...</span>}
-                                                {isLookingUpInsurance && <span className="ml-2 text-violet-400 normal-case flex items-center gap-1 inline-flex">
-                                                    <Loader2 className="h-3 w-3 animate-spin" /> looking up insurance...
-                                                </span>}
                                             </label>
                                             <div className="relative flex">
                                                 <span className="inline-flex items-center px-3 py-3.5 bg-gray-100 border border-r-0 border-gray-300 rounded-l-xl text-sm font-bold text-gray-500">
@@ -465,19 +383,10 @@ export default function ReceptionPage() {
                                                         pattern="[0-9]{10}"
                                                         maxLength={10}
                                                         onBlur={handlePhoneBlur}
-                                                        className="w-full bg-white border border-gray-300 rounded-r-xl pl-10 pr-24 py-3.5 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10 outline-none transition-all"
+                                                        className="w-full bg-white border border-gray-300 rounded-r-xl pl-10 pr-4 py-3.5 text-sm text-gray-900 font-bold placeholder:text-gray-400 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10 outline-none transition-all"
                                                         placeholder="10-digit mobile"
                                                         onChange={handlePhoneChange}
                                                     />
-                                                    <button
-                                                        type="button"
-                                                        onClick={triggerInsuranceLookup}
-                                                        disabled={isLookingUpInsurance}
-                                                        className="absolute right-2 top-1.5 bottom-1.5 px-3 bg-violet-500 hover:bg-violet-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
-                                                    >
-                                                        {isLookingUpInsurance ? <Loader2 className="h-3 w-3 animate-spin" /> : <Shield className="h-3 w-3" />}
-                                                        {isLookingUpInsurance ? 'Verifying...' : 'Verify'}
-                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -501,19 +410,54 @@ export default function ReceptionPage() {
                                             </div>
                                         </div>
 
-                                        {/* Age (auto-calc from DOB or manual) */}
-                                        <div className="space-y-1.5">
-                                            <label className={labelClass}>Age *</label>
+                                        {/* Age — years (required) + optional months/days for infants */}
+                                        <div className="space-y-1.5 md:col-span-2">
+                                            <label className={labelClass}>
+                                                Age * <span className="font-medium text-gray-400 normal-case">(months & days optional — for infants)</span>
+                                            </label>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <input
+                                                    name="age"
+                                                    type="number"
+                                                    min="0"
+                                                    max="120"
+                                                    required
+                                                    value={ageValue}
+                                                    onChange={(e) => setAgeValue(e.target.value)}
+                                                    className={`${inputClass} text-center`}
+                                                    placeholder="Years"
+                                                />
+                                                <input
+                                                    name="age_months"
+                                                    type="number"
+                                                    min="0"
+                                                    max="11"
+                                                    value={ageMonths}
+                                                    onChange={(e) => setAgeMonths(e.target.value)}
+                                                    className={`${inputClass} text-center`}
+                                                    placeholder="Months"
+                                                />
+                                                <input
+                                                    name="age_days"
+                                                    type="number"
+                                                    min="0"
+                                                    max="31"
+                                                    value={ageDays}
+                                                    onChange={(e) => setAgeDays(e.target.value)}
+                                                    className={`${inputClass} text-center`}
+                                                    placeholder="Days"
+                                                />
+                                            </div>
+                                            {/* Persist fine-grained infant age as total days (existing column) */}
                                             <input
-                                                name="age"
-                                                type="number"
-                                                min="0"
-                                                max="120"
-                                                required
-                                                value={ageValue}
-                                                onChange={(e) => setAgeValue(e.target.value)}
-                                                className={`${inputClass} text-center`}
-                                                placeholder="Yrs"
+                                                type="hidden"
+                                                name="age_in_days"
+                                                value={(() => {
+                                                    const m = parseInt(ageMonths, 10);
+                                                    const d = parseInt(ageDays, 10);
+                                                    const total = (isNaN(m) ? 0 : m) * 30 + (isNaN(d) ? 0 : d);
+                                                    return total > 0 ? String(total) : '';
+                                                })()}
                                             />
                                         </div>
 
@@ -794,124 +738,8 @@ export default function ReceptionPage() {
                                         </div>
                                     </div>
 
-                                    {/* Patient Type Classification */}
-                                    <div className="mb-6 border-t border-gray-200 pt-6">
-                                        <div className="flex items-center gap-2 mb-4">
-                                            <CreditCard className="h-4 w-4 text-violet-400" />
-                                            <span className="text-xs font-black text-gray-500">Patient Type *</span>
-                                        </div>
-                                        <input type="hidden" name="patient_type" value={patientType} />
-                                        <div className="flex gap-3 flex-wrap mb-4">
-                                            {PATIENT_TYPES.map(pt => (
-                                                <button
-                                                    key={pt.value}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setPatientType(pt.value);
-                                                        setSelectedCorporate(null);
-                                                    }}
-                                                    className={`px-4 py-2.5 rounded-xl text-sm font-bold border transition-all ${
-                                                        patientType === pt.value
-                                                            ? pt.value === 'cash'
-                                                                ? 'bg-orange-500 border-orange-500 text-white shadow-md'
-                                                                : pt.value === 'corporate'
-                                                                    ? 'bg-blue-500 border-blue-500 text-white shadow-md'
-                                                                    : 'bg-amber-500 border-amber-500 text-white shadow-md'
-                                                            : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                                                    }`}
-                                                >
-                                                    {pt.label}
-                                                </button>
-                                            ))}
-                                        </div>
-
-                                        {/* Corporate Fields */}
-                                        {patientType === 'corporate' && (
-                                            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-4">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <Building2 className="h-3.5 w-3.5 text-blue-500" />
-                                                    <span className="text-xs font-bold text-blue-700">Corporate Details</span>
-                                                </div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                    <div className="space-y-1.5">
-                                                        <label className={labelClass}>Company *</label>
-                                                        <select
-                                                            name="corporate_id"
-                                                            required={patientType === 'corporate'}
-                                                            className={selectClass}
-                                                            onChange={e => {
-                                                                const corp = corporates.find(c => c.id === e.target.value) || null;
-                                                                setSelectedCorporate(corp);
-                                                            }}
-                                                        >
-                                                            <option value="">Select Company</option>
-                                                            {corporates.map(c => (
-                                                                <option key={c.id} value={c.id}>{c.company_name} ({c.company_code})</option>
-                                                            ))}
-                                                        </select>
-                                                        {selectedCorporate && (
-                                                            <p className="text-[10px] text-blue-600 font-bold ml-1">
-                                                                Discount: {Number(selectedCorporate.discount_percentage)}%
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                    <div className="space-y-1.5">
-                                                        <label className={labelClass}>Employee ID</label>
-                                                        <input name="employee_id" className={inputClass} placeholder="EMP-001" />
-                                                    </div>
-                                                    <div className="space-y-1.5 md:col-span-2">
-                                                        <label className={labelClass}>Corporate Card Number (Optional)</label>
-                                                        <input name="corporate_card_number" className={inputClass} placeholder="Card / ID number" />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* TPA / Insurance Fields */}
-                                        {patientType === 'tpa_insurance' && (
-                                            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 space-y-4">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <FileText className="h-3.5 w-3.5 text-amber-600" />
-                                                    <span className="text-xs font-bold text-amber-700">TPA / Insurance Details</span>
-                                                </div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                    <div className="space-y-1.5">
-                                                        <label className={labelClass}>TPA / Insurance Company *</label>
-                                                        <select
-                                                            name="tpa_provider_id"
-                                                            required={patientType === 'tpa_insurance'}
-                                                            className={selectClass}
-                                                        >
-                                                            <option value="">Select Provider</option>
-                                                            {tpaProviders.map(p => (
-                                                                <option key={p.id} value={p.id}>
-                                                                    {p.provider_name} ({p.provider_code})
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                    <div className="space-y-1.5">
-                                                        <label className={labelClass}>Policy Number *</label>
-                                                        <input
-                                                            name="insurance_policy_number"
-                                                            required={patientType === 'tpa_insurance'}
-                                                            className={inputClass}
-                                                            placeholder="Policy / Member ID"
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-1.5">
-                                                        <label className={labelClass}>Validity Start</label>
-                                                        <DateField name="insurance_validity_start" className={inputClass} />
-                                                    </div>
-                                                    <div className="space-y-1.5">
-                                                        <label className={labelClass}>Validity End</label>
-                                                        <DateField name="insurance_validity_end" className={inputClass} />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
+                                    {/* Patient type (Cash / Corporate / TPA) is set at admission, not registration */}
+                                    <input type="hidden" name="patient_type" value="cash" />
                                     {/* Notes */}
                                     <div className="mb-6 border-t border-gray-200 pt-6">
                                         <div className="flex items-center gap-2 mb-4">
