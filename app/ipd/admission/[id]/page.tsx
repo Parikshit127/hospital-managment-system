@@ -10,7 +10,7 @@ import {
     FileText, CheckCircle2, Pencil, Receipt, AlertTriangle,
     Loader2, Plus, X, DollarSign, Activity, LogOut, HeartPulse,
     ArrowLeftRight, CreditCard, TrendingUp, CalendarDays,
-    ShieldAlert, Info, ChevronRight, RotateCcw, Printer
+    ShieldAlert, ShieldCheck, Info, ChevronRight, RotateCcw, Printer
 } from 'lucide-react';
 import {
     getAdmissionFullDetails, createNursingTask, changeAdmissionDoctor,
@@ -38,6 +38,7 @@ import {
 import { NEWSScoreBadge } from '@/app/components/ipd/NEWSScoreBadge';
 import { PreDischargeChecklist } from '@/app/components/ipd/PreDischargeChecklist';
 import { DischargeSummaryEditor } from '@/app/components/ipd/DischargeSummaryEditor';
+import TpaProfileModal from '@/app/components/ipd/TpaProfileModal';
 import { formatDoctorName } from '@/app/lib/format-name';
 
 const TABS = [
@@ -61,6 +62,7 @@ export default function AdmissionDetailPage() {
 
     // Doctor change (searchable autocomplete)
     const [showDoctorForm, setShowDoctorForm] = useState(false);
+    const [showTpa, setShowTpa] = useState(false);
     const [newDoctorName, setNewDoctorName] = useState('');
     const [savingDoctor, setSavingDoctor] = useState(false);
     const [doctorSuggestions, setDoctorSuggestions] = useState<any[]>([]);
@@ -694,6 +696,12 @@ export default function AdmissionDetailPage() {
                                 className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 bg-white text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition-colors"
                             >
                                 <Printer className="h-3.5 w-3.5" /> Print Stickers
+                            </button>
+                            <button
+                                onClick={() => setShowTpa(true)}
+                                className="flex items-center gap-1.5 px-3 py-2 border border-purple-200 bg-purple-50 text-purple-700 text-xs font-bold rounded-xl hover:bg-purple-100 transition-colors"
+                            >
+                                <ShieldCheck className="h-3.5 w-3.5" /> TPA Profile
                             </button>
                             {data.status === 'Admitted' && (
                                 <>
@@ -2160,6 +2168,15 @@ export default function AdmissionDetailPage() {
                     </div>
                 </div>
             )}
+
+            {/* ── TPA / Insurance Profile Modal ── */}
+            <TpaProfileModal
+                open={showTpa}
+                onClose={() => setShowTpa(false)}
+                patientId={data.patient_id}
+                patientName={data.patient?.full_name}
+                patientType={data.patient?.patient_type}
+            />
         </AppShell>
     );
 }
