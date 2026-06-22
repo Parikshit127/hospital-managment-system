@@ -1,13 +1,21 @@
 import { PrismaClient } from '@prisma/client';
 import { validateServerEnv } from '@/app/lib/env';
 
-validateServerEnv();
+// Guard: this module must only ever run server-side. If a client component's
+// import graph accidentally pulls it into the browser bundle, do NOT validate
+// env or instantiate Prisma there (both would crash). The client never actually
+// calls these — data access always goes through server actions.
+const isServer = typeof window === 'undefined';
+
+if (isServer) validateServerEnv();
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
-export const prisma = globalForPrisma.prisma || new PrismaClient();
+export const prisma = isServer
+    ? (globalForPrisma.prisma || new PrismaClient())
+    : (undefined as unknown as PrismaClient);
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+if (isServer && process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 // Models that support is_archived field for warm/cold archival
 const ARCHIVABLE_MODELS = new Set([

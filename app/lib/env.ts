@@ -31,6 +31,15 @@ function validateIntegrationGroups(): string[] {
 export function validateServerEnv() {
     if (validated) return;
 
+    // Never validate (or throw) in the browser. JWT_SECRET / DATABASE_URL /
+    // DIRECT_URL are server-only secrets and are intentionally absent from the
+    // client bundle, so a client-side import of this check must be a no-op —
+    // otherwise it crashes pages whose graph happens to pull in server modules.
+    if (typeof window !== 'undefined') {
+        validated = true;
+        return;
+    }
+
     const isProduction = process.env.NODE_ENV === 'production';
     if (!isProduction) {
         validated = true;
