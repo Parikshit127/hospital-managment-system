@@ -328,7 +328,10 @@ export async function allocateReceipt(input: {
     const glWarnings: string[] = [];
     for (const allocId of createdAllocationIds) {
       const r = await postReceiptAllocationToGL(allocId);
-      if (!r?.success) glWarnings.push(`GL post failed for allocation ${allocId}: ${r?.error || 'unknown'}`);
+      if (!r?.success) {
+        const message = r && 'error' in r ? r.error : 'unknown';
+        glWarnings.push(`GL post failed for allocation ${allocId}: ${message}`);
+      }
     }
 
     revalidatePath('/admin/finance/tpa-insurance');

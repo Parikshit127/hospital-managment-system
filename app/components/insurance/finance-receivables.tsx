@@ -287,8 +287,11 @@ function AllocateModal({ payer, onClose, onSaved }: any) {
     }).finally(() => setLoading(false));
   }, [payer.provider_id]);
 
-  const setLine = (id: number, field: string, val: string) =>
-    setLines((p) => ({ ...p, [id]: { allocated: '', disallowed: '', tds: '', ...p[id], [field]: val } }));
+  const setLine = (id: number, field: 'allocated' | 'disallowed' | 'tds', val: string) =>
+    setLines((p) => {
+      const line = p[id] ?? { allocated: '', disallowed: '', tds: '' };
+      return { ...p, [id]: { ...line, [field]: val } };
+    });
 
   const save = async () => {
     setError('');

@@ -25,6 +25,37 @@ function daysBetween(a: Date, b: Date): number {
   return Math.floor((a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+type InsuranceOutstandingRow = {
+  key: string;
+  payer_name: string;
+  opening: number;
+  below: number;
+  above: number;
+  unmapped_receipt: number;
+  balance: number;
+  bill_count: number;
+};
+
+type BillWiseSanctionTotals = {
+  claim_amount: number;
+  sanctioned: number;
+  received: number;
+  tds: number;
+  short_pay: number;
+  outstanding: number;
+};
+
+type BillWiseSanctionRow = BillWiseSanctionTotals & {
+  invoice_id: number;
+  invoice_number: string | null;
+  bill_date: Date;
+  patient_name: string;
+  patient_id: string;
+  provider_name: string;
+  claim_number: string;
+  status: string | null;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // OUTSTANDING & AGING  (benchmark "Ins. Outstanding")
 // ─────────────────────────────────────────────────────────────────────────────
@@ -58,9 +89,9 @@ export async function getInsuranceOutstanding(opts?: {
 
   // Resolve payer display names.
   const providers = await db.insurance_providers.findMany({ where: { organizationId }, select: { id: true, provider_name: true } });
-  const provMap = new Map(providers.map((p: any) => [p.id, p.provider_name]));
+  const provMap = new Map<number, string>(providers.map((p: any) => [p.id, p.provider_name]));
   const corporates = await db.corporateMaster.findMany({ where: { organizationId }, select: { id: true, company_name: true } });
-  const corpMap = new Map(corporates.map((c: any) => [c.id, c.company_name]));
+  const corpMap = new Map<string, string>(corporates.map((c: any) => [c.id, c.company_name]));
 
   // Unmapped receipts per payer (money received, not yet allocated).
   const receipts = await db.insuranceReceipt.findMany({
@@ -68,7 +99,7 @@ export async function getInsuranceOutstanding(opts?: {
     select: { provider_id: true, corporate_id: true, unmapped_amount: true },
   });
 
-  const groups = new Map<string, any>();
+  const groups = new Map<string, InsuranceOutstandingRow>();
   const keyOf = (inv: any) => payerType === 'tpa_insurance' ? `P:${inv.tpa_provider_id ?? 0}` : `C:${inv.corporate_id ?? 'none'}`;
   const nameOf = (inv: any) => payerType === 'tpa_insurance' ? (provMap.get(inv.tpa_provider_id) || 'Unmapped / Unknown') : (corpMap.get(inv.corporate_id) || 'Unmapped / Unknown');
 
@@ -84,7 +115,7 @@ export async function getInsuranceOutstanding(opts?: {
     if (!groups.has(key)) {
       groups.set(key, { key, payer_name: nameOf(inv), opening: 0, below: 0, above: 0, unmapped_receipt: 0, balance: 0, bill_count: 0 });
     }
-    const g = groups.get(key);
+    const g = groups.get(key)!;
     if (age > agingDays) g.above = round2(g.above + outstanding);
     else g.below = round2(g.below + outstanding);
     g.balance = round2(g.balance + outstanding);
@@ -98,7 +129,8 @@ export async function getInsuranceOutstanding(opts?: {
       const nm = payerType === 'tpa_insurance' ? (provMap.get(r.provider_id) || 'Unmapped / Unknown') : (corpMap.get(r.corporate_id) || 'Unmapped / Unknown');
       groups.set(key, { key, payer_name: nm, opening: 0, below: 0, above: 0, unmapped_receipt: 0, balance: 0, bill_count: 0 });
     }
-    groups.get(key).unmapped_receipt = round2(groups.get(key).unmapped_receipt + Number(r.unmapped_amount || 0));
+    const group = groups.get(key)!;
+    group.unmapped_receipt = round2(group.unmapped_receipt + Number(r.unmapped_amount || 0));
   }
 
   const rows = Array.from(groups.values()).sort((a, b) => b.balance - a.balance);
@@ -151,9 +183,9 @@ export async function getBillWiseSanction(filters?: {
   });
 
   const providers = await db.insurance_providers.findMany({ where: { organizationId }, select: { id: true, provider_name: true } });
-  const provMap = new Map(providers.map((p: any) => [p.id, p.provider_name]));
+  const provMap = new Map<number, string>(providers.map((p: any) => [p.id, p.provider_name]));
 
-  const rows = invoices.map((inv: any) => {
+  const rows: BillWiseSanctionRow[] = invoices.map((inv: any) => {
     const claimAmt = Number(inv.tpa_payable || 0) + Number(inv.tpa_settled_amount || 0) + Number(inv.tpa_disallowed_amount || 0) + Number(inv.tpa_tds_amount || 0);
     return {
       invoice_id: inv.id,
