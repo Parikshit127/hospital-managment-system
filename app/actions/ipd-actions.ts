@@ -219,6 +219,15 @@ export async function admitPatientIPD(data: {
   admission_type?: string;
   line_of_treatment?: string;
   admission_date?: string;
+  // Payer type (selected at admission, persisted onto the patient record)
+  patient_type?: string;
+  corporate_id?: string;
+  employee_id?: string;
+  corporate_card_number?: string;
+  tpa_provider_id?: string;
+  insurance_policy_number?: string;
+  insurance_validity_start?: string;
+  insurance_validity_end?: string;
 }) {
   try {
     const { db, organizationId } = await requireTenantContext();
@@ -305,6 +314,47 @@ export async function admitPatientIPD(data: {
             },
         });
 
+        // Persist payer type onto the patient record (mirrors register-patient.ts).
+        // Cash (or omitted) changes nothing about payer.
+        if (data.patient_type && data.patient_type !== 'cash') {
+            if (data.patient_type === 'corporate') {
+                await tx.oPD_REG.update({
+                    where: { patient_id: data.patient_id, organizationId },
+                    data: {
+                        patient_type: 'corporate',
+                        corporate_id: data.corporate_id || null,
+                        corporate_card_number: data.corporate_card_number || null,
+                        employee_id: data.employee_id || null,
+                    },
+                });
+            } else if (data.patient_type === 'tpa_insurance') {
+                await tx.oPD_REG.update({
+                    where: { patient_id: data.patient_id, organizationId },
+                    data: {
+                        patient_type: 'tpa_insurance',
+                    },
+                });
+
+                // Create insurance_policy record for TPA patients (mirrors register-patient.ts)
+                if (data.tpa_provider_id && data.insurance_policy_number) {
+                    const providerId = parseInt(data.tpa_provider_id, 10);
+                    if (!isNaN(providerId)) {
+                        await tx.insurance_policies.create({
+                            data: {
+                                patient_id: data.patient_id,
+                                provider_id: providerId,
+                                policy_number: data.insurance_policy_number,
+                                valid_from: data.insurance_validity_start ? new Date(data.insurance_validity_start) : null,
+                                valid_until: data.insurance_validity_end ? new Date(data.insurance_validity_end) : null,
+                                status: 'Active',
+                                organizationId,
+                            },
+                        });
+                    }
+                }
+            }
+        }
+
         // Create IPD invoice
         const newInvoice = await tx.invoices.create({
             data: {
@@ -378,6 +428,7 @@ export async function getIPDAdmissions(statusFilter?: string) {
             age: true,
             gender: true,
             phone: true,
+            patient_type: true,
             pan_number: true,
             govt_id_type: true,
             govt_id_number: true,

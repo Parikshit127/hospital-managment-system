@@ -65,6 +65,9 @@ export async function getRegisteredPatients(options?: {
     page?: number;
     limit?: number;
     dateRange?: 'today' | 'week' | 'month' | 'all';
+    paymentType?: string; // cash | corporate | tpa_insurance
+    fromDate?: string;     // YYYY-MM-DD (registration date, inclusive)
+    toDate?: string;       // YYYY-MM-DD (registration date, inclusive)
 }) {
     try {
         const { db } = await requireTenantContext();
@@ -90,8 +93,25 @@ export async function getRegisteredPatients(options?: {
             where.department = options.department;
         }
 
-        // Date range filter
-        if (options?.dateRange && options.dateRange !== 'all') {
+        // Payment type filter (cash | corporate | tpa_insurance)
+        if (options?.paymentType) {
+            where.patient_type = options.paymentType;
+        }
+
+        // Date filter — an explicit From/To range (on registration date) takes
+        // precedence; otherwise fall back to the relative dateRange preset.
+        if (options?.fromDate || options?.toDate) {
+            const range: Record<string, Date> = {};
+            if (options.fromDate) {
+                const f = new Date(options.fromDate);
+                if (!isNaN(f.getTime())) range.gte = new Date(f.setHours(0, 0, 0, 0));
+            }
+            if (options.toDate) {
+                const t = new Date(options.toDate);
+                if (!isNaN(t.getTime())) range.lte = new Date(t.setHours(23, 59, 59, 999));
+            }
+            if (Object.keys(range).length) where.created_at = range;
+        } else if (options?.dateRange && options.dateRange !== 'all') {
             const now = new Date();
             let from: Date;
             if (options.dateRange === 'today') {

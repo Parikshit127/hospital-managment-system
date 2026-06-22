@@ -53,6 +53,14 @@ function getIPDStatusBadge(status: string) {
 const IPD_STATUS_FILTERS = ['All', 'Admitted', 'Discharged', 'Cancelled'] as const;
 type IPDStatusFilter = typeof IPD_STATUS_FILTERS[number];
 
+// Payment type (OPD_REG.patient_type) options for the reception filters.
+const PAYMENT_TYPE_OPTIONS = [
+    { value: '', label: 'All Payment Types' },
+    { value: 'cash', label: 'Cash' },
+    { value: 'corporate', label: 'Corporate' },
+    { value: 'tpa_insurance', label: 'TPA / Insurance' },
+] as const;
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function ReceptionDashboard() {
@@ -66,6 +74,9 @@ export default function ReceptionDashboard() {
     const [search, setSearch] = useState('');
     const [department, setDepartment] = useState('');
     const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'all'>('all');
+    const [paymentType, setPaymentType] = useState('');
+    const [fromDate, setFromDate] = useState('');
+    const [toDate, setToDate] = useState('');
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(0);
     const [total, setTotal] = useState(0);
@@ -82,6 +93,9 @@ export default function ReceptionDashboard() {
     const [ipdStatusFilter, setIpdStatusFilter] = useState<IPDStatusFilter>('All');
     const [ipdWardFilter, setIpdWardFilter] = useState('');
     const [ipdSearch, setIpdSearch] = useState('');
+    const [ipdPaymentType, setIpdPaymentType] = useState('');
+    const [ipdFromDate, setIpdFromDate] = useState('');
+    const [ipdToDate, setIpdToDate] = useState('');
     const ipdLoaded = useRef(false);
 
     // ── Tab ── (honours ?tab=ipd|arrivals from redirects)
@@ -96,7 +110,7 @@ export default function ReceptionDashboard() {
         setLoading(true);
         try {
             const [patientsRes, statsRes, revRes] = await Promise.all([
-                getRegisteredPatients({ search, department, page, limit: 25, dateRange }),
+                getRegisteredPatients({ search, department, page, limit: 25, dateRange, paymentType, fromDate, toDate }),
                 getReceptionStats(),
                 getReceptionRevenueToday(),
             ]);
@@ -111,7 +125,7 @@ export default function ReceptionDashboard() {
             console.error('Reception load error:', err);
         }
         setLoading(false);
-    }, [search, department, page, dateRange]);
+    }, [search, department, page, dateRange, paymentType, fromDate, toDate]);
 
     // ── Expected arrivals loading ──
     const loadArrivals = useCallback(async () => {
@@ -260,6 +274,8 @@ export default function ReceptionDashboard() {
     };
 
     // IPD client-side filtering
+    const ipdFromTime = ipdFromDate ? new Date(ipdFromDate).setHours(0, 0, 0, 0) : null;
+    const ipdToTime = ipdToDate ? new Date(ipdToDate).setHours(23, 59, 59, 999) : null;
     const ipdFiltered = ipdAdmissions.filter(a => {
         const q = ipdSearch.toLowerCase();
         const matchesSearch = !q
@@ -268,7 +284,11 @@ export default function ReceptionDashboard() {
             || a.patient?.phone?.toLowerCase().includes(q);
         const matchesWard = !ipdWardFilter
             || (a.wardName || a.ward?.ward_name || a.bed?.wards?.ward_name || '') === ipdWardFilter;
-        return matchesSearch && matchesWard;
+        const matchesPaymentType = !ipdPaymentType || a.patient?.patient_type === ipdPaymentType;
+        const admittedTime = a.admission_date ? new Date(a.admission_date).getTime() : null;
+        const matchesFrom = ipdFromTime == null || (admittedTime != null && admittedTime >= ipdFromTime);
+        const matchesTo = ipdToTime == null || (admittedTime != null && admittedTime <= ipdToTime);
+        return matchesSearch && matchesWard && matchesPaymentType && matchesFrom && matchesTo;
     });
 
     // IPD KPI calculations
@@ -441,6 +461,39 @@ export default function ReceptionDashboard() {
                             <option value="week">This Week</option>
                             <option value="month">This Month</option>
                         </select>
+                        <select
+                            value={paymentType}
+                            onChange={e => { setPaymentType(e.target.value); setPage(1); }}
+                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
+                            title="Filter by payment type"
+                        >
+                            {PAYMENT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                        <input
+                            type="date"
+                            value={fromDate}
+                            max={toDate || undefined}
+                            onChange={e => { setFromDate(e.target.value); setPage(1); }}
+                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
+                            title="Registered from"
+                        />
+                        <input
+                            type="date"
+                            value={toDate}
+                            min={fromDate || undefined}
+                            onChange={e => { setToDate(e.target.value); setPage(1); }}
+                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
+                            title="Registered to"
+                        />
+                        {(fromDate || toDate || paymentType) && (
+                            <button
+                                onClick={() => { setFromDate(''); setToDate(''); setPaymentType(''); setPage(1); }}
+                                className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-50 transition-colors"
+                                title="Clear date & payment filters"
+                            >
+                                Clear
+                            </button>
+                        )}
                         <button
                             onClick={handleExportOpd}
                             className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors"
@@ -649,6 +702,41 @@ export default function ReceptionDashboard() {
                         ))}
                     </select>
 
+                    <select
+                        value={ipdPaymentType}
+                        onChange={e => setIpdPaymentType(e.target.value)}
+                        className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-emerald-400"
+                        title="Filter by payment type"
+                    >
+                        {PAYMENT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+
+                    <input
+                        type="date"
+                        value={ipdFromDate}
+                        max={ipdToDate || undefined}
+                        onChange={e => setIpdFromDate(e.target.value)}
+                        className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-emerald-400"
+                        title="Admitted from"
+                    />
+                    <input
+                        type="date"
+                        value={ipdToDate}
+                        min={ipdFromDate || undefined}
+                        onChange={e => setIpdToDate(e.target.value)}
+                        className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-emerald-400"
+                        title="Admitted to"
+                    />
+                    {(ipdFromDate || ipdToDate || ipdPaymentType) && (
+                        <button
+                            onClick={() => { setIpdFromDate(''); setIpdToDate(''); setIpdPaymentType(''); }}
+                            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-50 transition-colors"
+                            title="Clear date & payment filters"
+                        >
+                            Clear
+                        </button>
+                    )}
+
                     <button
                         onClick={handleExportIpd}
                         className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 transition-colors ml-auto"
@@ -692,7 +780,7 @@ export default function ReceptionDashboard() {
                                                 <Bed className="h-8 w-8 text-gray-200" />
                                                 <p className="text-sm font-medium text-gray-400">No admissions found</p>
                                                 <p className="text-xs text-gray-300">
-                                                    {ipdSearch || ipdWardFilter || ipdStatusFilter !== 'All'
+                                                    {ipdSearch || ipdWardFilter || ipdPaymentType || ipdFromDate || ipdToDate || ipdStatusFilter !== 'All'
                                                         ? 'Try adjusting your filters'
                                                         : 'No patients have been admitted yet'}
                                                 </p>
