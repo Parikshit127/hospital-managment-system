@@ -41,6 +41,7 @@ import {
   type GlobalFinanceSearchHit,
   type MasterBillingFilter,
 } from "@/app/actions/master-billing-actions";
+import { getMyRole } from "@/app/actions/finance-actions";
 import { CancelInvoiceModal } from "@/app/components/finance/CancelInvoiceModal";
 import { EditInvoiceModal } from "@/app/components/finance/EditInvoiceModal";
 import { RefundModal } from "@/app/components/finance/RefundModal";
@@ -209,6 +210,13 @@ export default function MasterBillingPage() {
   const [exporting, setExporting] = useState(false);
   const [refundOpen, setRefundOpen] = useState(false);
   const [tpaPaymentTarget, setTpaPaymentTarget] = useState<any | null>(null);
+  // Viewer role — only admin/finance may edit a bill once a payment has been collected.
+  const [myRole, setMyRole] = useState<string | null>(null);
+  const canEditPaid = ['admin', 'finance', 'superadmin'].includes(myRole || '');
+
+  useEffect(() => {
+    getMyRole().then((r) => setMyRole(r.role));
+  }, []);
 
   const loadGrid = useCallback(async () => {
     setLoading(true);
@@ -438,11 +446,11 @@ export default function MasterBillingPage() {
                         >
                           Open
                         </Link>
-                        {canCancelInvoice(r) && r.payment_status !== 'Paid' && (
+                        {canCancelInvoice(r) && (Number(r.paid_amount ?? 0) === 0 || canEditPaid) && (
                           <button
                             onClick={() => setEditingInvoiceId(Number(r.invoice_id))}
                             className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-bold rounded transition-colors flex items-center gap-0.5"
-                            title="Edit this invoice"
+                            title={Number(r.paid_amount ?? 0) > 0 ? 'Edit this bill (Admin/Finance — payment collected)' : 'Edit this invoice'}
                           >
                             <Pencil className="h-3 w-3" /> Edit
                           </button>

@@ -15,6 +15,7 @@ import { getCorporateMasters, getTpaProviders } from '@/app/actions/patient-type
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useToast } from '@/app/components/ui/Toast';
 import { useRouter } from 'next/navigation';
+import ReferredBySelect from './ReferredBySelect';
 
 type DuplicatePatient = {
     patient_id: string;
@@ -416,6 +417,13 @@ export default function ReceptionPage() {
                                         </div>
                                     )}
 
+
+                                    {/* Referred By — internal only, first field */}
+                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-6">
+                                        <div className="md:col-span-2">
+                                            <ReferredBySelect labelClass={labelClass} selectClass={selectClass} />
+                                        </div>
+                                    </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-6">
                                         {/* Full Name */}

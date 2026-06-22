@@ -42,7 +42,7 @@ import {
   getPatientLedger,
   getPatientTimeline,
 } from "@/app/actions/master-billing-actions";
-import { recordPayment } from "@/app/actions/finance-actions";
+import { recordPayment, getMyRole } from "@/app/actions/finance-actions";
 import { collectDeposit } from "@/app/actions/deposit-actions";
 import { getCashComplianceConfig } from "@/app/actions/cash-compliance-actions";
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan, resolveRegisteredPan } from "@/app/lib/cash-compliance";
@@ -104,6 +104,13 @@ export default function PatientFinancialProfilePage() {
   const [payingInvoice, setPayingInvoice] = useState<any | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
   const [refundOpen, setRefundOpen] = useState(false);
+  // Viewer role — only admin/finance may edit a bill once a payment has been collected.
+  const [myRole, setMyRole] = useState<string | null>(null);
+  const canEditPaid = ['admin', 'finance', 'superadmin'].includes(myRole || '');
+
+  useEffect(() => {
+    getMyRole().then((r) => setMyRole(r.role));
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -195,6 +202,7 @@ export default function PatientFinancialProfilePage() {
                   onCollectPayment={(inv: any) => setPayingInvoice(inv)}
                   onEdit={(inv: any) => setEditingInvoiceId(Number(inv.id))}
                   onRefund={() => setRefundOpen(true)}
+                  canEditPaid={canEditPaid}
                 />
               )}
               {tab === "payments" && <PaymentsTab invoices={profile.invoices} />}
@@ -398,6 +406,7 @@ function InvoicesTab({
   onCollectPayment,
   onEdit,
   onRefund,
+  canEditPaid,
 }: {
   invoices: any[];
   expandedInvoice: number | null;
@@ -405,6 +414,7 @@ function InvoicesTab({
   onCollectPayment: (inv: any) => void;
   onEdit: (inv: any) => void;
   onRefund: () => void;
+  canEditPaid: boolean;
 }) {
   if (!invoices.length) {
     return <div className="text-xs text-gray-400">No invoices yet.</div>;
@@ -619,13 +629,15 @@ function InvoicesTab({
                   {inv.status === "Draft" && (
                     <ActionLink href="/billing">Finalize</ActionLink>
                   )}
-                  {(inv.status === "Draft" || inv.status === "Partial") && inv.status !== "Cancelled" && (
+                  {!["Cancelled", "Voided", "Refunded"].includes(inv.status) &&
+                    (Number(inv.paid_amount ?? 0) === 0 || canEditPaid) && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         onEdit(inv);
                       }}
                       className="px-2.5 py-1 bg-white border border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 text-xs font-bold text-gray-700 rounded flex items-center gap-1"
+                      title={Number(inv.paid_amount ?? 0) > 0 ? "Edit bill (payment collected — Admin/Finance)" : "Edit invoice"}
                     >
                       <Pencil className="h-3 w-3" /> Edit
                     </button>

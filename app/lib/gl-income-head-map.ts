@@ -27,6 +27,18 @@ export function receivableCode(billingPatientType?: string | null): string {
 export const GST_FALLBACK = '3120'; // CGST Payable (also generic fallback)
 export const GST_CODE = { cgst: '3120', sgst: '3121', igst: '3122' } as const;
 
+// ── Cash / bank ledgers ─────────────────────────────────────────────────────
+export const CASH_CODE = '1110'; // Cash in Hand
+export const BANK_CODE = '1120'; // Bank Accounts
+
+// ── TPA & Insurance receivables / settlement ledgers (TPA upgrade) ───────────
+export const TDS_RECEIVABLE_CODE = '1200';        // TDS Receivable (Insurance/TPA)
+export const TDS_RECEIVABLE_FALLBACK = '1150';    // Insurance Receivable (keeps books balanced if 1200 missing)
+export const UNAPPLIED_RECEIPT_CODE = '3170';     // Unapplied Insurance Receipts (liability)
+export const UNAPPLIED_RECEIPT_FALLBACK = '3140'; // Advance from Patients (closest liability fallback)
+export const DISALLOWANCE_EXPENSE_CODE = '8960';  // Insurance Disallowance & Bad Debts
+export const DISALLOWANCE_EXPENSE_FALLBACK = '8000'; // Operating Expenses
+
 // ── Income heads (revenue) ──────────────────────────────────────────────────
 export const REVENUE_FALLBACK = '6000'; // generic Revenue parent
 

@@ -908,6 +908,16 @@ export async function settleAndDischarge(data: {
             data: { status: finalStatus, finalized_at: new Date() },
         });
 
+        // Referral + doctor commission accrue on the collected IPD bill (best-effort)
+        try {
+            const { recomputeInvoiceCommission } = await import('@/app/lib/referral-commission');
+            await recomputeInvoiceCommission(db, organizationId, invoice.id);
+            const { recomputeInvoiceDoctorCommission } = await import('@/app/lib/doctor-commission');
+            await recomputeInvoiceDoctorCommission(db, organizationId, invoice.id);
+        } catch (e) {
+            console.error('referral commission recompute failed (ipd):', e);
+        }
+
         const dischargeDate = data.discharge_date ? new Date(data.discharge_date) : new Date();
 
         // 6. Discharge patient

@@ -128,6 +128,17 @@ const STANDARD_HOSPITAL_COA: AccountDefinition[] = [
     tally_ledger_name: 'Prepaid Expenses',
     tally_group: 'Current Assets',
   },
+  {
+    // TPA upgrade — TDS deducted by payers on claim settlement, recoverable from IT dept.
+    account_code: '1200',
+    account_name: 'TDS Receivable (Insurance/TPA)',
+    account_type: 'Asset',
+    account_group: 'Current Assets',
+    parent_code: '1100',
+    normal_balance: 'Debit',
+    tally_ledger_name: 'TDS Receivable',
+    tally_group: 'Current Assets',
+  },
 
   // Fixed Assets (2000-2999)
   {
@@ -303,6 +314,17 @@ const STANDARD_HOSPITAL_COA: AccountDefinition[] = [
     parent_code: '3100',
     normal_balance: 'Credit',
     tally_ledger_name: 'Statutory Dues',
+    tally_group: 'Current Liabilities',
+  },
+  {
+    // TPA upgrade — payer money received but not yet allocated to specific bills.
+    account_code: '3170',
+    account_name: 'Unapplied Insurance Receipts',
+    account_type: 'Liability',
+    account_group: 'Current Liabilities',
+    parent_code: '3100',
+    normal_balance: 'Credit',
+    tally_ledger_name: 'Unapplied Insurance Receipts',
     tally_group: 'Current Liabilities',
   },
 
@@ -647,6 +669,17 @@ const STANDARD_HOSPITAL_COA: AccountDefinition[] = [
     parent_code: '8000',
     normal_balance: 'Debit',
     tally_ledger_name: 'Bank Charges',
+    tally_group: 'Indirect Expenses',
+  },
+  {
+    // TPA upgrade — disallowed/short-paid claim amounts written off (irrecoverable).
+    account_code: '8960',
+    account_name: 'Insurance Disallowance & Bad Debts',
+    account_type: 'Expense',
+    account_group: 'Operating Expenses',
+    parent_code: '8000',
+    normal_balance: 'Debit',
+    tally_ledger_name: 'Insurance Disallowance & Bad Debts',
     tally_group: 'Indirect Expenses',
   },
 ];

@@ -15,6 +15,9 @@ import {
 } from '@/app/actions/insurance-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useToast } from '@/app/components/ui/Toast';
+import {
+    ReceivablesDashboard, OutstandingAging, InsuranceReceipts, BillWiseSanction,
+} from '@/app/components/insurance/finance-receivables';
 
 export default function InsuranceDashboard() {
     const toast = useToast();
@@ -227,11 +230,22 @@ export default function InsuranceDashboard() {
                         <h2 className="text-3xl font-black tracking-tight text-gray-900">Insurance Dashboard</h2>
                         <p className="text-gray-500 mt-1 font-medium">Providers, policies, and claims lifecycle</p>
                     </div>
-                    <div className="flex gap-2">
-                        {['overview', 'preauths', 'claims', 'policies', 'providers', 'leakage'].map(tab => (
-                            <button key={tab} onClick={() => setActiveTab(tab)}
-                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all capitalize ${activeTab === tab ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:text-gray-900'}`}>
-                                {tab}
+                    <div className="flex flex-wrap gap-2">
+                        {[
+                            { k: 'overview', l: 'Overview' },
+                            { k: 'preauths', l: 'Pre-Auths' },
+                            { k: 'claims', l: 'Claims' },
+                            { k: 'policies', l: 'Policies' },
+                            { k: 'providers', l: 'Providers' },
+                            { k: 'leakage', l: 'Leakage' },
+                            { k: 'receivables', l: 'Receivables' },
+                            { k: 'receipts', l: 'Receipts' },
+                            { k: 'outstanding', l: 'Outstanding' },
+                            { k: 'sanction', l: 'Bill Sanction' },
+                        ].map(t => (
+                            <button key={t.k} onClick={() => setActiveTab(t.k)}
+                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === t.k ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:text-gray-900'}`}>
+                                {t.l}
                             </button>
                         ))}
                     </div>
@@ -703,6 +717,12 @@ export default function InsuranceDashboard() {
                                 )}
                             </div>
                         )}
+
+                        {/* ── FINANCE / RECEIVABLES (unified TPA & Insurance) ── */}
+                        {activeTab === 'receivables' && <ReceivablesDashboard />}
+                        {activeTab === 'receipts' && <InsuranceReceipts providers={providers} />}
+                        {activeTab === 'outstanding' && <OutstandingAging />}
+                        {activeTab === 'sanction' && <BillWiseSanction providers={providers} />}
                     </>
                 )}
             </div>

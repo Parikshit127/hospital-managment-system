@@ -117,6 +117,9 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
 
     // Hard-lock state + viewer role (only Admin/Finance can unlock).
     const [isLocked, setIsLocked] = useState(false);
+    // Bill with any payment collected (Partial or fully Paid): editable by Admin/Finance only
+    // (reception/OPD see a read-only block once money has been collected).
+    const [hasPayment, setHasPayment] = useState(false);
     const [myRole, setMyRole] = useState<string | null>(null);
     const [unlocking, setUnlocking] = useState(false);
     const [doctors, setDoctors] = useState<Array<{ id: string; name: string; specialty?: string | null }>>([]);
@@ -166,14 +169,15 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
             }
             const inv: any = res.data;
 
-            // Pre-flight editable check — Locked, Cancelled or fully paid invoices block edits.
+            // Pre-flight editable check — Locked and Cancelled invoices block edits outright.
+            // Bills with any payment collected are editable by Admin/Finance only; the role-gated
+            // block is applied at render time (myRole loads asynchronously).
             setIsLocked(!!inv.is_locked);
+            setHasPayment(Number(inv.paid_amount ?? 0) > 0);
             if (inv.is_locked) {
                 setError('This bill is locked. Only Admin or Finance can unlock it.');
             } else if (inv.status === 'Cancelled') {
                 setError('Cancelled invoices cannot be edited. Revert it first if needed.');
-            } else if (Number(inv.balance_due ?? 0) <= 0 && Number(inv.paid_amount ?? 0) > 0) {
-                setError('Cannot edit: This invoice is fully paid.');
             }
 
             setInvoiceMeta({
@@ -436,7 +440,15 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
             String(invoiceMeta.tpa_claim_status ?? '').toLowerCase(),
         ) &&
         Number(invoiceMeta.tpa_settled_amount ?? 0) > 0;
-    const readOnly = !!error || tpaLocked;
+    // Once any payment is collected, only Admin/Finance/Superadmin may edit. Others get a block.
+    const canEditPaid = ['admin', 'finance', 'superadmin'].includes(myRole || '');
+    const paidBlocked = hasPayment && !canEditPaid;
+    const effectiveError =
+        error ||
+        (paidBlocked
+            ? 'Only Admin or Finance can edit a bill once a payment has been collected.'
+            : null);
+    const readOnly = !!effectiveError || tpaLocked;
 
     if (!isOpen) return null;
 
@@ -450,11 +462,11 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
         >
             {loading ? (
                 <div className="py-12 text-center text-sm text-gray-500">Loading invoice…</div>
-            ) : error ? (
+            ) : effectiveError ? (
                 <div className="space-y-4">
                     <div className="flex items-start gap-2.5 rounded-xl border border-rose-300 bg-rose-50 px-3.5 py-3">
                         <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
-                        <p className="text-xs text-rose-700 leading-relaxed">{error}</p>
+                        <p className="text-xs text-rose-700 leading-relaxed">{effectiveError}</p>
                     </div>
                     <div className="flex items-center justify-end gap-3">
                         {isLocked && canUnlock && (
@@ -474,6 +486,19 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                             <p className="text-xs text-amber-800 leading-relaxed">
                                 TPA settlement is in progress — edit via the TPA workflow only.
                                 Use <span className="font-bold">Mark TPA Received</span> from the dashboard to record payments.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Paid-bill edit warning — privileged editor on a bill with payments */}
+                    {hasPayment && !tpaLocked && (
+                        <div className="flex items-start gap-2.5 rounded-xl border border-rose-300 bg-rose-50 px-3.5 py-3">
+                            <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                            <p className="text-xs text-rose-700 leading-relaxed">
+                                This bill already has <span className="font-bold">{fmtINR(invoiceMeta.paid_amount)}</span> collected.
+                                Editing recalculates the balance against the amount already paid. If the new total drops
+                                below what's been collected, the difference becomes an <span className="font-bold">overpayment that must be
+                                refunded separately</span> (Process Refund / Credit Note). A full audit trail is preserved.
                             </p>
                         </div>
                     )}

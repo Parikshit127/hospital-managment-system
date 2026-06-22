@@ -229,6 +229,26 @@ model Organization {
   pharmacy_purchase_invoices   PharmacyPurchaseInvoice[]
   dispense_allocations         DispenseAllocation[]
 
+  // Referral & Commission
+  referrers                 Referrer[]
+  referrer_service_rates    ReferrerServiceRate[]
+  referral_commissions      ReferralCommission[]
+  referral_payout_statements ReferralPayoutStatement[]
+
+  // Doctor Commission
+  doctor_commission_configs DoctorCommissionConfig[]
+  doctor_service_rates      DoctorServiceRate[]
+  doctor_commissions        DoctorCommission[]
+  doctor_payout_statements  DoctorPayoutStatement[]
+
+  // TPA & Insurance Upgrade — receipts, dispatch, denial taxonomy, short-pay, SLA
+  insurance_receipts            InsuranceReceipt[]
+  insurance_receipt_allocations InsuranceReceiptAllocation[]
+  claim_dispatches              ClaimDispatch[]
+  denial_reasons                DenialReason[]
+  claim_short_pays              ClaimShortPay[]
+  payer_sla_configs             PayerSlaConfig[]
+
   @@map("organizations")
 }
 
@@ -562,7 +582,11 @@ model OPD_REG {
   distance_from_hospital_km Float?
   registration_form_url     String? // Signed form upload
 
+  // Referral & Commission — who referred this patient (null = Self / walk-in)
+  referrer_id String?
+
   organization          Organization                @relation(fields: [organizationId], references: [id])
+  referrer              Referrer?                   @relation(fields: [referrer_id], references: [id])
   corporate             CorporateMaster?            @relation(fields: [corporate_id], references: [id])
   appointments          appointments[]
   admissions            admissions[]
@@ -585,6 +609,7 @@ model OPD_REG {
   @@index([patient_type])
   @@index([organizationId, city])
   @@index([organizationId, pincode])
+  @@index([organizationId, referrer_id])
 }
 
 // Free-text notes attached to a patient (added at admission/registration or
@@ -1198,6 +1223,10 @@ model invoices {
   tpa_approved_amount      Decimal   @default(0)
   tpa_approved_at          DateTime?
   tpa_settled_at           DateTime?
+  // TPA receipt reconciliation — disallowed (short-pay) + TDS deducted by payer.
+  // Identity once fully processed: tpa_settled_amount + tpa_disallowed_amount + tpa_tds_amount = tpa_approved_amount.
+  tpa_disallowed_amount    Decimal   @default(0)
+  tpa_tds_amount           Decimal   @default(0)
   corporate_invoice_number String?
   concession_amount        Decimal @default(0)
   concession_reason        String?
@@ -1238,6 +1267,8 @@ model invoices {
   payment_splits        PaymentSplit[]
   pharmacy_orders       pharmacy_orders[]
   writeoffs             Writeoff[]
+  receipt_allocations   InsuranceReceiptAllocation[]
+  claim_short_pays      ClaimShortPay[]
 
   @@index([organizationId])
   @@index([status])
@@ -1245,6 +1276,7 @@ model invoices {
   @@index([billing_patient_type])
   @@index([created_at])
   @@index([organizationId, is_archived])
+  @@index([organizationId, billing_patient_type, tpa_claim_status])
 }
 
 model invoice_items {
@@ -1366,9 +1398,15 @@ model insurance_providers {
   payment_terms_days          Int     @default(45)
   covered_services            Json    @default("[]")
   excluded_services           Json    @default("[]")
+  // TPA upgrade — required documents checklist + denial follow-up cadence
+  document_checklist          Json    @default("[]")
+  denial_followup_cadence_days Int    @default(7)
 
-  organization       Organization         @relation(fields: [organizationId], references: [id])
+  organization       Organization                 @relation(fields: [organizationId], references: [id])
   policies           insurance_policies[]
+  insurance_receipts InsuranceReceipt[]
+  sla_configs        PayerSlaConfig[]
+  preauths           InsurancePreAuth[]
 
   @@index([organizationId])
 }
@@ -1392,6 +1430,11 @@ model insurance_policies {
   status          String    @default("Active")
   organizationId  String
   created_at      DateTime  @default(now())
+  // TPA upgrade — explicit co-payment terms + eligibility verification snapshot
+  copay_percent      Decimal?
+  copay_fixed        Decimal?
+  eligibility_snapshot Json?
+  ecard_key          String?
 
   organization Organization        @relation(fields: [organizationId], references: [id])
   patient      OPD_REG             @relation(fields: [patient_id], references: [patient_id])
@@ -1422,13 +1465,29 @@ model insurance_claims {
   submitted_at          DateTime  @default(now())
   reviewed_at           DateTime?
   settled_at            DateTime?
+  // TPA upgrade — sanction reconciliation, denial taxonomy, resubmission & SLA
+  sanctioned_amount     Decimal?
+  short_pay_amount      Decimal?
+  denial_reason_code    String?
+  resubmission_count    Int       @default(0)
+  original_claim_id     Int?      // self-link: a resubmitted claim points to the original
+  appeal_status         String?   // null | Appealed | AppealApproved | AppealRejected
+  dispatch_id           String?
+  sla_due_at            DateTime?
 
-  organization Organization       @relation(fields: [organizationId], references: [id])
-  policy       insurance_policies @relation(fields: [policy_id], references: [id])
-  invoice      invoices           @relation(fields: [invoice_id], references: [id])
-  admission    admissions?        @relation(fields: [admission_id], references: [admission_id])
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  policy         insurance_policies @relation(fields: [policy_id], references: [id])
+  invoice        invoices           @relation(fields: [invoice_id], references: [id])
+  admission      admissions?        @relation(fields: [admission_id], references: [admission_id])
+  original_claim insurance_claims?  @relation("ClaimResubmission", fields: [original_claim_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  resubmissions  insurance_claims[] @relation("ClaimResubmission")
+  dispatches     ClaimDispatch[]
+  short_pays     ClaimShortPay[]
+  receipt_allocations InsuranceReceiptAllocation[]
 
   @@index([organizationId])
+  @@index([invoice_id])
+  @@index([status])
 }
 
 // ========================================
@@ -1516,6 +1575,8 @@ model PaymentSplit {
   received_by       String?
   status            String   @default("received") // pending | received | bounced | refunded
   created_at        DateTime @default(now())
+  // Link back to the insurance receipt allocation that settled this split (TPA upgrade)
+  receipt_allocation_id String?
 
   organization Organization @relation(fields: [organizationId], references: [id])
   invoice      invoices     @relation(fields: [invoice_id], references: [id])
@@ -1550,6 +1611,9 @@ model CorporateMaster {
 
   organization       Organization       @relation(fields: [organizationId], references: [id])
   patients           OPD_REG[]
+  insurance_receipts InsuranceReceipt[]
+  sla_configs        PayerSlaConfig[]
+  preauths           InsurancePreAuth[]
 
   @@unique([organizationId, company_code])
   @@index([organizationId])
@@ -3293,12 +3357,23 @@ model InsurancePreAuth {
   responded_at        DateTime?
   created_at          DateTime  @default(now())
   updated_at          DateTime  @updatedAt
+  // TPA upgrade — payer linkage, query SLA clock, checklist (consolidates the
+  // previously-orphaned preAuthorization action references onto this model)
+  provider_id         Int?
+  corporate_id        String?
+  valid_until         DateTime?
+  query_due_at        DateTime?
+  document_checklist  Json?
+  remarks             String?
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  admission    admissions?  @relation(fields: [admission_id], references: [admission_id])
+  organization Organization     @relation(fields: [organizationId], references: [id])
+  admission    admissions?      @relation(fields: [admission_id], references: [admission_id])
+  provider     insurance_providers? @relation(fields: [provider_id], references: [id])
+  corporate    CorporateMaster? @relation(fields: [corporate_id], references: [id])
 
   @@index([organizationId])
   @@index([admission_id])
+  @@index([status])
   @@map("insurance_preauths")
 }
 
@@ -4799,4 +4874,387 @@ model DispenseAllocation {
   @@index([order_item_id])
   @@index([batch_id])
   @@map("dispense_allocations")
+}
+
+// ============================================================
+// Referral & Commission
+// A referrer sends patients to the hospital and earns commission on the
+// business those patients generate. Internal-only — never shown on bills,
+// receipts, the patient portal, or any clinical screen.
+// ============================================================
+
+model Referrer {
+  id             String  @id @default(uuid())
+  organizationId String
+  name           String
+  phone          String?
+  email          String?
+  address        String?
+  notes          String?
+
+  // staff | affiliate | interpreter | rmp | others  (self is implicit — never stored)
+  category String @default("others")
+
+  // Payout / compliance details
+  pan_number   String?
+  bank_account String?
+  ifsc         String?
+
+  // commission_type: flat_percent | per_service | fixed_per_patient
+  commission_type          String  @default("flat_percent")
+  flat_percent             Float?  // used when commission_type = flat_percent
+  fixed_amount_per_patient Float?  // used when commission_type = fixed_per_patient
+
+  is_active  Boolean  @default(true)
+  created_by String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  organization  Organization          @relation(fields: [organizationId], references: [id])
+  service_rates ReferrerServiceRate[]
+  commissions   ReferralCommission[]
+  statements    ReferralPayoutStatement[]
+  patients      OPD_REG[]
+
+  @@index([organizationId])
+  @@index([organizationId, category])
+  @@index([organizationId, is_active])
+  @@map("referrers")
+}
+
+model ReferrerServiceRate {
+  id             String @id @default(uuid())
+  organizationId String
+  referrer_id    String
+  // matches invoices.invoice_type: OPD | IPD | Pharmacy | Lab | Procedure
+  service_type   String
+  percent        Float  @default(0)
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  referrer     Referrer     @relation(fields: [referrer_id], references: [id], onDelete: Cascade)
+
+  @@unique([referrer_id, service_type])
+  @@index([organizationId])
+  @@map("referrer_service_rates")
+}
+
+model ReferralCommission {
+  id             String  @id @default(uuid())
+  organizationId String
+  referrer_id    String
+  patient_id     String
+  invoice_id     Int
+  invoice_type   String
+
+  eligible_base     Decimal @default(0) // collected amount this commission is computed on
+  rate_applied      Float   @default(0) // percent (0 for fixed_per_patient rows)
+  commission_amount Decimal @default(0)
+
+  // accrued | included_in_statement | paid | void
+  status       String  @default("accrued")
+  statement_id String?
+
+  accrued_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  organization Organization             @relation(fields: [organizationId], references: [id])
+  referrer     Referrer                 @relation(fields: [referrer_id], references: [id])
+  statement    ReferralPayoutStatement? @relation(fields: [statement_id], references: [id])
+
+  @@unique([invoice_id])
+  @@index([organizationId])
+  @@index([referrer_id, status])
+  @@index([patient_id])
+  @@index([statement_id])
+  @@map("referral_commissions")
+}
+
+model ReferralPayoutStatement {
+  id             String   @id @default(uuid())
+  organizationId String
+  referrer_id    String
+  period_start   DateTime
+  period_end     DateTime
+
+  total_commission Decimal @default(0)
+  // draft | finalized | paid
+  status String @default("draft")
+
+  paid_at           DateTime?
+  paid_amount       Decimal?
+  payment_mode      String?
+  payment_reference String?
+  notes             String?
+  created_by        String?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id])
+  referrer     Referrer             @relation(fields: [referrer_id], references: [id])
+  lines        ReferralCommission[]
+
+  @@index([organizationId, referrer_id])
+  @@map("referral_payout_statements")
+}
+
+// ============================================================
+// Doctor Commission
+// Commission earned by the doctor assigned to a bill (invoices.doctor_id),
+// computed per-bill on the collected amount. Doctors are User records;
+// invoice.doctor_id = User.id. Internal-only — Admin/Finance.
+// ============================================================
+
+model DoctorCommissionConfig {
+  id             String @id @default(uuid())
+  organizationId String
+  doctor_id      String // User.id
+
+  // commission_type: flat_percent | per_service | fixed_per_bill
+  commission_type       String  @default("flat_percent")
+  flat_percent          Float?  // used when flat_percent
+  fixed_amount_per_bill Float?  // used when fixed_per_bill
+
+  // Payout / compliance details
+  pan_number   String?
+  bank_account String?
+  ifsc         String?
+
+  is_active  Boolean  @default(true)
+  created_by String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  organization  Organization        @relation(fields: [organizationId], references: [id])
+  service_rates DoctorServiceRate[]
+
+  @@unique([organizationId, doctor_id])
+  @@index([organizationId])
+  @@map("doctor_commission_configs")
+}
+
+model DoctorServiceRate {
+  id             String @id @default(uuid())
+  organizationId String
+  doctor_id      String
+  // matches invoices.invoice_type: OPD | IPD | Pharmacy | Lab | Procedure
+  service_type   String
+  percent        Float  @default(0)
+
+  organization Organization           @relation(fields: [organizationId], references: [id])
+  config       DoctorCommissionConfig @relation(fields: [organizationId, doctor_id], references: [organizationId, doctor_id], onDelete: Cascade)
+
+  @@unique([doctor_id, service_type])
+  @@index([organizationId])
+  @@index([organizationId, doctor_id])
+  @@map("doctor_service_rates")
+}
+
+model DoctorCommission {
+  id             String  @id @default(uuid())
+  organizationId String
+  doctor_id      String
+  patient_id     String
+  invoice_id     Int
+  invoice_type   String
+
+  eligible_base     Decimal @default(0) // collected amount this commission is computed on
+  rate_applied      Float   @default(0) // percent (0 for fixed_per_bill rows)
+  commission_amount Decimal @default(0)
+
+  // accrued | included_in_statement | paid | void
+  status       String  @default("accrued")
+  statement_id String?
+
+  accrued_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  organization Organization           @relation(fields: [organizationId], references: [id])
+  statement    DoctorPayoutStatement? @relation(fields: [statement_id], references: [id])
+
+  @@unique([invoice_id])
+  @@index([organizationId])
+  @@index([doctor_id, status])
+  @@index([patient_id])
+  @@index([statement_id])
+  @@map("doctor_commissions")
+}
+
+model DoctorPayoutStatement {
+  id             String   @id @default(uuid())
+  organizationId String
+  doctor_id      String
+  period_start   DateTime
+  period_end     DateTime
+
+  total_commission Decimal @default(0)
+  // draft | finalized | paid
+  status String @default("draft")
+
+  paid_at           DateTime?
+  paid_amount       Decimal?
+  payment_mode      String?
+  payment_reference String?
+  notes             String?
+  created_by        String?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id])
+  lines        DoctorCommission[]
+
+  @@index([organizationId, doctor_id])
+  @@map("doctor_payout_statements")
+}
+
+// ========================================
+// MODULE — TPA & Insurance Upgrade (Finance Receivables)
+// Receipts & advice reconciliation, dispatch, denial taxonomy, short-pay, SLA.
+// Additive to the existing insurance_* / invoices / PaymentSplit / GL models.
+// ========================================
+
+// A single payer remittance / advice. One receipt is allocated across many bills
+// via InsuranceReceiptAllocation. The benchmark "Insurance Receipts" + "unmapped
+// receipt" concepts live here.
+model InsuranceReceipt {
+  id               Int      @id @default(autoincrement())
+  receipt_number   String   // org-unique, e.g. AXT-IRC-26-27-001
+  payer_type       String   // tpa_insurance | corporate
+  provider_id      Int?     // when payer_type = tpa_insurance
+  corporate_id     String?  // when payer_type = corporate
+  instrument       String   @default("NEFT") // NEFT | RTGS | Cheque | UPI | Other
+  reference_number String   // UTR / cheque no — unique per org
+  receipt_date     DateTime
+  total_amount     Decimal  @default(0)
+  allocated_amount Decimal  @default(0)
+  unmapped_amount  Decimal  @default(0) // total_amount - allocated_amount (the "unmapped receipt")
+  tds_total        Decimal  @default(0)
+  status           String   @default("Open") // Open | PartiallyAllocated | Allocated | Reversed
+  remarks          String?
+  gl_posted        Boolean  @default(false)
+  organizationId   String
+  created_by       String?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  organization Organization                 @relation(fields: [organizationId], references: [id])
+  provider     insurance_providers?         @relation(fields: [provider_id], references: [id])
+  corporate    CorporateMaster?             @relation(fields: [corporate_id], references: [id])
+  allocations  InsuranceReceiptAllocation[]
+
+  @@unique([organizationId, receipt_number])
+  @@unique([organizationId, reference_number])
+  @@index([organizationId])
+  @@index([payer_type])
+  @@index([status])
+  @@map("insurance_receipts")
+}
+
+// One line of a receipt applied to one bill (invoice/claim): how much was
+// received, disallowed (short-pay) and TDS, with the linked payment row.
+model InsuranceReceiptAllocation {
+  id                  Int      @id @default(autoincrement())
+  receipt_id          Int
+  invoice_id          Int
+  claim_id            Int?
+  allocated_amount    Decimal  @default(0)
+  disallowed_amount   Decimal  @default(0)
+  tds_amount          Decimal  @default(0)
+  disallowance_reason String?  // FK code into DenialReason.code (soft ref)
+  payment_id          Int?     // the payments row created for this allocation
+  payment_split_id    String?  // the PaymentSplit row, if used
+  organizationId      String
+  created_at          DateTime @default(now())
+
+  organization Organization      @relation(fields: [organizationId], references: [id])
+  receipt      InsuranceReceipt  @relation(fields: [receipt_id], references: [id], onDelete: Cascade)
+  invoice      invoices          @relation(fields: [invoice_id], references: [id])
+  claim        insurance_claims? @relation(fields: [claim_id], references: [id])
+
+  @@index([organizationId])
+  @@index([receipt_id])
+  @@index([invoice_id])
+  @@map("insurance_receipt_allocations")
+}
+
+// Cover-letter + dispatch register entry for a submitted claim.
+model ClaimDispatch {
+  id             String    @id @default(uuid())
+  claim_id       Int
+  dispatch_mode  String    @default("Portal") // Portal | Email | Courier | Hand
+  reference_awb  String?
+  cover_letter_key String? // S3 key for the generated cover letter PDF
+  dispatched_by  String?
+  dispatched_at  DateTime  @default(now())
+  ack_received   Boolean   @default(false)
+  ack_date       DateTime?
+  remarks        String?
+  organizationId String
+  created_at     DateTime  @default(now())
+
+  organization Organization     @relation(fields: [organizationId], references: [id])
+  claim        insurance_claims @relation(fields: [claim_id], references: [id])
+
+  @@index([organizationId])
+  @@index([claim_id])
+  @@map("claim_dispatches")
+}
+
+// Configurable denial / disallowance reason library.
+model DenialReason {
+  code           String  // e.g. TARIFF_DIFF
+  description    String
+  category       String  @default("Other") // TariffDiff | NonPayable | Documentation | SubLimit | Copay | PreExisting | Other
+  is_recoverable Boolean @default(false)
+  is_active      Boolean @default(true)
+  organizationId String
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("denial_reasons")
+}
+
+// Short-pay / disallowance ledger — every disallowed amount with its disposition.
+model ClaimShortPay {
+  id                 Int      @id @default(autoincrement())
+  claim_id           Int?
+  invoice_id         Int
+  amount             Decimal  @default(0)
+  denial_reason_code String?
+  disposition        String   @default("PendingReview") // PendingReview | ToRecover | WriteOff | Resubmit
+  resolved_by        String?
+  resolved_at        DateTime?
+  gl_posted          Boolean  @default(false)
+  organizationId     String
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id])
+  invoice      invoices          @relation(fields: [invoice_id], references: [id])
+  claim        insurance_claims? @relation(fields: [claim_id], references: [id])
+
+  @@index([organizationId])
+  @@index([invoice_id])
+  @@index([disposition])
+  @@map("claim_short_pays")
+}
+
+// Per-payer SLA / follow-up configuration driving the desk dashboard & tasks.
+model PayerSlaConfig {
+  id                  Int    @id @default(autoincrement())
+  provider_id         Int?
+  corporate_id        String?
+  submission_tat_hours Int   @default(48)
+  payment_terms_days  Int    @default(45)
+  followup_cadence_days Int  @default(7)
+  ageing_alert_days   Int    @default(60)
+  organizationId      String
+
+  organization Organization         @relation(fields: [organizationId], references: [id])
+  provider     insurance_providers? @relation(fields: [provider_id], references: [id])
+  corporate    CorporateMaster?     @relation(fields: [corporate_id], references: [id])
+
+  @@index([organizationId])
+  @@map("payer_sla_configs")
 }

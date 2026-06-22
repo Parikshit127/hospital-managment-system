@@ -473,51 +473,79 @@ export async function rejectTpaClaim(input: {
 // PRE-AUTHORIZATIONS
 // ─────────────────────────────────────────────────────────────────────────────
 
+// NOTE: these now target the real `InsurancePreAuth` model (Prisma client:
+// db.insurancePreAuth). The previous `db.preAuthorization` reference pointed at a
+// model that does not exist in the schema — a latent broken path now fixed.
 export async function getAllPreAuthorizations(statusFilter?: string) {
     const { db, organizationId } = await requireTenantContext();
 
     const where: any = { organizationId };
     if (statusFilter && statusFilter !== 'all') where.status = statusFilter;
 
-    const preAuths = await db.preAuthorization.findMany({
+    const preAuths = await db.insurancePreAuth.findMany({
         where,
         include: {
             provider: { select: { provider_name: true, provider_code: true } },
             corporate: { select: { company_name: true, company_code: true } },
-            patient: { select: { full_name: true, patient_id: true, phone: true } },
         },
-        orderBy: { created_at: 'desc' },
+        orderBy: { submitted_at: 'desc' },
         take: 200,
     });
 
-    return { success: true, data: serialize(preAuths) };
+    // Hydrate patient summary (no direct relation on InsurancePreAuth -> OPD_REG).
+    const patientIds = Array.from(new Set(preAuths.map((p: any) => p.patient_id).filter(Boolean)));
+    const patients = patientIds.length
+        ? await db.oPD_REG.findMany({
+            where: { organizationId, patient_id: { in: patientIds } },
+            select: { patient_id: true, full_name: true, phone: true },
+        })
+        : [];
+    const pmap = new Map(patients.map((p: any) => [p.patient_id, p]));
+
+    const data = preAuths.map((p: any) => ({
+        ...p,
+        patient: pmap.get(p.patient_id) || null,
+    }));
+
+    return { success: true, data: serialize(data) };
 }
 
 export async function createPreAuthAction(data: {
     patient_id: string;
+    admission_id?: string;
+    policy_id?: string;
     provider_id?: number;
     corporate_id?: string;
+    tpa_name?: string;
     pre_auth_number?: string;
     requested_amount?: number;
+    submission_type?: 'Planned' | 'Emergency';
+    diagnosis_icd?: string;
     valid_until?: string;
     remarks?: string;
 }) {
     const { db, organizationId } = await requireTenantContext();
     try {
-        const preAuth = await db.preAuthorization.create({
+        const preAuth = await db.insurancePreAuth.create({
             data: {
                 organizationId,
                 patient_id: data.patient_id,
-                provider_id: data.provider_id || null,
+                admission_id: data.admission_id || null,
+                policy_id: data.policy_id || null,
+                provider_id: data.provider_id ?? null,
                 corporate_id: data.corporate_id || null,
+                tpa_name: data.tpa_name || null,
                 pre_auth_number: data.pre_auth_number || null,
-                requested_amount: data.requested_amount ?? null,
+                requested_amount: data.requested_amount ?? 0,
+                submission_type: data.submission_type || 'Planned',
+                diagnosis_icd: data.diagnosis_icd || null,
                 valid_until: data.valid_until ? new Date(data.valid_until) : null,
                 remarks: data.remarks || null,
-                status: 'pending',
+                status: 'Submitted',
             },
         });
         revalidatePath('/reception/insurance');
+        revalidatePath('/admin/finance/tpa-insurance');
         return { success: true, data: serialize(preAuth) };
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -526,22 +554,25 @@ export async function createPreAuthAction(data: {
 
 export async function updatePreAuthAction(data: {
     id: string;
-    status: string;
+    status: string; // Submitted | Approved | PartiallyApproved | Denied | QueryRaised | Enhanced
     approved_amount?: number;
-    remarks?: string;
+    tpa_remarks?: string;
+    query_due_at?: string;
 }) {
     const { db, organizationId } = await requireTenantContext();
     try {
-        await db.preAuthorization.update({
+        await db.insurancePreAuth.update({
             where: { id: data.id, organizationId },
             data: {
                 status: data.status,
                 approved_amount: data.approved_amount ?? undefined,
-                remarks: data.remarks ?? undefined,
+                tpa_remarks: data.tpa_remarks ?? undefined,
+                query_due_at: data.query_due_at ? new Date(data.query_due_at) : undefined,
                 responded_at: new Date(),
             },
         });
         revalidatePath('/reception/insurance');
+        revalidatePath('/admin/finance/tpa-insurance');
         return { success: true };
     } catch (error: any) {
         return { success: false, error: error.message };

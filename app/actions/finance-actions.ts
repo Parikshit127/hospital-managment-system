@@ -9,6 +9,8 @@ import { postInvoiceToGL, postPaymentToGL, reverseJournalEntry } from './gl-acti
 import { getCashThresholds, validateCashCompliance, normalizePan, resolveRegisteredPan, CASH_METHOD } from '@/app/lib/cash-compliance';
 import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
 import { validateBackdate } from '@/app/lib/backdate';
+import { recomputeInvoiceCommission } from '@/app/lib/referral-commission';
+import { recomputeInvoiceDoctorCommission } from '@/app/lib/doctor-commission';
 
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
@@ -275,7 +277,14 @@ async function recalculateInvoice(invoiceId: number) {
             sgst_amount: isInterState ? 0 : total_tax / 2,
             igst_amount: isInterState ? total_tax : 0,
             balance_due: balance_due > 0 ? balance_due : 0,
-            status: balance_due <= 0 && net_amount > 0 ? 'Paid' : invoice?.status,
+            // Re-derive payment status from the new totals. If an edit re-opens a
+            // previously-paid bill (e.g. items added), it drops back to Partial.
+            status:
+                balance_due <= 0 && net_amount > 0
+                    ? 'Paid'
+                    : balance_due > 0 && paid_amount > 0
+                        ? 'Partial'
+                        : invoice?.status,
             version: { increment: 1 },
         },
     });
@@ -677,6 +686,13 @@ export async function updateInvoiceDoctor(invoiceId: number, doctor_id: string |
             data: { doctor_id: doctor_id || null, doctor_name: cleanName },
         });
 
+        // Reassigning the bill's doctor moves the commission to the new doctor.
+        try {
+            await recomputeInvoiceDoctorCommission(db, organizationId, invoiceId);
+        } catch (e) {
+            console.error('doctor commission recompute failed:', e);
+        }
+
         await db.system_audit_logs.create({
             data: {
                 action: 'UPDATE_INVOICE_DOCTOR',
@@ -757,6 +773,14 @@ export async function cancelInvoice(invoiceId: number, reason: string) {
             },
         });
 
+        // Cancelled bill earns no commission — void any accrued row.
+        try {
+            await recomputeInvoiceCommission(db, organizationId, invoiceId);
+            await recomputeInvoiceDoctorCommission(db, organizationId, invoiceId);
+        } catch (e) {
+            console.error('referral commission recompute failed:', e);
+        }
+
         await db.system_audit_logs.create({
             data: {
                 action: 'CANCEL_INVOICE',
@@ -805,6 +829,14 @@ export async function revertInvoice(invoiceId: number, reason?: string) {
                 version: { increment: 1 },
             },
         });
+
+        // Reverted bill is collectible again — re-accrue commission.
+        try {
+            await recomputeInvoiceCommission(db, organizationId, invoiceId);
+            await recomputeInvoiceDoctorCommission(db, organizationId, invoiceId);
+        } catch (e) {
+            console.error('referral commission recompute failed:', e);
+        }
 
         await db.system_audit_logs.create({
             data: {
@@ -949,6 +981,14 @@ export async function recordPayment(data: {
                 version: { increment: 1 },
             },
         });
+
+        // Referral commission accrues on collected amount (best-effort, never blocks billing)
+        try {
+            await recomputeInvoiceCommission(db, organizationId, data.invoice_id);
+            await recomputeInvoiceDoctorCommission(db, organizationId, data.invoice_id);
+        } catch (e) {
+            console.error('referral commission recompute failed:', e);
+        }
 
         await db.system_audit_logs.create({
             data: {
@@ -1110,6 +1150,13 @@ export async function recordSplitPayment(data: {
             },
         });
 
+        try {
+            await recomputeInvoiceCommission(db, organizationId, data.invoice_id);
+            await recomputeInvoiceDoctorCommission(db, organizationId, data.invoice_id);
+        } catch (e) {
+            console.error('referral commission recompute failed:', e);
+        }
+
         await db.system_audit_logs.create({
             data: {
                 user_id: session?.id,
@@ -1183,6 +1230,13 @@ export async function reversePayment(paymentId: number, reason: string) {
                 version: { increment: 1 },
             },
         });
+
+        try {
+            await recomputeInvoiceCommission(db, organizationId, payment.invoice_id);
+            await recomputeInvoiceDoctorCommission(db, organizationId, payment.invoice_id);
+        } catch (e) {
+            console.error('referral commission recompute failed:', e);
+        }
 
         await db.system_audit_logs.create({
             data: {
@@ -1881,8 +1935,16 @@ export async function processRefund(input: {
                 },
             });
 
-            return { refund, receipt_number: payment.receipt_number };
+            return { refund, receipt_number: payment.receipt_number, invoice_id: payment.invoice_id };
         });
+
+        // Refund lowers collected amount → recompute commission (best-effort).
+        try {
+            await recomputeInvoiceCommission(db, organizationId, result.invoice_id);
+            await recomputeInvoiceDoctorCommission(db, organizationId, result.invoice_id);
+        } catch (e) {
+            console.error('referral commission recompute failed:', e);
+        }
 
         return { success: true, data: serialize(result) };
     } catch (error: any) {
@@ -2247,7 +2309,18 @@ type InvoiceEditableCheck = {
     reason?: string;
 };
 
-function evaluateInvoiceEditable(invoice: any, expectedVersion?: number): InvoiceEditableCheck {
+// Roles allowed to edit a bill AFTER a payment has been collected (Partial/Paid).
+// Reception / OPD may only edit while nothing has been paid (Draft / unpaid bills).
+const PRIVILEGED_BILLING_ROLES = ['admin', 'finance', 'superadmin'];
+function isPrivilegedBilling(session: any): boolean {
+    return PRIVILEGED_BILLING_ROLES.includes(String(session?.role ?? '').toLowerCase());
+}
+
+function evaluateInvoiceEditable(
+    invoice: any,
+    expectedVersion?: number,
+    opts?: { allowPaid?: boolean },
+): InvoiceEditableCheck {
     if (!invoice) return { editable: false, reason: 'Invoice not found.' };
     if (invoice.is_locked) {
         return { editable: false, reason: 'This bill is locked. Only Admin or Finance can unlock it.' };
@@ -2255,11 +2328,14 @@ function evaluateInvoiceEditable(invoice: any, expectedVersion?: number): Invoic
     if (invoice.status === 'Cancelled') {
         return { editable: false, reason: 'Cancelled invoices cannot be edited. Revert first if needed.' };
     }
-    // Fully paid check: block edits if there is no outstanding balance and a payment has been collected
-    if (Number(invoice.balance_due ?? 0) <= 0 && Number(invoice.paid_amount ?? 0) > 0) {
+    // Payment gate: once ANY money has been collected (Partial or fully Paid), the bill is locked
+    // to Admin/Finance — UNLESS the caller is privileged. Reception/OPD edit unpaid bills only.
+    // For privileged editors, reducing a paid bill creates an overpayment that must be refunded
+    // separately.
+    if (!opts?.allowPaid && Number(invoice.paid_amount ?? 0) > 0) {
         return {
             editable: false,
-            reason: 'Cannot edit: This invoice is fully paid.',
+            reason: 'Only Admin or Finance can edit a bill once a payment has been collected.',
         };
     }
     if (expectedVersion !== undefined && Number(invoice.version) !== Number(expectedVersion)) {
@@ -2274,12 +2350,12 @@ function evaluateInvoiceEditable(invoice: any, expectedVersion?: number): Invoic
 // Public read: check whether an invoice is editable from the UI without mutating anything.
 export async function checkInvoiceEditable(invoiceId: number) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, session } = await requireTenantContext();
         const invoice = await db.invoices.findUnique({
             where: { id: invoiceId },
             select: { id: true, status: true, paid_amount: true, balance_due: true, version: true, created_at: true, is_locked: true },
         });
-        const check = evaluateInvoiceEditable(invoice);
+        const check = evaluateInvoiceEditable(invoice, undefined, { allowPaid: isPrivilegedBilling(session) });
         if (!check.editable) return { success: true, editable: false, reason: check.reason };
         // Period lock check (read-only — we throw the same error message the mutation would)
         try {
@@ -2306,7 +2382,7 @@ export async function updateInvoiceItem(itemId: number, patch: {
     service_category?: string | null;
 }) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
         const item = await db.invoice_items.findUnique({
             where: { id: itemId },
@@ -2314,7 +2390,7 @@ export async function updateInvoiceItem(itemId: number, patch: {
         });
         if (!item) return { success: false, error: 'Invoice item not found' };
 
-        const check = evaluateInvoiceEditable(item.invoice);
+        const check = evaluateInvoiceEditable(item.invoice, undefined, { allowPaid: isPrivilegedBilling(session) });
         if (!check.editable) return { success: false, error: check.reason };
 
         await checkPeriodLock(db, item.invoice.created_at as any);
@@ -2384,12 +2460,12 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
     doctor_name?: string | null;
 }) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
         const invoice = await db.invoices.findUnique({ where: { id: invoiceId } });
         if (!invoice) return { success: false, error: 'Invoice not found' };
 
-        const check = evaluateInvoiceEditable(invoice);
+        const check = evaluateInvoiceEditable(invoice, undefined, { allowPaid: isPrivilegedBilling(session) });
         if (!check.editable) return { success: false, error: check.reason };
 
         await checkPeriodLock(db, invoice.created_at as any);
@@ -2555,12 +2631,16 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
     items_to_remove?: number[];
 }) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
         const invoice = await db.invoices.findUnique({ where: { id: invoiceId } });
         if (!invoice) return { success: false, error: 'Invoice not found' };
 
-        const check = evaluateInvoiceEditable(invoice, payload.expected_version);
+        // Admin/Finance/Superadmin may edit bills that already have payments (overpayment, if any,
+        // is refunded separately). Reception/OPD are blocked once any payment is collected.
+        const check = evaluateInvoiceEditable(invoice, payload.expected_version, {
+            allowPaid: isPrivilegedBilling(session),
+        });
         if (!check.editable) return { success: false, error: check.reason };
 
         await checkPeriodLock(db, invoice.created_at as any);

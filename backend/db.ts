@@ -78,6 +78,9 @@ const TENANT_SCOPED_MODELS = new Set([
     // Insurance
     'CorporateMaster', 'PreAuthorization', 'PaymentSplit',
     'InsurancePreAuth', 'AdmissionConsultant',
+    // TPA & Insurance Upgrade (receivables)
+    'InsuranceReceipt', 'InsuranceReceiptAllocation', 'ClaimDispatch',
+    'DenialReason', 'ClaimShortPay', 'PayerSlaConfig',
     // Clinical
     'ClinicalEncounter', 'PatientAllergy',
     'IPDVitals', 'NursingAssessment',

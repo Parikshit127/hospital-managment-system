@@ -95,6 +95,8 @@ export async function registerPatient(formData: FormData) {
         registration_remarks: (formData.get('registration_remarks') as string) || '',
         distance_from_hospital_km: (formData.get('distance_from_hospital_km') as string) || '',
         registration_form_url: (formData.get('registration_form_url') as string) || '',
+        // Referral — who referred this patient (empty = Self / walk-in)
+        referrer_id: (formData.get('referrer_id') as string) || '',
     };
 
     // Server-side Zod validation
@@ -209,6 +211,8 @@ export async function registerPatient(formData: FormData) {
                     registration_form_url: rawData.registration_form_url || null,
                     // Auto-flag senior citizen
                     is_senior_citizen: rawData.age ? parseInt(rawData.age, 10) > 60 : false,
+                    // Referral — null = Self / walk-in
+                    referrer_id: rawInput.referrer_id || null,
                 },
             });
 

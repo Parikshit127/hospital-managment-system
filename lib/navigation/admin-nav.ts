@@ -4,7 +4,7 @@ import {
     Users, UserCog, Building2, ShieldCheck, UserRound,
     Settings, Palette, FileText, Bell, Plug, Clock, BarChart3, Lock,
     Workflow, Scissors, GitBranch, DatabaseBackup, BookOpen, Database,
-    ShieldAlert, Scale, Siren, SlidersHorizontal,
+    ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck,
     type LucideIcon,
 } from 'lucide-react';
 
@@ -41,7 +41,10 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
             { label: 'Lab', href: '/admin/lab', icon: FlaskConical },
             { label: 'Pharmacy', href: '/admin/pharmacy', icon: Pill },
             { label: 'Finance', href: '/admin/finance', icon: DollarSign },
+            { label: 'TPA & Insurance', href: '/admin/finance/tpa-insurance', icon: ShieldAlert },
             { label: 'Finance Master', href: '/admin/finance-master', icon: Receipt },
+            { label: 'Referrals', href: '/admin/referrals', icon: UserCheck },
+            { label: 'Doctor Invoicing', href: '/admin/doctor-invoicing', icon: Stethoscope },
             { label: 'Master Billing', href: '/billing', icon: FileText },
             { label: 'Approval Center', href: '/admin/billing/approvals', icon: ShieldAlert },
             { label: 'Write-offs', href: '/admin/billing/writeoffs', icon: Scale },

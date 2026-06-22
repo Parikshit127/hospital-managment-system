@@ -784,10 +784,11 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                                                                                 Mark TPA Received
                                                                                             </button>
                                                                                         )}
-                                                                                        {role === 'admin' && Number(inv.paid_amount ?? 0) === 0 && inv.status !== 'Cancelled' && (
+                                                                                        {inv.status !== 'Cancelled' && (Number(inv.paid_amount ?? 0) === 0 || role === 'admin') && (
                                                                                             <button
                                                                                                 onClick={() => setEditingInvoiceId(Number(inv.id))}
-                                                                                                className="px-2 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-md hover:bg-indigo-100" title="Edit Invoice">
+                                                                                                className="px-2 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-md hover:bg-indigo-100"
+                                                                                                title={Number(inv.paid_amount ?? 0) > 0 ? 'Edit bill (payment collected — Admin/Finance)' : 'Edit Invoice'}>
                                                                                                 <Pencil className="h-3.5 w-3.5" />
                                                                                             </button>
                                                                                         )}

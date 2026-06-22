@@ -547,6 +547,16 @@ export async function generateInvoice(
             }
         });
 
+        // Referral + doctor commission accrue on the collected pharmacy bill (best-effort)
+        try {
+            const { recomputeInvoiceCommission } = await import('@/app/lib/referral-commission');
+            await recomputeInvoiceCommission(db, organizationId, invoice.id);
+            const { recomputeInvoiceDoctorCommission } = await import('@/app/lib/doctor-commission');
+            await recomputeInvoiceDoctorCommission(db, organizationId, invoice.id);
+        } catch (e) {
+            console.error('referral commission recompute failed (pharmacy):', e);
+        }
+
         // 4. Post to GL and GST register
         await postInvoiceToGL(invoice.id).catch(err =>
             console.error('GL posting failed for pharmacy invoice:', invoice.id, err)
