@@ -119,7 +119,12 @@ export default function NurseMedicationsPage() {
         }
     };
 
+    const isOverdue = (m: any) =>
+        m.status === 'Scheduled' && m.scheduled_time && new Date(m.scheduled_time).getTime() < Date.now();
+
     const scheduledCount = medications.filter(m => m.status === 'Scheduled').length;
+    const overdueCount = medications.filter(isOverdue).length;
+    const administeredCount = medications.filter(m => m.status === 'Administered').length;
 
     return (
         <AppShell
@@ -129,6 +134,11 @@ export default function NurseMedicationsPage() {
             refreshing={refreshing}
             headerActions={
                 <div className="flex items-center gap-2">
+                    {overdueCount > 0 && (
+                        <span className="flex items-center gap-1 bg-red-50 text-red-600 text-[10px] font-black px-2.5 py-1 rounded-lg border border-red-200">
+                            <AlertTriangle className="h-3 w-3" /> {overdueCount} OVERDUE
+                        </span>
+                    )}
                     {scheduledCount > 0 && (
                         <span className="bg-amber-50 text-amber-600 text-[10px] font-black px-2.5 py-1 rounded-lg border border-amber-200">
                             {scheduledCount} DUE
@@ -137,6 +147,28 @@ export default function NurseMedicationsPage() {
                 </div>
             }
         >
+            {/* Summary strip */}
+            <div className="grid grid-cols-3 gap-3 mb-4">
+                {[
+                    { label: 'Due Now', value: scheduledCount, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50' },
+                    { label: 'Overdue', value: overdueCount, icon: AlertTriangle, color: 'text-red-500', bg: 'bg-red-50' },
+                    { label: 'Administered', value: administeredCount, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-50' },
+                ].map((s) => {
+                    const Icon = s.icon;
+                    return (
+                        <div key={s.label} className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4 flex items-center justify-between">
+                            <div>
+                                <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-0.5">{s.label}</p>
+                                <p className="text-2xl font-black text-gray-900">{s.value}</p>
+                            </div>
+                            <div className={`p-2.5 rounded-xl ${s.bg}`}>
+                                <Icon className={`h-5 w-5 ${s.color}`} />
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
             <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
                 {/* Header Controls */}
                 <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row gap-4 justify-between bg-gray-50/50">
@@ -191,10 +223,11 @@ export default function NurseMedicationsPage() {
                             ) : filteredMedications.length > 0 ? (
                                 filteredMedications.map((med: any) => {
                                     const isScheduled = med.status === 'Scheduled';
+                                    const overdue = isOverdue(med);
                                     const isLoading = actionLoading === med.id;
 
                                     return (
-                                        <tr key={med.id} className={`hover:bg-gray-50 transition-colors ${isScheduled ? '' : 'opacity-70'}`}>
+                                        <tr key={med.id} className={`transition-colors ${overdue ? 'bg-red-50/40 hover:bg-red-50/70' : 'hover:bg-gray-50'} ${isScheduled ? '' : 'opacity-70'}`}>
                                             <td className="px-6 py-4 font-bold text-gray-900">
                                                 <div className="flex items-center gap-2">
                                                     <div className="h-7 w-7 bg-orange-50 rounded-lg flex items-center justify-center shrink-0">
@@ -218,11 +251,16 @@ export default function NurseMedicationsPage() {
                                                     {med.route || 'N/A'}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 text-gray-500 text-xs">
-                                                <span className="flex items-center gap-1">
+                                            <td className="px-6 py-4 text-xs">
+                                                <span className={`flex items-center gap-1 ${overdue ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
                                                     <Clock className="h-3 w-3" />
                                                     {med.scheduled_time ? new Date(med.scheduled_time).toLocaleString() : 'N/A'}
                                                 </span>
+                                                {overdue && (
+                                                    <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-red-600 bg-red-100 border border-red-200 px-1.5 py-0.5 rounded">
+                                                        <AlertTriangle className="h-2.5 w-2.5" /> Overdue
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide border ${getStatusStyle(med.status)}`}>

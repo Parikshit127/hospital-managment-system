@@ -749,6 +749,28 @@ export default function NursePatientsPage() {
                 </div>
             )}
 
+            {/* ─────────────── Summary strip ─────────────── */}
+            <div className="grid grid-cols-3 gap-3 mb-4">
+                {[
+                    { label: statusFilter === 'All' ? 'Patients' : `${statusFilter}`, value: filteredPatients.length, icon: Users, color: 'text-teal-500', bg: 'bg-teal-50' },
+                    { label: 'Wards / Units', value: wards.length, icon: Building2, color: 'text-blue-500', bg: 'bg-blue-50' },
+                    { label: 'On This Screen', value: patients.length, icon: BedDouble, color: 'text-violet-500', bg: 'bg-violet-50' },
+                ].map((s) => {
+                    const Icon = s.icon;
+                    return (
+                        <div key={s.label} className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4 flex items-center justify-between">
+                            <div className="min-w-0">
+                                <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-0.5 truncate">{s.label}</p>
+                                <p className="text-2xl font-black text-gray-900">{s.value}</p>
+                            </div>
+                            <div className={`p-2.5 rounded-xl ${s.bg} shrink-0`}>
+                                <Icon className={`h-5 w-5 ${s.color}`} />
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
             {/* ─────────────── Filters ─────────────── */}
             <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
                 <div className="p-4 border-b border-gray-200 flex flex-col lg:flex-row gap-3 lg:items-center justify-between bg-gray-50/50">

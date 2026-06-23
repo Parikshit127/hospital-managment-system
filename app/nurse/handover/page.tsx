@@ -67,10 +67,17 @@ export default function NurseHandoverPage() {
         <AppShell pageTitle="Shift Handover" pageIcon={<ArrowLeftRight className="h-5 w-5" />}
             onRefresh={loadData} refreshing={refreshing}
             headerActions={
-                <button onClick={() => setShowForm(true)}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-xs font-bold rounded-xl hover:shadow-md transition-all">
-                    <Plus className="h-3.5 w-3.5" /> New Handover
-                </button>
+                <div className="flex items-center gap-2">
+                    {handovers.length > 0 && (
+                        <span className="bg-indigo-50 text-indigo-600 text-[10px] font-black px-2.5 py-1 rounded-lg border border-indigo-200">
+                            {handovers.length} REPORTS
+                        </span>
+                    )}
+                    <button onClick={() => setShowForm(v => !v)}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-xs font-bold rounded-xl hover:shadow-md hover:shadow-teal-500/20 transition-all">
+                        <Plus className="h-3.5 w-3.5" /> New Handover
+                    </button>
+                </div>
             }
         >
             <div className="space-y-6">
@@ -128,9 +135,13 @@ export default function NurseHandoverPage() {
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        <h3 className="text-sm font-black text-gray-900">Recent Handovers</h3>
+                        <h3 className="text-sm font-black text-gray-900 flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-indigo-400" /> Recent Handovers
+                        </h3>
                         {handovers.map((h: any) => (
-                            <div key={h.id} className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5">
+                            <div key={h.id}
+                                className="relative overflow-hidden bg-white border border-gray-200 shadow-sm rounded-2xl p-5 pl-6 transition-all hover:shadow-md
+                                    before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1.5 before:bg-gradient-to-b before:from-indigo-400 before:to-violet-500">
                                 <div className="flex items-start justify-between gap-4 mb-3">
                                     <div className="flex items-center gap-3">
                                         <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
