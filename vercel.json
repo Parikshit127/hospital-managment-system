@@ -6,7 +6,7 @@
     "crons": [
         {
             "path": "/api/ipd/bed-cleaning-sla",
-            "schedule": "0 * * * *"
+            "schedule": "0 0 * * *"
         }
     ]
 }
