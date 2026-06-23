@@ -1224,6 +1224,7 @@ export async function searchMedicine(
         cursor?: number;
         activeOnly?: boolean;
         includeBatches?: boolean;
+        includeEmptyBatches?: boolean;
     }
 ) {
     try {
@@ -1235,7 +1236,10 @@ export async function searchMedicine(
         const query = (opts.query ?? '').trim();
         const limit = Math.min(Math.max(opts.limit ?? 20, 1), 50);
         const activeOnly = opts.activeOnly ?? true;
-        const includeBatches = opts.includeBatches ?? false;
+        const includeBatches = (opts as any).includeBatches ?? false;
+        // Returns/restocking may target a depleted batch (stock 0), so callers can
+        // opt to include zero-stock batches too.
+        const includeEmptyBatches = (opts as any).includeEmptyBatches ?? false;
 
         const where: any = {};
         if (activeOnly) where.is_active = true;
@@ -1272,7 +1276,7 @@ export async function searchMedicine(
                 ? {
                     include: {
                         batches: {
-                            where: { current_stock: { gt: 0 } },
+                            where: includeEmptyBatches ? {} : { current_stock: { gt: 0 } },
                             orderBy: { expiry_date: 'asc' },
                             select: {
                                 id: true,

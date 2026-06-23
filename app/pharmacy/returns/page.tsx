@@ -49,7 +49,8 @@ export default function ReturnsPage() {
     useEffect(() => {
         const fetchMeds = async () => {
             if (searchQuery.length > 2) {
-                const res = await searchMedicine(searchQuery);
+                // Returns can target a depleted batch, so include zero-stock batches too.
+                const res = await searchMedicine({ query: searchQuery, includeBatches: true, includeEmptyBatches: true });
                 if (res.success) setMedicines(res.data);
             } else {
                 setMedicines([]);
