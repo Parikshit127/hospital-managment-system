@@ -3,15 +3,16 @@
 import { useState, useEffect } from 'react';
 import {
     Shield, FileText, Clock, Loader2, ChevronRight,
-    Plus, Eye, CheckCircle, AlertTriangle, ArrowUpRight,
-    Building2, Wallet, Edit2,
-    ShieldCheck, ShieldAlert, ShieldX, ClipboardCheck
+    Plus, CheckCircle, AlertTriangle, ArrowUpRight,
+    Building2, Wallet, Users, X, ExternalLink,
+    ShieldCheck, ClipboardCheck
 } from 'lucide-react';
+import Link from 'next/link';
 import {
     getInsuranceProviders, getInsuranceClaims, getInsuranceStats,
     getAllPolicies, addInsuranceProvider, updateInsuranceProvider,
-    submitInsuranceClaim, updateClaimStatus, getRevenueLeakage, getClaimableInvoices,
-    getProviderPerformance, autoSubmitClaim, getAllPreAuths, disputeClaim
+    submitInsuranceClaim, getRevenueLeakage, getClaimableInvoices,
+    getProviderPerformance, autoSubmitClaim, getPatientsByProvider
 } from '@/app/actions/insurance-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useToast } from '@/app/components/ui/Toast';
@@ -27,17 +28,12 @@ export default function InsuranceDashboard() {
     const [policies, setPolicies] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
-    const [claimFilter, setClaimFilter] = useState('');
 
     // Provider modal
     const [providerModal, setProviderModal] = useState(false);
     const [providerForm, setProviderForm] = useState({ provider_name: '', provider_code: '', contact_email: '', contact_phone: '' });
     const [editProvider, setEditProvider] = useState<any>(null);
     const [editProviderForm, setEditProviderForm] = useState({ provider_name: '', contact_email: '', contact_phone: '', address: '', pre_auth_required: false, default_discount_percentage: 0, is_active: true });
-
-    // Claim update modal
-    const [claimModal, setClaimModal] = useState<any>(null);
-    const [claimUpdateForm, setClaimUpdateForm] = useState({ status: '', approved_amount: '', rejection_reason: '' });
 
     // New claim submission modal
     const [newClaimModal, setNewClaimModal] = useState(false);
@@ -54,20 +50,21 @@ export default function InsuranceDashboard() {
     // Provider performance
     const [providerPerf, setProviderPerf] = useState<any[]>([]);
 
-    // Pre-Auths
-    const [preAuths, setPreAuths] = useState<any[]>([]);
+    // Provider drill-down: patients covered by a selected TPA
+    const [drillProvider, setDrillProvider] = useState<any>(null);
+    const [drillPatients, setDrillPatients] = useState<any[]>([]);
+    const [drillLoading, setDrillLoading] = useState(false);
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const [s, p, c, pol, leak, perf, preauthsData] = await Promise.all([
+            const [s, p, c, pol, leak, perf] = await Promise.all([
                 getInsuranceStats(),
                 getInsuranceProviders(),
-                getInsuranceClaims({ status: claimFilter || undefined }),
+                getInsuranceClaims(),
                 getAllPolicies(),
                 getRevenueLeakage(),
                 getProviderPerformance(),
-                getAllPreAuths(),
             ]);
             if (s.success) setStats(s.data);
             if (p.success) setProviders(p.data || []);
@@ -75,12 +72,20 @@ export default function InsuranceDashboard() {
             if (pol.success) setPolicies(pol.data || []);
             if (leak.success) setLeakage(leak.data || []);
             if (perf.success) setProviderPerf(perf.data || []);
-            if (preauthsData.success) setPreAuths(preauthsData.data || []);
         } catch (err) { console.error('Insurance load error:', err); }
         setLoading(false);
     };
 
-    useEffect(() => { loadData(); }, [claimFilter]);
+    useEffect(() => { loadData(); }, []);
+
+    const openProviderDrill = async (provider: any) => {
+        setDrillProvider(provider);
+        setDrillPatients([]);
+        setDrillLoading(true);
+        const res = await getPatientsByProvider(provider.id);
+        if (res.success) setDrillPatients(res.data || []);
+        setDrillLoading(false);
+    };
 
     const handleAddProvider = async () => {
         if (!providerForm.provider_name) return;
@@ -151,28 +156,6 @@ export default function InsuranceDashboard() {
         }
     };
 
-    const handleUpdateClaim = async () => {
-        if (!claimModal || !claimUpdateForm.status) return;
-        await updateClaimStatus(claimModal.id, {
-            status: claimUpdateForm.status,
-            approved_amount: claimUpdateForm.approved_amount ? parseFloat(claimUpdateForm.approved_amount) : undefined,
-            rejection_reason: claimUpdateForm.rejection_reason || undefined,
-        });
-        setClaimModal(null);
-        setClaimUpdateForm({ status: '', approved_amount: '', rejection_reason: '' });
-        loadData();
-    };
-
-    const handleDisputeClaim = async (claimId: number, reason: string) => {
-        const res = await disputeClaim(claimId, reason);
-        if (res.success) {
-            toast.success("Claim status updated to Disputed");
-            loadData();
-        } else {
-            toast.error(res.error || "Failed to dispute claim");
-        }
-    };
-
     const handleAutoSubmit = async (invoiceId: number) => {
         setAutoSubmitting(invoiceId);
         const res = await autoSubmitClaim(invoiceId);
@@ -197,20 +180,6 @@ export default function InsuranceDashboard() {
         return map[status] || 'text-gray-500 bg-gray-100';
     };
 
-    const getClaimStatusIcon = (status: string) => {
-        const map: Record<string, any> = {
-            Submitted: ShieldAlert,
-            UnderReview: Clock,
-            Approved: ShieldCheck,
-            Rejected: ShieldX,
-            PartiallyApproved: Shield,
-            Settled: CheckCircle,
-            Disputed: AlertTriangle,
-        };
-        const Icon = map[status] || Shield;
-        return <Icon className="h-3.5 w-3.5" />;
-    };
-
     const headerActions = (
         <>
             <button onClick={handleOpenNewClaim} className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl text-xs font-bold text-white shadow-lg shadow-emerald-500/20 flex items-center gap-2">
@@ -233,9 +202,6 @@ export default function InsuranceDashboard() {
                     <div className="flex flex-wrap gap-2">
                         {[
                             { k: 'overview', l: 'Overview' },
-                            { k: 'preauths', l: 'Pre-Auths' },
-                            { k: 'claims', l: 'Claims' },
-                            { k: 'policies', l: 'Policies' },
                             { k: 'providers', l: 'Providers' },
                             { k: 'leakage', l: 'Leakage' },
                             { k: 'receivables', l: 'Receivables' },
@@ -261,7 +227,7 @@ export default function InsuranceDashboard() {
                 ) : (
                     <>
                         {/* KPIs */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                             <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-blue-500/30 transition-all overflow-hidden">
                                 <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl" />
                                 <div className="flex items-center justify-between mb-3">
@@ -271,18 +237,6 @@ export default function InsuranceDashboard() {
                                 <p className="text-3xl font-black text-gray-900 tracking-tight">{stats?.totalProviders || 0}</p>
                                 <div className="flex items-center gap-1 mt-2 text-xs font-bold text-blue-400">
                                     <Shield className="h-3 w-3" /> Active TPAs
-                                </div>
-                            </div>
-
-                            <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-emerald-500/30 transition-all overflow-hidden">
-                                <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl" />
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Active Policies</span>
-                                    <div className="p-1.5 bg-emerald-500/10 rounded-lg"><FileText className="h-3.5 w-3.5 text-emerald-400" /></div>
-                                </div>
-                                <p className="text-3xl font-black text-gray-900 tracking-tight">{stats?.activePolicies || 0}</p>
-                                <div className="flex items-center gap-1 mt-2 text-xs font-bold text-emerald-400">
-                                    <CheckCircle className="h-3 w-3" /> Covered patients
                                 </div>
                             </div>
 
@@ -348,9 +302,7 @@ export default function InsuranceDashboard() {
                                         <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
                                             <ClipboardCheck className="h-4 w-4 text-amber-400" /> Recent Claims
                                         </h3>
-                                        <button onClick={() => setActiveTab('claims')} className="text-[10px] font-black text-blue-400 uppercase tracking-wider hover:text-blue-300 flex items-center gap-1">
-                                            View All <ChevronRight className="h-3 w-3" />
-                                        </button>
+                                        <span className="text-[10px] font-black text-gray-300">{claims.length} total</span>
                                     </div>
                                     <div className="max-h-[320px] overflow-auto">
                                         {claims.length === 0 ? (
@@ -425,205 +377,6 @@ export default function InsuranceDashboard() {
                             )}
                         </>)}
 
-                        {/* PREAUTHS TAB */}
-                        {activeTab === 'preauths' && (
-                            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
-                                <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-                                    <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
-                                        <Shield className="h-4 w-4 text-purple-400" /> Pre-Authorizations
-                                    </h3>
-                                    <span className="text-xs font-bold text-gray-400">{preAuths.length} total</span>
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full">
-                                        <thead>
-                                            <tr className="border-b border-gray-200">
-                                                <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Patient</th>
-                                                <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">TPA / Policy</th>
-                                                <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Pre-Auth #</th>
-                                                <th className="text-right px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Requested</th>
-                                                <th className="text-right px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Approved</th>
-                                                <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Status</th>
-                                                <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Date</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {preAuths.length === 0 ? (
-                                                <tr>
-                                                    <td colSpan={7} className="px-5 py-16 text-center text-gray-300">
-                                                        <Shield className="h-8 w-8 mx-auto mb-2" />
-                                                        <p className="text-xs font-bold">No pre-authorizations found</p>
-                                                    </td>
-                                                </tr>
-                                            ) : preAuths.map((auth: any) => (
-                                                <tr key={auth.id} className="border-b border-gray-200 hover:bg-gray-50">
-                                                    <td className="px-5 py-3.5">
-                                                        <p className="text-xs font-bold text-gray-700">{auth.admission?.patient?.full_name}</p>
-                                                        <p className="text-[10px] text-gray-400">{auth.admission?.patient?.patient_id}</p>
-                                                    </td>
-                                                    <td className="px-5 py-3.5">
-                                                        <p className="text-xs font-bold text-gray-700">{auth.tpa_name || '-'}</p>
-                                                        <p className="text-[10px] text-gray-400">{auth.policy_id || '-'}</p>
-                                                    </td>
-                                                    <td className="px-5 py-3.5 text-xs font-mono text-gray-500">{auth.pre_auth_number || '-'}</td>
-                                                    <td className="px-5 py-3.5 text-right text-xs font-bold text-gray-700">{'\u20B9'}{Number(auth.requested_amount || 0).toLocaleString()}</td>
-                                                    <td className="px-5 py-3.5 text-right text-xs font-bold text-emerald-400">
-                                                        {auth.approved_amount ? `\u20B9${Number(auth.approved_amount).toLocaleString()}` : '-'}
-                                                    </td>
-                                                    <td className="px-5 py-3.5 text-center">
-                                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${
-                                                            auth.status === 'Approved' ? 'text-emerald-400 bg-emerald-500/10' :
-                                                            auth.status === 'Denied' ? 'text-rose-400 bg-rose-500/10' :
-                                                            auth.status === 'QueryRaised' ? 'text-amber-400 bg-amber-500/10' :
-                                                            'text-blue-400 bg-blue-500/10'
-                                                        }`}>
-                                                            {auth.status}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-5 py-3.5 text-center text-[10px] text-gray-500">
-                                                        {new Date(auth.submitted_at).toLocaleDateString('en-GB')}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* CLAIMS TAB */}
-                        {activeTab === 'claims' && (
-                            <div className="space-y-4">
-                                <div className="flex gap-2">
-                                    {['', 'Submitted', 'UnderReview', 'Approved', 'Rejected', 'Settled', 'Disputed'].map(f => (
-                                        <button key={f} onClick={() => setClaimFilter(f)}
-                                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${claimFilter === f ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
-                                            {f || 'All'}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full">
-                                            <thead>
-                                                <tr className="border-b border-gray-200">
-                                                    <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Claim #</th>
-                                                    <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Patient</th>
-                                                    <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Provider</th>
-                                                    <th className="text-right px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Claimed</th>
-                                                    <th className="text-right px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Approved</th>
-                                                    <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Status</th>
-                                                    <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {claims.length === 0 ? (
-                                                    <tr>
-                                                        <td colSpan={7} className="px-5 py-16 text-center text-gray-300">
-                                                            <Shield className="h-8 w-8 mx-auto mb-2" />
-                                                            <p className="text-xs font-bold">No claims found</p>
-                                                        </td>
-                                                    </tr>
-                                                ) : claims.map((claim: any) => (
-                                                    <tr key={claim.id} className="border-b border-gray-200 hover:bg-gray-50">
-                                                        <td className="px-5 py-3.5 text-xs font-mono font-bold text-gray-700">{claim.claim_number}</td>
-                                                        <td className="px-5 py-3.5">
-                                                            <p className="text-xs font-bold text-gray-700">{claim.policy?.patient?.full_name || '-'}</p>
-                                                            <p className="text-[10px] text-gray-400">{claim.policy?.patient?.patient_id}</p>
-                                                        </td>
-                                                        <td className="px-5 py-3.5 text-xs text-gray-500">{claim.policy?.provider?.provider_name || '-'}</td>
-                                                        <td className="px-5 py-3.5 text-right text-xs font-bold text-gray-700">{'\u20B9'}{Number(claim.claimed_amount).toLocaleString()}</td>
-                                                        <td className="px-5 py-3.5 text-right text-xs font-bold text-emerald-400">
-                                                            {claim.approved_amount ? `\u20B9${Number(claim.approved_amount).toLocaleString()}` : '-'}
-                                                        </td>
-                                                        <td className="px-5 py-3.5 text-center">
-                                                            <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg inline-flex items-center gap-1 ${getClaimStatusColor(claim.status)}`}>
-                                                                {getClaimStatusIcon(claim.status)} {claim.status}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-5 py-3.5 text-center flex items-center justify-center gap-1">
-                                                            {!['Settled', 'Rejected', 'Disputed'].includes(claim.status) && (
-                                                                <button onClick={() => { setClaimModal(claim); setClaimUpdateForm({ status: '', approved_amount: '', rejection_reason: '' }); }}
-                                                                    className="p-1.5 hover:bg-blue-500/10 rounded-lg transition-all" title="Update Status">
-                                                                    <Eye className="h-3.5 w-3.5 text-blue-400/60 hover:text-blue-400" />
-                                                                </button>
-                                                            )}
-                                                            {claim.status === 'Rejected' && (
-                                                                <button onClick={() => {
-                                                                        const reason = prompt("Enter dispute reason for " + claim.claim_number);
-                                                                        if (reason) handleDisputeClaim(claim.id, reason);
-                                                                    }}
-                                                                    className="p-1.5 hover:bg-purple-500/10 rounded-lg transition-all" title="Dispute Claim">
-                                                                    <AlertTriangle className="h-3.5 w-3.5 text-purple-400/60 hover:text-purple-400" />
-                                                                </button>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* POLICIES TAB */}
-                        {activeTab === 'policies' && (
-                            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
-                                <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-                                    <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
-                                        <FileText className="h-4 w-4 text-emerald-400" /> Patient Insurance Policies
-                                    </h3>
-                                    <span className="text-xs font-bold text-gray-400">{policies.length} policies</span>
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full">
-                                        <thead>
-                                            <tr className="border-b border-gray-200">
-                                                <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Patient</th>
-                                                <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Provider</th>
-                                                <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Policy #</th>
-                                                <th className="text-right px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Coverage</th>
-                                                <th className="text-right px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Remaining</th>
-                                                <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Status</th>
-                                                <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Valid Until</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {policies.length === 0 ? (
-                                                <tr>
-                                                    <td colSpan={7} className="px-5 py-16 text-center text-gray-300">
-                                                        <FileText className="h-8 w-8 mx-auto mb-2" />
-                                                        <p className="text-xs font-bold">No policies registered</p>
-                                                    </td>
-                                                </tr>
-                                            ) : policies.map((pol: any) => (
-                                                <tr key={pol.id} className="border-b border-gray-200 hover:bg-gray-50">
-                                                    <td className="px-5 py-3.5">
-                                                        <p className="text-xs font-bold text-gray-700">{pol.patient?.full_name}</p>
-                                                        <p className="text-[10px] text-gray-400">{pol.patient?.patient_id}</p>
-                                                    </td>
-                                                    <td className="px-5 py-3.5 text-xs text-gray-500">{pol.provider?.provider_name}</td>
-                                                    <td className="px-5 py-3.5 text-xs font-mono text-gray-500">{pol.policy_number}</td>
-                                                    <td className="px-5 py-3.5 text-right text-xs font-bold text-gray-700">{'\u20B9'}{Number(pol.coverage_limit || 0).toLocaleString()}</td>
-                                                    <td className="px-5 py-3.5 text-right text-xs font-bold text-emerald-400">{'\u20B9'}{Number(pol.remaining_limit || 0).toLocaleString()}</td>
-                                                    <td className="px-5 py-3.5 text-center">
-                                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded ${pol.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                                                            {pol.status}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-5 py-3.5 text-center text-[10px] text-gray-500">
-                                                        {pol.valid_until ? new Date(pol.valid_until).toLocaleDateString('en-GB') : '-'}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        )}
-
                         {/* REVENUE LEAKAGE TAB */}
                         {activeTab === 'leakage' && (
                             <div className="space-y-4">
@@ -691,22 +444,27 @@ export default function InsuranceDashboard() {
                         {activeTab === 'providers' && (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {providers.map((p: any) => (
-                                    <div key={p.id} className="bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-blue-500/20 transition-all">
+                                    <button key={p.id} type="button" onClick={() => openProviderDrill(p)}
+                                        className="text-left bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-blue-500/40 hover:shadow-md transition-all group">
                                         <div className="flex items-center gap-3 mb-3">
                                             <div className="p-2 bg-blue-500/10 rounded-xl">
                                                 <Building2 className="h-5 w-5 text-blue-400" />
                                             </div>
-                                            <div>
-                                                <h4 className="text-sm font-black text-gray-700">{p.provider_name}</h4>
+                                            <div className="min-w-0">
+                                                <h4 className="text-sm font-black text-gray-700 truncate">{p.provider_name}</h4>
                                                 <p className="text-[10px] font-mono text-gray-400">{p.provider_code}</p>
                                             </div>
+                                            <ChevronRight className="h-4 w-4 text-gray-300 ml-auto group-hover:text-blue-400 transition-colors" />
                                         </div>
                                         <div className="space-y-1.5 text-xs">
-                                            {p.contact_email && <p className="text-gray-500">{p.contact_email}</p>}
+                                            {p.contact_email && <p className="text-gray-500 truncate">{p.contact_email}</p>}
                                             {p.contact_phone && <p className="text-gray-500">{p.contact_phone}</p>}
                                             {p.address && <p className="text-gray-400 text-[10px]">{p.address}</p>}
                                         </div>
-                                    </div>
+                                        <p className="mt-3 text-[10px] font-black text-blue-400 uppercase tracking-wider flex items-center gap-1">
+                                            <Users className="h-3 w-3" /> View admitted patients
+                                        </p>
+                                    </button>
                                 ))}
                                 {providers.length === 0 && (
                                     <div className="col-span-full py-20 text-center text-gray-300">
@@ -769,51 +527,59 @@ export default function InsuranceDashboard() {
                 </div>
             )}
 
-            {/* CLAIM UPDATE MODAL */}
-            {claimModal && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl w-full max-w-md p-6 space-y-5">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                                <ClipboardCheck className="h-5 w-5 text-amber-400" /> Update Claim
-                            </h3>
-                            <button onClick={() => setClaimModal(null)} className="text-gray-400 hover:text-gray-900 text-xl">&times;</button>
-                        </div>
-                        <div className="bg-gray-100 rounded-xl p-3 text-xs space-y-1">
-                            <p className="font-mono font-bold text-gray-500">{claimModal.claim_number}</p>
-                            <p className="text-gray-400">
-                                Claimed: {'\u20B9'}{Number(claimModal.claimed_amount).toLocaleString()} &bull;
-                                Current: <span className={getClaimStatusColor(claimModal.status).split(' ')[0]}>{claimModal.status}</span>
-                            </p>
-                        </div>
-                        <div className="space-y-3">
-                            <div>
-                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">New Status</label>
-                                <select value={claimUpdateForm.status} onChange={e => setClaimUpdateForm({ ...claimUpdateForm, status: e.target.value })}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none">
-                                    <option value="">Select Status</option>
-                                    {['UnderReview', 'Approved', 'PartiallyApproved', 'Rejected', 'Settled'].map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
+            {/* PROVIDER DRILL-DOWN \u2014 patients covered by the selected TPA */}
+            {drillProvider && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setDrillProvider(null)}>
+                    <div className="bg-white border border-gray-200 shadow-2xl rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-blue-500/10 rounded-xl">
+                                    <Building2 className="h-5 w-5 text-blue-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-black text-gray-900">{drillProvider.provider_name}</h3>
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Patients under this TPA</p>
+                                </div>
                             </div>
-                            {['Approved', 'PartiallyApproved', 'Settled'].includes(claimUpdateForm.status) && (
-                                <div>
-                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Approved Amount</label>
-                                    <input type="number" value={claimUpdateForm.approved_amount} onChange={e => setClaimUpdateForm({ ...claimUpdateForm, approved_amount: e.target.value })}
-                                        className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none" />
+                            <button onClick={() => setDrillProvider(null)} className="p-1.5 text-gray-400 hover:text-gray-900 rounded-lg hover:bg-gray-100 transition-all">
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4">
+                            {drillLoading ? (
+                                <div className="flex items-center justify-center py-16">
+                                    <Loader2 className="h-6 w-6 animate-spin text-blue-400" />
                                 </div>
-                            )}
-                            {claimUpdateForm.status === 'Rejected' && (
-                                <div>
-                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Rejection Reason</label>
-                                    <input type="text" value={claimUpdateForm.rejection_reason} onChange={e => setClaimUpdateForm({ ...claimUpdateForm, rejection_reason: e.target.value })}
-                                        className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none" />
+                            ) : drillPatients.length === 0 ? (
+                                <div className="py-16 flex flex-col items-center text-gray-300">
+                                    <Users className="h-10 w-10 mb-2" />
+                                    <p className="text-xs font-bold">No patients covered by this TPA</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {drillPatients.map((pt: any) => (
+                                        <div key={pt.patient_id} className="flex items-center justify-between gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl hover:border-blue-500/30 transition-all">
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-sm font-bold text-gray-800 truncate">{pt.full_name}</p>
+                                                    {pt.is_admitted && (
+                                                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 uppercase tracking-wider shrink-0">Admitted</span>
+                                                    )}
+                                                </div>
+                                                <p className="text-[10px] text-gray-400">
+                                                    {pt.patient_id} &bull; {pt.policy_number}
+                                                    {pt.phone ? ` \u2022 ${pt.phone}` : ''}
+                                                </p>
+                                            </div>
+                                            <Link href={`/reception/patient/${pt.patient_id}`}
+                                                className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-all">
+                                                <ExternalLink className="h-3 w-3" /> View Patient
+                                            </Link>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                         </div>
-                        <button onClick={handleUpdateClaim} disabled={!claimUpdateForm.status}
-                            className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-black rounded-xl hover:shadow-lg hover:shadow-amber-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                            <CheckCircle className="h-4 w-4" /> Update Claim
-                        </button>
                     </div>
                 </div>
             )}
