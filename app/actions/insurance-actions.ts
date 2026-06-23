@@ -50,6 +50,58 @@ export async function getInsuranceProviders() {
     }
 }
 
+// Patients covered by (i.e. holding a policy with) a specific TPA / insurance provider.
+// Used by the Providers drill-down on the Insurance dashboard. Deduped to one row per
+// patient, with a flag indicating whether they are currently admitted (IPD).
+export async function getPatientsByProvider(providerId: number) {
+    try {
+        const { db } = await requireTenantContext();
+        const policies = await db.insurance_policies.findMany({
+            where: { provider_id: providerId },
+            include: {
+                patient: {
+                    select: {
+                        patient_id: true,
+                        full_name: true,
+                        phone: true,
+                        admissions: {
+                            where: { status: 'Admitted', is_archived: false },
+                            select: { admission_id: true, admission_date: true },
+                            orderBy: { admission_date: 'desc' },
+                            take: 1,
+                        },
+                    },
+                },
+            },
+            orderBy: { created_at: 'desc' },
+        });
+
+        // One entry per patient — a patient may hold multiple policies with the same TPA.
+        const byPatient = new Map<string, any>();
+        for (const pol of policies) {
+            if (!pol.patient) continue;
+            const pid = pol.patient.patient_id;
+            if (byPatient.has(pid)) continue;
+            const admission = pol.patient.admissions?.[0] || null;
+            byPatient.set(pid, {
+                patient_id: pid,
+                full_name: pol.patient.full_name,
+                phone: pol.patient.phone,
+                policy_number: pol.policy_number,
+                policy_status: pol.status,
+                coverage_limit: pol.coverage_limit,
+                remaining_limit: pol.remaining_limit,
+                is_admitted: !!admission,
+            });
+        }
+
+        return { success: true, data: serialize(Array.from(byPatient.values())) };
+    } catch (error: any) {
+        console.error('getPatientsByProvider error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 export async function addInsuranceProvider(data: {
     provider_name: string;
     provider_code?: string;
