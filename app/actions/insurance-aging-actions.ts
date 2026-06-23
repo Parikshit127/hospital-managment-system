@@ -134,7 +134,7 @@ export async function getInsuranceOutstanding(opts?: {
   }
 
   const rows = Array.from(groups.values()).sort((a, b) => b.balance - a.balance);
-  const totals = rows.reduce((t, r) => ({
+  const totals = rows.reduce((t: any, r: any) => ({
     opening: round2(t.opening + r.opening),
     below: round2(t.below + r.below),
     above: round2(t.above + r.above),
@@ -205,7 +205,7 @@ export async function getBillWiseSanction(filters?: {
     };
   });
 
-  const totals = rows.reduce((t, r) => ({
+  const totals = rows.reduce((t: any, r: any) => ({
     claim_amount: round2(t.claim_amount + r.claim_amount),
     sanctioned: round2(t.sanctioned + r.sanctioned),
     received: round2(t.received + r.received),
