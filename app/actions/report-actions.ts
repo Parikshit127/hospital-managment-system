@@ -804,6 +804,12 @@ export async function getMISReport(filters: { from: string; to: string; billType
         };
         if (filters.billType && filters.billType !== 'all') {
             where.invoice_type = filters.billType;
+        } else {
+            // Default ("all"): exclude standalone pharmacy counter / OTC bills — they
+            // belong to the Pharmacy → Invoices module, not the hospital MIS report.
+            // (Pharmacy charges inside IPD/OPD bills still count via their line items.)
+            // Selecting "Pharmacy Only" (billType='Pharmacy') still shows them.
+            where.invoice_type = { notIn: ['Pharmacy', 'PHARMACY'] };
         }
 
         const invoices = await db.invoices.findMany({
