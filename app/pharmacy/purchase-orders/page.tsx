@@ -26,9 +26,10 @@ type PoItem = {
 //   gst     = taxable * (cgst% + sgst%) / 100
 //   amount  = taxable + gst
 function calcLine(item: PoItem) {
-    const taxable = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0) * (1 - (Number(item.discount_pct) || 0) / 100);
-    const gst = taxable * ((Number(item.cgst_rate) || 0) + (Number(item.sgst_rate) || 0)) / 100;
-    return { taxable, gst, amount: taxable + gst };
+    const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+    const taxable = r2((Number(item.quantity) || 0) * (Number(item.unit_price) || 0) * (1 - (Number(item.discount_pct) || 0) / 100));
+    const gst = r2(taxable * ((Number(item.cgst_rate) || 0) + (Number(item.sgst_rate) || 0)) / 100);
+    return { taxable, gst, amount: r2(taxable + gst) };
 }
 
 export default function PurchaseOrdersPage() {

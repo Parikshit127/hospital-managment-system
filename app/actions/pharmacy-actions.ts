@@ -1483,6 +1483,9 @@ export async function createPurchaseOrder(
         //   taxable = qty * rate * (1 - discount/100)
         //   gst     = taxable * (cgst% + sgst%) / 100
         //   amount  = taxable + gst   (GST-inclusive line total, like a supplier invoice)
+        // Each line is rounded to 2dp BEFORE summing so the PO total matches the
+        // purchase invoice total exactly (the invoice rounds per line the same way).
+        const r2 = (n: number) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
         const computed = items.map(item => {
             const qty = Number(item.quantity) || 0;
             const rate = Number(item.unit_price) || 0;
@@ -1493,14 +1496,14 @@ export async function createPurchaseOrder(
             const sgst = item.sgst_rate != null ? Number(item.sgst_rate) : flat / 2;
             const totalGstRate = cgst + sgst;
 
-            const taxable = qty * rate * (1 - discount / 100);
-            const gst = taxable * totalGstRate / 100;
-            const amount = taxable + gst;
+            const taxable = r2(qty * rate * (1 - discount / 100));
+            const gst = r2(taxable * totalGstRate / 100);
+            const amount = r2(taxable + gst);
             return { item, qty, rate, discount, cgst, sgst, totalGstRate, taxable, gst, amount };
         });
 
-        const totalAmount = computed.reduce((sum, c) => sum + c.amount, 0);
-        const gstAmount = computed.reduce((sum, c) => sum + c.gst, 0);
+        const totalAmount = r2(computed.reduce((sum, c) => sum + c.amount, 0));
+        const gstAmount = r2(computed.reduce((sum, c) => sum + c.gst, 0));
         const poNumber = `PO-${Date.now().toString().slice(-6)}`;
 
         // supplier_id from UI is actually a Vendor.id (unified vendor table).

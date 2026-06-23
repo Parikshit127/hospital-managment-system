@@ -189,18 +189,21 @@ export default function PurchaseInvoicesPage() {
         else toast.error(res.error || 'Failed');
     };
 
+    // Round each line to 2dp (paise) so the displayed grand total matches what
+    // gets saved (and the PO total, which rounds the same way).
+    const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
     const lineTaxable = (l: any) => {
         const gross = (parseInt(l.quantity) || 0) * (parseFloat(l.unit_price) || 0);
         const pctDisc = gross * (parseFloat(l.discount_pct) || 0) / 100;
         const flat = parseFloat(l.discount_amount) || 0;
         const scheme = parseFloat(l.scheme_amount) || 0;
-        return Math.max(0, gross - pctDisc - flat - scheme);
+        return r2(Math.max(0, gross - pctDisc - flat - scheme));
     };
     const lineTotal = (l: any) => {
         const taxable = lineTaxable(l);
-        return taxable + taxable * (parseFloat(l.gst_rate) || 0) / 100;
+        return r2(taxable + r2(taxable * (parseFloat(l.gst_rate) || 0) / 100));
     };
-    const grandTotal = lines.reduce((s, l) => s + lineTotal(l), 0);
+    const grandTotal = r2(lines.reduce((s, l) => s + lineTotal(l), 0));
 
     return (
         <AppShell pageTitle="Purchase Invoices" pageIcon={<FileText className="h-5 w-5" />} onRefresh={load} refreshing={loading}
