@@ -1972,29 +1972,62 @@ export async function processReturn(data: {
             }
         });
 
-        // Patient return: create credit note
+        // Patient return: reduce the linked bill.
+        // - IPD bill  → add a negative pharmacy line item to the IPD invoice and
+        //               drop net_amount/balance_due by the return value (no credit note).
+        // - Counter   → create a credit note (existing behaviour) and reduce the invoice.
         if (data.invoice_id && (data.return_type === 'Patient' || data.return_type === 'patient_return') && refundAmount > 0) {
-            const { createCreditNote } = await import('@/app/actions/deposit-actions');
             const medicine = await db.pharmacy_medicine_master.findUnique({ where: { id: data.medicine_id } });
-
-            const cnResult = await createCreditNote({
-                original_invoice_id: data.invoice_id,
-                reason: `Pharmacy return: ${medicine?.brand_name || 'Medicine'} x${data.quantity} — ${data.reason}`,
-                items: JSON.stringify([{
-                    medicine_id: data.medicine_id,
-                    medicine_name: medicine?.brand_name,
-                    quantity: data.quantity,
-                    unit_price: Number(medicine?.selling_price) || 0,
-                    amount: refundAmount,
-                }]),
-                total_amount: refundAmount,
-                notes: `Return type: ${data.return_type}, Batch: ${data.batch_id || 'N/A'}`,
-            });
-
-            if (cnResult.success) creditNoteId = cnResult.data?.id;
-
             const invoice = await db.invoices.findUnique({ where: { id: data.invoice_id } });
-            if (invoice) {
+
+            if (invoice && invoice.invoice_type === 'IPD') {
+                // IPD: deduct directly from the IPD bill via a negative line item.
+                await db.invoice_items.create({
+                    data: {
+                        invoice_id: data.invoice_id,
+                        department: 'Pharmacy',
+                        service_category: 'Pharmacy',
+                        description: `Return: ${medicine?.brand_name || 'Medicine'} x${data.quantity}`,
+                        quantity: data.quantity,
+                        unit_price: 0,
+                        total_price: 0,
+                        discount: 0,
+                        net_price: -refundAmount,
+                        tax_rate: 0,
+                        tax_amount: 0,
+                        organizationId,
+                    }
+                });
+
+                const newNetAmount = Math.max(0, Number(invoice.net_amount) - refundAmount);
+                const newBalanceDue = Math.max(0, Number(invoice.balance_due) - refundAmount);
+                await db.invoices.update({
+                    where: { id: data.invoice_id },
+                    data: {
+                        net_amount: newNetAmount,
+                        balance_due: newBalanceDue,
+                    }
+                });
+            } else if (invoice) {
+                // Counter / non-IPD pharmacy invoice: existing credit-note behaviour.
+                const { createCreditNote } = await import('@/app/actions/deposit-actions');
+
+                const cnResult = await createCreditNote({
+                    original_invoice_id: data.invoice_id,
+                    reason: `Pharmacy return: ${medicine?.brand_name || 'Medicine'} x${data.quantity} — ${data.reason}`,
+                    items: JSON.stringify([{
+                        medicine_id: data.medicine_id,
+                        medicine_name: medicine?.brand_name,
+                        quantity: data.quantity,
+                        unit_price: Number(medicine?.selling_price) || 0,
+                        amount: refundAmount,
+                    }]),
+                    total_amount: refundAmount,
+                    notes: `Return type: ${data.return_type}, Batch: ${data.batch_id || 'N/A'}`,
+                });
+
+                if (cnResult.success) creditNoteId = cnResult.data?.id;
+
                 const newNetAmount = Number(invoice.net_amount) - refundAmount;
                 const newBalanceDue = newNetAmount - Number(invoice.paid_amount);
                 await db.invoices.update({
@@ -2051,6 +2084,76 @@ export async function processReturn(data: {
     } catch (error: any) {
         console.error('Return processing error:', error);
         return { success: false, error: error.message || 'Failed to process return' };
+    }
+}
+
+// Resolve the invoice a patient return should be applied to.
+// - If the patient is currently admitted, return their active IPD invoice
+//   (return value will be deducted directly from the IPD bill).
+// - Otherwise return their most recent non-cancelled counter pharmacy invoice
+//   (a credit note will be created against it).
+// - If neither exists, returns data: null (stock is restocked only).
+export async function getReturnInvoiceForPatient(patientId: string) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const admission = await db.admissions.findFirst({
+            where: { patient_id: patientId, status: 'Admitted' },
+        });
+
+        if (admission) {
+            const invoice = await db.invoices.findFirst({
+                where: { admission_id: admission.admission_id, status: { not: 'Cancelled' } },
+                orderBy: { created_at: 'desc' },
+            });
+            if (invoice) {
+                const patient = await db.oPD_REG.findUnique({
+                    where: { patient_id: patientId },
+                    select: { full_name: true },
+                });
+                return {
+                    success: true,
+                    data: {
+                        invoice_id: invoice.id,
+                        invoice_number: invoice.invoice_number,
+                        invoice_type: invoice.invoice_type,
+                        is_ipd: true,
+                        patient_name: patient?.full_name ?? null,
+                        net_amount: Number(invoice.net_amount),
+                        balance_due: Number(invoice.balance_due),
+                    },
+                };
+            }
+        }
+
+        const invoice = await db.invoices.findFirst({
+            where: {
+                patient_id: patientId,
+                invoice_type: { in: ['PHARMACY', 'Pharmacy'] },
+                status: { not: 'Cancelled' },
+            },
+            orderBy: { created_at: 'desc' },
+        });
+
+        if (invoice) {
+            return {
+                success: true,
+                data: {
+                    invoice_id: invoice.id,
+                    invoice_number: invoice.invoice_number,
+                    invoice_type: invoice.invoice_type,
+                    is_ipd: false,
+                    patient_name: null,
+                    net_amount: Number(invoice.net_amount),
+                    balance_due: Number(invoice.balance_due),
+                },
+            };
+        }
+
+        return { success: true, data: null };
+    } catch (error: any) {
+        console.error('getReturnInvoiceForPatient error:', error);
+        return { success: false, error: error.message || 'Failed to resolve return invoice' };
     }
 }
 

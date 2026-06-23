@@ -2,8 +2,28 @@
 
 import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { RotateCcw, AlertTriangle, CheckCircle, Search, FileText, IndianRupee } from 'lucide-react';
-import { processReturn, searchMedicine } from '@/app/actions/pharmacy-actions';
+import { RotateCcw, AlertTriangle, CheckCircle, Search, FileText, IndianRupee, User } from 'lucide-react';
+import { processReturn, searchMedicine, getReturnInvoiceForPatient } from '@/app/actions/pharmacy-actions';
+import { searchPatientsForBilling } from '@/app/actions/finance-actions';
+
+interface ReturnForm {
+    medicine_id: string;
+    medicine_name: string;
+    batch_id: string;
+    quantity: string;
+    reason: string;
+    invoice_id: string;
+}
+
+interface ReturnContext {
+    invoice_id: number;
+    invoice_number: string;
+    invoice_type: string;
+    is_ipd: boolean;
+    patient_name: string | null;
+    net_amount: number;
+    balance_due: number;
+}
 
 export default function ReturnsPage() {
     const [returnType, setReturnType] = useState<'Patient' | 'Expired'>('Expired');
@@ -12,7 +32,14 @@ export default function ReturnsPage() {
     const [saving, setSaving] = useState(false);
     const [result, setResult] = useState<any>(null);
 
-    const [form, setForm] = useState({
+    // Patient search (Patient Returns mode only)
+    const [patientSearch, setPatientSearch] = useState('');
+    const [patientSuggestions, setPatientSuggestions] = useState<any[]>([]);
+    const [selectedPatient, setSelectedPatient] = useState<any>(null);
+    const [returnContext, setReturnContext] = useState<ReturnContext | null>(null);
+    const [resolvingInvoice, setResolvingInvoice] = useState(false);
+
+    const [form, setForm] = useState<ReturnForm>({
         medicine_id: '',
         medicine_name: '',
         batch_id: '',
@@ -34,6 +61,51 @@ export default function ReturnsPage() {
         return () => clearTimeout(timer);
     }, [searchQuery]);
 
+    // Debounced patient search (Patient Returns mode only)
+    useEffect(() => {
+        if (returnType !== 'Patient') return;
+        const fetchPatients = async () => {
+            if (patientSearch.length >= 2 && !selectedPatient) {
+                const res = await searchPatientsForBilling(patientSearch);
+                if (res.success) setPatientSuggestions(res.data || []);
+            } else {
+                setPatientSuggestions([]);
+            }
+        };
+        const timer = setTimeout(fetchPatients, 300);
+        return () => clearTimeout(timer);
+    }, [patientSearch, selectedPatient, returnType]);
+
+    const handleSelectPatient = async (patient: any) => {
+        setSelectedPatient(patient);
+        setPatientSuggestions([]);
+        setPatientSearch(patient.full_name || '');
+        setReturnContext(null);
+        setForm((f: ReturnForm) => ({ ...f, invoice_id: '' }));
+        setResolvingInvoice(true);
+        try {
+            const res = await getReturnInvoiceForPatient(patient.patient_id);
+            if (res.success && res.data) {
+                const ctx = res.data as ReturnContext;
+                setReturnContext(ctx);
+                setForm((f: ReturnForm) => ({ ...f, invoice_id: String(ctx.invoice_id) }));
+            } else {
+                setReturnContext(null);
+                setForm((f: ReturnForm) => ({ ...f, invoice_id: '' }));
+            }
+        } finally {
+            setResolvingInvoice(false);
+        }
+    };
+
+    const handleClearPatient = () => {
+        setSelectedPatient(null);
+        setPatientSearch('');
+        setPatientSuggestions([]);
+        setReturnContext(null);
+        setForm((f: ReturnForm) => ({ ...f, invoice_id: '' }));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setSaving(true);
@@ -52,6 +124,7 @@ export default function ReturnsPage() {
             setResult(res);
             setForm({ medicine_id: '', medicine_name: '', batch_id: '', quantity: '', reason: '', invoice_id: '' });
             setSearchQuery('');
+            handleClearPatient();
         } else {
             alert(res.error || 'Failed to process return');
         }
@@ -64,7 +137,7 @@ export default function ReturnsPage() {
                 {/* Mode Switcher */}
                 <div className="bg-white p-1.5 rounded-xl border border-gray-200 mb-6 flex gap-1.5">
                     <button
-                        onClick={() => { setReturnType('Expired'); setResult(null); }}
+                        onClick={() => { setReturnType('Expired'); setResult(null); handleClearPatient(); }}
                         className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all flex justify-center items-center gap-2 ${returnType === 'Expired' ? 'bg-red-50 text-red-700 border border-red-200' : 'text-gray-500 hover:bg-gray-50'}`}
                     >
                         <AlertTriangle className="h-4 w-4" /> Expired Stock / Damage
@@ -181,16 +254,76 @@ export default function ReturnsPage() {
                             </div>
                         </div>
 
-                        {/* Invoice ID for patient returns */}
+                        {/* Patient search for patient returns */}
                         {returnType === 'Patient' && (
-                            <div>
+                            <div className="relative">
                                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.12em] mb-1.5 ml-1">
-                                    Invoice ID <span className="text-gray-300 font-medium normal-case">(for credit note generation)</span>
+                                    Patient <span className="text-gray-300 font-medium normal-case">(auto-resolves the bill to credit)</span>
                                 </label>
-                                <input value={form.invoice_id} onChange={e => setForm({ ...form, invoice_id: e.target.value })}
-                                    type="number"
-                                    className="w-full py-3 px-4 bg-white border border-gray-300 rounded-xl text-sm font-mono font-medium focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none text-gray-900 placeholder:text-gray-400"
-                                    placeholder="Optional — enter original invoice ID for refund" />
+                                <div className="relative">
+                                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                    <input
+                                        type="text"
+                                        value={patientSearch}
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setPatientSearch(e.target.value); setSelectedPatient(null); setReturnContext(null); setForm((f: ReturnForm) => ({ ...f, invoice_id: '' })); }}
+                                        className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 font-bold text-gray-900 placeholder:text-gray-400 placeholder:font-medium"
+                                        placeholder="Search patient by name, ID or phone..."
+                                    />
+                                    {selectedPatient && (
+                                        <button
+                                            type="button"
+                                            onClick={handleClearPatient}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-gray-400 hover:text-gray-700"
+                                        >
+                                            Clear
+                                        </button>
+                                    )}
+                                </div>
+
+                                {patientSuggestions.length > 0 && !selectedPatient && (
+                                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-auto">
+                                        {patientSuggestions.map((p: any) => (
+                                            <div
+                                                key={p.patient_id}
+                                                onClick={() => handleSelectPatient(p)}
+                                                className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-bold text-sm text-gray-900">{p.full_name}</p>
+                                                    {p.patient_type === 'IPD' && (
+                                                        <span className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold border border-blue-100">IPD</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <span className="text-[10px] text-gray-500 font-mono">{p.patient_id}</span>
+                                                    {p.phone && <span className="text-[10px] text-gray-400">{p.phone}</span>}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Resolved bill context banner */}
+                                {selectedPatient && resolvingInvoice && (
+                                    <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-xs font-medium text-gray-500">
+                                        Resolving billable invoice…
+                                    </div>
+                                )}
+                                {selectedPatient && !resolvingInvoice && returnContext && returnContext.is_ipd && (
+                                    <div className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs font-semibold text-blue-700">
+                                        🏥 IPD bill {returnContext.invoice_number} — return amount will be deducted from the IPD bill
+                                    </div>
+                                )}
+                                {selectedPatient && !resolvingInvoice && returnContext && !returnContext.is_ipd && (
+                                    <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-xs font-semibold text-gray-600">
+                                        Counter bill {returnContext.invoice_number} — credit note will be created
+                                    </div>
+                                )}
+                                {selectedPatient && !resolvingInvoice && !returnContext && (
+                                    <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs font-semibold text-amber-700">
+                                        No billable invoice found for this patient — stock will be restocked only
+                                    </div>
+                                )}
                             </div>
                         )}
 
