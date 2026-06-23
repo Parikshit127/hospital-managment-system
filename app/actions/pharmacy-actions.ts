@@ -2157,6 +2157,57 @@ export async function getReturnInvoiceForPatient(patientId: string) {
     }
 }
 
+// Search returnable bills for the pharmacy Returns screen. Matches pharmacy
+// counter bills (incl. walk-in/OTC whose customer name lives in `notes`) and IPD
+// bills, by invoice number, registered patient name/phone/ID, or walk-in name.
+export async function searchReturnableInvoices(query: string) {
+    try {
+        const { db } = await requireTenantContext();
+        const q = (query || '').trim();
+        if (q.length < 2) return { success: true, data: [] };
+
+        const invoices = await db.invoices.findMany({
+            where: {
+                status: { not: 'Cancelled' },
+                invoice_type: { in: ['Pharmacy', 'PHARMACY', 'IPD'] },
+                OR: [
+                    { invoice_number: { contains: q, mode: 'insensitive' } },
+                    { notes: { contains: q, mode: 'insensitive' } },        // walk-in / OTC name
+                    { patient_id: { contains: q, mode: 'insensitive' } },
+                    { patient: { full_name: { contains: q, mode: 'insensitive' } } },
+                    { patient: { phone: { contains: q } } },
+                ],
+            },
+            include: { patient: { select: { full_name: true } } },
+            orderBy: { created_at: 'desc' },
+            take: 15,
+        });
+
+        const data = invoices.map((inv: any) => {
+            const isWalkin = inv.patient_id === 'WALKIN';
+            const name = isWalkin
+                ? (parseWalkinNote(inv.notes).name || 'Walk-in / OTC')
+                : (inv.patient?.full_name || inv.patient_id);
+            return {
+                invoice_id: inv.id,
+                invoice_number: inv.invoice_number,
+                patient_name: name,
+                is_ipd: inv.invoice_type === 'IPD',
+                is_walkin: isWalkin,
+                invoice_type: inv.invoice_type,
+                created_at: inv.created_at,
+                net_amount: Number(inv.net_amount),
+                balance_due: Number(inv.balance_due),
+            };
+        });
+        return { success: true, data };
+    } catch (error: any) {
+        console.error('searchReturnableInvoices error:', error);
+        return { success: false, error: error.message || 'Search failed', data: [] };
+    }
+}
+
+
 export async function getPharmacyOrderDetails(orderId: number) {
     try {
         const { db } = await requireTenantContext();

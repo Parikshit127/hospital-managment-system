@@ -3,8 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { RotateCcw, AlertTriangle, CheckCircle, Search, FileText, IndianRupee, User } from 'lucide-react';
-import { processReturn, searchMedicine, getReturnInvoiceForPatient } from '@/app/actions/pharmacy-actions';
-import { searchPatientsForBilling } from '@/app/actions/finance-actions';
+import { processReturn, searchMedicine, searchReturnableInvoices } from '@/app/actions/pharmacy-actions';
 
 interface ReturnForm {
     medicine_id: string;
@@ -37,7 +36,6 @@ export default function ReturnsPage() {
     const [patientSuggestions, setPatientSuggestions] = useState<any[]>([]);
     const [selectedPatient, setSelectedPatient] = useState<any>(null);
     const [returnContext, setReturnContext] = useState<ReturnContext | null>(null);
-    const [resolvingInvoice, setResolvingInvoice] = useState(false);
 
     const [form, setForm] = useState<ReturnForm>({
         medicine_id: '',
@@ -61,41 +59,28 @@ export default function ReturnsPage() {
         return () => clearTimeout(timer);
     }, [searchQuery]);
 
-    // Debounced patient search (Patient Returns mode only)
+    // Debounced INVOICE search (Patient Returns mode only). Searches pharmacy
+    // counter bills (incl. walk-in/OTC by name) and IPD bills.
     useEffect(() => {
         if (returnType !== 'Patient') return;
-        const fetchPatients = async () => {
+        const fetchInvoices = async () => {
             if (patientSearch.length >= 2 && !selectedPatient) {
-                const res = await searchPatientsForBilling(patientSearch);
+                const res = await searchReturnableInvoices(patientSearch);
                 if (res.success) setPatientSuggestions(res.data || []);
             } else {
                 setPatientSuggestions([]);
             }
         };
-        const timer = setTimeout(fetchPatients, 300);
+        const timer = setTimeout(fetchInvoices, 300);
         return () => clearTimeout(timer);
     }, [patientSearch, selectedPatient, returnType]);
 
-    const handleSelectPatient = async (patient: any) => {
-        setSelectedPatient(patient);
+    const handleSelectPatient = (inv: any) => {
+        setSelectedPatient(inv);
         setPatientSuggestions([]);
-        setPatientSearch(patient.full_name || '');
-        setReturnContext(null);
-        setForm((f: ReturnForm) => ({ ...f, invoice_id: '' }));
-        setResolvingInvoice(true);
-        try {
-            const res = await getReturnInvoiceForPatient(patient.patient_id);
-            if (res.success && res.data) {
-                const ctx = res.data as ReturnContext;
-                setReturnContext(ctx);
-                setForm((f: ReturnForm) => ({ ...f, invoice_id: String(ctx.invoice_id) }));
-            } else {
-                setReturnContext(null);
-                setForm((f: ReturnForm) => ({ ...f, invoice_id: '' }));
-            }
-        } finally {
-            setResolvingInvoice(false);
-        }
+        setPatientSearch(`${inv.invoice_number} · ${inv.patient_name}`);
+        setReturnContext(inv as ReturnContext);
+        setForm((f: ReturnForm) => ({ ...f, invoice_id: String(inv.invoice_id) }));
     };
 
     const handleClearPatient = () => {
@@ -258,7 +243,7 @@ export default function ReturnsPage() {
                         {returnType === 'Patient' && (
                             <div className="relative">
                                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.12em] mb-1.5 ml-1">
-                                    Patient <span className="text-gray-300 font-medium normal-case">(auto-resolves the bill to credit)</span>
+                                    Bill / Invoice <span className="text-gray-300 font-medium normal-case">(find the bill to return against)</span>
                                 </label>
                                 <div className="relative">
                                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -267,7 +252,7 @@ export default function ReturnsPage() {
                                         value={patientSearch}
                                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setPatientSearch(e.target.value); setSelectedPatient(null); setReturnContext(null); setForm((f: ReturnForm) => ({ ...f, invoice_id: '' })); }}
                                         className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 font-bold text-gray-900 placeholder:text-gray-400 placeholder:font-medium"
-                                        placeholder="Search patient by name, ID or phone..."
+                                        placeholder="Search by invoice #, patient or walk-in name, phone..."
                                     />
                                     {selectedPatient && (
                                         <button
@@ -282,46 +267,40 @@ export default function ReturnsPage() {
 
                                 {patientSuggestions.length > 0 && !selectedPatient && (
                                     <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-auto">
-                                        {patientSuggestions.map((p: any) => (
+                                        {patientSuggestions.map((inv: any) => (
                                             <div
-                                                key={p.patient_id}
-                                                onClick={() => handleSelectPatient(p)}
+                                                key={inv.invoice_id}
+                                                onClick={() => handleSelectPatient(inv)}
                                                 className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
                                             >
                                                 <div className="flex items-center gap-2">
-                                                    <p className="font-bold text-sm text-gray-900">{p.full_name}</p>
-                                                    {p.patient_type === 'IPD' && (
+                                                    <p className="font-bold text-sm text-gray-900">{inv.patient_name}</p>
+                                                    {inv.is_ipd ? (
                                                         <span className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold border border-blue-100">IPD</span>
+                                                    ) : inv.is_walkin ? (
+                                                        <span className="text-[9px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded font-bold border border-amber-100">OTC</span>
+                                                    ) : (
+                                                        <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">Counter</span>
                                                     )}
                                                 </div>
-                                                <div className="flex items-center gap-2 mt-0.5">
-                                                    <span className="text-[10px] text-gray-500 font-mono">{p.patient_id}</span>
-                                                    {p.phone && <span className="text-[10px] text-gray-400">{p.phone}</span>}
+                                                <div className="flex items-center justify-between gap-2 mt-0.5">
+                                                    <span className="text-[10px] text-gray-500 font-mono">{inv.invoice_number}</span>
+                                                    <span className="text-[10px] text-gray-400">{new Date(inv.created_at).toLocaleDateString('en-GB')} · ₹{Number(inv.net_amount).toFixed(2)}</span>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
                                 )}
 
-                                {/* Resolved bill context banner */}
-                                {selectedPatient && resolvingInvoice && (
-                                    <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-xs font-medium text-gray-500">
-                                        Resolving billable invoice…
-                                    </div>
-                                )}
-                                {selectedPatient && !resolvingInvoice && returnContext && returnContext.is_ipd && (
+                                {/* Selected bill context banner */}
+                                {selectedPatient && returnContext && returnContext.is_ipd && (
                                     <div className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs font-semibold text-blue-700">
                                         🏥 IPD bill {returnContext.invoice_number} — return amount will be deducted from the IPD bill
                                     </div>
                                 )}
-                                {selectedPatient && !resolvingInvoice && returnContext && !returnContext.is_ipd && (
-                                    <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-xs font-semibold text-gray-600">
+                                {selectedPatient && returnContext && !returnContext.is_ipd && (
+                                    <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs font-semibold text-emerald-700">
                                         Counter bill {returnContext.invoice_number} — credit note will be created
-                                    </div>
-                                )}
-                                {selectedPatient && !resolvingInvoice && !returnContext && (
-                                    <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs font-semibold text-amber-700">
-                                        No billable invoice found for this patient — stock will be restocked only
                                     </div>
                                 )}
                             </div>
