@@ -164,12 +164,18 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
       if (filter.date_to) where.created_at.lte = new Date(filter.date_to + "T23:59:59.999");
     }
 
-    // Reception role: show only IPD invoices, hide pharmacy OPD bills
+    // Pharmacy COUNTER / OTC bills (invoice_type 'Pharmacy') belong to the
+    // Pharmacy → Invoices module, not the hospital patient-billing report. Hide
+    // them here by default for everyone, unless the user explicitly filters by
+    // invoice_type. Reception additionally only sees hospital IPD/OPD bills.
     const receptionRoles = ['ipd_recep', 'receptionist', 'reception', 'front_desk'];
     const isReceptionRole = receptionRoles.includes((session?.role || '').toLowerCase());
-    if (isReceptionRole && !filter.invoice_type) {
-      where.invoice_type = { in: ['IPD', 'OPD', 'OPD_FEE'] };
-      where.NOT = { invoice_type: 'PHARMACY' };
+    if (!filter.invoice_type) {
+      if (isReceptionRole) {
+        where.invoice_type = { in: ['IPD', 'OPD', 'OPD_FEE'] };
+      } else {
+        where.invoice_type = { notIn: ['Pharmacy', 'PHARMACY'] };
+      }
     }
 
     if (filter.search && filter.search.trim().length >= 2) {
