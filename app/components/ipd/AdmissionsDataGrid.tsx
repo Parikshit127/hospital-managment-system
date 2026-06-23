@@ -15,8 +15,36 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<'All' | 'Admitted' | 'Discharged' | 'Cancelled'>('Admitted');
     const [wardFilter, setWardFilter] = useState<string>('All');
+    const [doctorFilter, setDoctorFilter] = useState<string>('All');
+    const [categoryFilter, setCategoryFilter] = useState<string>('All');
+    const [billingFilter, setBillingFilter] = useState<string>('All');
     const [fromDate, setFromDate] = useState<string>('');
     const [toDate, setToDate] = useState<string>('');
+
+    // Distinct option lists derived from the loaded dataset (plus canonical fallbacks)
+    const doctorOptions = useMemo(() => {
+        const set = new Set<string>();
+        initialData.forEach((a: any) => { if (a.doctor_name) set.add(a.doctor_name); });
+        return Array.from(set).sort((a, b) => a.localeCompare(b));
+    }, [initialData]);
+
+    const categoryOptions = useMemo(() => {
+        const set = new Set<string>(['Planned', 'Emergency', 'DayCare', 'Observation']);
+        initialData.forEach((a: any) => { if (a.admission_category) set.add(a.admission_category); });
+        return Array.from(set);
+    }, [initialData]);
+
+    const billingOptions = useMemo(() => {
+        const set = new Set<string>(['General', 'Semi-Private', 'Private', 'Deluxe', 'VIP']);
+        initialData.forEach((a: any) => { if (a.billing_category) set.add(a.billing_category); });
+        return Array.from(set);
+    }, [initialData]);
+
+    const wardNameById = useMemo(() => {
+        const m = new Map<string, string>();
+        wards.forEach((w: any) => m.set(String(w.ward_id), w.ward_name));
+        return m;
+    }, [wards]);
     
     // Transfer Modal State
     const [transferModal, setTransferModal] = useState<any | null>(null);
@@ -121,6 +149,15 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
             // Ward match
             if (wardFilter !== 'All' && adm.ward_id !== Number(wardFilter)) return false;
 
+            // Attending doctor match
+            if (doctorFilter !== 'All' && adm.doctor_name !== doctorFilter) return false;
+
+            // Admission category match
+            if (categoryFilter !== 'All' && adm.admission_category !== categoryFilter) return false;
+
+            // Billing class match
+            if (billingFilter !== 'All' && adm.billing_category !== billingFilter) return false;
+
             // Admission date range (compares the local calendar date of admission)
             if (fromDate || toDate) {
                 const d = adm.admission_date ? new Date(adm.admission_date) : null;
@@ -143,48 +180,113 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
             
             return true;
         });
-    }, [initialData, search, statusFilter, wardFilter, fromDate, toDate]);
+    }, [initialData, search, statusFilter, wardFilter, doctorFilter, categoryFilter, billingFilter, fromDate, toDate]);
+
+    // Active-filter chips (excludes status, which lives in its own toggle)
+    const activeFilters = useMemo(() => {
+        const chips: { key: string; label: string; clear: () => void }[] = [];
+        if (search.trim()) chips.push({ key: 'search', label: `Search: "${search.trim()}"`, clear: () => setSearch('') });
+        if (wardFilter !== 'All') chips.push({ key: 'ward', label: `Ward: ${wardNameById.get(wardFilter) || wardFilter}`, clear: () => setWardFilter('All') });
+        if (doctorFilter !== 'All') chips.push({ key: 'doctor', label: `Dr. ${doctorFilter}`, clear: () => setDoctorFilter('All') });
+        if (categoryFilter !== 'All') chips.push({ key: 'category', label: `Category: ${categoryFilter}`, clear: () => setCategoryFilter('All') });
+        if (billingFilter !== 'All') chips.push({ key: 'billing', label: `Class: ${billingFilter}`, clear: () => setBillingFilter('All') });
+        if (fromDate || toDate) chips.push({ key: 'date', label: `Admitted: ${fromDate || '…'} – ${toDate || '…'}`, clear: () => { setFromDate(''); setToDate(''); } });
+        return chips;
+    }, [search, wardFilter, doctorFilter, categoryFilter, billingFilter, fromDate, toDate, wardNameById]);
+
+    const clearAllFilters = () => {
+        setSearch('');
+        setWardFilter('All');
+        setDoctorFilter('All');
+        setCategoryFilter('All');
+        setBillingFilter('All');
+        setFromDate('');
+        setToDate('');
+    };
+
+    const selectCls = 'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all';
 
     return (
         <div className="space-y-6">
             {/* Smart Filters Header */}
-            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
-                
-                {/* Search */}
-                <div className="relative w-full md:w-96">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input 
-                        className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all"
-                        placeholder="Search by Name, IPD ID, or Mobile..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
+            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm space-y-3">
+
+                {/* Row 1: Search + Status toggle + result count */}
+                <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+                    {/* Search */}
+                    <div className="relative w-full md:w-96">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                            className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all"
+                            placeholder="Search by Name, IPD ID, or Mobile..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                    </div>
+
+                    <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+                        <span className="hidden sm:inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 shrink-0">
+                            <span className="text-base font-black text-gray-800">{filteredAdmissions.length}</span>
+                            {filteredAdmissions.length === 1 ? 'result' : 'results'}
+                        </span>
+                        {/* Quick Toggles */}
+                        <div className="flex bg-gray-100 p-1 rounded-xl shrink-0">
+                            {['All', 'Admitted', 'Discharged', 'Cancelled'].map((status) => (
+                                <button
+                                    key={status}
+                                    onClick={() => setStatusFilter(status as any)}
+                                    className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${statusFilter === status ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    {status}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                 </div>
 
-                <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
-                    {/* Quick Toggles */}
-                    <div className="flex bg-gray-100 p-1 rounded-xl shrink-0">
-                        {['All', 'Admitted', 'Discharged', 'Cancelled'].map((status) => (
-                            <button
-                                key={status}
-                                onClick={() => setStatusFilter(status as any)}
-                                className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${statusFilter === status ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                            >
-                                {status}
-                            </button>
-                        ))}
+                {/* Row 2: Dropdown filters + date range */}
+                <div className="flex flex-wrap items-center gap-3 border-t border-gray-100 pt-3">
+                    <div className="flex items-center gap-1.5 text-gray-400 shrink-0">
+                        <Filter className="h-4 w-4" />
+                        <span className="text-[10px] font-black uppercase tracking-wider">Filter</span>
                     </div>
 
                     {/* Ward Filter */}
-                    <div className="shrink-0 w-48">
-                        <select
-                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:outline-none focus:border-orange-500"
-                            value={wardFilter}
-                            onChange={(e) => setWardFilter(e.target.value)}
-                        >
+                    <div className="shrink-0 w-44">
+                        <select className={selectCls} value={wardFilter} onChange={(e) => setWardFilter(e.target.value)}>
                             <option value="All">All Wards / Units</option>
                             {wards.map((w: any) => (
                                 <option key={w.ward_id} value={w.ward_id}>{w.ward_name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Attending Doctor Filter */}
+                    <div className="shrink-0 w-44">
+                        <select className={selectCls} value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)}>
+                            <option value="All">All Doctors</option>
+                            {doctorOptions.map((d) => (
+                                <option key={d} value={d}>{d}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Admission Category Filter */}
+                    <div className="shrink-0 w-40">
+                        <select className={selectCls} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+                            <option value="All">All Categories</option>
+                            {categoryOptions.map((c) => (
+                                <option key={c} value={c}>{c}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Billing Class Filter */}
+                    <div className="shrink-0 w-40">
+                        <select className={selectCls} value={billingFilter} onChange={(e) => setBillingFilter(e.target.value)}>
+                            <option value="All">All Classes</option>
+                            {billingOptions.map((b) => (
+                                <option key={b} value={b}>{b}</option>
                             ))}
                         </select>
                     </div>
@@ -218,6 +320,29 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                         )}
                     </div>
                 </div>
+
+                {/* Row 3: Active filter chips + Clear all */}
+                {activeFilters.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
+                        {activeFilters.map((chip) => (
+                            <span
+                                key={chip.key}
+                                className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-700 border border-orange-200 rounded-lg pl-2.5 pr-1.5 py-1 text-[11px] font-bold"
+                            >
+                                {chip.label}
+                                <button onClick={chip.clear} className="text-orange-400 hover:text-orange-700 transition-colors" title="Remove filter">
+                                    <X className="h-3 w-3" />
+                                </button>
+                            </span>
+                        ))}
+                        <button
+                            onClick={clearAllFilters}
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-gray-500 hover:text-rose-600 transition-colors ml-1"
+                        >
+                            <X className="h-3.5 w-3.5" /> Clear all
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* List View Components */}
