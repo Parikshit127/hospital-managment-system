@@ -425,10 +425,21 @@ export async function getInvoices(filters?: {
             const ipdPharmMapped = ipdPharmInvoices.map((inv: any) => {
                 const pharmTotal = inv.items.reduce((s: number, it: any) => s + Number(it.net_price || 0), 0);
                 const pharmTax = inv.items.reduce((s: number, it: any) => s + Number(it.tax_amount || 0), 0);
+                const pharmGross = pharmTotal + pharmTax;
+                // Bill date = when the pharmacy was actually dispensed (latest pharmacy
+                // line), NOT the IPD invoice/admission date.
+                const pharmDate = inv.items.length > 0
+                    ? new Date(Math.max(...inv.items.map((it: any) => new Date(it.created_at).getTime())))
+                    : inv.created_at;
+                // Show only the pharmacy portion that is still outstanding (capped at
+                // the pharmacy gross), not the whole IPD bill's balance.
+                const pharmBalance = Math.max(0, Math.min(pharmGross, Number(inv.balance_due || 0)));
                 return {
                     ...inv,
                     _isIpdPharmacy: true,
-                    _pharmTotal: pharmTotal + pharmTax,
+                    _pharmTotal: pharmGross,
+                    _pharmBalance: pharmBalance,
+                    _pharmDate: pharmDate,
                     _pharmItemCount: inv.items.length,
                     _admissionStatus: inv.admission?.status || null,
                     items: undefined, // don't carry heavy items array
@@ -501,9 +512,9 @@ export async function getInvoices(filters?: {
                 invoice_type: 'PHARMACY',
                 net_amount: pharm._isIpdPharmacy ? pharm._pharmTotal : pharm.net_amount,
                 total_amount: pharm._isIpdPharmacy ? pharm._pharmTotal : pharm.total_amount,
-                balance_due: pharm.balance_due,
+                balance_due: pharm._isIpdPharmacy ? pharm._pharmBalance : pharm.balance_due,
                 status: pharm.status,
-                created_at: pharm.created_at,
+                created_at: pharm._isIpdPharmacy ? pharm._pharmDate : pharm.created_at,
                 source: pharm._isIpdPharmacy ? 'IPD-PHARMACY' : 'PHARMACY',
                 admission_id: pharm.admission_id || null,
                 admission_status: pharm._admissionStatus || null,
