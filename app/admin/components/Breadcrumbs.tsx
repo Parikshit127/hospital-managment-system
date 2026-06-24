@@ -62,7 +62,13 @@ export default function Breadcrumbs() {
     let accumulated = '';
     for (const seg of segments) {
         accumulated += `/${seg}`;
-        const href = accumulated;
+        let href = accumulated;
+        
+        // Special case: /admin/mis routes belong to the /admin/mis-reports hub
+        if (href === '/admin/mis') {
+            href = '/admin/mis-reports';
+        }
+
         // Try exact nav label first, then segment label map
         const label = ADMIN_NAV_LABEL_MAP[href] ?? labelForSegment(seg);
         crumbs.push({ label, href });
