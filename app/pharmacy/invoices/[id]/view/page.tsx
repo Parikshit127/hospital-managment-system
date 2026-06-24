@@ -3,6 +3,7 @@ import { prisma } from '@/backend/db';
 import { getSession } from '@/app/lib/session';
 import { getPharmacyBranding } from '@/app/lib/pharmacy-branding';
 import { parseWalkinNote } from '@/app/lib/walkin-note';
+import { dispensingKey } from '@/app/lib/pharmacy-bill-group';
 
 // IPD pharmacy line descriptions carry a trailing " — Dr. X" (prescribing
 // doctor). Split it out so the doctor can be shown once in the header rather
@@ -15,8 +16,9 @@ function splitLineDoctor(desc: any): { text: string; doctor: string } {
     return { text: String(desc || ''), doctor: '' };
 }
 
-export default async function PharmacyInvoiceViewPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PharmacyInvoiceViewPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ bill?: string }> }) {
     const { id } = await params;
+    const { bill: billKey } = await searchParams;
     const invoiceId = parseInt(id);
     if (isNaN(invoiceId)) notFound();
 
@@ -46,7 +48,14 @@ export default async function PharmacyInvoiceViewPage({ params }: { params: Prom
     const isIpd = invoice.invoice_type === 'IPD';
     // For IPD invoices, only show pharmacy items; for pharmacy invoices, show all
     const allItems = invoice.items as any[];
-    const items = isIpd ? allItems.filter((i: any) => i.service_category === 'Pharmacy') : allItems;
+    let items = isIpd ? allItems.filter((i: any) => i.service_category === 'Pharmacy') : allItems;
+    // When opened for a specific dispensing bill (?bill=<key>), narrow to just that
+    // bill so each Customer-Invoices row opens its own bill, not the whole IPD
+    // pharmacy. Fall back to all pharmacy items if nothing matches (stale link).
+    if (isIpd && billKey) {
+        const scoped = items.filter((i: any) => dispensingKey(i.created_at) === billKey);
+        if (scoped.length > 0) items = scoped;
+    }
 
     if (isIpd && items.length === 0) {
         return <div style={{ padding: 40, fontFamily: 'Arial', color: '#6b7280' }}>No pharmacy items found on this IPD invoice.</div>;
