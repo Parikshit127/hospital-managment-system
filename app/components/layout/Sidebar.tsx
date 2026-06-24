@@ -36,6 +36,7 @@ import {
   FileStack,
   UserCheck,
   BarChart3,
+  FileSpreadsheet,
   Package,
   ShoppingCart,
   Truck,
@@ -191,6 +192,12 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Emergency Room", href: "/er/dashboard", icon: Siren },
       ],
     },
+    {
+      title: "Reports",
+      items: [
+        { label: "MIS Reports", href: "/doctor/mis-reports", icon: FileSpreadsheet },
+      ],
+    },
   ],
 
   receptionist: [
@@ -230,6 +237,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       title: "Reports",
       items: [
         { label: "Patient Reports", href: "/reception/reports", icon: BarChart3 },
+        { label: "MIS Reports", href: "/reception/mis-reports", icon: FileSpreadsheet },
       ],
     },
   ],
@@ -242,6 +250,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Lab Orders", href: "/lab/technician", icon: FlaskConical },
         { label: "Inventory", href: "/lab/inventory", icon: Package },
         { label: "Reports", href: "/lab/reports", icon: BarChart3 },
+        { label: "MIS Reports", href: "/lab/mis-reports", icon: FileSpreadsheet },
       ],
     },
   ],
@@ -271,6 +280,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       title: "Reports",
       items: [
         { label: "Pharmacy Reports", href: "/pharmacy/reports", icon: BarChart3 },
+        { label: "MIS Reports", href: "/pharmacy/mis-reports", icon: FileSpreadsheet },
       ],
     },
   ],
@@ -319,6 +329,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "TPA / Insurance", href: "/insurance", icon: ShieldCheck },
         { label: "Revenue Analytics", href: "/finance/revenue", icon: PieChart },
         { label: "Financial Reports", href: "/finance/reports", icon: BarChart3 },
+        { label: "MIS Reports", href: "/finance/mis-reports", icon: FileSpreadsheet },
         { label: "Fiscal Periods", href: "/finance/periods", icon: CalendarCheck },
         { label: "Bank Recon", href: "/finance/bank-recon", icon: ArrowLeftRight },
         { label: "Collections", href: "/finance/collections", icon: Bell },
@@ -347,6 +358,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Ward Rounds", href: "/ipd/ward-rounds", icon: ClipboardCheck },
         { label: "Case Sheet", href: "/ipd/case-sheet", icon: ClipboardList },
         { label: "Census", href: "/ipd/census", icon: PieChart },
+        { label: "MIS Reports", href: "/ipd/mis-reports", icon: FileSpreadsheet },
       ],
     },
     {
