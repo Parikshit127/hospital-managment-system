@@ -4,7 +4,8 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { User, Phone, Mail, Calendar, MapPin, Loader2, CheckCircle, ArrowLeft, Building2 } from 'lucide-react';
+import { User, Phone, Mail, Calendar, MapPin, Loader2, ArrowLeft, Building2, Mic } from 'lucide-react';
+import { RegistrationSuccess } from '@/app/components/registration/RegistrationSuccess';
 
 type Org = { id: string; name: string; slug: string; address: string | null };
 
@@ -17,12 +18,13 @@ function RegisterForm() {
     const [selectedOrg, setSelectedOrg] = useState(orgSlug);
     const [loading, setLoading] = useState(false);
     const [orgsLoading, setOrgsLoading] = useState(true);
-    const [success, setSuccess] = useState<{ patient_id: string; setup_link: string | null } | null>(null);
+    const [success, setSuccess] = useState<{ patient_id: string; password?: string; setup_link: string | null } | null>(null);
     const [error, setError] = useState('');
+    const [showManualForm, setShowManualForm] = useState(false);
 
     const [form, setForm] = useState({
         full_name: '', phone: '', email: '', age: '', gender: 'Male',
-        date_of_birth: '', address: '', blood_group: '', department: 'General',
+        date_of_birth: '', address: '', blood_group: '',
         emergency_contact_name: '', emergency_contact_phone: '',
     });
 
@@ -55,7 +57,7 @@ function RegisterForm() {
             });
             const data = await res.json();
             if (data.success) {
-                setSuccess({ patient_id: data.patient_id, setup_link: data.setup_link });
+                setSuccess({ patient_id: data.patient_id, password: data.password, setup_link: data.setup_link });
             } else {
                 setError(data.error || 'Registration failed. Please try again.');
             }
@@ -67,29 +69,12 @@ function RegisterForm() {
 
     if (success) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-3xl shadow-xl p-10 max-w-md w-full text-center space-y-5">
-                    <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto">
-                        <CheckCircle className="w-10 h-10 text-emerald-600" />
-                    </div>
-                    <h2 className="text-2xl font-black text-gray-900">Registration Successful!</h2>
-                    <p className="text-gray-500 text-sm">Your patient account has been created.</p>
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5">
-                        <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Your Patient ID</p>
-                        <p className="text-3xl font-black text-emerald-700 font-mono">{success.patient_id}</p>
-                        <p className="text-xs text-gray-500 mt-2">Save this ID — you will need it to log in</p>
-                    </div>
-                    {success.setup_link && (
-                        <a href={success.setup_link}
-                            className="block w-full py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition text-sm">
-                            Set Your Password →
-                        </a>
-                    )}
-                    <Link href="/patient/login" className="block text-sm text-emerald-600 hover:underline font-medium">
-                        Go to Login
-                    </Link>
-                </div>
-            </div>
+            <RegistrationSuccess
+                patientId={success.patient_id}
+                password={success.password}
+                redirectTo="/patient/appointments/choose-method"
+                ctaLabel="Continue"
+            />
         );
     }
 
@@ -103,6 +88,50 @@ function RegisterForm() {
                     <ArrowLeft className="w-4 h-4" /> Back to Login
                 </Link>
 
+                {/* ─── Entry Choice: Manual vs Voice ─── */}
+                {!showManualForm && (
+                    <div className="bg-white rounded-3xl shadow-xl overflow-hidden mb-6">
+                        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-8 py-8 text-white text-center">
+                            <h1 className="text-2xl font-black">Create Patient Account</h1>
+                            <p className="text-emerald-100 text-sm mt-1">Choose how you would like to register</p>
+                        </div>
+                        <div className="p-8 space-y-4">
+                            <button
+                                onClick={() => setShowManualForm(true)}
+                                className="w-full py-5 px-6 border-2 border-gray-200 rounded-2xl hover:border-emerald-400 hover:bg-emerald-50/50 transition-all flex items-center gap-4 group text-left"
+                            >
+                                <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center shrink-0">
+                                    <User className="w-6 h-6 text-emerald-600" />
+                                </div>
+                                <div>
+                                    <span className="font-bold text-gray-800 group-hover:text-emerald-700 text-lg block">Fill Manually</span>
+                                    <p className="text-sm text-gray-500">Type your details into the registration form</p>
+                                </div>
+                            </button>
+                            <button
+                                onClick={() => router.push('/patient/register/voice')}
+                                className="w-full py-5 px-6 border-2 border-gray-200 rounded-2xl hover:border-emerald-400 hover:bg-emerald-50/50 transition-all flex items-center gap-4 group text-left"
+                            >
+                                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
+                                    <Mic className="w-6 h-6 text-blue-600" />
+                                </div>
+                                <div>
+                                    <span className="font-bold text-gray-800 group-hover:text-emerald-700 text-lg block">Register with AI Voice Assistant</span>
+                                    <p className="text-sm text-gray-500">Speak your details — the assistant fills the form for you</p>
+                                </div>
+                            </button>
+                            <p className="text-center text-sm text-gray-500 pt-2">
+                                Already have an account?{' '}
+                                <Link href="/patient/login" className="text-emerald-600 font-bold hover:underline">
+                                    Sign In
+                                </Link>
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {/* ─── Manual Registration Form (unchanged) ─── */}
+                {showManualForm && (
                 <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
                     <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-8 py-8 text-white">
                         <h1 className="text-2xl font-black">Create Patient Account</h1>
@@ -225,14 +254,6 @@ function RegisterForm() {
                                 </select>
                             </div>
 
-                            {/* Department */}
-                            <div>
-                                <label className={labelCls}>Department</label>
-                                <select value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))} className={inputCls}>
-                                    {['General', 'Cardiology', 'Orthopedics', 'Neurology', 'Pediatrics', 'Gynecology', 'Dermatology', 'ENT', 'Ophthalmology', 'Psychiatry', 'Oncology', 'Urology'].map(d => <option key={d}>{d}</option>)}
-                                </select>
-                            </div>
-
                             {/* Address */}
                             <div className="sm:col-span-2">
                                 <label className={labelCls}>Address</label>
@@ -293,6 +314,7 @@ function RegisterForm() {
                         </p>
                     </form>
                 </div>
+                )}
             </div>
         </div>
     );

@@ -133,7 +133,12 @@ export async function patientLogin(prevState: any, formData: FormData) {
         return { success: false, error: 'Internal server error' };
     }
 
-    redirect('/patient/dashboard');
+    const redirectTo = formData.get('redirectTo') as string;
+    if (redirectTo && redirectTo.startsWith('/patient/')) {
+        redirect(redirectTo);
+    } else {
+        redirect('/patient/dashboard');
+    }
 }
 
 export async function patientLogout() {

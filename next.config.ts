@@ -37,12 +37,13 @@ const nextConfig: NextConfig = {
     async headers() {
         return [
             {
+                // Global security headers applied to every route.
                 source: '/(.*)',
                 headers: [
                     { key: 'X-Frame-Options', value: 'DENY' },
                     { key: 'X-Content-Type-Options', value: 'nosniff' },
                     { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-                    { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+                    { key: 'Permissions-Policy', value: 'camera=(), microphone=self, geolocation=()' },
                     {
                         key: 'Content-Security-Policy',
                         value: [
@@ -51,7 +52,14 @@ const nextConfig: NextConfig = {
                             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
                             "font-src 'self' https://fonts.gstatic.com data: https:",
                             "img-src 'self' data: https: blob:",
-                            "connect-src 'self' https://*.supabase.co https://*.razorpay.com https://api.razorpay.com https://lumberjack.razorpay.com https://lumberjack-cx.razorpay.com https://cdn.razorpay.com",
+                            // ws: and wss: are required for the Phase 3A WebSocket STT/TTS connections.
+                            // next-ws opens a WebSocket upgrade on the same host/port as Next.js.
+                            "connect-src 'self' ws: wss: https://*.supabase.co https://*.razorpay.com https://api.razorpay.com https://lumberjack.razorpay.com https://lumberjack-cx.razorpay.com https://cdn.razorpay.com",
+                            // worker-src governs AudioWorklet module loading (spec §5.2).
+                            // Without this explicit directive the browser falls back to
+                            // child-src → default-src with varying strictness across
+                            // Chromium versions, producing AbortError on addModule().
+                            "worker-src 'self'",
                             "frame-src https://api.razorpay.com https://checkout.razorpay.com",
                         ].join('; ')
                     },
@@ -60,7 +68,34 @@ const nextConfig: NextConfig = {
                         value: 'max-age=63072000; includeSubDomains; preload'
                     }
                 ]
-            }
+            },
+            {
+                // AudioWorklet processor files served from /public/worklets/.
+                //
+                // Content-Type: declared explicitly so no proxy/CDN can strip
+                //   it. A missing CT + global nosniff = browser refuses to
+                //   execute the worklet (AbortError).
+                //
+                // Cache-Control: cache for 1 hour in dev / 24 h in prod.
+                //   addModule() issues a new network fetch every time a new
+                //   AudioContext is created. If the dev server has a momentary
+                //   glitch (e.g. right after next-ws patch restarts it), that
+                //   fetch returns an error body and the browser reports AbortError.
+                //   With caching, any fetch after the first successful one is
+                //   served from the browser cache, making addModule() immune to
+                //   transient server hiccups.
+                //
+                // Cross-Origin-Resource-Policy: same-origin required when the
+                //   worklet loader fetches the script — some Chromium builds
+                //   block cross-origin worklet fetches even on the same host
+                //   if this header is absent.
+                source: '/worklets/:file*',
+                headers: [
+                    { key: 'Content-Type',                value: 'application/javascript; charset=utf-8' },
+                    { key: 'Cache-Control',                value: 'public, max-age=3600, stale-while-revalidate=86400' },
+                    { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
+                ],
+            },
         ]
     }
 }

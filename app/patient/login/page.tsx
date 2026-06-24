@@ -53,6 +53,7 @@ function PatientLoginForm() {
                     )}
 
                     <form action={loginAction} className="space-y-5">
+                        <input type="hidden" name="redirectTo" value={searchParams.get('redirectTo') || ''} />
                         <div className="space-y-1.5">
                             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Patient ID or Email</label>
                             <div className="relative">

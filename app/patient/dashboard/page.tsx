@@ -225,7 +225,7 @@ export default function PatientDashboard() {
 
             {/* Quick Links */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                <Link href="/patient/appointments/book" className="bg-gradient-to-br from-indigo-500 to-blue-600 rounded-2xl p-5 text-white hover:shadow-lg transition-shadow relative overflow-hidden group">
+                <Link href="/patient/appointments/choose-method" className="bg-gradient-to-br from-indigo-500 to-blue-600 rounded-2xl p-5 text-white hover:shadow-lg transition-shadow relative overflow-hidden group">
                     <Calendar className="absolute right-[-10px] bottom-[-10px] h-20 w-20 text-white/10 group-hover:scale-110 transition-transform" />
                     <h3 className="text-base font-black mb-0.5">Book Appointment</h3>
                     <p className="text-indigo-100 text-xs font-medium">Schedule a visit</p>

@@ -10,13 +10,15 @@ function PatientSetupPasswordForm() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const tokenFromUrl = searchParams.get('token') || '';
+    const redirectTo = searchParams.get('redirectTo') || '';
     const [state, action, pending] = useActionState(setPatientPortalPassword, initialState);
 
     useEffect(() => {
         if (state.success) {
-            router.push('/patient/login?setup=success');
+            const redirectParam = redirectTo ? `&redirectTo=${encodeURIComponent(redirectTo)}` : '';
+            router.push(`/patient/login?setup=success${redirectParam}`);
         }
-    }, [router, state.success]);
+    }, [router, state.success, redirectTo]);
 
     return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">

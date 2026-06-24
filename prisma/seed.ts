@@ -1,6 +1,6 @@
 
-const { PrismaClient } = require('@prisma/client');
-const bcrypt = require('bcryptjs');
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -25,11 +25,11 @@ async function main() {
     // =============================================
     const org = await prisma.organization.upsert({
         where: { id: DEFAULT_ORG_ID },
-        update: { name: 'Axten Hospitals', slug: 'axten', code: 'AXT' },
+        update: { name: 'Axten Hospitals', slug: 'axten-voice-test', code: 'AXT' },
         create: {
             id: DEFAULT_ORG_ID,
             name: 'Axten Hospitals',
-            slug: 'axten',
+            slug: 'axten-voice-test',
             code: 'AVN',
             address: '123 Health Avenue, Medical District',
             phone: '+91 80000 00000',
@@ -138,7 +138,7 @@ async function main() {
 
     for (const t of tests) {
         await prisma.lab_test_inventory.upsert({
-            where: { test_name: t.test_name },
+            where: { test_name_organizationId: { test_name: t.test_name, organizationId: DEFAULT_ORG_ID } },
             update: { organizationId: DEFAULT_ORG_ID },
             create: { ...t, organizationId: DEFAULT_ORG_ID },
         });
@@ -178,7 +178,7 @@ async function main() {
 
     for (const m of medicines) {
         const med = await prisma.pharmacy_medicine_master.upsert({
-            where: { brand_name: m.brand_name },
+            where: { brand_name_organizationId: { brand_name: m.brand_name, organizationId: DEFAULT_ORG_ID } },
             update: { organizationId: DEFAULT_ORG_ID },
             create: { ...m, organizationId: DEFAULT_ORG_ID },
         });

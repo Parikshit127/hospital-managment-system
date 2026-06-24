@@ -88,7 +88,13 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/api/verify-lab-pharmacy") ||
     pathname.startsWith("/api/zealthix/") ||
     pathname.startsWith("/api/public/") ||
-    pathname.startsWith("/api/patient/self-register")
+    pathname.startsWith("/api/patient/self-register") ||
+    // Track B & Track A API routes for AI voice booking / registration
+    pathname.startsWith("/api/voice/") ||
+    pathname.startsWith("/api/organisations") ||
+    pathname.startsWith("/api/doctors/") ||
+    pathname.startsWith("/api/appointments") ||
+    pathname.startsWith("/api/notifications/")
   ) {
     return NextResponse.next();
   }
@@ -128,16 +134,36 @@ export async function proxy(request: NextRequest) {
 
   // 2. Patient portal — separate auth
   if (pathname.startsWith("/patient")) {
+    // Add this safety redirect for the bare '/patient' route
+    if (pathname === "/patient") {
+      return NextResponse.redirect(new URL("/patient/dashboard", request.url));
+    }
+
     const isPatientAuthPage =
       pathname.startsWith("/patient/login") ||
       pathname.startsWith("/patient/setup-password") ||
       pathname.startsWith("/patient/forgot-password") ||
       pathname.startsWith("/patient/register") ||
       pathname.startsWith("/patient/organisations");
+
     // Allow public assessment pages without auth
     if (pathname.startsWith("/patient/assessment/")) {
       return NextResponse.next();
     }
+
+    // Token-bearing email links (set / reset password) must ALWAYS be reachable,
+    // even when a (possibly stale) patient_session cookie is present. Otherwise
+    // the "if on auth page AND logged in → redirect to dashboard" rule below
+    // would bounce the patient to whichever account is currently logged in on
+    // this browser, instead of showing the "Create new password" form for the
+    // token in the link.
+    if (
+      pathname.startsWith("/patient/setup-password") ||
+      pathname.startsWith("/patient/forgot-password")
+    ) {
+      return NextResponse.next();
+    }
+
     const patientSession = request.cookies.get("patient_session");
 
     if (!isPatientAuthPage && !patientSession) {

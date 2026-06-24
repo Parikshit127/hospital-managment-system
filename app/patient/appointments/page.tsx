@@ -182,7 +182,7 @@ export default function MyAppointmentsPage() {
                     <p className="text-sm text-gray-500 mt-1">View and manage your appointments</p>
                 </div>
                 <Link
-                    href="/patient/appointments/book"
+                    href="/patient/appointments/choose-method"
                     className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-5 py-3 rounded-xl transition shadow-lg shadow-emerald-500/20"
                 >
                     <Plus className="h-4 w-4" />
@@ -233,7 +233,7 @@ export default function MyAppointmentsPage() {
                                 Schedule a visit with your doctor to get started
                             </p>
                             <Link
-                                href="/patient/appointments/book"
+                                href="/patient/appointments/choose-method"
                                 className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-5 py-2.5 rounded-xl transition"
                             >
                                 <Plus className="h-4 w-4" />
