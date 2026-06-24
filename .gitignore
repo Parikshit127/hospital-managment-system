@@ -56,8 +56,3 @@ prisma/dev.db
 .omc/
 .gemini/
 .claude/
-
-package-lock.json
-package.json
-next.config.ts
-vercel.json
