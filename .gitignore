@@ -60,3 +60,4 @@ prisma/dev.db
 package-lock.json
 package.json
 next.config.ts
+vercel.json
