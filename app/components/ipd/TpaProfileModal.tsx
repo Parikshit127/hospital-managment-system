@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { X, ShieldCheck, Loader2, Building2, CalendarDays, FileText } from 'lucide-react';
-import { getPatientPolicies } from '@/app/actions/insurance-actions';
+import { useCallback, useEffect, useState } from 'react';
+import { X, ShieldCheck, Loader2, Building2, CalendarDays, FileText, Banknote, Receipt } from 'lucide-react';
+import { getPatientPolicies, getPatientTpaInvoices } from '@/app/actions/insurance-actions';
+import { RecordTpaPaymentModal } from '@/app/components/billing/RecordTpaPaymentModal';
 
 type Claim = {
     id: number;
@@ -34,12 +35,42 @@ type Policy = {
     claims: Claim[];
 };
 
-interface Props {
-    open: boolean;
-    onClose: () => void;
+// A patient's TPA bill — the system tracks the claim lifecycle on the invoice.
+type TpaInvoice = {
+    id: number;
+    version: number;
+    invoice_number: string;
+    billing_patient_type: string;
+    tpa_provider_id: number | null;
+    tpa_provider_name: string | null;
+    tpa_claim_status: string;
+    tpa_claim_number: string | null;
+    tpa_approved_amount: number | null;
+    tpa_settled_amount: number | null;
+    net_amount: number | null;
+    created_at: string | null;
+};
+
+// Exact invoice shape RecordTpaPaymentModal expects.
+type TpaInvoiceTarget = {
+    id: number;
+    version: number;
+    invoice_number: string;
+    patient_name?: string | null;
+    tpa_provider_name?: string | null;
+    tpa_approved_amount: number;
+    tpa_settled_amount: number;
+};
+
+interface PanelProps {
     patientId: string;
     patientName?: string;
     patientType?: string;
+}
+
+interface ModalProps extends PanelProps {
+    open: boolean;
+    onClose: () => void;
 }
 
 const inr = (n: number | null | undefined) =>
@@ -56,28 +87,74 @@ function statusCls(status: string): string {
     return 'bg-gray-100 text-gray-600';
 }
 
-export default function TpaProfileModal({ open, onClose, patientId, patientName, patientType }: Props) {
+// Human-readable labels + colours for the invoice-level TPA claim status.
+const TPA_STATUS_LABEL: Record<string, string> = {
+    not_submitted: 'Not Submitted',
+    submitted: 'Submitted',
+    under_review: 'Under Review',
+    approved: 'Approved · Awaiting Payment',
+    partially_settled: 'Partially Settled',
+    settled: 'Settled',
+    rejected: 'Rejected',
+};
+
+function tpaStatusLabel(s: string): string {
+    return TPA_STATUS_LABEL[s] ?? s;
+}
+
+function tpaStatusCls(s: string): string {
+    if (s === 'settled') return 'bg-emerald-100 text-emerald-700';
+    if (s === 'approved' || s === 'partially_settled') return 'bg-amber-100 text-amber-700';
+    if (s === 'rejected') return 'bg-rose-100 text-rose-700';
+    if (s === 'submitted' || s === 'under_review') return 'bg-blue-100 text-blue-700';
+    return 'bg-gray-100 text-gray-600';
+}
+
+// Mirrors the Master Billing gate: payment can only be recorded when the
+// invoice's TPA claim is approved (awaiting payment) or partially settled.
+function canRecordTpaPayment(status: string | undefined): boolean {
+    return status === 'approved' || status === 'partially_settled';
+}
+
+/**
+ * Inline TPA / Insurance profile panel — shows the patient's policies, coverage
+ * and recent claims, plus an actionable "TPA Claims & Payments" section listing
+ * their TPA bills. Approved / partially-settled bills expose a [Mark TPA Received]
+ * button that opens the same RecordTpaPaymentModal used by Master Billing.
+ */
+export function TpaProfilePanel({ patientId, patientName, patientType }: PanelProps) {
     const [loading, setLoading] = useState(true);
     const [policies, setPolicies] = useState<Policy[]>([]);
+    const [tpaInvoices, setTpaInvoices] = useState<TpaInvoice[]>([]);
     const [error, setError] = useState<string | null>(null);
+    // Tracks the specific bill whose payment is being recorded.
+    const [tpaTarget, setTpaTarget] = useState<TpaInvoiceTarget | null>(null);
 
-    useEffect(() => {
-        if (!open) return;
-        let cancelled = false;
+    // Single fetch routine, reused on mount/patient-change and after recording a payment.
+    const load = useCallback(async (signal?: { cancelled: boolean }) => {
         setLoading(true);
         setError(null);
-        getPatientPolicies(patientId)
-            .then(res => {
-                if (cancelled) return;
-                if (res.success) setPolicies((res.data as Policy[]) || []);
-                else setError(res.error || 'Failed to load TPA profile');
-                setLoading(false);
-            })
-            .catch(() => { if (!cancelled) { setError('Failed to load TPA profile'); setLoading(false); } });
-        return () => { cancelled = true; };
-    }, [open, patientId]);
+        try {
+            const [polRes, invRes] = await Promise.all([
+                getPatientPolicies(patientId),
+                getPatientTpaInvoices(patientId),
+            ]);
+            if (signal?.cancelled) return;
+            if (polRes.success) setPolicies((polRes.data as Policy[]) || []);
+            else setError(polRes.error || 'Failed to load TPA profile');
+            if (invRes.success) setTpaInvoices((invRes.data as TpaInvoice[]) || []);
+        } catch {
+            if (!signal?.cancelled) setError('Failed to load TPA profile');
+        } finally {
+            if (!signal?.cancelled) setLoading(false);
+        }
+    }, [patientId]);
 
-    if (!open) return null;
+    useEffect(() => {
+        const signal = { cancelled: false };
+        void load(signal);
+        return () => { signal.cancelled = true; };
+    }, [load]);
 
     const typeLabel =
         patientType === 'tpa_insurance' ? 'TPA / Insurance'
@@ -85,38 +162,105 @@ export default function TpaProfileModal({ open, onClose, patientId, patientName,
         : 'Cash / Self-Pay';
 
     return (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-            <div
-                className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto"
-                onClick={e => e.stopPropagation()}
-            >
-                {/* Header */}
-                <div className="sticky top-0 bg-white flex items-center gap-2.5 px-5 py-4 border-b border-gray-100">
-                    <div className="p-2 rounded-xl bg-purple-50">
-                        <ShieldCheck className="h-5 w-5 text-purple-600" />
-                    </div>
-                    <div className="min-w-0">
-                        <h3 className="text-base font-black text-gray-900 truncate">TPA / Insurance Profile</h3>
-                        {patientName && <p className="text-xs text-gray-500 truncate">{patientName}</p>}
-                    </div>
-                    <button onClick={onClose} className="ml-auto p-1.5 rounded-lg text-gray-400 hover:text-gray-900 hover:bg-gray-100">
-                        <X className="h-4 w-4" />
-                    </button>
+        <div className="space-y-4">
+            {loading ? (
+                <div className="flex items-center justify-center h-40">
+                    <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
                 </div>
+            ) : error ? (
+                <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-4 py-3">{error}</div>
+            ) : (
+                <>
+                    {/* ── TPA Claims & Payments (driven by invoices) ── */}
+                    {tpaInvoices.length > 0 && (
+                        <div className="border border-amber-200 rounded-xl overflow-hidden">
+                            <div className="flex items-center gap-2 px-4 py-3 bg-amber-50/70 border-b border-amber-100">
+                                <Receipt className="h-4 w-4 text-amber-600 shrink-0" />
+                                <span className="font-bold text-gray-900 text-sm">TPA Claims &amp; Payments</span>
+                                <span className="ml-auto text-[11px] text-gray-500">{tpaInvoices.length} bill{tpaInvoices.length !== 1 ? 's' : ''}</span>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-xs">
+                                    <thead>
+                                        <tr className="text-gray-400 text-left bg-gray-50/60">
+                                            <th className="py-2 px-4 font-medium">Invoice</th>
+                                            <th className="py-2 pr-3 font-medium">Status</th>
+                                            <th className="py-2 pr-3 font-medium text-right">Approved</th>
+                                            <th className="py-2 pr-3 font-medium text-right">Received</th>
+                                            <th className="py-2 pr-3 font-medium text-right">Outstanding</th>
+                                            <th className="py-2 pr-4 font-medium text-right">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {tpaInvoices.map(inv => {
+                                            const approved = Number(inv.tpa_approved_amount || 0);
+                                            const settled = Number(inv.tpa_settled_amount || 0);
+                                            const outstanding = Math.max(0, approved - settled);
+                                            // A bill is actionable only while money is still outstanding.
+                                            // Some bills keep status 'approved' even after being fully
+                                            // received (status flag not flipped), so gate on the amount
+                                            // too — and surface those as Settled, not "Awaiting Payment".
+                                            const fullyReceived = canRecordTpaPayment(inv.tpa_claim_status) && outstanding <= 0.01;
+                                            const showPay = canRecordTpaPayment(inv.tpa_claim_status) && outstanding > 0.01;
+                                            const displayStatus = fullyReceived ? 'settled' : inv.tpa_claim_status;
+                                            return (
+                                                <tr key={inv.id} className="border-t border-gray-100">
+                                                    <td className="py-2 px-4">
+                                                        <span className="font-mono text-gray-700">{inv.invoice_number}</span>
+                                                        {inv.tpa_provider_name && (
+                                                            <span className="block text-[10px] text-gray-400">{inv.tpa_provider_name}</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-2 pr-3">
+                                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${tpaStatusCls(displayStatus)}`}>
+                                                            {tpaStatusLabel(displayStatus)}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-2 pr-3 text-right text-gray-700">{inr(approved)}</td>
+                                                    <td className="py-2 pr-3 text-right text-gray-700">{inr(settled)}</td>
+                                                    <td className="py-2 pr-3 text-right font-semibold text-gray-900">{inr(outstanding)}</td>
+                                                    <td className="py-2 pr-4 text-right">
+                                                        {showPay ? (
+                                                            <button
+                                                                onClick={() => {
+                                                                    // Capture THIS bill's invoice exactly (mirrors Master Billing).
+                                                                    setTpaTarget({
+                                                                        id: Number(inv.id),
+                                                                        version: Number(inv.version || 0),
+                                                                        invoice_number: inv.invoice_number,
+                                                                        patient_name: patientName ?? null,
+                                                                        tpa_provider_name: inv.tpa_provider_name,
+                                                                        tpa_approved_amount: approved,
+                                                                        tpa_settled_amount: settled,
+                                                                    });
+                                                                }}
+                                                                className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 text-[10px] font-bold rounded-md hover:bg-amber-100 transition-colors"
+                                                                title="Record TPA payment received"
+                                                            >
+                                                                <Banknote className="h-3 w-3" /> Mark TPA Received
+                                                            </button>
+                                                        ) : (
+                                                            <span className="text-gray-300">—</span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
 
-                <div className="p-5 space-y-4">
-                    {loading ? (
-                        <div className="flex items-center justify-center h-40">
-                            <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
-                        </div>
-                    ) : error ? (
-                        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-4 py-3">{error}</div>
-                    ) : policies.length === 0 ? (
-                        <div className="text-center py-10 text-gray-500">
-                            <ShieldCheck className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                            <p className="text-sm font-medium">No insurance / TPA policy on file.</p>
-                            <p className="text-xs mt-1">This patient is registered as <strong>{typeLabel}</strong>.</p>
-                        </div>
+                    {/* ── Policies ── */}
+                    {policies.length === 0 ? (
+                        tpaInvoices.length === 0 && (
+                            <div className="text-center py-10 text-gray-500">
+                                <ShieldCheck className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                                <p className="text-sm font-medium">No insurance / TPA policy on file.</p>
+                                <p className="text-xs mt-1">This patient is registered as <strong>{typeLabel}</strong>.</p>
+                            </div>
+                        )
                     ) : (
                         policies.map(p => {
                             const limit = Number(p.coverage_limit ?? 0);
@@ -166,7 +310,7 @@ export default function TpaProfileModal({ open, onClose, patientId, patientName,
                                         </div>
                                     )}
 
-                                    {/* Claims */}
+                                    {/* Claims (insurance_claims records — informational) */}
                                     <div className="px-4 pb-4">
                                         <p className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">
                                             <FileText className="h-3.5 w-3.5" /> Recent Claims
@@ -208,6 +352,51 @@ export default function TpaProfileModal({ open, onClose, patientId, patientName,
                             );
                         })
                     )}
+                </>
+            )}
+
+            {/* Record TPA Payment modal — populated with the selected bill's invoice */}
+            {tpaTarget && (
+                <RecordTpaPaymentModal
+                    open
+                    invoice={tpaTarget}
+                    onClose={() => setTpaTarget(null)}
+                    onRecorded={() => { setTpaTarget(null); void load(); }}
+                />
+            )}
+        </div>
+    );
+}
+
+/**
+ * Backwards-compatible overlay wrapper around TpaProfilePanel.
+ * Retained so any existing modal-style call sites keep working.
+ */
+export default function TpaProfileModal({ open, onClose, patientId, patientName, patientType }: ModalProps) {
+    if (!open) return null;
+
+    return (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+            <div
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto"
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="sticky top-0 bg-white flex items-center gap-2.5 px-5 py-4 border-b border-gray-100">
+                    <div className="p-2 rounded-xl bg-purple-50">
+                        <ShieldCheck className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div className="min-w-0">
+                        <h3 className="text-base font-black text-gray-900 truncate">TPA / Insurance Profile</h3>
+                        {patientName && <p className="text-xs text-gray-500 truncate">{patientName}</p>}
+                    </div>
+                    <button onClick={onClose} className="ml-auto p-1.5 rounded-lg text-gray-400 hover:text-gray-900 hover:bg-gray-100">
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+
+                <div className="p-5">
+                    <TpaProfilePanel patientId={patientId} patientName={patientName} patientType={patientType} />
                 </div>
             </div>
         </div>

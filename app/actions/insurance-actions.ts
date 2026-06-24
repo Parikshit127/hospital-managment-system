@@ -183,6 +183,71 @@ export async function getPatientPolicies(patientId: string) {
     }
 }
 
+/**
+ * Fetch a patient's TPA / insurance invoices (the "claims on bills").
+ *
+ * The TPA lifecycle in this system is tracked entirely on the invoice
+ * (invoices.tpa_claim_status), not on insurance_claims rows — so this powers
+ * the same actionable view the Master Billing module exposes, including the
+ * [Mark TPA Received] action for approved / partially-settled bills.
+ */
+export async function getPatientTpaInvoices(patientId: string) {
+    try {
+        const { db } = await requireTenantContext();
+        const invoices = await db.invoices.findMany({
+            where: {
+                patient_id: patientId,
+                // Any bill that has entered the TPA workflow (covers tpa_insurance
+                // bills as well as any invoice with a TPA claim status set).
+                OR: [
+                    { billing_patient_type: 'tpa_insurance' },
+                    { tpa_claim_status: { not: 'not_submitted' } },
+                ],
+                is_archived: false,
+            },
+            select: {
+                id: true,
+                version: true,
+                invoice_number: true,
+                billing_patient_type: true,
+                tpa_provider_id: true,
+                tpa_claim_status: true,
+                tpa_claim_number: true,
+                tpa_approved_amount: true,
+                tpa_settled_amount: true,
+                net_amount: true,
+                created_at: true,
+            },
+            orderBy: { created_at: 'desc' },
+        });
+
+        // invoices has no tpa_provider relation — resolve provider names in one pass.
+        const providerIds = [...new Set(
+            invoices.map((i: { tpa_provider_id: number | null }) => i.tpa_provider_id)
+                .filter((v: number | null): v is number => v != null)
+        )];
+        const providers = providerIds.length
+            ? await db.insurance_providers.findMany({
+                where: { id: { in: providerIds } },
+                select: { id: true, provider_name: true },
+            })
+            : [];
+        const providerName = new Map<number, string>(
+            providers.map((p: { id: number; provider_name: string }) => [p.id, p.provider_name])
+        );
+
+        const data = invoices.map((inv: { tpa_provider_id: number | null }) => ({
+            ...inv,
+            tpa_provider_name: inv.tpa_provider_id != null ? (providerName.get(inv.tpa_provider_id) ?? null) : null,
+        }));
+
+        return { success: true, data: serialize(data) };
+    } catch (error: any) {
+        console.error('getPatientTpaInvoices error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 export async function addPatientPolicy(data: {
     patient_id: string;
     provider_id: number;

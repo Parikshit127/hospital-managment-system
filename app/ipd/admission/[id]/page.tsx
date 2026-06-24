@@ -38,7 +38,7 @@ import {
 import { NEWSScoreBadge } from '@/app/components/ipd/NEWSScoreBadge';
 import { PreDischargeChecklist } from '@/app/components/ipd/PreDischargeChecklist';
 import { DischargeSummaryEditor } from '@/app/components/ipd/DischargeSummaryEditor';
-import TpaProfileModal from '@/app/components/ipd/TpaProfileModal';
+import { TpaProfilePanel } from '@/app/components/ipd/TpaProfileModal';
 import { formatDoctorName } from '@/app/lib/format-name';
 
 const TABS = [
@@ -49,6 +49,7 @@ const TABS = [
     { id: 'diet', label: 'Diet', icon: Utensils },
     { id: 'billing', label: 'Billing', icon: Receipt },
     { id: 'discharge', label: 'Discharge', icon: LogOut },
+    { id: 'tpa', label: 'TPA Profile', icon: ShieldCheck },
 ];
 
 const DIET_TYPES = ['Normal', 'Soft', 'Liquid', 'NPO', 'Diabetic', 'Renal', 'Cardiac'];
@@ -62,7 +63,6 @@ export default function AdmissionDetailPage() {
 
     // Doctor change (searchable autocomplete)
     const [showDoctorForm, setShowDoctorForm] = useState(false);
-    const [showTpa, setShowTpa] = useState(false);
     const [newDoctorName, setNewDoctorName] = useState('');
     const [savingDoctor, setSavingDoctor] = useState(false);
     const [doctorSuggestions, setDoctorSuggestions] = useState<any[]>([]);
@@ -696,12 +696,6 @@ export default function AdmissionDetailPage() {
                                 className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 bg-white text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition-colors"
                             >
                                 <Printer className="h-3.5 w-3.5" /> Print Stickers
-                            </button>
-                            <button
-                                onClick={() => setShowTpa(true)}
-                                className="flex items-center gap-1.5 px-3 py-2 border border-purple-200 bg-purple-50 text-purple-700 text-xs font-bold rounded-xl hover:bg-purple-100 transition-colors"
-                            >
-                                <ShieldCheck className="h-3.5 w-3.5" /> TPA Profile
                             </button>
                             {data.status === 'Admitted' && (
                                 <>
@@ -2094,6 +2088,17 @@ export default function AdmissionDetailPage() {
                             </div>
                         )}
 
+                        {/* ════════════════════════════ TPA PROFILE ════════════════════════════ */}
+                        {activeTab === 'tpa' && (
+                            <div className="py-4">
+                                <TpaProfilePanel
+                                    patientId={data.patient_id}
+                                    patientName={data.patient?.full_name}
+                                    patientType={data.patient?.patient_type}
+                                />
+                            </div>
+                        )}
+
                     </div>
                 </div>
             </div>
@@ -2169,14 +2174,6 @@ export default function AdmissionDetailPage() {
                 </div>
             )}
 
-            {/* ── TPA / Insurance Profile Modal ── */}
-            <TpaProfileModal
-                open={showTpa}
-                onClose={() => setShowTpa(false)}
-                patientId={data.patient_id}
-                patientName={data.patient?.full_name}
-                patientType={data.patient?.patient_type}
-            />
         </AppShell>
     );
 }
