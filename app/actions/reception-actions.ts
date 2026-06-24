@@ -93,8 +93,29 @@ export async function getRegisteredPatients(options?: {
             where.department = options.department;
         }
 
-        // Payment type filter (cash | corporate | tpa_insurance)
-        if (options?.paymentType) {
+        // Payment type filter (cash | corporate | tpa_insurance).
+        // The master patient_type flag frequently drifts — a TPA/insurance or corporate
+        // patient is often left tagged 'cash' (e.g. registered without their policy, or
+        // billed as TPA only at the invoice). So for those two categories we match the
+        // harder evidence (an insurance policy row / a corporate link) in addition to the
+        // flag, otherwise genuine TPA patients silently fall out of this filter.
+        if (options?.paymentType === 'tpa_insurance') {
+            where.AND = [{
+                OR: [
+                    { patient_type: 'tpa_insurance' },
+                    { insurance_policies: { some: {} } },
+                    { invoices: { some: { billing_patient_type: 'tpa_insurance' } } },
+                ],
+            }];
+        } else if (options?.paymentType === 'corporate') {
+            where.AND = [{
+                OR: [
+                    { patient_type: 'corporate' },
+                    { corporate_id: { not: null } },
+                    { invoices: { some: { billing_patient_type: 'corporate' } } },
+                ],
+            }];
+        } else if (options?.paymentType) {
             where.patient_type = options.paymentType;
         }
 
