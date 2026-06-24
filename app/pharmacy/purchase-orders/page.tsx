@@ -3,8 +3,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { Truck, Plus, CheckCircle, PackageOpen, X, Search, AlertTriangle, ListChecks } from 'lucide-react';
-import { getPurchaseOrders, receivePurchaseOrder, createPurchaseOrder, getSuppliers, getInventoryForPO } from '@/app/actions/pharmacy-actions';
+import { Truck, Plus, CheckCircle, PackageOpen, X, Search, AlertTriangle, ListChecks, Pencil } from 'lucide-react';
+import { getPurchaseOrders, receivePurchaseOrder, createPurchaseOrder, updatePurchaseOrder, quickCreateMedicineForPO, getSuppliers, getInventoryForPO } from '@/app/actions/pharmacy-actions';
 
 type PoItem = {
     medicine_id: number;
@@ -40,8 +40,9 @@ export default function PurchaseOrdersPage() {
     const [receiveModal, setReceiveModal] = useState<any>(null);
     const [receiveData, setReceiveData] = useState<any[]>([]);
 
-    // Create PO modal state
+    // Create / Edit PO modal state
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [editingPoId, setEditingPoId] = useState<number | null>(null);
     const [suppliers, setSuppliers] = useState<any[]>([]);
     const [medicines, setMedicines] = useState<any[]>([]);
     const [poForm, setPoForm] = useState({ supplier_id: '', notes: '' });
@@ -49,6 +50,11 @@ export default function PurchaseOrdersPage() {
     const [medicineSearch, setMedicineSearch] = useState('');
     const [showMedDropdown, setShowMedDropdown] = useState(false);
     const [creating, setCreating] = useState(false);
+
+    // Quick "add medicine not in list" form
+    const [showNewMed, setShowNewMed] = useState(false);
+    const [savingNewMed, setSavingNewMed] = useState(false);
+    const [newMed, setNewMed] = useState({ brand_name: '', generic_name: '', hsn_sac_code: '', gst_percent: '', mrp: '', unit_price: '' });
 
     // Bulk select mode
     const [showBulkSelect, setShowBulkSelect] = useState(false);
@@ -74,8 +80,14 @@ export default function PurchaseOrdersPage() {
 
     useEffect(() => { loadOrders(); }, []);
 
+    const resetNewMed = () => {
+        setShowNewMed(false);
+        setNewMed({ brand_name: '', generic_name: '', hsn_sac_code: '', gst_percent: '', mrp: '', unit_price: '' });
+    };
+
     const openCreateModal = async () => {
         setShowCreateModal(true);
+        setEditingPoId(null);
         setPoForm({ supplier_id: '', notes: '' });
         setPoItems([]);
         setMedicineSearch('');
@@ -83,9 +95,90 @@ export default function PurchaseOrdersPage() {
         setBulkSearch('');
         setBulkFilter('all');
         setSelectedMedIds(new Set());
+        resetNewMed();
         const [sRes, mRes] = await Promise.all([getSuppliers(), getInventoryForPO()]);
         if (sRes.success) setSuppliers(sRes.data || []);
         if (mRes.success) setMedicines(mRes.data || []);
+    };
+
+    // A PO is editable only while no stock has been received against it.
+    const isEditable = (po: any) =>
+        !['Received', 'Partially Received'].includes(po.status) &&
+        !(po.items || []).some((i: any) => Number(i.quantity_received) > 0);
+
+    const openEditModal = async (po: any) => {
+        setShowCreateModal(true);
+        setEditingPoId(po.id);
+        // vendor_id is the UI's supplier value (Vendor.id); fall back to supplier_id.
+        setPoForm({ supplier_id: String(po.vendor_id ?? po.supplier_id ?? ''), notes: po.notes || '' });
+        setPoItems((po.items || []).map((it: any): PoItem => {
+            const cgst = Number(it.cgst_rate ?? 0);
+            const sgst = Number(it.sgst_rate ?? 0);
+            const split = (cgst || sgst) ? { cgst, sgst } : { cgst: Number(it.gst_rate || 0) / 2, sgst: Number(it.gst_rate || 0) / 2 };
+            return {
+                medicine_id: it.medicine_id,
+                name: it.medicine?.brand_name || '',
+                pack: it.pack || '',
+                hsn_code: it.hsn_code || '',
+                batch_no: it.batch_no || '',
+                expiry: it.expiry || '',
+                mrp: Number(it.mrp || 0),
+                unit_price: Number(it.unit_price || 0),
+                quantity: Number(it.quantity_ordered || 1),
+                discount_pct: Number(it.discount_pct || 0),
+                cgst_rate: split.cgst,
+                sgst_rate: split.sgst,
+            };
+        }));
+        setMedicineSearch('');
+        setShowBulkSelect(false);
+        setBulkSearch('');
+        setBulkFilter('all');
+        setSelectedMedIds(new Set());
+        resetNewMed();
+        const [sRes, mRes] = await Promise.all([getSuppliers(), getInventoryForPO()]);
+        if (sRes.success) setSuppliers(sRes.data || []);
+        if (mRes.success) setMedicines(mRes.data || []);
+    };
+
+    // Quick-create a medicine that isn't in the master list and add it to the PO.
+    const handleAddNewMedicine = async () => {
+        const brand = newMed.brand_name.trim();
+        if (!brand) return alert('Enter the medicine name.');
+        setSavingNewMed(true);
+        const res = await quickCreateMedicineForPO({
+            brand_name: brand,
+            generic_name: newMed.generic_name.trim() || undefined,
+            hsn_sac_code: newMed.hsn_sac_code.trim() || undefined,
+            gst_percent: newMed.gst_percent ? Number(newMed.gst_percent) : undefined,
+            mrp: newMed.mrp ? Number(newMed.mrp) : undefined,
+            selling_price: newMed.unit_price ? Number(newMed.unit_price) : undefined,
+        });
+        setSavingNewMed(false);
+        if (!res.success) return alert(res.error || 'Failed to add medicine');
+        const med = res.data;
+        // Make it available in the searchable list for next time too.
+        setMedicines(prev => prev.find((x: any) => (x.medicine_id ?? x.id) === med.id) ? prev : [...prev, med]);
+        if (poItems.find(i => i.medicine_id === med.id)) {
+            alert('That medicine is already in this order.');
+        } else {
+            const gst = Number(newMed.gst_percent || med.gst_percent || 0);
+            setPoItems(prev => [...prev, {
+                medicine_id: med.id,
+                name: med.brand_name,
+                pack: '',
+                hsn_code: med.hsn_sac_code || '',
+                batch_no: '',
+                expiry: '',
+                mrp: Number(newMed.mrp || med.mrp || 0),
+                unit_price: Number(newMed.unit_price || med.selling_price || 0),
+                quantity: 1,
+                discount_pct: 0,
+                cgst_rate: gst / 2,
+                sgst_rate: gst / 2,
+            }]);
+        }
+        resetNewMed();
     };
 
     // Build a PO line from a medicine/inventory record, prefilling invoice
@@ -187,26 +280,25 @@ export default function PurchaseOrdersPage() {
     const handleCreatePO = async () => {
         if (!poForm.supplier_id || poItems.length === 0) return alert('Select supplier and add at least one item.');
         setCreating(true);
-        const res = await createPurchaseOrder(
-            Number(poForm.supplier_id),
-            poItems.map(i => ({
-                medicine_id: i.medicine_id,
-                quantity: i.quantity,
-                unit_price: i.unit_price,
-                hsn_code: i.hsn_code || undefined,
-                pack: i.pack || undefined,
-                batch_no: i.batch_no || undefined,
-                expiry: i.expiry || undefined,
-                mrp: i.mrp,
-                discount_pct: i.discount_pct,
-                cgst_rate: i.cgst_rate,
-                sgst_rate: i.sgst_rate,
-            })),
-            { notes: poForm.notes || undefined }
-        );
+        const mappedItems = poItems.map(i => ({
+            medicine_id: i.medicine_id,
+            quantity: i.quantity,
+            unit_price: i.unit_price,
+            hsn_code: i.hsn_code || undefined,
+            pack: i.pack || undefined,
+            batch_no: i.batch_no || undefined,
+            expiry: i.expiry || undefined,
+            mrp: i.mrp,
+            discount_pct: i.discount_pct,
+            cgst_rate: i.cgst_rate,
+            sgst_rate: i.sgst_rate,
+        }));
+        const res = editingPoId
+            ? await updatePurchaseOrder(editingPoId, Number(poForm.supplier_id), mappedItems, { notes: poForm.notes || undefined })
+            : await createPurchaseOrder(Number(poForm.supplier_id), mappedItems, { notes: poForm.notes || undefined });
         setCreating(false);
-        if (res.success) { setShowCreateModal(false); loadOrders(); }
-        else alert(res.error || 'Failed to create PO');
+        if (res.success) { setShowCreateModal(false); setEditingPoId(null); loadOrders(); }
+        else alert(res.error || 'Failed to save PO');
     };
 
     const handleOpenReceive = (po: any) => {
@@ -297,13 +389,20 @@ export default function PurchaseOrdersPage() {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        {po.status !== 'Received' ? (
-                                            <button onClick={() => handleOpenReceive(po)} className="text-orange-600 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg font-bold text-xs inline-flex items-center gap-1">
-                                                <Truck className="h-3 w-3" /> Receive Stock
-                                            </button>
-                                        ) : (
-                                            <span className="text-gray-400 font-bold text-xs flex items-center justify-end gap-1"><CheckCircle className="h-3 w-3" /> Fully Received</span>
-                                        )}
+                                        <div className="inline-flex items-center justify-end gap-2">
+                                            {isEditable(po) && (
+                                                <button onClick={() => openEditModal(po)} className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg font-bold text-xs inline-flex items-center gap-1">
+                                                    <Pencil className="h-3 w-3" /> Edit
+                                                </button>
+                                            )}
+                                            {po.status !== 'Received' ? (
+                                                <button onClick={() => handleOpenReceive(po)} className="text-orange-600 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg font-bold text-xs inline-flex items-center gap-1">
+                                                    <Truck className="h-3 w-3" /> Receive Stock
+                                                </button>
+                                            ) : (
+                                                <span className="text-gray-400 font-bold text-xs flex items-center justify-end gap-1"><CheckCircle className="h-3 w-3" /> Fully Received</span>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -358,8 +457,8 @@ export default function PurchaseOrdersPage() {
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl w-full max-w-6xl shadow-2xl flex flex-col max-h-[90vh]">
                         <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
-                            <h3 className="font-bold text-gray-900">Create Purchase Order</h3>
-                            <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-900"><X className="h-5 w-5" /></button>
+                            <h3 className="font-bold text-gray-900">{editingPoId ? 'Edit Purchase Order' : 'Create Purchase Order'}</h3>
+                            <button onClick={() => { setShowCreateModal(false); setEditingPoId(null); }} className="text-gray-400 hover:text-gray-900"><X className="h-5 w-5" /></button>
                         </div>
 
                         <div className="p-5 overflow-y-auto flex-1 space-y-4">
@@ -392,8 +491,47 @@ export default function PurchaseOrdersPage() {
                                             className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold rounded-lg hover:bg-blue-100 transition-colors">
                                             <ListChecks className="h-3 w-3" /> Select from List
                                         </button>
+                                        {/* Add a medicine that isn't in the master list */}
+                                        <button type="button" onClick={() => setShowNewMed(v => !v)}
+                                            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded-lg hover:bg-emerald-100 transition-colors">
+                                            <Plus className="h-3 w-3" /> New Medicine
+                                        </button>
                                     </div>
                                 </div>
+
+                                {/* New medicine quick-create (not in list) */}
+                                {showNewMed && (
+                                    <div className="mb-3 p-3 border border-emerald-200 bg-emerald-50/40 rounded-lg">
+                                        <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider mb-2">Add a medicine not in the list</p>
+                                        <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+                                            <input type="text" placeholder="Name *" value={newMed.brand_name}
+                                                onChange={e => setNewMed({ ...newMed, brand_name: e.target.value })}
+                                                className="col-span-2 p-2 border border-gray-200 rounded-lg text-sm" />
+                                            <input type="text" placeholder="Generic" value={newMed.generic_name}
+                                                onChange={e => setNewMed({ ...newMed, generic_name: e.target.value })}
+                                                className="col-span-2 p-2 border border-gray-200 rounded-lg text-sm" />
+                                            <input type="text" placeholder="HSN" value={newMed.hsn_sac_code}
+                                                onChange={e => setNewMed({ ...newMed, hsn_sac_code: e.target.value })}
+                                                className="p-2 border border-gray-200 rounded-lg text-sm" />
+                                            <input type="number" min="0" step="0.01" placeholder="GST%" value={newMed.gst_percent}
+                                                onChange={e => setNewMed({ ...newMed, gst_percent: e.target.value })}
+                                                className="p-2 border border-gray-200 rounded-lg text-sm" />
+                                            <input type="number" min="0" step="0.01" placeholder="MRP" value={newMed.mrp}
+                                                onChange={e => setNewMed({ ...newMed, mrp: e.target.value })}
+                                                className="p-2 border border-gray-200 rounded-lg text-sm" />
+                                            <input type="number" min="0" step="0.01" placeholder="Rate" value={newMed.unit_price}
+                                                onChange={e => setNewMed({ ...newMed, unit_price: e.target.value })}
+                                                className="p-2 border border-gray-200 rounded-lg text-sm" />
+                                        </div>
+                                        <div className="flex justify-end gap-2 mt-2">
+                                            <button type="button" onClick={resetNewMed} className="px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+                                            <button type="button" onClick={handleAddNewMedicine} disabled={savingNewMed || !newMed.brand_name.trim()}
+                                                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg disabled:opacity-50 flex items-center gap-1.5">
+                                                <Plus className="h-3 w-3" /> {savingNewMed ? 'Adding...' : 'Add to Order'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Single search */}
                                 <div className="relative">
@@ -546,10 +684,10 @@ export default function PurchaseOrdersPage() {
                         <div className="p-4 border-t bg-white flex justify-between items-center">
                             <span className="text-xs text-gray-400">{poItems.length} item{poItems.length !== 1 ? 's' : ''} added</span>
                             <div className="flex gap-3">
-                                <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-xl">Cancel</button>
+                                <button onClick={() => { setShowCreateModal(false); setEditingPoId(null); }} className="px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-xl">Cancel</button>
                                 <button onClick={handleCreatePO} disabled={creating || !poForm.supplier_id || poItems.length === 0}
                                     className="px-6 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 text-white font-bold rounded-xl text-sm disabled:opacity-50 flex items-center gap-2">
-                                    {creating ? 'Creating...' : <><Plus className="h-4 w-4" /> Create PO</>}
+                                    {creating ? (editingPoId ? 'Saving...' : 'Creating...') : <><Plus className="h-4 w-4" /> {editingPoId ? 'Save Changes' : 'Create PO'}</>}
                                 </button>
                             </div>
                         </div>
