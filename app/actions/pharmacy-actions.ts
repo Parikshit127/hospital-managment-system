@@ -1590,6 +1590,179 @@ export async function createPurchaseOrder(
     }
 }
 
+// Quick-create a medicine so it can be added to a Purchase Order even when it
+// is not yet in the master catalogue. Unlike the admin-only createMedicine in
+// medicine-master-actions, this is available to any pharmacy user. If a brand
+// with the same name already exists in the tenant it is reused (the master has
+// a @@unique([brand_name, organizationId]) constraint).
+export async function quickCreateMedicineForPO(input: {
+    brand_name: string;
+    generic_name?: string;
+    hsn_sac_code?: string;
+    gst_percent?: number;
+    mrp?: number;
+    purchase_price?: number;
+    selling_price?: number;
+}) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const brand = (input.brand_name || '').trim();
+        if (!brand) return { success: false, error: 'Medicine name is required' };
+
+        // Reuse an existing brand (case-insensitive) instead of failing the unique constraint.
+        const existing = await db.pharmacy_medicine_master.findFirst({
+            where: { brand_name: { equals: brand, mode: 'insensitive' } },
+        });
+        if (existing) {
+            return { success: true, data: existing, reused: true };
+        }
+
+        const gst = Number(input.gst_percent) || 0;
+        const sell = Number(input.selling_price ?? input.mrp ?? 0) || 0;
+        const row = await db.pharmacy_medicine_master.create({
+            data: {
+                brand_name: brand,
+                generic_name: input.generic_name?.trim() || null,
+                hsn_sac_code: input.hsn_sac_code?.trim() || null,
+                gst_percent: gst,
+                tax_rate: gst,
+                mrp: Number(input.mrp) || 0,
+                purchase_price: Number(input.purchase_price) || 0,
+                selling_price: sell,
+                price_per_unit: sell,
+                organizationId,
+            },
+        });
+        return { success: true, data: row, reused: false };
+    } catch (error: any) {
+        console.error('quickCreateMedicineForPO error:', error.message);
+        return { success: false, error: error.message || 'Failed to create medicine' };
+    }
+}
+
+// Full edit of an existing Purchase Order: supplier, notes and every line.
+// Blocked once any stock has been received (quantity_received > 0 or a
+// Received / Partially Received status) since editing then would desync
+// inventory. Lines are recomputed and rounded exactly like createPurchaseOrder
+// so the PO total still matches the purchase invoice total.
+export async function updatePurchaseOrder(
+    poId: number,
+    supplier_id: number,
+    items: {
+        medicine_id: number,
+        quantity: number,
+        unit_price: number,
+        gst_rate?: number,
+        hsn_code?: string,
+        pack?: string,
+        batch_no?: string,
+        expiry?: string,
+        mrp?: number,
+        discount_pct?: number,
+        cgst_rate?: number,
+        sgst_rate?: number,
+    }[],
+    options?: { vendor_id?: number; notes?: string }
+) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const existing = await db.purchaseOrder.findFirst({
+            where: { id: poId, organizationId },
+            include: { items: true },
+        });
+        if (!existing) return { success: false, error: 'Purchase order not found' };
+
+        if (['Received', 'Partially Received'].includes(existing.status) ||
+            existing.items.some((i: any) => Number(i.quantity_received) > 0)) {
+            return { success: false, error: 'Cannot edit a PO once stock has been received' };
+        }
+
+        if (!items || items.length === 0) {
+            return { success: false, error: 'At least one item is required' };
+        }
+
+        const r2 = (n: number) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+        const computed = items.map(item => {
+            const qty = Number(item.quantity) || 0;
+            const rate = Number(item.unit_price) || 0;
+            const discount = Number(item.discount_pct) || 0;
+            const flat = Number(item.gst_rate) || 0;
+            const cgst = item.cgst_rate != null ? Number(item.cgst_rate) : flat / 2;
+            const sgst = item.sgst_rate != null ? Number(item.sgst_rate) : flat / 2;
+            const totalGstRate = cgst + sgst;
+
+            const taxable = r2(qty * rate * (1 - discount / 100));
+            const gst = r2(taxable * totalGstRate / 100);
+            const amount = r2(taxable + gst);
+            return { item, qty, rate, discount, cgst, sgst, totalGstRate, taxable, gst, amount };
+        });
+
+        const totalAmount = r2(computed.reduce((sum, c) => sum + c.amount, 0));
+        const gstAmount = r2(computed.reduce((sum, c) => sum + c.gst, 0));
+
+        // supplier_id from UI is a Vendor.id; resolve to a PharmacySupplier.id.
+        const vendorId = supplier_id;
+        const vendor = await db.vendor.findUnique({ where: { id: vendorId } });
+        if (!vendor) return { success: false, error: `Supplier not found (id=${vendorId})` };
+
+        let pharmSupplier = await db.pharmacySupplier.findFirst({
+            where: { organizationId, name: vendor.vendor_name },
+        });
+        if (!pharmSupplier) {
+            pharmSupplier = await db.pharmacySupplier.create({
+                data: {
+                    name: vendor.vendor_name,
+                    contact_person: vendor.contact_person || null,
+                    phone: vendor.phone || null,
+                    email: vendor.email || null,
+                    gst_no: vendor.gst_number || null,
+                    organizationId,
+                },
+            });
+        }
+        const resolvedSupplierId = pharmSupplier.id;
+
+        const updated = await db.$transaction(async (tx: any) => {
+            await tx.purchaseOrderItem.deleteMany({ where: { po_id: poId } });
+            return tx.purchaseOrder.update({
+                where: { id: poId },
+                data: {
+                    supplier_id: resolvedSupplierId,
+                    vendor_id: vendorId,
+                    total_amount: totalAmount,
+                    gst_amount: gstAmount,
+                    notes: options?.notes ?? existing.notes,
+                    items: {
+                        create: computed.map(c => ({
+                            medicine_id: c.item.medicine_id,
+                            quantity_ordered: c.qty,
+                            unit_price: c.rate,
+                            gst_rate: c.totalGstRate,
+                            hsn_code: c.item.hsn_code || null,
+                            pack: c.item.pack || null,
+                            batch_no: c.item.batch_no || null,
+                            expiry: c.item.expiry || null,
+                            mrp: c.item.mrp != null ? Number(c.item.mrp) : 0,
+                            discount_pct: c.discount,
+                            cgst_rate: c.cgst,
+                            sgst_rate: c.sgst,
+                            amount: c.amount,
+                            quantity_received: 0,
+                        })),
+                    },
+                },
+            });
+        });
+
+        revalidatePath('/pharmacy/purchase-orders');
+        return { success: true, data: updated };
+    } catch (error: any) {
+        console.error('updatePurchaseOrder error:', error.message);
+        return { success: false, error: error.message || 'Failed to update PO' };
+    }
+}
+
 export async function submitPurchaseOrder(poId: number) {
     try {
         const { db } = await requireTenantContext();
