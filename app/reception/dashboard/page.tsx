@@ -752,13 +752,30 @@ export default function ReceptionDashboard() {
                 {/* IPD Table */}
                 <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                        <table className="w-full text-sm table-fixed">
+                            {/* Fixed proportional widths so all 10 columns fit the
+                                viewport without horizontal scroll. Order: Admission ID,
+                                Patient Name, UHID, Doctor, Ward/Bed, Diagnosis, Days,
+                                Balance, Status, Actions. Sum = 100%. No whitespace/
+                                comments allowed directly inside <colgroup>. */}
+                            <colgroup>
+                                <col style={{ width: '11%' }} />
+                                <col style={{ width: '13%' }} />
+                                <col style={{ width: '9%' }} />
+                                <col style={{ width: '11%' }} />
+                                <col style={{ width: '11%' }} />
+                                <col style={{ width: '10%' }} />
+                                <col style={{ width: '7%' }} />
+                                <col style={{ width: '8%' }} />
+                                <col style={{ width: '8%' }} />
+                                <col style={{ width: '12%' }} />
+                            </colgroup>
                             <thead>
                                 <tr className="border-b border-gray-100 bg-gray-50">
                                     {['Admission ID', 'Patient Name', 'UHID', 'Doctor', 'Ward / Bed', 'Diagnosis', 'Days', 'Balance', 'Status', 'Actions'].map(h => (
                                         <th
                                             key={h}
-                                            className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                                            className="px-2.5 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider"
                                         >
                                             {h}
                                         </th>
@@ -796,13 +813,13 @@ export default function ReceptionDashboard() {
 
                                     return (
                                         <tr key={admission.admission_id} className="hover:bg-gray-50 transition-colors">
-                                            <td className="px-4 py-3 whitespace-nowrap">
-                                                <span className="text-xs font-mono font-bold text-emerald-600">
+                                            <td className="px-2.5 py-3 align-top">
+                                                <span className="text-xs font-mono font-bold text-emerald-600 break-all">
                                                     {admission.admission_id}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3">
-                                                <p className="font-semibold text-gray-900 text-xs whitespace-nowrap">
+                                            <td className="px-2.5 py-3 align-top">
+                                                <p className="font-semibold text-gray-900 text-xs break-words">
                                                     {admission.patient?.full_name || '—'}
                                                 </p>
                                                 <p className="text-[10px] text-gray-400 mt-0.5">
@@ -810,26 +827,26 @@ export default function ReceptionDashboard() {
                                                     {admission.patient?.gender || ''}
                                                 </p>
                                             </td>
-                                            <td className="px-4 py-3">
-                                                <span className="text-xs font-mono text-gray-500">
+                                            <td className="px-2.5 py-3 align-top">
+                                                <span className="text-xs font-mono text-gray-500 break-all">
                                                     {admission.patient?.patient_id || '—'}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3">
-                                                <span className="text-xs text-gray-700 whitespace-nowrap">
+                                            <td className="px-2.5 py-3 align-top">
+                                                <span className="text-xs text-gray-700 break-words">
                                                     {admission.doctor_name || '—'}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3">
-                                                <p className="text-xs font-medium text-gray-800 whitespace-nowrap">{wardName}</p>
+                                            <td className="px-2.5 py-3 align-top">
+                                                <p className="text-xs font-medium text-gray-800 break-words">{wardName}</p>
                                                 <p className="text-[10px] text-gray-400 mt-0.5">Bed: {bedId}</p>
                                             </td>
-                                            <td className="px-4 py-3">
-                                                <span className="text-xs text-gray-600 max-w-[120px] truncate block">
+                                            <td className="px-2.5 py-3 align-top">
+                                                <span className="text-xs text-gray-600 truncate block">
                                                     {admission.diagnosis || '—'}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3 whitespace-nowrap">
+                                            <td className="px-2.5 py-3 align-top whitespace-nowrap">
                                                 <div>
                                                     <span className="text-xs font-bold text-gray-900">
                                                         {admission.daysAdmitted ?? '—'}
@@ -842,7 +859,7 @@ export default function ReceptionDashboard() {
                                                     {formatDate(admission.admission_date)}
                                                 </p>
                                             </td>
-                                            <td className="px-4 py-3 whitespace-nowrap">
+                                            <td className="px-2.5 py-3 align-top whitespace-nowrap">
                                                 <span className={`text-xs font-bold ${
                                                     (admission.totalBalance ?? 0) > 0
                                                         ? 'text-red-600'
@@ -851,22 +868,22 @@ export default function ReceptionDashboard() {
                                                     {formatMoney(admission.totalBalance)}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3 whitespace-nowrap">
+                                            <td className="px-2.5 py-3 align-top">
                                                 <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full border ${getIPDStatusBadge(admission.status)}`}>
                                                     {admission.status}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3 whitespace-nowrap">
-                                                <div className="flex items-center gap-1.5">
+                                            <td className="px-2.5 py-3 align-top">
+                                                <div className="flex flex-wrap items-center gap-1.5">
                                                     <Link
                                                         href={`/ipd/admission/${encodeURIComponent(admission.admission_id)}`}
-                                                        className="inline-flex items-center px-3 py-1.5 text-[10px] font-bold text-white bg-gradient-to-r from-teal-500 to-emerald-600 rounded-lg hover:shadow-md transition-shadow"
+                                                        className="inline-flex items-center px-2.5 py-1.5 text-[10px] font-bold text-white bg-gradient-to-r from-teal-500 to-emerald-600 rounded-lg hover:shadow-md transition-shadow"
                                                     >
                                                         View
                                                     </Link>
                                                     <Link
                                                         href={`/ipd/discharge-settlement/${encodeURIComponent(admission.admission_id)}`}
-                                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
+                                                        className="inline-flex items-center gap-1 px-2 py-1.5 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
                                                         title="Discharge Settlement"
                                                     >
                                                         <Wallet className="h-3 w-3" /> Settle

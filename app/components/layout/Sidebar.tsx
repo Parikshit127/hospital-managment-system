@@ -624,17 +624,19 @@ export function Sidebar({ session }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [branding, setBranding] = useState<PortalBranding | null>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = window.localStorage.getItem('portal-branding');
-        if (cached) return JSON.parse(cached);
-      } catch {}
-    }
-    return null;
-  });
+  // Start as null so the first client render matches the server (which has no
+  // localStorage). Reading the cache in the useState initializer instead made
+  // the client render org colours the server didn't, causing a hydration
+  // mismatch on the sidebar's inline styles. We hydrate the cache in an effect
+  // below (runs after mount), then refresh from the server.
+  const [branding, setBranding] = useState<PortalBranding | null>(null);
 
   useEffect(() => {
+    // Cached branding first (instant, avoids a colour flash), then the live value.
+    try {
+      const cached = window.localStorage.getItem('portal-branding');
+      if (cached) setBranding(JSON.parse(cached));
+    } catch {}
     getPortalBranding().then(b => {
       setBranding(b);
       try { window.localStorage.setItem('portal-branding', JSON.stringify(b)); } catch {}

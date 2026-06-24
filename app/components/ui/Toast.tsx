@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useMemo } from 'react';
 import { CheckCircle2, XCircle, Info, AlertTriangle, X } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'info' | 'warning';
@@ -57,12 +57,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         timersRef.current.set(id, timer);
     }, [removeToast]);
 
-    const toast: ToastContextType = {
+    // Memoize so the context value keeps a stable identity across renders.
+    // Consumers that put `toast` in a useEffect/useCallback dependency array
+    // (e.g. DischargeSummaryEditor) would otherwise re-run their effects on
+    // every provider render — an unstable value here caused an infinite
+    // reload loop on pages that fetch on mount. `addToast` is already stable.
+    const toast = useMemo<ToastContextType>(() => ({
         success: (msg, dur) => addToast(msg, 'success', dur),
         error: (msg, dur) => addToast(msg, 'error', dur),
         info: (msg, dur) => addToast(msg, 'info', dur),
         warning: (msg, dur) => addToast(msg, 'warning', dur),
-    };
+    }), [addToast]);
 
     const iconMap = {
         success: <CheckCircle2 className="h-4.5 w-4.5 text-emerald-500 shrink-0" />,
