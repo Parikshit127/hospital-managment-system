@@ -4,6 +4,10 @@ const nextConfig: NextConfig = {
     output: 'standalone',
     poweredByHeader: false,
     productionBrowserSourceMaps: false,
+    // Keep heavy/native server-only packages out of the bundle. Honored by both
+    // the Turbopack and webpack builders (replaces the webpack `externals` hack
+    // below for the Turbopack path, which is now the default builder).
+    serverExternalPackages: ['@sparticuz/chromium'],
     experimental: {
         // NOTE: 'lucide-react' removed — its ESM paths break the webpack
         // resolver in Next 16 ("Can't resolve './icons/activity.js'").
