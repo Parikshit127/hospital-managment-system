@@ -964,16 +964,23 @@ export async function getMISReport(filters: { from: string; to: string; billType
             // TPA provider / pre-auth / insurance claim) → patient master type →
             // patient corporate link → patient insurance policy.
             const hasClaim = (inv.insurance_claims?.length || 0) > 0;
+            // Patient-level payer type (corporate/TPA) is set at IPD admission and only
+            // applies to IPD bills. OPD bills are walk-in: their payer is whatever the
+            // OPD bill itself is tagged with at billing time (invoice-level signals
+            // below). Without an explicit OPD tag the visit is Cash — never inherit the
+            // patient master's IPD admission type or patient-level corporate/insurance
+            // links, or a TPA-admitted patient's unrelated OPD visit would show as TPA.
+            const isIPD = !!inv.admission_id || (inv.invoice_type || '').toUpperCase() === 'IPD';
             let effectiveType = normType(inv.billing_patient_type);
             if (effectiveType === 'cash') {
                 if (inv.corporate_id) effectiveType = 'corporate';
                 else if (inv.tpa_provider_id || inv.pre_auth_id || hasClaim) effectiveType = 'tpa_insurance';
             }
-            if (effectiveType === 'cash') {
+            if (isIPD && effectiveType === 'cash') {
                 const pt = normType(inv.patient?.patient_type);
                 if (pt !== 'cash') effectiveType = pt;
             }
-            if (effectiveType === 'cash') {
+            if (isIPD && effectiveType === 'cash') {
                 if (inv.patient?.corporate?.company_name) effectiveType = 'corporate';
                 else if (policyProviderByPatient[inv.patient_id]) effectiveType = 'tpa_insurance';
             }
