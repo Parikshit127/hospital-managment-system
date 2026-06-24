@@ -11,6 +11,12 @@ import { prisma } from '@/backend/db';
 import VoiceBookingClient from './VoiceBookingClient';
 import { getPatientSession } from '@/app/lib/session';
 
+// This page reads the patient session cookie and queries the database, so it
+// must be rendered per-request — never statically prerendered at build time.
+// Without this, `next build` tries to prerender it and the DB query fails in CI
+// (no database reachable), breaking the build.
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
   title: 'AI Voice Booking | HospitalOS',
   description: 'Book your appointment using our AI voice assistant.',
