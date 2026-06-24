@@ -671,6 +671,20 @@ function InvoicesTab({
                   >
                     Detailed
                   </button>
+                  {/* TPA claim bill — addressed to the insurer/TPA, showing the
+                      actual treatment amount being claimed (separate from the
+                      patient's own bill). Always available so it can be raised
+                      for any invoice; the bill names the insurer when one is on
+                      file, else shows "Not specified". */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(`/api/invoice/${inv.id}/tpa-bill`, "_blank");
+                    }}
+                    className="px-2.5 py-1 bg-white border border-violet-200 hover:border-violet-400 hover:bg-violet-50 text-xs font-bold text-violet-700 rounded"
+                  >
+                    Bill for TPA
+                  </button>
                   {inv.admission_id && (
                     <button
                       onClick={(e) => {
