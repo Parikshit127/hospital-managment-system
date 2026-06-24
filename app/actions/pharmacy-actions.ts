@@ -23,6 +23,7 @@ import { syncInvoiceToGSTRegister } from '@/app/actions/gst-compliance-actions';
 import { generateSequentialNumber, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
 import { formatDoctorName } from '@/app/lib/format-name';
 import { validateBackdate } from '@/app/lib/backdate';
+import { dispensingKey } from '@/app/lib/pharmacy-bill-group';
 
 // Helper: post a GL journal entry using account codes (resolves to account IDs)
 async function postPharmacyJournal(db: any, organizationId: string, data: {
@@ -426,6 +427,11 @@ export async function generateInvoice(
             });
             if (activeAdmission) {
                 const doctorSuffix = options.doctorName ? ` — ${formatDoctorName(options.doctorName)}` : '';
+                // Stamp every line of THIS dispensing with one shared timestamp so
+                // they form a single identifiable "bill" on the IPD invoice (used to
+                // show each dispensing separately on Customer Invoices and to target
+                // returns at the right bill/day).
+                const dispensedAt = backdatedAt || new Date();
                 for (const item of invoiceItems) {
                     await postChargeToIpdBill({
                         admission_id: activeAdmission.admission_id,
@@ -437,7 +443,7 @@ export async function generateInvoice(
                         tax_rate: item.tax_rate,
                         hsn_sac_code: item.hsn_sac_code,
                         service_category: 'Pharmacy',
-                        posted_at: backdatedAt,
+                        posted_at: dispensedAt,
                     });
                 }
 
@@ -2013,6 +2019,7 @@ export async function processReturn(data: {
     quantity: number,
     reason: string,
     invoice_id?: number,    // original sale invoice for patient returns
+    bill_date?: string | Date, // for IPD: the specific dispensing bill/day to deduct from
     vendor_id?: number,     // for supplier returns
     po_id?: number,         // for supplier returns
     purchase_invoice_id?: number, // for supplier returns
@@ -2162,6 +2169,10 @@ export async function processReturn(data: {
 
             if (invoice && invoice.invoice_type === 'IPD') {
                 // IPD: deduct directly from the IPD bill via a negative line item.
+                // Stamp it with the chosen bill's date so it lands on that day's
+                // pharmacy group in the discharge/master bill (returns reduce the
+                // exact day they were dispensed, not "today").
+                const returnLineDate = data.bill_date ? new Date(data.bill_date) : null;
                 await db.invoice_items.create({
                     data: {
                         invoice_id: data.invoice_id,
@@ -2176,6 +2187,7 @@ export async function processReturn(data: {
                         tax_rate: 0,
                         tax_amount: 0,
                         organizationId,
+                        ...(returnLineDate ? { created_at: returnLineDate } : {}),
                     }
                 });
 
@@ -2358,28 +2370,73 @@ export async function searchReturnableInvoices(query: string) {
                     { patient: { phone: { contains: q } } },
                 ],
             },
-            include: { patient: { select: { full_name: true } } },
+            include: {
+                patient: { select: { full_name: true } },
+                // For IPD bills, pull the pharmacy lines so we can split the invoice
+                // into individual dispensing bills the user can return against.
+                items: { where: { service_category: 'Pharmacy' }, select: { created_at: true, net_price: true, tax_amount: true } },
+            },
             orderBy: { created_at: 'desc' },
             take: 15,
         });
 
-        const data = invoices.map((inv: any) => {
+        const data: any[] = [];
+        for (const inv of invoices) {
             const isWalkin = inv.patient_id === 'WALKIN';
             const name = isWalkin
                 ? (parseWalkinNote(inv.notes).name || 'Walk-in / OTC')
                 : (inv.patient?.full_name || inv.patient_id);
-            return {
-                invoice_id: inv.id,
-                invoice_number: inv.invoice_number,
-                patient_name: name,
-                is_ipd: inv.invoice_type === 'IPD',
-                is_walkin: isWalkin,
-                invoice_type: inv.invoice_type,
-                created_at: inv.created_at,
-                net_amount: Number(inv.net_amount),
-                balance_due: Number(inv.balance_due),
-            };
-        });
+
+            if (inv.invoice_type === 'IPD') {
+                // One entry per pharmacy bill (dispensing event) so the user picks the
+                // specific bill/day; the return is then deducted from that day.
+                const pharmItems: any[] = inv.items || [];
+                const billMap = new Map<string, any[]>();
+                for (const it of pharmItems) {
+                    const key = dispensingKey(it.created_at);
+                    if (!billMap.has(key)) billMap.set(key, []);
+                    billMap.get(key)!.push(it);
+                }
+                const bills = Array.from(billMap.values())
+                    .map((items) => ({
+                        billDate: new Date(Math.max(...items.map((it: any) => new Date(it.created_at).getTime()))),
+                        gross: items.reduce((s: number, it: any) => s + Number(it.net_price || 0) + Number(it.tax_amount || 0), 0),
+                    }))
+                    .sort((a, b) => b.billDate.getTime() - a.billDate.getTime());
+
+                if (bills.length === 0) {
+                    // IPD bill with no pharmacy lines yet — keep a single entry.
+                    data.push({
+                        invoice_id: inv.id, invoice_number: inv.invoice_number, patient_name: name,
+                        is_ipd: true, is_walkin: false, invoice_type: 'IPD',
+                        created_at: inv.created_at, bill_date: null,
+                        net_amount: Number(inv.net_amount), balance_due: Number(inv.balance_due),
+                    });
+                } else {
+                    for (const b of bills) {
+                        data.push({
+                            invoice_id: inv.id, invoice_number: inv.invoice_number, patient_name: name,
+                            is_ipd: true, is_walkin: false, invoice_type: 'IPD',
+                            created_at: b.billDate, bill_date: b.billDate,
+                            net_amount: b.gross, balance_due: Number(inv.balance_due),
+                        });
+                    }
+                }
+            } else {
+                data.push({
+                    invoice_id: inv.id,
+                    invoice_number: inv.invoice_number,
+                    patient_name: name,
+                    is_ipd: false,
+                    is_walkin: isWalkin,
+                    invoice_type: inv.invoice_type,
+                    created_at: inv.created_at,
+                    bill_date: null,
+                    net_amount: Number(inv.net_amount),
+                    balance_due: Number(inv.balance_due),
+                });
+            }
+        }
         return { success: true, data };
     } catch (error: any) {
         console.error('searchReturnableInvoices error:', error);

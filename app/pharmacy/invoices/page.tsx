@@ -367,7 +367,7 @@ export default function PharmacyInvoicesPage() {
                                     const notCancelled = inv.status !== 'Cancelled';
 
                                     return (
-                                        <tr key={`${inv.source}-${inv.id}`} className="hover:bg-orange-50/30 transition-colors">
+                                        <tr key={`${inv.source}-${inv.id}-${inv._billKey ?? ''}`} className="hover:bg-orange-50/30 transition-colors">
                                             {/* SR # */}
                                             <td className="px-4 py-3 text-xs text-gray-400 font-mono">{idx + 1}</td>
 
