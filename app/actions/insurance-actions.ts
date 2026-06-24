@@ -251,11 +251,11 @@ export async function getPatientTpaInvoices(patientId: string) {
 export async function addPatientPolicy(data: {
     patient_id: string;
     provider_id: number;
-    policy_number: string;
+    // Policy number, coverage limit + validity are optional at the patient level —
+    // they become mandatory only when billing a TPA/insurance patient.
+    policy_number?: string;
     policy_holder?: string;
     plan_name?: string;
-    // Coverage limit + validity are optional at the patient level — they become
-    // mandatory only when billing a TPA/insurance patient (enforced at billing).
     coverage_limit?: number | null;
     valid_from?: string;
     valid_until?: string;
@@ -265,11 +265,12 @@ export async function addPatientPolicy(data: {
         const coverage = data.coverage_limit != null && data.coverage_limit !== ('' as any)
             ? Number(data.coverage_limit)
             : null;
+        const policyNumber = data.policy_number?.trim() || null;
         const policy = await db.insurance_policies.create({
             data: {
                 patient_id: data.patient_id,
                 provider_id: data.provider_id,
-                policy_number: data.policy_number,
+                policy_number: policyNumber,
                 policy_holder: data.policy_holder || null,
                 plan_name: data.plan_name || null,
                 coverage_limit: coverage,
@@ -286,7 +287,7 @@ export async function addPatientPolicy(data: {
                 action: 'ADD_INSURANCE_POLICY',
                 module: 'insurance',
                 entity_type: 'policy',
-                entity_id: data.policy_number,
+                entity_id: policyNumber || String(policy.id),
                 details: JSON.stringify({ patient_id: data.patient_id, provider_id: data.provider_id }),
                 organizationId,
             },

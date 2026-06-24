@@ -1326,7 +1326,7 @@ model insurance_policies {
   id                   Int       @id @default(autoincrement())
   patient_id           String
   provider_id          Int
-  policy_number        String    @unique
+  policy_number        String?   @unique
   policy_holder        String?
   plan_name            String?
   member_id            String?

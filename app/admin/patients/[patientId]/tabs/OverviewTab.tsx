@@ -168,18 +168,18 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
   }
   async function savePolicy() {
     if (!patientId) return;
-    // Only provider + policy number are required to save a policy on the patient.
-    // Coverage limit and validity are optional here — they're enforced at billing
+    // Only the provider is required to save a policy on the patient. Policy number,
+    // coverage limit and validity are optional here — they're enforced at billing
     // time for TPA/insurance patients.
-    if (!policyForm.provider_id || !policyForm.policy_number) {
-      alert('Provider and policy number are required');
+    if (!policyForm.provider_id) {
+      alert('Please select an insurance provider');
       return;
     }
     setPolicyBusy(true);
     const payload = {
       patient_id: patientId,
       provider_id: Number(policyForm.provider_id),
-      policy_number: policyForm.policy_number.trim(),
+      policy_number: policyForm.policy_number.trim() || undefined,
       policy_holder: policyForm.policy_holder.trim() || undefined,
       plan_name: policyForm.plan_name.trim() || undefined,
       coverage_limit: policyForm.coverage_limit ? Number(policyForm.coverage_limit) : undefined,
@@ -557,7 +557,7 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Policy Number *</label>
+                  <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Policy Number</label>
                   <input
                     value={policyForm.policy_number}
                     onChange={e => setPolicyForm({ ...policyForm, policy_number: e.target.value })}
