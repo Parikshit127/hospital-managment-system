@@ -5,7 +5,7 @@ import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     FileText, Plus, X, Loader2, CheckCircle, Eye, CreditCard,
-    AlertTriangle, Search, Filter,
+    AlertTriangle, Search, Filter, Printer,
 } from 'lucide-react';
 import {
     getPurchaseInvoices, createPurchaseInvoice, matchPurchaseInvoice,
@@ -258,6 +258,7 @@ export default function PurchaseInvoicesPage() {
                                     <td className="px-4 py-3 text-right">
                                         <div className="flex gap-1.5 justify-end">
                                             <button onClick={() => setShowDetail(inv)} className="p-1.5 hover:bg-gray-100 rounded-lg" title="View Details"><Eye className="h-3.5 w-3.5 text-gray-500" /></button>
+                                            <a href={`/api/pharmacy/purchase-invoice/${inv.id}/print`} target="_blank" rel="noopener noreferrer" className="p-1.5 hover:bg-slate-100 rounded-lg" title="Print Invoice"><Printer className="h-3.5 w-3.5 text-slate-500" /></a>
                                             {inv.status === 'Draft' && inv.po_id && (
                                                 <button onClick={() => handleMatch(inv)} className="p-1.5 hover:bg-amber-50 rounded-lg" title="3-Way Match"><Search className="h-3.5 w-3.5 text-amber-500" /></button>
                                             )}
