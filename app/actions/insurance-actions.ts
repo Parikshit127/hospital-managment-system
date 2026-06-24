@@ -557,6 +557,7 @@ export async function updateClaimStatus(claimId: number, data: {
 export async function getInsuranceClaims(filters?: {
     status?: string;
     policy_id?: number;
+    provider_id?: number;
     limit?: number;
 }) {
     try {
@@ -564,6 +565,7 @@ export async function getInsuranceClaims(filters?: {
         const where: any = {};
         if (filters?.status) where.status = filters.status;
         if (filters?.policy_id) where.policy_id = filters.policy_id;
+        if (filters?.provider_id) where.policy = { provider_id: filters.provider_id };
 
         const claims = await db.insurance_claims.findMany({
             where,

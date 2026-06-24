@@ -53,6 +53,12 @@ export async function createInsuranceReceipt(input: {
   reference_number: string;
   receipt_date: string;
   total_amount: number;
+  // Optional settlement-advice breakdown (MEDNET-style). When omitted, only the
+  // received total is recorded (back-compatible with the simple receipt entry).
+  claim_amount?: number;
+  sanctioned_amount?: number;
+  tds_amount?: number;
+  service_charge?: number;
   remarks?: string;
 }) {
   try {
@@ -60,6 +66,10 @@ export async function createInsuranceReceipt(input: {
 
     const total = round2(Number(input.total_amount));
     if (!Number.isFinite(total) || total <= 0) return { success: false, error: 'total_amount must be greater than 0' };
+    const claim = round2(Math.max(0, Number(input.claim_amount) || 0));
+    const sanctioned = round2(Math.max(0, Number(input.sanctioned_amount) || 0));
+    const tds = round2(Math.max(0, Number(input.tds_amount) || 0));
+    const serviceCharge = round2(Math.max(0, Number(input.service_charge) || 0));
     const reference = (input.reference_number || '').trim();
     if (!reference) return { success: false, error: 'reference_number is required' };
     if (input.payer_type === 'tpa_insurance' && !input.provider_id) return { success: false, error: 'provider_id required for TPA/insurance receipt' };
@@ -86,7 +96,10 @@ export async function createInsuranceReceipt(input: {
         total_amount: total,
         allocated_amount: 0,
         unmapped_amount: total,
-        tds_total: 0,
+        tds_total: tds,
+        claim_amount: claim,
+        sanctioned_amount: sanctioned,
+        service_charge: serviceCharge,
         status: 'Open',
         remarks: input.remarks || null,
         organizationId,

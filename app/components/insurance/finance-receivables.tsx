@@ -185,28 +185,38 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-gray-600">
               <tr>
-                <th className="px-4 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Receipt #</th>
-                <th className="px-4 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Payer</th>
-                <th className="px-4 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Instrument / Ref</th>
-                <th className="px-4 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Total</th>
-                <th className="px-4 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Allocated</th>
-                <th className="px-4 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Unmapped</th>
-                <th className="px-4 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Status</th>
+                <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Receipt #</th>
+                <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Date</th>
+                <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Payer</th>
+                <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Ref No</th>
+                <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Received</th>
+                <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Claim</th>
+                <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Sanctioned</th>
+                <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">TDS</th>
+                <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Svc Chg</th>
+                <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Disallowed</th>
+                <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {receipts.map((r: any) => (
+              {receipts.map((r: any) => {
+                const disallowed = Math.max(0, Number(r.claim_amount || 0) - Number(r.sanctioned_amount || 0));
+                return (
                 <tr key={r.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-2.5 font-mono text-xs text-gray-700">{r.receipt_number}</td>
-                  <td className="px-4 py-2.5 text-gray-800">{r.provider?.provider_name || r.corporate?.company_name || '-'}</td>
-                  <td className="px-4 py-2.5 text-gray-600">{r.instrument} · {r.reference_number}</td>
-                  <td className="px-4 py-2.5 text-right">{fmt(r.total_amount)}</td>
-                  <td className="px-4 py-2.5 text-right">{fmt(r.allocated_amount)}</td>
-                  <td className="px-4 py-2.5 text-right">{fmt(r.unmapped_amount)}</td>
-                  <td className="px-4 py-2.5"><StatusPill status={r.status} /></td>
+                  <td className="px-3 py-2.5 font-mono text-xs text-gray-700">{r.receipt_number}</td>
+                  <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{r.receipt_date ? new Date(r.receipt_date).toLocaleDateString('en-GB') : '-'}</td>
+                  <td className="px-3 py-2.5 text-gray-800">{r.provider?.provider_name || r.corporate?.company_name || '-'}</td>
+                  <td className="px-3 py-2.5 text-gray-600 font-mono text-xs">{r.reference_number}</td>
+                  <td className="px-3 py-2.5 text-right font-bold text-gray-900">{fmt(r.total_amount)}</td>
+                  <td className="px-3 py-2.5 text-right text-gray-600">{Number(r.claim_amount) ? fmt(r.claim_amount) : '—'}</td>
+                  <td className="px-3 py-2.5 text-right text-gray-600">{Number(r.sanctioned_amount) ? fmt(r.sanctioned_amount) : '—'}</td>
+                  <td className="px-3 py-2.5 text-right text-gray-600">{Number(r.tds_total) ? fmt(r.tds_total) : '—'}</td>
+                  <td className="px-3 py-2.5 text-right text-gray-600">{Number(r.service_charge) ? fmt(r.service_charge) : '—'}</td>
+                  <td className="px-3 py-2.5 text-right text-rose-600">{disallowed ? fmt(disallowed) : '—'}</td>
+                  <td className="px-3 py-2.5"><StatusPill status={r.status} /></td>
                 </tr>
-              ))}
-              {receipts.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No receipts yet</td></tr>}
+              );})}
+              {receipts.length === 0 && <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">No receipts yet</td></tr>}
             </tbody>
           </table>
         </div>
@@ -218,49 +228,91 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
   );
 }
 
-function NewReceiptModal({ providers, onClose, onSaved }: any) {
-  const [form, setForm] = useState({ provider_id: '', instrument: 'NEFT', reference_number: '', receipt_date: new Date().toISOString().slice(0, 10), total_amount: '', remarks: '' });
+export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId }: any) {
+  const [form, setForm] = useState({
+    provider_id: defaultProviderId ? String(defaultProviderId) : '', instrument: 'NEFT', reference_number: '',
+    receipt_date: new Date().toISOString().slice(0, 10),
+    claim_amount: '', sanctioned_amount: '', tds_amount: '', service_charge: '', total_amount: '', remarks: '',
+  });
+  const [autoReceived, setAutoReceived] = useState(true); // received auto-derived until the user overrides it
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  const num = (v: string) => Number(v) || 0;
+  const sanctioned = num(form.sanctioned_amount);
+  const claim = num(form.claim_amount);
+  const tds = num(form.tds_amount);
+  const svc = num(form.service_charge);
+  const disallowed = Math.max(0, claim - sanctioned);
+  const computedReceived = Math.max(0, sanctioned - tds - svc);
+  // Keep "received" in sync with sanctioned − tds − service charge unless the user typed their own.
+  const received = autoReceived && sanctioned > 0 ? computedReceived : num(form.total_amount);
 
   const save = async () => {
     setError(''); setSaving(true);
     const res: any = await createInsuranceReceipt({
       payer_type: 'tpa_insurance', provider_id: Number(form.provider_id),
       instrument: form.instrument, reference_number: form.reference_number,
-      receipt_date: form.receipt_date, total_amount: Number(form.total_amount), remarks: form.remarks,
+      receipt_date: form.receipt_date,
+      total_amount: received,
+      claim_amount: claim, sanctioned_amount: sanctioned, tds_amount: tds, service_charge: svc,
+      remarks: form.remarks,
     });
     setSaving(false);
     if (res?.success) onSaved(); else setError(res?.error || 'Failed to create receipt');
   };
 
   return (
-    <Modal title="Record Insurance Receipt" onClose={onClose}>
+    <Modal title="Record Insurance Receipt" onClose={onClose} wide>
       {error && <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
       <div className="space-y-3">
         <Field label="Insurance / TPA">
-          <select value={form.provider_id} onChange={(e) => setForm({ ...form, provider_id: e.target.value })} className={INPUT}>
+          <select value={form.provider_id} onChange={(e) => setForm({ ...form, provider_id: e.target.value })} className={INPUT} disabled={!!defaultProviderId}>
             <option value="">Select payer…</option>
             {providers.map((p: any) => <option key={p.id} value={p.id}>{p.provider_name}</option>)}
           </select>
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <Field label="Instrument">
             <select value={form.instrument} onChange={(e) => setForm({ ...form, instrument: e.target.value })} className={INPUT}>
               {['NEFT', 'RTGS', 'Cheque', 'UPI', 'Other'].map((i) => <option key={i}>{i}</option>)}
             </select>
           </Field>
           <Field label="Reference / UTR"><input className={INPUT} value={form.reference_number} onChange={(e) => setForm({ ...form, reference_number: e.target.value })} /></Field>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
           <Field label="Receipt Date"><input type="date" className={INPUT} value={form.receipt_date} onChange={(e) => setForm({ ...form, receipt_date: e.target.value })} /></Field>
-          <Field label="Total Amount"><input type="number" className={INPUT} value={form.total_amount} onChange={(e) => setForm({ ...form, total_amount: e.target.value })} /></Field>
         </div>
+
+        {/* Settlement advice breakdown */}
+        <div className="rounded-xl border border-gray-200 bg-slate-50/60 p-3 space-y-3">
+          <p className="text-[11px] font-black uppercase tracking-wider text-gray-500">Settlement Advice</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Claim Amount"><input type="number" className={INPUT} value={form.claim_amount} onChange={(e) => setForm({ ...form, claim_amount: e.target.value })} /></Field>
+            <Field label="Sanctioned"><input type="number" className={INPUT} value={form.sanctioned_amount} onChange={(e) => setForm({ ...form, sanctioned_amount: e.target.value })} /></Field>
+            <Field label="TDS"><input type="number" className={INPUT} value={form.tds_amount} onChange={(e) => setForm({ ...form, tds_amount: e.target.value })} /></Field>
+            <Field label="Service Charge"><input type="number" className={INPUT} value={form.service_charge} onChange={(e) => setForm({ ...form, service_charge: e.target.value })} /></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg bg-white border border-gray-200 px-3 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Disallowed (Claim − Sanctioned)</p>
+              <p className="text-sm font-black text-rose-600">{fmt(disallowed)}</p>
+            </div>
+            <Field label="Amount Received *">
+              <input type="number" className={INPUT}
+                value={autoReceived && sanctioned > 0 ? String(computedReceived) : form.total_amount}
+                onChange={(e) => { setAutoReceived(false); setForm({ ...form, total_amount: e.target.value }); }} />
+            </Field>
+          </div>
+          {sanctioned > 0 && !autoReceived && Math.abs(received - computedReceived) > 0.01 && (
+            <p className="text-[11px] text-amber-600">Heads up: received ({fmt(received)}) ≠ sanctioned − TDS − service charge ({fmt(computedReceived)}).</p>
+          )}
+        </div>
+
         <Field label="Remarks"><input className={INPUT} value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} /></Field>
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold">Cancel</button>
-        <button onClick={save} disabled={saving} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
+        <button onClick={save} disabled={saving || !form.provider_id || !form.reference_number || received <= 0}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Receipt'}
         </button>
       </div>

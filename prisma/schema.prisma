@@ -4641,10 +4641,15 @@ model InsuranceReceipt {
   instrument       String   @default("NEFT") // NEFT | RTGS | Cheque | UPI | Other
   reference_number String // UTR / cheque no — unique per org
   receipt_date     DateTime
-  total_amount     Decimal  @default(0)
+  total_amount     Decimal  @default(0) // amount actually received (net of TDS/service charge/disallowance)
   allocated_amount Decimal  @default(0)
   unmapped_amount  Decimal  @default(0) // total_amount - allocated_amount (the "unmapped receipt")
   tds_total        Decimal  @default(0)
+  // Settlement-advice breakdown (MEDNET-style): claim − sanctioned = disallowed;
+  // sanctioned − tds_total − service_charge = total_amount (received).
+  claim_amount      Decimal @default(0) // gross amount claimed from the payer
+  sanctioned_amount Decimal @default(0) // amount the payer approved
+  service_charge    Decimal @default(0) // TPA service charge deducted from the sanctioned amount
   status           String   @default("Open") // Open | PartiallyAllocated | Allocated | Reversed
   remarks          String?
   gl_posted        Boolean  @default(false)

@@ -4,15 +4,16 @@ import { useState, useEffect } from 'react';
 import {
     Shield, FileText, Clock, Loader2, ChevronRight,
     Plus, CheckCircle, AlertTriangle, ArrowUpRight,
-    Building2, Wallet, Users, X, ExternalLink,
+    Building2, Wallet, Users,
     ShieldCheck, ClipboardCheck
 } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import {
     getInsuranceProviders, getInsuranceClaims, getInsuranceStats,
     getAllPolicies, addInsuranceProvider, updateInsuranceProvider,
     submitInsuranceClaim, getRevenueLeakage, getClaimableInvoices,
-    getProviderPerformance, autoSubmitClaim, getPatientsByProvider
+    getProviderPerformance, autoSubmitClaim
 } from '@/app/actions/insurance-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useToast } from '@/app/components/ui/Toast';
@@ -22,6 +23,12 @@ import {
 
 export default function InsuranceDashboard() {
     const toast = useToast();
+    const pathname = usePathname();
+    // Clicking a provider opens a dedicated page (not a popup); keep the user in
+    // whichever portal they came from (admin finance vs. insurance).
+    const providerHref = (id: number) => pathname?.startsWith('/admin/finance/tpa-insurance')
+        ? `/admin/finance/tpa-insurance/${id}`
+        : `/insurance/provider/${id}`;
     const [stats, setStats] = useState<any>(null);
     const [providers, setProviders] = useState<any[]>([]);
     const [claims, setClaims] = useState<any[]>([]);
@@ -50,11 +57,6 @@ export default function InsuranceDashboard() {
     // Provider performance
     const [providerPerf, setProviderPerf] = useState<any[]>([]);
 
-    // Provider drill-down: patients covered by a selected TPA
-    const [drillProvider, setDrillProvider] = useState<any>(null);
-    const [drillPatients, setDrillPatients] = useState<any[]>([]);
-    const [drillLoading, setDrillLoading] = useState(false);
-
     const loadData = async () => {
         setLoading(true);
         try {
@@ -77,15 +79,6 @@ export default function InsuranceDashboard() {
     };
 
     useEffect(() => { loadData(); }, []);
-
-    const openProviderDrill = async (provider: any) => {
-        setDrillProvider(provider);
-        setDrillPatients([]);
-        setDrillLoading(true);
-        const res = await getPatientsByProvider(provider.id);
-        if (res.success) setDrillPatients(res.data || []);
-        setDrillLoading(false);
-    };
 
     const handleAddProvider = async () => {
         if (!providerForm.provider_name) return;
@@ -444,7 +437,7 @@ export default function InsuranceDashboard() {
                         {activeTab === 'providers' && (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {providers.map((p: any) => (
-                                    <button key={p.id} type="button" onClick={() => openProviderDrill(p)}
+                                    <Link key={p.id} href={providerHref(p.id)}
                                         className="text-left bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-blue-500/40 hover:shadow-md transition-all group">
                                         <div className="flex items-center gap-3 mb-3">
                                             <div className="p-2 bg-blue-500/10 rounded-xl">
@@ -462,9 +455,9 @@ export default function InsuranceDashboard() {
                                             {p.address && <p className="text-gray-400 text-[10px]">{p.address}</p>}
                                         </div>
                                         <p className="mt-3 text-[10px] font-black text-blue-400 uppercase tracking-wider flex items-center gap-1">
-                                            <Users className="h-3 w-3" /> View admitted patients
+                                            <Users className="h-3 w-3" /> View patients
                                         </p>
-                                    </button>
+                                    </Link>
                                 ))}
                                 {providers.length === 0 && (
                                     <div className="col-span-full py-20 text-center text-gray-300">
@@ -523,63 +516,6 @@ export default function InsuranceDashboard() {
                             className="w-full py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-sm font-black rounded-xl hover:shadow-lg hover:shadow-blue-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                             <Plus className="h-4 w-4" /> Add Provider
                         </button>
-                    </div>
-                </div>
-            )}
-
-            {/* PROVIDER DRILL-DOWN \u2014 patients covered by the selected TPA */}
-            {drillProvider && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setDrillProvider(null)}>
-                    <div className="bg-white border border-gray-200 shadow-2xl rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-blue-500/10 rounded-xl">
-                                    <Building2 className="h-5 w-5 text-blue-400" />
-                                </div>
-                                <div>
-                                    <h3 className="text-base font-black text-gray-900">{drillProvider.provider_name}</h3>
-                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Patients under this TPA</p>
-                                </div>
-                            </div>
-                            <button onClick={() => setDrillProvider(null)} className="p-1.5 text-gray-400 hover:text-gray-900 rounded-lg hover:bg-gray-100 transition-all">
-                                <X className="h-4 w-4" />
-                            </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-4">
-                            {drillLoading ? (
-                                <div className="flex items-center justify-center py-16">
-                                    <Loader2 className="h-6 w-6 animate-spin text-blue-400" />
-                                </div>
-                            ) : drillPatients.length === 0 ? (
-                                <div className="py-16 flex flex-col items-center text-gray-300">
-                                    <Users className="h-10 w-10 mb-2" />
-                                    <p className="text-xs font-bold">No patients covered by this TPA</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-2">
-                                    {drillPatients.map((pt: any) => (
-                                        <div key={pt.patient_id} className="flex items-center justify-between gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl hover:border-blue-500/30 transition-all">
-                                            <div className="min-w-0">
-                                                <div className="flex items-center gap-2">
-                                                    <p className="text-sm font-bold text-gray-800 truncate">{pt.full_name}</p>
-                                                    {pt.is_admitted && (
-                                                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 uppercase tracking-wider shrink-0">Admitted</span>
-                                                    )}
-                                                </div>
-                                                <p className="text-[10px] text-gray-400">
-                                                    {pt.patient_id} &bull; {pt.policy_number}
-                                                    {pt.phone ? ` \u2022 ${pt.phone}` : ''}
-                                                </p>
-                                            </div>
-                                            <Link href={`/reception/patient/${pt.patient_id}`}
-                                                className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-all">
-                                                <ExternalLink className="h-3 w-3" /> View Patient
-                                            </Link>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
                     </div>
                 </div>
             )}

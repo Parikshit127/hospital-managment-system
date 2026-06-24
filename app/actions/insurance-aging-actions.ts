@@ -64,6 +64,7 @@ export async function getInsuranceOutstanding(opts?: {
   agingDays?: number;             // bucket threshold (default 60 like the benchmark)
   asOnDate?: string;
   agingBasis?: 'approval' | 'bill';
+  provider_id?: number;           // scope to a single TPA/insurance provider
 }) {
   const { db, organizationId } = await requireTenantContext();
   const payerType = opts?.payer_type || 'tpa_insurance';
@@ -77,6 +78,7 @@ export async function getInsuranceOutstanding(opts?: {
       organizationId,
       billing_patient_type: payerType,
       tpa_payable: payerType === 'tpa_insurance' ? { gt: 0 } : undefined,
+      ...(opts?.provider_id ? { tpa_provider_id: opts.provider_id } : {}),
     },
     select: {
       id: true, invoice_number: true, created_at: true,
@@ -95,7 +97,10 @@ export async function getInsuranceOutstanding(opts?: {
 
   // Unmapped receipts per payer (money received, not yet allocated).
   const receipts = await db.insuranceReceipt.findMany({
-    where: { organizationId, payer_type: payerType, status: { in: ['Open', 'PartiallyAllocated'] } },
+    where: {
+      organizationId, payer_type: payerType, status: { in: ['Open', 'PartiallyAllocated'] },
+      ...(opts?.provider_id ? { provider_id: opts.provider_id } : {}),
+    },
     select: { provider_id: true, corporate_id: true, unmapped_amount: true },
   });
 
