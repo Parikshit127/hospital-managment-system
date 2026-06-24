@@ -233,6 +233,29 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
                     <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${Number(item.net_price).toFixed(2)}</td>
                 </tr>`;
             }
+        } else if (isBulkPharmacy) {
+            // Collapsed pharmacy: show one summed line PER DAY (date-wise) instead of
+            // a single bulk total, so the bill reflects what was dispensed each day.
+            const byDate = new Map<string, { total: number; count: number; date: any }>();
+            for (const item of catItems) {
+                const key = fmtDate(item.created_at);
+                const e = byDate.get(key) || { total: 0, count: 0, date: item.created_at };
+                e.total += Number(item.net_price || 0);
+                e.count += 1;
+                byDate.set(key, e);
+            }
+            const dayRows = Array.from(byDate.entries())
+                .sort((a, b) => new Date(a[1].date).getTime() - new Date(b[1].date).getTime());
+            for (const [dateLabel, e] of dayRows) {
+                detailRows += `<tr>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;">${dateLabel}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;">Pharmacy (${e.count} item${e.count > 1 ? 's' : ''})</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;"></td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:center;"></td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;"></td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${e.total.toFixed(2)}</td>
+                </tr>`;
+            }
         }
     }
 

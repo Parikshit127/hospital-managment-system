@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { Truck, Plus, CheckCircle, PackageOpen, X, Search, AlertTriangle, ListChecks, Pencil } from 'lucide-react';
+import { Truck, Plus, CheckCircle, PackageOpen, X, Search, AlertTriangle, ListChecks, Pencil, Printer } from 'lucide-react';
 import { getPurchaseOrders, receivePurchaseOrder, createPurchaseOrder, updatePurchaseOrder, quickCreateMedicineForPO, getSuppliers, getInventoryForPO } from '@/app/actions/pharmacy-actions';
 
 type PoItem = {
@@ -390,6 +390,10 @@ export default function PurchaseOrdersPage() {
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <div className="inline-flex items-center justify-end gap-2">
+                                            <a href={`/api/pharmacy/purchase-order/${po.id}/print`} target="_blank" rel="noopener noreferrer"
+                                                className="text-slate-600 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-lg font-bold text-xs inline-flex items-center gap-1">
+                                                <Printer className="h-3 w-3" /> Print
+                                            </a>
                                             {isEditable(po) && (
                                                 <button onClick={() => openEditModal(po)} className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg font-bold text-xs inline-flex items-center gap-1">
                                                     <Pencil className="h-3 w-3" /> Edit
