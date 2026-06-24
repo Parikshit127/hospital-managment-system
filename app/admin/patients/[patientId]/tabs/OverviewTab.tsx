@@ -168,8 +168,11 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
   }
   async function savePolicy() {
     if (!patientId) return;
-    if (!policyForm.provider_id || !policyForm.policy_number || !policyForm.coverage_limit || !policyForm.valid_from || !policyForm.valid_until) {
-      alert('Provider, policy number, coverage limit, valid from and valid until are required');
+    // Only provider + policy number are required to save a policy on the patient.
+    // Coverage limit and validity are optional here — they're enforced at billing
+    // time for TPA/insurance patients.
+    if (!policyForm.provider_id || !policyForm.policy_number) {
+      alert('Provider and policy number are required');
       return;
     }
     setPolicyBusy(true);
@@ -179,9 +182,9 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
       policy_number: policyForm.policy_number.trim(),
       policy_holder: policyForm.policy_holder.trim() || undefined,
       plan_name: policyForm.plan_name.trim() || undefined,
-      coverage_limit: Number(policyForm.coverage_limit),
-      valid_from: policyForm.valid_from,
-      valid_until: policyForm.valid_until,
+      coverage_limit: policyForm.coverage_limit ? Number(policyForm.coverage_limit) : undefined,
+      valid_from: policyForm.valid_from || undefined,
+      valid_until: policyForm.valid_until || undefined,
     };
     const res = editingPolicyId
       ? await updatePatientPolicy(editingPolicyId, payload)
@@ -581,7 +584,7 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Coverage Limit (₹) *</label>
+                  <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Coverage Limit (₹)</label>
                   <input
                     type="number"
                     min="0"
@@ -592,7 +595,7 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Valid From *</label>
+                  <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Valid From</label>
                   <DateField
                     value={policyForm.valid_from}
                     onChange={e => setPolicyForm({ ...policyForm, valid_from: e.target.value })}
@@ -600,7 +603,7 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Valid Until *</label>
+                  <label className="text-[10px] font-bold text-gray-500 block mb-0.5">Valid Until</label>
                   <DateField
                     value={policyForm.valid_until}
                     onChange={e => setPolicyForm({ ...policyForm, valid_until: e.target.value })}

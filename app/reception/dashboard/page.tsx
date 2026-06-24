@@ -876,7 +876,7 @@ export default function ReceptionDashboard() {
                                             <td className="px-2.5 py-3 align-top">
                                                 <div className="flex flex-wrap items-center gap-1.5">
                                                     <Link
-                                                        href={`/ipd/admission/${encodeURIComponent(admission.admission_id)}`}
+                                                        href={`/reception/ipd/${encodeURIComponent(admission.admission_id)}`}
                                                         className="inline-flex items-center px-2.5 py-1.5 text-[10px] font-bold text-white bg-gradient-to-r from-teal-500 to-emerald-600 rounded-lg hover:shadow-md transition-shadow"
                                                     >
                                                         View

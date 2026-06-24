@@ -38,11 +38,13 @@ function ageFromDob(dob: string | null | undefined): string {
 // Code-split the inline bill builder — only loaded when staff actually open the panel.
 const InlineBillBuilder = dynamic(
     () => import('@/app/components/billing/InlineBillBuilder').then(m => m.InlineBillBuilder),
-    { ssr: false, loading: () => (
-        <div className="bg-white border border-orange-200 rounded-2xl p-10 flex items-center justify-center text-gray-400 text-sm">
-            <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading bill builder…
-        </div>
-    ) },
+    {
+        ssr: false, loading: () => (
+            <div className="bg-white border border-orange-200 rounded-2xl p-10 flex items-center justify-center text-gray-400 text-sm">
+                <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading bill builder…
+            </div>
+        )
+    },
 );
 
 /** Inline editable field */
@@ -182,7 +184,7 @@ export default function PatientProfilePage() {
         const tab = searchParams?.get('tab');
         const action = searchParams?.get('action');
         const welcome = searchParams?.get('welcome');
-        if (tab && ['overview','appointments','triage','vitals','timeline','billing','records'].includes(tab)) {
+        if (tab && ['overview', 'appointments', 'triage', 'vitals', 'timeline', 'billing', 'records'].includes(tab)) {
             setActiveTab(tab as any);
         }
         if (welcome === '1') setShowWelcome(true);
@@ -200,8 +202,8 @@ export default function PatientProfilePage() {
                 }
             } catch { /* sessionStorage unavailable */ }
         }
-    // We only want this to run once after mount; searchParams identity is stable per route.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // We only want this to run once after mount; searchParams identity is stable per route.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [patientId]);
 
     const dismissWelcome = useCallback(() => {
@@ -213,7 +215,7 @@ export default function PatientProfilePage() {
             window.history.replaceState({}, '', url.toString());
         }
     }, []);
-    
+
     // Billing Modals State
     const [showDuesModal, setShowDuesModal] = useState(false);
     const [dueForm, setDueForm] = useState({ amount: '', description: '', department: 'General' });
@@ -771,7 +773,7 @@ export default function PatientProfilePage() {
                             <div key={t.id} className="bg-white border border-gray-200 rounded-2xl p-4">
                                 <div className="flex items-center justify-between mb-3">
                                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${t.triage_level === 'Emergency' ? 'bg-rose-50 text-rose-700' :
-                                            t.triage_level === 'Urgent' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'
+                                        t.triage_level === 'Urgent' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'
                                         }`}>{t.triage_level}</span>
                                     <span className="text-[10px] text-gray-400">{formatDate(t.created_at)}</span>
                                 </div>
@@ -907,11 +909,10 @@ export default function PatientProfilePage() {
                                                             className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 text-left">
                                                             <div className="flex items-center gap-3 min-w-0 flex-wrap">
                                                                 <span className="font-mono text-xs font-bold text-orange-600">{inv.invoice_number}</span>
-                                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                                                    inv.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' :
-                                                                    inv.status === 'Cancelled' ? 'bg-gray-100 text-gray-500' :
-                                                                    'bg-blue-100 text-blue-700'
-                                                                }`}>{inv.status}</span>
+                                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${inv.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' :
+                                                                        inv.status === 'Cancelled' ? 'bg-gray-100 text-gray-500' :
+                                                                            'bg-blue-100 text-blue-700'
+                                                                    }`}>{inv.status}</span>
                                                                 <span className="text-[10px] text-gray-400">{inv.invoice_type} · {formatDate(inv.created_at)}</span>
                                                             </div>
                                                             <div className="flex items-center gap-4 text-xs shrink-0">
@@ -1006,11 +1007,10 @@ export default function PatientProfilePage() {
                                                                                         <td className="py-1 text-gray-500">{new Date(p.created_at).toLocaleString()}</td>
                                                                                         <td className="py-1 text-right font-bold text-emerald-600">₹{Number(p.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
                                                                                         <td className="py-1 text-right">
-                                                                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                                                                                p.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' :
-                                                                                                p.status === 'Reversed' ? 'bg-rose-100 text-rose-700' :
-                                                                                                'bg-gray-100 text-gray-600'
-                                                                                            }`}>{p.status}</span>
+                                                                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${p.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' :
+                                                                                                    p.status === 'Reversed' ? 'bg-rose-100 text-rose-700' :
+                                                                                                        'bg-gray-100 text-gray-600'
+                                                                                                }`}>{p.status}</span>
                                                                                         </td>
                                                                                         <td className="py-1 text-right">
                                                                                             <button onClick={() => window.open(`/api/payment/${p.id}/receipt`, '_blank')}
@@ -1079,9 +1079,8 @@ export default function PatientProfilePage() {
                                                             <td className="py-2 font-mono">{d.deposit_number}</td>
                                                             <td className="py-2">{d.payment_method}</td>
                                                             <td className="py-2">
-                                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                                                    d.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
-                                                                }`}>{d.status}</span>
+                                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${d.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                                                                    }`}>{d.status}</span>
                                                             </td>
                                                             <td className="py-2 text-right font-bold">₹{Number(d.amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
                                                             <td className={`py-2 text-right font-bold ${bal > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>₹{bal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
@@ -1099,48 +1098,48 @@ export default function PatientProfilePage() {
             </div>
 
             {/* External Records Tab */}
-                {activeTab === 'records' && (
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h3 className="font-black text-gray-700 text-lg flex items-center gap-2">
-                                <Upload className="h-5 w-5 text-violet-500" /> External Records
-                            </h3>
-                            <button onClick={() => setShowRecordModal(true)}
-                                className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white text-sm font-bold rounded-xl hover:bg-violet-700 transition">
-                                <Plus className="h-4 w-4" /> Add Record
+            {activeTab === 'records' && (
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h3 className="font-black text-gray-700 text-lg flex items-center gap-2">
+                            <Upload className="h-5 w-5 text-violet-500" /> External Records
+                        </h3>
+                        <button onClick={() => setShowRecordModal(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white text-sm font-bold rounded-xl hover:bg-violet-700 transition">
+                            <Plus className="h-4 w-4" /> Add Record
+                        </button>
+                    </div>
+                    {externalRecords.length === 0 ? (
+                        <div className="p-8 border border-dashed border-gray-300 rounded-2xl text-center text-gray-400 text-sm">
+                            No external records yet. Add records from other hospitals or previous treatments.
+                        </div>
+                    ) : externalRecords.map((rec: any) => (
+                        <div key={rec.id} className="bg-white border border-gray-200 rounded-2xl p-4 flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                                <p className="font-bold text-gray-900">{rec.title}</p>
+                                {rec.hospital_name && <p className="text-xs text-gray-500 mt-0.5">{rec.hospital_name}</p>}
+                                {rec.description && <p className="text-sm text-gray-600 mt-1">{rec.description}</p>}
+                                {rec.record_date && <p className="text-xs text-gray-400 mt-1">{fmtDate(rec.record_date)}</p>}
+                                {rec.file_url && (
+                                    <button onClick={async () => {
+                                        const url = rec.file_url.startsWith('patient-records/')
+                                            ? (await fetch(`/api/files?key=${encodeURIComponent(rec.file_url)}`).then(r => r.json())).url
+                                            : rec.file_url;
+                                        if (url) window.open(url, '_blank');
+                                    }}
+                                        className="inline-flex items-center gap-1.5 text-xs font-bold text-violet-600 bg-violet-50 px-3 py-1.5 rounded-lg mt-2 cursor-pointer hover:bg-violet-100 transition-colors">
+                                        <ExternalLink className="h-3.5 w-3.5" /> {rec.file_name || 'View File'}
+                                    </button>
+                                )}
+                            </div>
+                            <button onClick={async () => { await deletePatientExternalRecord(rec.id); loadData(); }}
+                                className="text-gray-300 hover:text-red-500 transition p-1">
+                                <Trash2 className="h-4 w-4" />
                             </button>
                         </div>
-                        {externalRecords.length === 0 ? (
-                            <div className="p-8 border border-dashed border-gray-300 rounded-2xl text-center text-gray-400 text-sm">
-                                No external records yet. Add records from other hospitals or previous treatments.
-                            </div>
-                        ) : externalRecords.map((rec: any) => (
-                            <div key={rec.id} className="bg-white border border-gray-200 rounded-2xl p-4 flex items-start justify-between gap-4">
-                                <div className="flex-1">
-                                    <p className="font-bold text-gray-900">{rec.title}</p>
-                                    {rec.hospital_name && <p className="text-xs text-gray-500 mt-0.5">{rec.hospital_name}</p>}
-                                    {rec.description && <p className="text-sm text-gray-600 mt-1">{rec.description}</p>}
-                                    {rec.record_date && <p className="text-xs text-gray-400 mt-1">{fmtDate(rec.record_date)}</p>}
-                                    {rec.file_url && (
-                                        <button onClick={async () => {
-                                            const url = rec.file_url.startsWith('patient-records/')
-                                                ? (await fetch(`/api/files?key=${encodeURIComponent(rec.file_url)}`).then(r => r.json())).url
-                                                : rec.file_url;
-                                            if (url) window.open(url, '_blank');
-                                        }}
-                                            className="inline-flex items-center gap-1.5 text-xs font-bold text-violet-600 bg-violet-50 px-3 py-1.5 rounded-lg mt-2 cursor-pointer hover:bg-violet-100 transition-colors">
-                                            <ExternalLink className="h-3.5 w-3.5" /> {rec.file_name || 'View File'}
-                                        </button>
-                                    )}
-                                </div>
-                                <button onClick={async () => { await deletePatientExternalRecord(rec.id); loadData(); }}
-                                    className="text-gray-300 hover:text-red-500 transition p-1">
-                                    <Trash2 className="h-4 w-4" />
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                )}
+                    ))}
+                </div>
+            )}
 
             {/* External Record Modal */}
             {showRecordModal && (
@@ -1201,11 +1200,11 @@ export default function PatientProfilePage() {
                         <form onSubmit={handleAddDues} className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Amount (₹)</label>
-                                <input type="number" required min="1" value={dueForm.amount} onChange={e => setDueForm({...dueForm, amount: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-50 font-mono text-lg" placeholder="e.g. 500" />
+                                <input type="number" required min="1" value={dueForm.amount} onChange={e => setDueForm({ ...dueForm, amount: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-50 font-mono text-lg" placeholder="e.g. 500" />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Description / Tag</label>
-                                <input type="text" required value={dueForm.description} onChange={e => setDueForm({...dueForm, description: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-50" placeholder="e.g. Extra Consumables" />
+                                <input type="text" required value={dueForm.description} onChange={e => setDueForm({ ...dueForm, description: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 bg-gray-50" placeholder="e.g. Extra Consumables" />
                             </div>
                             <div className="flex gap-3 mt-6">
                                 <button type="button" onClick={() => setShowDuesModal(false)} className="flex-1 py-2 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
@@ -1435,10 +1434,9 @@ function CollectPaymentModal({ invoice, registeredPan, registeredPanName, onClos
                             <div className="grid grid-cols-4 gap-1.5 mt-1.5">
                                 {['Cash', 'Card', 'UPI', 'Bank', 'NEFT_RTGS', 'Cheque', 'Online'].map(m => (
                                     <button key={m} onClick={() => setMethod(m)}
-                                        className={`py-2 rounded-lg text-xs font-bold border transition-all ${
-                                            method === m ? 'bg-emerald-50 border-emerald-400 text-emerald-700 shadow-sm'
+                                        className={`py-2 rounded-lg text-xs font-bold border transition-all ${method === m ? 'bg-emerald-50 border-emerald-400 text-emerald-700 shadow-sm'
                                                 : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                                        }`}>{m === 'NEFT_RTGS' ? 'NEFT/RTGS' : m}</button>
+                                            }`}>{m === 'NEFT_RTGS' ? 'NEFT/RTGS' : m}</button>
                                 ))}
                             </div>
                             {method === 'Online' && (

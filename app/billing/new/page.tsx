@@ -206,6 +206,17 @@ export default function ReceptionGenerateBillPage() {
         if (items.length === 0) return toast.error('Please add at least one item');
         if (preAuthBlocked) return toast.error('Pre-authorization required. Obtain TPA approval before billing.');
 
+        // TPA/Insurance patients MUST have a complete policy before billing — the
+        // policy fields are optional at the patient level but mandatory here.
+        if ((selectedPatient.patient_type || 'cash') === 'tpa_insurance') {
+            const pol = selectedPatient.insurance_policies?.[0];
+            const missing = !pol || !pol.provider?.id || !pol.policy_number
+                || pol.coverage_limit == null || !pol.valid_from || !pol.valid_until;
+            if (missing) {
+                return toast.error('TPA patient: complete the insurance policy (provider, policy number, coverage limit, valid from & until) on the patient profile before billing.');
+            }
+        }
+
         setIsSaving(true);
         try {
             const patientType = selectedPatient.patient_type || 'cash';

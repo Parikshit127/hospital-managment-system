@@ -254,12 +254,17 @@ export async function addPatientPolicy(data: {
     policy_number: string;
     policy_holder?: string;
     plan_name?: string;
-    coverage_limit: number;
-    valid_from: string;
-    valid_until: string;
+    // Coverage limit + validity are optional at the patient level — they become
+    // mandatory only when billing a TPA/insurance patient (enforced at billing).
+    coverage_limit?: number | null;
+    valid_from?: string;
+    valid_until?: string;
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
+        const coverage = data.coverage_limit != null && data.coverage_limit !== ('' as any)
+            ? Number(data.coverage_limit)
+            : null;
         const policy = await db.insurance_policies.create({
             data: {
                 patient_id: data.patient_id,
@@ -267,10 +272,10 @@ export async function addPatientPolicy(data: {
                 policy_number: data.policy_number,
                 policy_holder: data.policy_holder || null,
                 plan_name: data.plan_name || null,
-                coverage_limit: data.coverage_limit,
-                remaining_limit: data.coverage_limit,
-                valid_from: new Date(data.valid_from),
-                valid_until: new Date(data.valid_until),
+                coverage_limit: coverage,
+                remaining_limit: coverage,
+                valid_from: data.valid_from ? new Date(data.valid_from) : null,
+                valid_until: data.valid_until ? new Date(data.valid_until) : null,
                 status: 'Active',
                 organizationId,
             },
