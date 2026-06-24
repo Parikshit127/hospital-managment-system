@@ -48,6 +48,21 @@ import type { NextRequest } from 'next/server';
 import type { RouteContext } from 'next-ws/server';
 import OpenAI from 'openai';
 
+// WebSocket upgrades require the Node.js runtime and must never be statically
+// optimised.
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+// next-ws routes only export `UPGRADE`, which Next's typed-route validator does
+// not recognise — during `next build` that surfaces as TS2559 ("no properties in
+// common with RouteHandlerConfig") and fails the build, because the module shares
+// no recognised HTTP-method export. Exporting a minimal GET handler gives the
+// validator the property it needs. This endpoint is WebSocket-only, so a plain
+// HTTP request gets a 426 "Upgrade Required".
+export function GET(): Response {
+  return new Response('This endpoint requires a WebSocket upgrade.', { status: 426 });
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /** 16 kHz mono — must match PcmProcessor TARGET_SAMPLE_RATE */
