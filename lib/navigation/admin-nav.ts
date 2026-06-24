@@ -27,6 +27,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
         items: [
             { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
             { label: 'Analytics', href: '/admin/analytics', icon: LineChart },
+            { label: 'MIS Reports', href: '/admin/mis-reports', icon: LineChart },
         ],
     },
     {

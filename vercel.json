@@ -7,6 +7,18 @@
         {
             "path": "/api/ipd/bed-cleaning-sla",
             "schedule": "0 0 * * *"
+        },
+        {
+            "path": "/api/mis/worker",
+            "schedule": "* * * * *"
+        },
+        {
+            "path": "/api/cron/mis-scheduled-delivery",
+            "schedule": "30 1 * * *"
+        },
+        {
+            "path": "/api/cron/mis-rollup",
+            "schedule": "30 18 * * *"
         }
     ]
 }
