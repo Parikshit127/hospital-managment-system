@@ -22,6 +22,8 @@ interface ReturnContext {
     patient_name: string | null;
     net_amount: number;
     balance_due: number;
+    bill_date?: string | null;
+    created_at?: string | Date;
 }
 
 export default function ReturnsPage() {
@@ -79,7 +81,12 @@ export default function ReturnsPage() {
     const handleSelectPatient = (inv: any) => {
         setSelectedPatient(inv);
         setPatientSuggestions([]);
-        setPatientSearch(`${inv.invoice_number} · ${inv.patient_name}`);
+        // For IPD, append the bill's date/time so it's clear WHICH dispensing bill
+        // (of possibly several) is selected.
+        const billLabel = inv.is_ipd && inv.bill_date
+            ? ` · ${new Date(inv.bill_date).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+            : '';
+        setPatientSearch(`${inv.invoice_number} · ${inv.patient_name}${billLabel}`);
         setReturnContext(inv as ReturnContext);
         setForm((f: ReturnForm) => ({ ...f, invoice_id: String(inv.invoice_id) }));
     };
@@ -104,6 +111,8 @@ export default function ReturnsPage() {
             quantity: Number(form.quantity),
             reason: form.reason,
             invoice_id: form.invoice_id ? Number(form.invoice_id) : undefined,
+            // For IPD, deduct from the specific dispensing bill's day.
+            bill_date: returnContext?.bill_date || undefined,
         });
 
         if (res.success) {
@@ -286,7 +295,11 @@ export default function ReturnsPage() {
                                                 </div>
                                                 <div className="flex items-center justify-between gap-2 mt-0.5">
                                                     <span className="text-[10px] text-gray-500 font-mono">{inv.invoice_number}</span>
-                                                    <span className="text-[10px] text-gray-400">{new Date(inv.created_at).toLocaleDateString('en-GB')} · ₹{Number(inv.net_amount).toFixed(2)}</span>
+                                                    <span className="text-[10px] text-gray-400">
+                                                        {inv.is_ipd
+                                                            ? new Date(inv.created_at).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                                            : new Date(inv.created_at).toLocaleDateString('en-GB')} · ₹{Number(inv.net_amount).toFixed(2)}
+                                                    </span>
                                                 </div>
                                             </div>
                                         ))}
@@ -296,7 +309,10 @@ export default function ReturnsPage() {
                                 {/* Selected bill context banner */}
                                 {selectedPatient && returnContext && returnContext.is_ipd && (
                                     <div className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs font-semibold text-blue-700">
-                                        🏥 IPD bill {returnContext.invoice_number} — return amount will be deducted from the IPD bill
+                                        🏥 IPD bill {returnContext.invoice_number}
+                                        {returnContext.bill_date
+                                            ? ` — return will be deducted from the ${new Date(returnContext.bill_date).toLocaleDateString('en-GB')} pharmacy bill`
+                                            : ' — return amount will be deducted from the IPD bill'}
                                     </div>
                                 )}
                                 {selectedPatient && returnContext && !returnContext.is_ipd && (

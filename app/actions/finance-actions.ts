@@ -11,6 +11,7 @@ import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum 
 import { validateBackdate } from '@/app/lib/backdate';
 import { recomputeInvoiceCommission } from '@/app/lib/referral-commission';
 import { recomputeInvoiceDoctorCommission } from '@/app/lib/doctor-commission';
+import { dispensingKey } from '@/app/lib/pharmacy-bill-group';
 
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
@@ -421,32 +422,60 @@ export async function getInvoices(filters?: {
                 take: limit,
             });
 
-            // Map IPD invoices to show only pharmacy totals
-            const ipdPharmMapped = ipdPharmInvoices.map((inv: any) => {
-                const pharmTotal = inv.items.reduce((s: number, it: any) => s + Number(it.net_price || 0), 0);
-                const pharmTax = inv.items.reduce((s: number, it: any) => s + Number(it.tax_amount || 0), 0);
-                const pharmGross = pharmTotal + pharmTax;
-                // Bill date = when the pharmacy was actually dispensed (latest pharmacy
-                // line), NOT the IPD invoice/admission date.
-                const pharmDate = inv.items.length > 0
-                    ? new Date(Math.max(...inv.items.map((it: any) => new Date(it.created_at).getTime())))
-                    : inv.created_at;
-                // Show only the pharmacy portion that is still outstanding (capped at
-                // the pharmacy gross), not the whole IPD bill's balance.
-                const pharmBalance = Math.max(0, Math.min(pharmGross, Number(inv.balance_due || 0)));
-                return {
-                    ...inv,
-                    _isIpdPharmacy: true,
-                    _pharmTotal: pharmGross,
-                    _pharmBalance: pharmBalance,
-                    _pharmDate: pharmDate,
-                    _pharmItemCount: inv.items.length,
-                    _admissionStatus: inv.admission?.status || null,
-                    items: undefined, // don't carry heavy items array
-                };
-            });
+            // Expand each IPD invoice into ONE row PER pharmacy bill (dispensing
+            // event). Medicines posted together share a created_at, so we group the
+            // pharmacy items by dispensing (created_at to the minute) — three
+            // dispensings in a day become three separate Customer-Invoices rows.
+            // The discharge/master bill still groups these by day.
+            const grossOf = (items: any[]) => items.reduce((s: number, it: any) =>
+                s + Number(it.net_price || 0) + Number(it.tax_amount || 0), 0);
 
-            pharmacyOrders = [...opdPharmInvoices, ...ipdPharmMapped];
+            const ipdPharmBills: any[] = [];
+            for (const inv of ipdPharmInvoices) {
+                const pharmItems: any[] = inv.items || [];
+                if (pharmItems.length === 0) continue;
+
+                // Group items into bills by dispensing timestamp.
+                const billMap = new Map<string, any[]>();
+                for (const it of pharmItems) {
+                    const key = dispensingKey(it.created_at);
+                    if (!billMap.has(key)) billMap.set(key, []);
+                    billMap.get(key)!.push(it);
+                }
+
+                // Allocate the invoice's still-outstanding pharmacy balance across the
+                // bills, oldest paid first, so the latest bills carry the balance.
+                const totalPharmGross = grossOf(pharmItems);
+                const pharmOutstanding = Math.max(0, Math.min(totalPharmGross, Number(inv.balance_due || 0)));
+                let paidPharm = totalPharmGross - pharmOutstanding;
+
+                const bills = Array.from(billMap.entries())
+                    .map(([key, items]) => ({
+                        key,
+                        items,
+                        billDate: new Date(Math.max(...items.map((it: any) => new Date(it.created_at).getTime()))),
+                        gross: grossOf(items),
+                    }))
+                    .sort((a, b) => a.billDate.getTime() - b.billDate.getTime());
+
+                for (const b of bills) {
+                    const cover = Math.min(paidPharm, b.gross);
+                    paidPharm -= cover;
+                    ipdPharmBills.push({
+                        ...inv,
+                        _isIpdPharmacy: true,
+                        _pharmTotal: b.gross,
+                        _pharmBalance: Math.max(0, b.gross - cover),
+                        _pharmDate: b.billDate,
+                        _pharmItemCount: b.items.length,
+                        _billKey: b.key,
+                        _admissionStatus: inv.admission?.status || null,
+                        items: undefined, // don't carry heavy items array
+                    });
+                }
+            }
+
+            pharmacyOrders = [...opdPharmInvoices, ...ipdPharmBills];
         }
 
         // 4. Enrich Lab/Pharmacy with Patient Names & Lab pricing
@@ -519,6 +548,7 @@ export async function getInvoices(filters?: {
                 admission_id: pharm.admission_id || null,
                 admission_status: pharm._admissionStatus || null,
                 doctor_name: pharm.doctor_name || null,
+                _billKey: pharm._billKey || null,
             }))
         ];
 
