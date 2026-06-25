@@ -1,9 +1,15 @@
 "use server";
 
-import { requireTenantContext } from "@/backend/tenant";
+import { requireRoleAndTenant, requireTenantContext } from "@/backend/tenant";
 import { revalidatePath } from "next/cache";
 import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
 import { formatDoctorName } from '@/app/lib/format-name';
+
+function extractVoidReason(notes?: string | null) {
+    if (!notes) return null;
+    const match = notes.match(/VOID:\s*(.+)$/im);
+    return match?.[1]?.trim() || null;
+}
 
 export async function searchPatientsForReceipt(query: string) {
     try {
@@ -368,6 +374,7 @@ export async function listFeeReceipts(filter: ListFeeReceiptsFilter = {}) {
                     invoice_id: r.id,
                     invoice_number: r.invoice_number,
                     receipt_number: pay?.receipt_number || null,
+                    void_reason: extractVoidReason(r.notes),
                     patient_id: r.patient_id,
                     patient_name: p?.full_name || "(Unknown)",
                     patient_phone: p?.phone || "",
@@ -431,6 +438,7 @@ export async function getFeeReceiptDetail(invoiceId: number) {
                 invoice_id: inv.id,
                 invoice_number: inv.invoice_number,
                 receipt_number: pay?.receipt_number || null,
+                void_reason: extractVoidReason(inv.notes),
                 patient_id: inv.patient_id,
                 patient_name: patient?.full_name || "(Unknown)",
                 patient_phone: patient?.phone || "",
@@ -461,7 +469,10 @@ export async function getFeeReceiptDetail(invoiceId: number) {
 
 export async function voidFeeReceipt(invoiceId: number, reason: string) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const trimmed = (reason || "").trim();
+        if (!trimmed) return { success: false, error: "Reason is required before deleting a receipt." };
+
+        const { db, organizationId } = await requireRoleAndTenant(['admin', 'finance']);
         const inv = await db.invoices.findFirst({
             where: { id: invoiceId, organizationId, invoice_type: "OPD_FEE" }
         });
@@ -475,7 +486,7 @@ export async function voidFeeReceipt(invoiceId: number, reason: string) {
                 where: { id: inv.id },
                 data: {
                     status: "Voided",
-                    notes: (inv.notes ? inv.notes + "\n" : "") + `VOID: ${reason || "no reason given"}`,
+                    notes: [inv.notes?.trim(), `VOID: ${trimmed}`].filter(Boolean).join("\n"),
                 }
             }),
             db.payments.updateMany({
@@ -489,5 +500,135 @@ export async function voidFeeReceipt(invoiceId: number, reason: string) {
     } catch (error: any) {
         console.error("Failed to void receipt:", error);
         return { success: false, error: error?.message || "Failed to void receipt." };
+    }
+}
+
+export interface UpdateFeeReceiptInput {
+    patient_id: string;
+    patient_name: string;
+    patient_phone?: string;
+    payment_method: string;
+    items: FeeReceiptItemInput[];
+    notes?: string;
+    receipt_date?: string;
+}
+
+export async function updateFeeReceipt(invoiceId: number, payload: UpdateFeeReceiptInput) {
+    try {
+        const { db, organizationId } = await requireRoleAndTenant(['admin', 'finance']);
+
+        const existing = await db.invoices.findFirst({
+            where: { id: invoiceId, organizationId, invoice_type: 'OPD_FEE' },
+            include: {
+                payments: { orderBy: { created_at: 'asc' } },
+                items: true,
+            },
+        });
+        if (!existing) return { success: false, error: 'Receipt not found.' };
+        if (existing.status === 'Voided' || existing.status === 'Cancelled') {
+            return { success: false, error: 'Voided receipts cannot be edited.' };
+        }
+
+        const name = (payload.patient_name || '').trim();
+        if (!name) return { success: false, error: 'Patient name is required.' };
+
+        const cleanItems = (payload.items || [])
+            .map(i => ({
+                description: (i.description || '').trim() || 'Misc Fee',
+                amount: Number(i.amount) || 0,
+                quantity: Math.max(1, Number(i.quantity) || 1),
+                discount: Math.max(0, Number(i.discount) || 0),
+            }))
+            .filter(i => i.amount > 0);
+
+        if (cleanItems.length === 0) {
+            return { success: false, error: 'Add at least one line item with a non-zero amount.' };
+        }
+
+        const grossAmount = cleanItems.reduce((s, i) => s + i.amount * i.quantity, 0);
+        const totalDiscount = cleanItems.reduce((s, i) => s + (i.discount || 0), 0);
+        const netAmount = Math.max(0, grossAmount - totalDiscount);
+        const createdAt = payload.receipt_date ? new Date(payload.receipt_date) : undefined;
+
+        await db.$transaction(async (tx) => {
+            await tx.oPD_REG.updateMany({
+                where: { patient_id: existing.patient_id, organizationId },
+                data: {
+                    full_name: name,
+                    phone: (payload.patient_phone || '').trim() || null,
+                },
+            });
+
+            await tx.invoice_items.deleteMany({ where: { invoice_id: existing.id } });
+            await tx.invoice_items.createMany({
+                data: cleanItems.map((item) => ({
+                    invoice_id: existing.id,
+                    department: 'General',
+                    description: item.description,
+                    quantity: item.quantity,
+                    unit_price: item.amount,
+                    total_price: item.amount * item.quantity,
+                    discount: item.discount || 0,
+                    net_price: item.amount * item.quantity - (item.discount || 0),
+                    service_category: null,
+                    organizationId,
+                })),
+            });
+
+            await tx.invoices.update({
+                where: { id: existing.id },
+                data: {
+                    total_amount: grossAmount,
+                    total_discount: totalDiscount,
+                    net_amount: netAmount,
+                    paid_amount: netAmount,
+                    balance_due: 0,
+                    notes: payload.notes?.trim() || null,
+                    ...(createdAt ? { created_at: createdAt } : {}),
+                },
+            });
+
+            const primaryPayment = existing.payments[0];
+            if (primaryPayment) {
+                await tx.payments.update({
+                    where: { id: primaryPayment.id },
+                    data: {
+                        amount: netAmount,
+                        payment_method: payload.payment_method,
+                        notes: payload.notes?.trim() || null,
+                        ...(createdAt ? { created_at: createdAt } : {}),
+                    },
+                });
+                if (existing.payments.length > 1) {
+                    await tx.payments.deleteMany({
+                        where: {
+                            invoice_id: existing.id,
+                            id: { not: primaryPayment.id },
+                        },
+                    });
+                }
+            } else {
+                await tx.payments.create({
+                    data: {
+                        receipt_number: await genRcpNum(organizationId, tx),
+                        invoice_id: existing.id,
+                        amount: netAmount,
+                        payment_method: payload.payment_method,
+                        payment_type: 'Full',
+                        status: 'Completed',
+                        notes: payload.notes?.trim() || null,
+                        organizationId,
+                        ...(createdAt ? { created_at: createdAt } : {}),
+                    },
+                });
+            }
+        });
+
+        revalidatePath('/billing/fee-receipt');
+        revalidatePath('/reception/history');
+        return { success: true };
+    } catch (error: any) {
+        console.error('Failed to update receipt:', error);
+        return { success: false, error: error?.message || 'Failed to update receipt.' };
     }
 }

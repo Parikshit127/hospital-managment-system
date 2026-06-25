@@ -25,6 +25,7 @@ import {
     Filter,
     RotateCcw,
     AlertCircle,
+    Pencil,
 } from "lucide-react";
 import {
     searchPatientsForReceipt,
@@ -33,7 +34,9 @@ import {
     listFeeReceipts,
     getFeeReceiptDetail,
     voidFeeReceipt,
+    updateFeeReceipt,
 } from "@/app/actions/fee-receipt-actions";
+import { getMyRole } from "@/app/actions/finance-actions";
 import { getPatientBalances } from "@/app/actions/balance-actions";
 import { PrintLetterhead } from "@/app/components/print/PrintLetterhead";
 import Link from "next/link";
@@ -62,6 +65,8 @@ interface ReceiptItem {
 interface SavedReceiptView {
     id: string;
     invoice: string;
+    status?: string;
+    void_reason?: string | null;
     name: string;
     phone: string;
     method: string;
@@ -71,6 +76,39 @@ interface SavedReceiptView {
     items: { desc: string; qty: number; amt: number; discount: number }[];
     notes?: string;
     created_at: string;
+}
+
+interface EditableReceiptDraft {
+    invoice_id: number;
+    invoice: string;
+    patient_id: string;
+    name: string;
+    phone: string;
+    method: string;
+    notes: string;
+    receipt_date: string;
+    items: ReceiptItem[];
+}
+
+function toEditDraft(d: any): EditableReceiptDraft {
+    return {
+        invoice_id: Number(d.invoice_id),
+        invoice: d.invoice_number,
+        patient_id: d.patient_id || "",
+        name: d.patient_name || "",
+        phone: d.patient_phone || "",
+        method: d.payment_method || "Cash",
+        notes: d.notes || "",
+        receipt_date: d.created_at ? new Date(d.created_at).toISOString().slice(0, 16) : "",
+        items: (d.items || []).map((it: any, idx: number) => ({
+            id: idx + 1,
+            description: it.description || "",
+            amount: String(it.unit_price ?? 0),
+            quantity: String(it.quantity ?? 1),
+            discount: String(it.discount ?? 0),
+            isLocked: false,
+        })),
+    };
 }
 
 export default function FeeReceiptPage() {
@@ -584,7 +622,17 @@ function ReceiptHistory() {
     const [showFilters, setShowFilters] = useState(false);
 
     const [viewReceipt, setViewReceipt] = useState<SavedReceiptView | null>(null);
+    const [editReceipt, setEditReceipt] = useState<EditableReceiptDraft | null>(null);
     const [voidingId, setVoidingId] = useState<number | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+    const [deleteReason, setDeleteReason] = useState("");
+    const [deleteError, setDeleteError] = useState<string | null>(null);
+    const [myRole, setMyRole] = useState<string | null>(null);
+    const canManageReceipts = ['admin', 'finance'].includes(myRole || '');
+
+    useEffect(() => {
+        getMyRole().then((r) => setMyRole(r.role));
+    }, []);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -624,6 +672,8 @@ function ReceiptHistory() {
             setViewReceipt({
                 id: d.receipt_number || "",
                 invoice: d.invoice_number,
+                status: d.status,
+                void_reason: d.void_reason,
                 name: d.patient_name,
                 phone: d.patient_phone,
                 method: d.payment_method,
@@ -644,14 +694,39 @@ function ReceiptHistory() {
         }
     };
 
-    const handleVoid = async (invoice_id: number) => {
-        const reason = prompt("Reason for voiding this receipt?");
-        if (!reason || !reason.trim()) return;
+    const handleEdit = async (invoice_id: number) => {
+        const res = await getFeeReceiptDetail(invoice_id);
+        if (res.success && res.data) {
+            setEditReceipt(toEditDraft(res.data));
+        } else {
+            alert(res.error || "Failed to load receipt.");
+        }
+    };
+
+    const openDeleteDialog = (row: any) => {
+        setDeleteTarget(row);
+        setDeleteReason("");
+        setDeleteError(null);
+    };
+
+    const handleVoid = async () => {
+        if (!deleteTarget) return;
+        if (!deleteReason.trim()) {
+            setDeleteError("Please enter a reason before deleting.");
+            return;
+        }
+        const invoice_id = Number(deleteTarget.invoice_id);
         setVoidingId(invoice_id);
-        const res = await voidFeeReceipt(invoice_id, reason.trim());
+        const res = await voidFeeReceipt(invoice_id, deleteReason.trim());
         setVoidingId(null);
-        if (res.success) load();
-        else alert(res.error || "Failed to void receipt.");
+        if (res.success) {
+            setDeleteTarget(null);
+            setDeleteReason("");
+            setDeleteError(null);
+            load();
+        } else {
+            setDeleteError(res.error || "Failed to delete receipt.");
+        }
     };
 
     return (
@@ -773,7 +848,11 @@ function ReceiptHistory() {
                                             <div className="font-medium text-gray-700">{fmtDate(r.created_at)}</div>
                                             <div className="text-[10px] text-gray-400">{fmtTime(r.created_at)}</div>
                                         </td>
-                                        <td className="px-3 py-2 font-mono text-gray-700">{r.receipt_number || "—"}</td>
+                                        <td className="px-3 py-2 font-mono text-gray-700">
+                                            {r.status === "Voided"
+                                                ? `DELETED: ${r.void_reason || "Receipt deleted"}`
+                                                : r.receipt_number || "—"}
+                                        </td>
                                         <td className="px-3 py-2 font-mono text-gray-700">{r.invoice_number}</td>
                                         <td className="px-3 py-2">
                                             <div className="font-bold text-gray-800">{r.patient_name}</div>
@@ -798,14 +877,23 @@ function ReceiptHistory() {
                                                 >
                                                     <Eye className="h-3.5 w-3.5" />
                                                 </button>
-                                                {r.status !== "Voided" && (
+                                                {canManageReceipts && r.status !== "Voided" && (
                                                     <button
-                                                        onClick={() => handleVoid(r.invoice_id)}
+                                                        onClick={() => handleEdit(r.invoice_id)}
+                                                        className="p-1.5 text-gray-500 hover:bg-emerald-50 hover:text-emerald-600 rounded-lg"
+                                                        title="Edit"
+                                                    >
+                                                        <Pencil className="h-3.5 w-3.5" />
+                                                    </button>
+                                                )}
+                                                {canManageReceipts && r.status !== "Voided" && (
+                                                    <button
+                                                        onClick={() => openDeleteDialog(r)}
                                                         disabled={voidingId === r.invoice_id}
                                                         className="p-1.5 text-gray-500 hover:bg-rose-50 hover:text-rose-600 rounded-lg disabled:opacity-40"
-                                                        title="Void"
+                                                        title="Delete"
                                                     >
-                                                        {voidingId === r.invoice_id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
+                                                        {voidingId === r.invoice_id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                                                     </button>
                                                 )}
                                             </div>
@@ -848,7 +936,219 @@ function ReceiptHistory() {
                     onPrint={() => window.print()}
                 />
             )}
+
+            {editReceipt && (
+                <ReceiptEditorModal
+                    draft={editReceipt}
+                    onClose={() => setEditReceipt(null)}
+                    onSaved={() => {
+                        setEditReceipt(null);
+                        load();
+                    }}
+                />
+            )}
+
+            {deleteTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                    <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl overflow-hidden">
+                        <div className="bg-rose-600 px-6 py-4 text-white flex items-center justify-between">
+                            <div>
+                                <div className="text-lg font-bold">Delete Receipt</div>
+                                <div className="text-xs text-rose-100">Receipt {deleteTarget.receipt_number || deleteTarget.invoice_number || '—'}</div>
+                            </div>
+                            <button onClick={() => setDeleteTarget(null)} className="rounded-full p-2 hover:bg-white/10"><X className="h-5 w-5" /></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                This will hide the receipt and show the reason instead of the receipt details.
+                            </div>
+                            <div>
+                                <label className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Reason for deletion</label>
+                                <textarea
+                                    value={deleteReason}
+                                    onChange={(e) => {
+                                        setDeleteReason(e.target.value);
+                                        setDeleteError(null);
+                                    }}
+                                    rows={4}
+                                    placeholder="Enter a reason for deleting this receipt"
+                                    className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-rose-500 resize-none"
+                                />
+                            </div>
+                            {deleteError && (
+                                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                                    {deleteError}
+                                </div>
+                            )}
+                            <div className="flex items-center justify-end gap-3 pt-2">
+                                <button onClick={() => setDeleteTarget(null)} className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50">
+                                    Cancel
+                                </button>
+                                <button onClick={handleVoid} disabled={voidingId === Number(deleteTarget.invoice_id)} className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-60">
+                                    {voidingId === Number(deleteTarget.invoice_id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                    {voidingId === Number(deleteTarget.invoice_id) ? 'Deleting…' : 'Delete Receipt'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
+    );
+}
+
+function ReceiptEditorModal({
+    draft,
+    onClose,
+    onSaved,
+}: {
+    draft: EditableReceiptDraft;
+    onClose: () => void;
+    onSaved: () => void;
+}) {
+    const [patientName, setPatientName] = useState(draft.name);
+    const [patientPhone, setPatientPhone] = useState(draft.phone);
+    const [patientId] = useState(draft.patient_id);
+    const [paymentMethod, setPaymentMethod] = useState(draft.method);
+    const [notes, setNotes] = useState(draft.notes);
+    const [receiptDate, setReceiptDate] = useState(draft.receipt_date);
+    const [items, setItems] = useState<ReceiptItem[]>(draft.items.length ? draft.items : [{ id: 1, description: '', amount: '', quantity: '1', discount: '0', isLocked: false }]);
+    const [saving, setSaving] = useState(false);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+    useEffect(() => {
+        setPatientName(draft.name);
+        setPatientPhone(draft.phone);
+        setPaymentMethod(draft.method);
+        setNotes(draft.notes);
+        setReceiptDate(draft.receipt_date);
+        setItems(draft.items.length ? draft.items : [{ id: 1, description: '', amount: '', quantity: '1', discount: '0', isLocked: false }]);
+    }, [draft]);
+
+    const totals = useMemo(() => {
+        const gross = items.reduce((s, i) => s + (Number(i.amount) || 0) * (Number(i.quantity) || 1), 0);
+        const discount = items.reduce((s, i) => s + (Number(i.discount) || 0), 0);
+        const net = Math.max(0, gross - discount);
+        return { gross, discount, net };
+    }, [items]);
+
+    const handleAddItem = () => setItems(prev => [...prev, { id: Date.now(), description: '', amount: '', quantity: '1', discount: '0', isLocked: false }]);
+    const handleRemoveItem = (id: number) => setItems(prev => prev.length > 1 ? prev.filter(i => i.id !== id) : prev);
+    const handleItemChange = (id: number, field: keyof ReceiptItem, value: string) => {
+        setItems(prev => prev.map(item => item.id !== id ? item : { ...item, [field]: value }));
+    };
+
+    const handleSave = async () => {
+        setErrorMsg(null);
+        if (!patientName.trim()) {
+            setErrorMsg('Patient name is required.');
+            return;
+        }
+        const validItems = items.filter(i => (Number(i.amount) || 0) > 0);
+        if (validItems.length === 0) {
+            setErrorMsg('Add at least one line item with a non-zero amount.');
+            return;
+        }
+
+        setSaving(true);
+        const res = await updateFeeReceipt(draft.invoice_id, {
+            patient_id: patientId,
+            patient_name: patientName,
+            patient_phone: patientPhone,
+            payment_method: paymentMethod,
+            notes: notes.trim() || undefined,
+            receipt_date: receiptDate || undefined,
+            items: items.map(i => ({
+                description: i.description || 'Misc Fee',
+                amount: Number(i.amount) || 0,
+                quantity: Number(i.quantity) || 1,
+                discount: Number(i.discount) || 0,
+            })),
+        });
+        setSaving(false);
+
+        if (res.success) {
+            onSaved();
+        } else {
+            setErrorMsg(res.error || 'Failed to update receipt.');
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-4xl rounded-3xl bg-white shadow-2xl overflow-hidden">
+                <div className="flex items-center justify-between border-b border-gray-100 bg-emerald-600 px-6 py-4 text-white">
+                    <div>
+                        <div className="text-lg font-bold">Edit Receipt</div>
+                        <div className="text-xs text-emerald-100">Invoice {draft.invoice}</div>
+                    </div>
+                    <button onClick={onClose} className="rounded-full p-2 hover:bg-white/10"><X className="h-5 w-5" /></button>
+                </div>
+
+                <div className="max-h-[80vh] overflow-y-auto p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Patient Name</label>
+                            <input value={patientName} onChange={e => setPatientName(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+                        </div>
+                        <div>
+                            <label className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Phone</label>
+                            <input value={patientPhone} onChange={e => setPatientPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+                        </div>
+                        <div>
+                            <label className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Payment Method</label>
+                            <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-emerald-500">
+                                {['Cash', 'Card', 'UPI', 'Bank', 'NEFT_RTGS', 'Cheque'].map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Receipt Date</label>
+                            <input type="datetime-local" value={receiptDate} onChange={e => setReceiptDate(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+                        </div>
+                    </div>
+
+                    <div className="mt-4">
+                        <label className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Notes</label>
+                        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+                    </div>
+
+                    <div className="mt-6 rounded-2xl border border-gray-100">
+                        <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-3">
+                            <h3 className="font-bold text-gray-900">Line Items</h3>
+                            <button onClick={handleAddItem} className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-100">Add Row</button>
+                        </div>
+                        <div className="space-y-3 p-4">
+                            {items.map(item => (
+                                <div key={item.id} className="flex gap-3 items-center">
+                                    <input value={item.description} onChange={e => handleItemChange(item.id, 'description', e.target.value)} className="flex-1 rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-emerald-500" placeholder="Description" />
+                                    <input value={item.quantity} onChange={e => handleItemChange(item.id, 'quantity', e.target.value.replace(/\D/g, ''))} className="w-20 rounded-xl border border-gray-200 px-2 py-2 text-sm text-center outline-none focus:border-emerald-500" placeholder="Qty" />
+                                    <input value={item.amount} onChange={e => handleItemChange(item.id, 'amount', e.target.value.replace(/[^\d.]/g, ''))} className="w-28 rounded-xl border border-gray-200 px-2 py-2 text-sm text-right outline-none focus:border-emerald-500" placeholder="Rate" />
+                                    <input value={item.discount} onChange={e => handleItemChange(item.id, 'discount', e.target.value.replace(/[^\d.]/g, ''))} className="w-24 rounded-xl border border-gray-200 px-2 py-2 text-sm text-right outline-none focus:border-emerald-500" placeholder="Disc." />
+                                    <button onClick={() => handleRemoveItem(item.id)} disabled={items.length <= 1} className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"><Trash2 className="h-4 w-4" /></button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3 text-sm">
+                        <span className="font-medium text-gray-500">Total Payable</span>
+                        <span className="font-mono text-xl font-black text-emerald-600">{fmtMoney(totals.net)}</span>
+                    </div>
+
+                    {errorMsg && (
+                        <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{errorMsg}</div>
+                    )}
+                </div>
+
+                <div className="flex items-center justify-end gap-3 border-t border-gray-100 bg-gray-50 px-6 py-4">
+                    <button onClick={onClose} className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50">Cancel</button>
+                    <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60">
+                        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
+                        {saving ? 'Saving…' : 'Save Changes'}
+                    </button>
+                </div>
+            </div>
+        </div>
     );
 }
 
@@ -903,51 +1203,69 @@ function SuccessAndPrintModal({
                 </div>
 
                 <div className="p-8 flex-1 space-y-5">
-                    <div className="text-center space-y-1">
-                        <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">Amount Collected</p>
-                        <h3 className="text-5xl font-black text-gray-900 font-mono">{fmtMoney(receipt.amount)}</h3>
-                        <p className="text-emerald-600 text-[10px] font-black uppercase tracking-widest bg-emerald-50 inline-block px-3 py-1 rounded-full mt-2">
-                            Paid via {receipt.method}
-                        </p>
-                    </div>
+                    {receipt.status === 'Voided' ? (
+                        <>
+                            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-5 text-center space-y-1">
+                                <p className="text-xs font-bold uppercase tracking-widest text-rose-600">Receipt Voided</p>
+                                <p className="text-2xl font-black text-rose-700">{receipt.void_reason || 'No reason recorded'}</p>
+                            </div>
 
-                    <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 space-y-2 text-sm">
-                        <Row label="Patient" value={receipt.name} />
-                        {receipt.phone && <Row label="Phone" value={receipt.phone} />}
-                        <Row label="Invoice No" value={<span className="font-mono">{receipt.invoice}</span>} />
-                        <Row label="Date" value={fmtDate(receipt.created_at)} />
-                        {receipt.discount > 0 && (
-                            <>
-                                <Row label="Gross" value={<span className="font-mono">{fmtMoney(receipt.gross)}</span>} />
-                                <Row label="Discount" value={<span className="font-mono text-rose-600">– {fmtMoney(receipt.discount)}</span>} />
-                            </>
-                        )}
-                    </div>
+                            <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 space-y-2 text-sm">
+                                <Row label="Patient" value={receipt.name} />
+                                {receipt.phone && <Row label="Phone" value={receipt.phone} />}
+                                <Row label="Invoice No" value={<span className="font-mono">{receipt.invoice}</span>} />
+                                <Row label="Date" value={fmtDate(receipt.created_at)} />
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="text-center space-y-1">
+                                <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">Amount Collected</p>
+                                <h3 className="text-5xl font-black text-gray-900 font-mono">{fmtMoney(receipt.amount)}</h3>
+                                <p className="text-emerald-600 text-[10px] font-black uppercase tracking-widest bg-emerald-50 inline-block px-3 py-1 rounded-full mt-2">
+                                    Paid via {receipt.method}
+                                </p>
+                            </div>
 
-                    {receipt.notes && (
-                        <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-2 text-xs text-amber-800">
-                            <p className="font-bold uppercase tracking-wider text-[10px] text-amber-600 mb-0.5">Notes</p>
-                            <p>{receipt.notes}</p>
-                        </div>
+                            <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 space-y-2 text-sm">
+                                <Row label="Patient" value={receipt.name} />
+                                {receipt.phone && <Row label="Phone" value={receipt.phone} />}
+                                <Row label="Invoice No" value={<span className="font-mono">{receipt.invoice}</span>} />
+                                <Row label="Date" value={fmtDate(receipt.created_at)} />
+                                {receipt.discount > 0 && (
+                                    <>
+                                        <Row label="Gross" value={<span className="font-mono">{fmtMoney(receipt.gross)}</span>} />
+                                        <Row label="Discount" value={<span className="font-mono text-rose-600">– {fmtMoney(receipt.discount)}</span>} />
+                                    </>
+                                )}
+                            </div>
+
+                            {receipt.notes && (
+                                <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-2 text-xs text-amber-800">
+                                    <p className="font-bold uppercase tracking-wider text-[10px] text-amber-600 mb-0.5">Notes</p>
+                                    <p>{receipt.notes}</p>
+                                </div>
+                            )}
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={onPrint}
+                                    className="flex-1 flex items-center justify-center gap-2 py-3.5 bg-gray-900 text-white font-bold rounded-2xl hover:bg-black transition-all active:scale-[0.98] shadow-lg shadow-gray-200"
+                                >
+                                    <Printer className="h-5 w-5 text-emerald-400" />
+                                    Print
+                                </button>
+                                <button
+                                    onClick={onClose}
+                                    className="px-8 py-3.5 bg-gray-100 text-gray-700 font-bold rounded-2xl hover:bg-gray-200 transition-all active:scale-[0.98]"
+                                >
+                                    Done
+                                </button>
+                            </div>
+                        </>
                     )}
-
-                    <div className="flex gap-3">
-                        <button
-                            onClick={onPrint}
-                            className="flex-1 flex items-center justify-center gap-2 py-3.5 bg-gray-900 text-white font-bold rounded-2xl hover:bg-black transition-all active:scale-[0.98] shadow-lg shadow-gray-200"
-                        >
-                            <Printer className="h-5 w-5 text-emerald-400" />
-                            Print
-                        </button>
-                        <button
-                            onClick={onClose}
-                            className="px-8 py-3.5 bg-gray-100 text-gray-700 font-bold rounded-2xl hover:bg-gray-200 transition-all active:scale-[0.98]"
-                        >
-                            Done
-                        </button>
-                    </div>
-                </div>
             </div>
+        </div>
 
             <div className="fee-receipt-print" style={{ display: 'none', position: 'relative' }}>
                 {/* Full letterhead img — header + watermark + footer */}
@@ -981,68 +1299,78 @@ function SuccessAndPrintModal({
                         </div>
                     </div>
 
-                    <table className="w-full border-collapse">
-                        <thead>
-                            <tr className="border-y-2 border-black">
-                                <th className="py-3 text-left font-black uppercase tracking-widest text-sm">Description</th>
-                                <th className="py-3 text-center font-black uppercase tracking-widest text-sm w-20">Qty</th>
-                                <th className="py-3 text-right font-black uppercase tracking-widest text-sm w-28">Rate</th>
-                                <th className="py-3 text-right font-black uppercase tracking-widest text-sm w-24">Disc.</th>
-                                <th className="py-3 text-right font-black uppercase tracking-widest text-sm w-28">Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                            {receipt.items.map((srv, i) => {
-                                const lineGross = srv.amt * srv.qty;
-                                const lineNet = lineGross - (srv.discount || 0);
-                                return (
-                                    <tr key={i}>
-                                        <td className="py-3 font-bold text-gray-800">{srv.desc}</td>
-                                        <td className="py-3 text-center font-mono font-bold">{srv.qty}</td>
-                                        <td className="py-3 text-right font-mono">₹{srv.amt.toFixed(2)}</td>
-                                        <td className="py-3 text-right font-mono">{srv.discount > 0 ? `– ₹${srv.discount.toFixed(2)}` : "—"}</td>
-                                        <td className="py-3 text-right font-mono font-bold">₹{lineNet.toFixed(2)}</td>
+                    {receipt.status === 'Voided' ? (
+                        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-6 py-8 text-center space-y-2">
+                            <p className="text-xs font-black uppercase tracking-[0.35em] text-rose-600">Receipt Deleted</p>
+                            <p className="text-2xl font-black text-rose-700">{receipt.void_reason || 'No reason recorded'}</p>
+                            <p className="text-sm text-rose-700/80">Original receipt number: {receipt.id || '—'}</p>
+                        </div>
+                    ) : (
+                        <>
+                            <table className="w-full border-collapse">
+                                <thead>
+                                    <tr className="border-y-2 border-black">
+                                        <th className="py-3 text-left font-black uppercase tracking-widest text-sm">Description</th>
+                                        <th className="py-3 text-center font-black uppercase tracking-widest text-sm w-20">Qty</th>
+                                        <th className="py-3 text-right font-black uppercase tracking-widest text-sm w-28">Rate</th>
+                                        <th className="py-3 text-right font-black uppercase tracking-widest text-sm w-24">Disc.</th>
+                                        <th className="py-3 text-right font-black uppercase tracking-widest text-sm w-28">Amount</th>
                                     </tr>
-                                );
-                            })}
-                        </tbody>
-                        <tfoot>
-                            {receipt.discount > 0 && (
-                                <>
-                                    <tr>
-                                        <td colSpan={4} className="py-2 text-right font-medium uppercase tracking-wider text-xs text-gray-600">Subtotal</td>
-                                        <td className="py-2 text-right font-mono">₹{receipt.gross.toFixed(2)}</td>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200">
+                                    {receipt.items.map((srv, i) => {
+                                        const lineGross = srv.amt * srv.qty;
+                                        const lineNet = lineGross - (srv.discount || 0);
+                                        return (
+                                            <tr key={i}>
+                                                <td className="py-3 font-bold text-gray-800">{srv.desc}</td>
+                                                <td className="py-3 text-center font-mono font-bold">{srv.qty}</td>
+                                                <td className="py-3 text-right font-mono">₹{srv.amt.toFixed(2)}</td>
+                                                <td className="py-3 text-right font-mono">{srv.discount > 0 ? `– ₹${srv.discount.toFixed(2)}` : "—"}</td>
+                                                <td className="py-3 text-right font-mono font-bold">₹{lineNet.toFixed(2)}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                                <tfoot>
+                                    {receipt.discount > 0 && (
+                                        <>
+                                            <tr>
+                                                <td colSpan={4} className="py-2 text-right font-medium uppercase tracking-wider text-xs text-gray-600">Subtotal</td>
+                                                <td className="py-2 text-right font-mono">₹{receipt.gross.toFixed(2)}</td>
+                                            </tr>
+                                            <tr>
+                                                <td colSpan={4} className="py-2 text-right font-medium uppercase tracking-wider text-xs text-gray-600">Discount</td>
+                                                <td className="py-2 text-right font-mono">– ₹{receipt.discount.toFixed(2)}</td>
+                                            </tr>
+                                        </>
+                                    )}
+                                    <tr className="border-t-2 border-black">
+                                        <td colSpan={4} className="py-5 text-right font-black uppercase tracking-widest text-lg">Total Payable</td>
+                                        <td className="py-5 text-right font-black text-2xl font-mono">₹{receipt.amount.toFixed(2)}</td>
                                     </tr>
-                                    <tr>
-                                        <td colSpan={4} className="py-2 text-right font-medium uppercase tracking-wider text-xs text-gray-600">Discount</td>
-                                        <td className="py-2 text-right font-mono">– ₹{receipt.discount.toFixed(2)}</td>
-                                    </tr>
-                                </>
+                                </tfoot>
+                            </table>
+
+                            {receipt.notes && (
+                                <div className="border border-gray-300 rounded p-3 text-sm">
+                                    <p className="text-xs font-bold text-gray-500 uppercase mb-1">Remarks</p>
+                                    <p>{receipt.notes}</p>
+                                </div>
                             )}
-                            <tr className="border-t-2 border-black">
-                                <td colSpan={4} className="py-5 text-right font-black uppercase tracking-widest text-lg">Total Payable</td>
-                                <td className="py-5 text-right font-black text-2xl font-mono">₹{receipt.amount.toFixed(2)}</td>
-                            </tr>
-                        </tfoot>
-                    </table>
 
-                    {receipt.notes && (
-                        <div className="border border-gray-300 rounded p-3 text-sm">
-                            <p className="text-xs font-bold text-gray-500 uppercase mb-1">Remarks</p>
-                            <p>{receipt.notes}</p>
-                        </div>
+                            <div className="pt-16 flex justify-between items-end">
+                                <div className="space-y-1 text-xs font-bold text-gray-500">
+                                    <p>Payment Method: {receipt.method}</p>
+                                    <p>Status: FULLY PAID</p>
+                                </div>
+                                <div className="text-center w-64 border-t-2 border-dashed border-gray-900 pt-2">
+                                    <p className="text-sm font-black uppercase tracking-widest">Authorized Signatory</p>
+                                    <p className="text-[10px] font-medium text-gray-500 mt-1">Computer Generated Digital Receipt</p>
+                                </div>
+                            </div>
+                        </>
                     )}
-
-                    <div className="pt-16 flex justify-between items-end">
-                        <div className="space-y-1 text-xs font-bold text-gray-500">
-                            <p>Payment Method: {receipt.method}</p>
-                            <p>Status: FULLY PAID</p>
-                        </div>
-                        <div className="text-center w-64 border-t-2 border-dashed border-gray-900 pt-2">
-                            <p className="text-sm font-black uppercase tracking-widest">Authorized Signatory</p>
-                            <p className="text-[10px] font-medium text-gray-500 mt-1">Computer Generated Digital Receipt</p>
-                        </div>
-                    </div>
                 </div>
                 </div>
             </div>
