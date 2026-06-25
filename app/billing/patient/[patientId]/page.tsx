@@ -42,7 +42,7 @@ import {
   getPatientLedger,
   getPatientTimeline,
 } from "@/app/actions/master-billing-actions";
-import { recordPayment, getMyRole } from "@/app/actions/finance-actions";
+import { recordPayment, getMyRole, updatePayment, reversePayment } from "@/app/actions/finance-actions";
 import { collectDeposit } from "@/app/actions/deposit-actions";
 import { getCashComplianceConfig } from "@/app/actions/cash-compliance-actions";
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan, resolveRegisteredPan } from "@/app/lib/cash-compliance";
@@ -103,6 +103,8 @@ export default function PatientFinancialProfilePage() {
   const [expandedInvoice, setExpandedInvoice] = useState<number | null>(null);
   const [payingInvoice, setPayingInvoice] = useState<any | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
+  const [editingPayment, setEditingPayment] = useState<any | null>(null);
+  const [reversingPayment, setReversingPayment] = useState<any | null>(null);
   const [refundOpen, setRefundOpen] = useState(false);
   // Viewer role — only admin/finance may edit a bill once a payment has been collected.
   const [myRole, setMyRole] = useState<string | null>(null);
@@ -110,6 +112,22 @@ export default function PatientFinancialProfilePage() {
 
   useEffect(() => {
     getMyRole().then((r) => setMyRole(r.role));
+  }, []);
+
+  const handleEditPaymentClick = useCallback((e: React.MouseEvent, p: any) => {
+    e.stopPropagation();
+    try {
+      toast.loading('Opening payment editor...', { id: `edit-${p.id}` });
+    } catch {}
+    setEditingPayment(p);
+  }, []);
+
+  const handleReversePaymentClick = useCallback((e: React.MouseEvent, p: any) => {
+    e.stopPropagation();
+    try {
+      toast.loading('Preparing reversal dialog...', { id: `rev-${p.id}` });
+    } catch {}
+    setReversingPayment(p);
   }, []);
 
   const load = useCallback(async () => {
@@ -203,6 +221,8 @@ export default function PatientFinancialProfilePage() {
                   onEdit={(inv: any) => setEditingInvoiceId(Number(inv.id))}
                   onRefund={() => setRefundOpen(true)}
                   canEditPaid={canEditPaid}
+                  setEditingPayment={setEditingPayment}
+                  setReversingPayment={setReversingPayment}
                 />
               )}
               {tab === "payments" && <PaymentsTab invoices={profile.invoices} />}
@@ -255,6 +275,30 @@ export default function PatientFinancialProfilePage() {
         />
       )}
 
+      {/* Edit Payment Modal */}
+      {editingPayment && (
+        <EditPaymentModal
+          payment={editingPayment}
+          onClose={() => setEditingPayment(null)}
+          onSaved={() => {
+            setEditingPayment(null);
+            load();
+          }}
+        />
+      )}
+
+      {/* Reverse Payment Modal */}
+      {reversingPayment && (
+        <ReversePaymentModal
+          payment={reversingPayment}
+          onClose={() => setReversingPayment(null)}
+          onReversed={() => {
+            setReversingPayment(null);
+            load();
+          }}
+        />
+      )}
+
       {/* Refund Modal — pre-filled for this patient */}
       <RefundModal
         open={refundOpen}
@@ -271,6 +315,162 @@ export default function PatientFinancialProfilePage() {
         onRefunded={load}
       />
     </AppShell>
+  );
+}
+
+function EditPaymentModal({ payment, onClose, onSaved }: { payment: any; onClose: () => void; onSaved: () => void }) {
+  const [method, setMethod] = useState(payment.payment_method || 'Cash');
+  const [reference, setReference] = useState(payment.reference || '');
+  const [notes, setNotes] = useState(payment.notes || '');
+  const [amount, setAmount] = useState(payment.amount?.toString() || '');
+  
+  // Convert UTC created_at to local datetime-local format string
+  const formatDatetimeLocal = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const tzOffset = date.getTimezoneOffset() * 60000; // offset in milliseconds
+    const localISOTime = (new Date(date.getTime() - tzOffset)).toISOString().slice(0, 16);
+    return localISOTime;
+  };
+  
+  const [date, setDate] = useState(formatDatetimeLocal(payment.created_at));
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    const numAmount = Number(amount);
+    if (!amount || Number.isNaN(numAmount) || numAmount <= 0) {
+      return toast.error('Please enter a valid positive amount');
+    }
+    setSaving(true);
+    try {
+      const res = await updatePayment(payment.id, { 
+        payment_method: method, 
+        reference: reference || null, 
+        notes: notes || null,
+        amount: numAmount,
+        created_at: date ? new Date(date).toISOString() : undefined
+      });
+      if (res.success) {
+        toast.success('Payment updated');
+        onSaved();
+      } else {
+        toast.error(res.error || 'Failed to update payment');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Unexpected error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(15,23,42,0.5)' }} onClick={onClose}>
+      <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/60">
+          <div className="flex items-center gap-2">
+            <Pencil className="h-4 w-4 text-indigo-500" />
+            <h3 className="text-sm font-bold">Edit Payment {payment.receipt_number}</h3>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-500">
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+        
+        <div className="px-5 py-5 space-y-4">
+          <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-3 mb-4">
+              <ShieldAlert className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-800 leading-relaxed">
+                  Editing the payment amount will automatically recalculate the associated invoice's paid amount and balance due.
+              </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[11px] font-bold text-gray-500 uppercase">Amount (₹)</label>
+              <input type="number" min="0" step="0.01" className="w-full mt-1 p-2 border border-gray-200 rounded font-mono text-sm" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-gray-500 uppercase">Payment Date</label>
+              <input type="datetime-local" className="w-full mt-1 p-2 border border-gray-200 rounded text-sm" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-gray-500 uppercase">Method</label>
+              <select className="w-full mt-1 p-2 border border-gray-200 rounded text-sm" value={method} onChange={(e) => setMethod(e.target.value)}>
+                {["Cash", "Card", "UPI", "Bank", "NEFT_RTGS", "Cheque", "Online"].map(m => (
+                  <option key={m} value={m}>{m === 'NEFT_RTGS' ? 'NEFT/RTGS' : m}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-gray-500 uppercase">Reference</label>
+              <input className="w-full mt-1 p-2 border border-gray-200 rounded text-sm" value={reference} onChange={(e) => setReference(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className="text-[11px] font-bold text-gray-500 uppercase">Notes</label>
+            <textarea className="w-full mt-1 p-2 border border-gray-200 rounded text-sm" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button onClick={onClose} className="px-4 py-1.5 bg-white border border-gray-200 rounded text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors">Cancel</button>
+            <button onClick={handleSave} disabled={saving} className="px-4 py-1.5 bg-indigo-600 text-white rounded text-sm font-bold flex items-center gap-1.5 hover:bg-indigo-700 transition-colors">
+              <ClipboardCheck className="h-4 w-4" />
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReversePaymentModal({ payment, onClose, onReversed }: { payment: any; onClose: () => void; onReversed: () => void }) {
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const canSubmit = reason.trim().length >= 10;
+
+  const handleConfirm = async () => {
+    if (!canSubmit) return toast.error('Reason must be at least 10 characters');
+    setSaving(true);
+    try {
+      const res = await reversePayment(payment.id, reason.trim());
+      if (res.success) {
+        toast.success('Payment reversed');
+        onReversed();
+      } else {
+        toast.error(res.error || 'Failed to reverse payment');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Unexpected error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(15,23,42,0.5)' }} onClick={onClose}>
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/60">
+          <h3 className="text-sm font-bold">Delete / Reverse Payment {payment.receipt_number}</h3>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-500">
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="px-5 py-5 space-y-4">
+          <p className="text-sm text-gray-700">Reversing a payment is audited and requires a reason.</p>
+          <div>
+            <label className="text-[11px] font-bold text-gray-500 uppercase">Reason (min 10 chars)</label>
+            <textarea className="w-full mt-1 p-2 border border-gray-200 rounded" value={reason} onChange={(e) => setReason(e.target.value)} />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={onClose} className="px-3 py-1 bg-white border border-gray-200 rounded">Cancel</button>
+            <button onClick={handleConfirm} disabled={!canSubmit || saving} className="px-3 py-1 bg-rose-600 text-white rounded">
+              {saving ? 'Processing...' : 'Confirm Delete'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -407,6 +607,8 @@ function InvoicesTab({
   onEdit,
   onRefund,
   canEditPaid,
+  setEditingPayment,
+  setReversingPayment,
 }: {
   invoices: any[];
   expandedInvoice: number | null;
@@ -415,6 +617,8 @@ function InvoicesTab({
   onEdit: (inv: any) => void;
   onRefund: () => void;
   canEditPaid: boolean;
+  setEditingPayment: (p: any) => void;
+  setReversingPayment: (p: any) => void;
 }) {
   if (!invoices.length) {
     return <div className="text-xs text-gray-400">No invoices yet.</div>;
@@ -608,13 +812,29 @@ function InvoicesTab({
                                 {p.status}
                               </span>
                             </td>
-                            <td className="py-1 text-right">
+                            <td className="py-1 text-right space-x-2">
                               <button
                                 onClick={() => window.open(`/api/payment/${p.id}/receipt`, '_blank')}
                                 className="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline"
                               >
                                 Receipt
                               </button>
+                              {canEditPaid && p.status !== 'Reversed' && (
+                                <>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setEditingPayment(p); }}
+                                    className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setReversingPayment(p); }}
+                                    className="text-[10px] font-bold text-rose-600 hover:text-rose-800 hover:underline"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              )}
                             </td>
                           </tr>
                         ))}

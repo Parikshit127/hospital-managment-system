@@ -1245,7 +1245,7 @@ export async function recordSplitPayment(data: {
 // Reverse a payment (refund)
 export async function reversePayment(paymentId: number, reason: string) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, session, organizationId } = await requireRoleAndTenant(['admin', 'finance', 'superadmin']);
 
         const payment = await db.payments.update({
             where: { id: paymentId },
@@ -1281,6 +1281,9 @@ export async function reversePayment(paymentId: number, reason: string) {
 
         await db.system_audit_logs.create({
             data: {
+                user_id: session?.id,
+                username: session?.username || session?.name,
+                role: session?.role,
                 action: 'REVERSE_PAYMENT',
                 module: 'finance',
                 entity_type: 'payment',
@@ -1771,6 +1774,91 @@ export async function requestRefund(data: { invoice_id: string; payment_id?: str
         });
         return { success: true, data: serialize(refund) };
     } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+// Edit payment metadata and amount — audited.
+export async function updatePayment(paymentId: number, updates: { amount?: number; created_at?: string; payment_method?: string; reference?: string | null; notes?: string | null; }) {
+    try {
+        const { db, session, organizationId } = await requireRoleAndTenant(['admin', 'finance', 'superadmin']);
+
+        const result = await db.$transaction(async (tx: any) => {
+            const payment = await tx.payments.findUnique({ where: { id: paymentId }, include: { invoice: true } });
+            if (!payment) throw new Error('Payment not found');
+
+            const data: any = {};
+            if (typeof updates.payment_method !== 'undefined') data.payment_method = updates.payment_method;
+            if (typeof updates.reference !== 'undefined') data.reference = updates.reference;
+            if (typeof updates.notes !== 'undefined') data.notes = updates.notes;
+            if (typeof updates.amount !== 'undefined') {
+                const amount = Number(updates.amount);
+                if (!Number.isFinite(amount) || amount < 0) throw new Error('Amount must be a positive number');
+                data.amount = amount;
+            }
+            if (typeof updates.created_at !== 'undefined') data.created_at = new Date(updates.created_at);
+
+            const updated = await tx.payments.update({ where: { id: paymentId }, data });
+
+            if (data.amount !== undefined && Number(payment.amount) !== data.amount) {
+                const activePayments = await tx.payments.findMany({
+                    where: { invoice_id: payment.invoice_id, status: 'Completed' },
+                    select: { amount: true },
+                });
+                const refundsForInvoice = await tx.refund.aggregate({
+                    where: {
+                        organizationId,
+                        invoice_id: String(payment.invoice_id),
+                        status: { in: ['Processed', 'Approved'] },
+                    },
+                    _sum: { amount: true },
+                });
+                const grossPaid = activePayments.reduce((s: number, p: any) => s + Number(p.amount), 0);
+                const totalRefunded = Number(refundsForInvoice._sum.amount || 0);
+                const netPaid = Math.max(0, grossPaid - totalRefunded);
+                const netAmount = Number(payment.invoice.net_amount);
+                const balance = Math.max(0, netAmount - netPaid);
+
+                let invoiceStatus: string = payment.invoice.status;
+                if (netPaid <= 0 && totalRefunded > 0) invoiceStatus = 'Refunded';
+                else if (netPaid >= netAmount - 0.01) invoiceStatus = 'Paid';
+                else if (netPaid > 0) invoiceStatus = 'Partial';
+                else invoiceStatus = 'Final';
+
+                await tx.invoices.update({
+                    where: { id: payment.invoice_id },
+                    data: {
+                        paid_amount: netPaid,
+                        balance_due: balance,
+                        status: invoiceStatus,
+                        version: { increment: 1 },
+                    },
+                });
+            }
+
+            await tx.system_audit_logs.create({
+                data: {
+                    user_id: session?.id,
+                    username: session?.username || session?.name,
+                    role: session?.role,
+                    action: 'UPDATE_PAYMENT',
+                    module: 'finance',
+                    entity_type: 'payment',
+                    entity_id: updated.receipt_number,
+                    details: JSON.stringify({ 
+                        before: { amount: payment.amount, created_at: payment.created_at, payment_method: payment.payment_method, reference: payment.reference, notes: payment.notes }, 
+                        after: { amount: updated.amount, created_at: updated.created_at, payment_method: updated.payment_method, reference: updated.reference, notes: updated.notes } 
+                    }),
+                    organizationId,
+                },
+            });
+
+            return updated;
+        });
+
+        return { success: true, data: serialize(result) };
+    } catch (error: any) {
+        console.error('updatePayment error:', error);
         return { success: false, error: error.message };
     }
 }
