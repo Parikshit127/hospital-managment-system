@@ -1,5 +1,6 @@
 "use server";
 
+import type { Prisma } from "@prisma/client";
 import { requireRoleAndTenant, requireTenantContext } from "@/backend/tenant";
 import { revalidatePath } from "next/cache";
 import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
@@ -550,7 +551,7 @@ export async function updateFeeReceipt(invoiceId: number, payload: UpdateFeeRece
         const netAmount = Math.max(0, grossAmount - totalDiscount);
         const createdAt = payload.receipt_date ? new Date(payload.receipt_date) : undefined;
 
-        await db.$transaction(async (tx) => {
+        await db.$transaction(async (tx: Prisma.TransactionClient) => {
             await tx.oPD_REG.updateMany({
                 where: { patient_id: existing.patient_id, organizationId },
                 data: {
