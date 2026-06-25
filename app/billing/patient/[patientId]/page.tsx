@@ -225,7 +225,7 @@ export default function PatientFinancialProfilePage() {
                   setReversingPayment={setReversingPayment}
                 />
               )}
-              {tab === "payments" && <PaymentsTab invoices={profile.invoices} />}
+              {tab === "payments" && <PaymentsTab invoices={profile.invoices} setEditingPayment={setEditingPayment} setReversingPayment={setReversingPayment} />}
               {tab === "deposits" && <DepositsTab deposits={profile.deposits} patient={profile.patient} onSaved={load} />}
               {tab === "insurance" && <InsuranceTab claims={profile.claims} preauths={profile.preauths} policies={profile.patient.insurance_policies} />}
               {tab === "refunds" && <RefundsTab refunds={profile.refunds} />}
@@ -1340,7 +1340,7 @@ function CollectPaymentModal({
 // SECTION E — Payments Tab
 // ──────────────────────────────────────────────────────────────────────────
 
-function PaymentsTab({ invoices }: { invoices: any[] }) {
+function PaymentsTab({ invoices, setEditingPayment, setReversingPayment }: { invoices: any[]; setEditingPayment: (p: any) => void; setReversingPayment: (p: any) => void; }) {
   const payments = invoices
     .flatMap((inv: any) =>
       inv.payments.map((p: any) => ({ ...p, invoice_number: inv.invoice_number })),
@@ -1392,7 +1392,22 @@ function PaymentsTab({ invoices }: { invoices: any[] }) {
               >
                 Receipt
               </button>
-              <ActionLink href={`/finance/payments`}>Reverse</ActionLink>
+              {p.status === "Completed" && (
+                <>
+                  <button
+                    onClick={() => setEditingPayment(p)}
+                    className="text-[10px] font-bold text-gray-500 hover:text-gray-900 border border-gray-200 px-2 py-0.5 rounded bg-white"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => setReversingPayment(p)}
+                    className="text-[10px] font-bold text-rose-500 hover:text-rose-700 border border-gray-200 px-2 py-0.5 rounded bg-white"
+                  >
+                    Delete
+                  </button>
+                </>
+              )}
             </td>
           </tr>
         ))}
