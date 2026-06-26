@@ -5,17 +5,20 @@ import { DateField } from '@/app/components/ui/DateField';
 import {
     Pill, Search, Plus, Minus, Receipt, ShoppingCart,
     Trash2, AlertTriangle, CheckCircle, Package, Printer, X, Loader2,
-    CreditCard, Banknote, Smartphone, Clock, IndianRupee, FileText
+    CreditCard, Banknote, Smartphone, Clock, IndianRupee, FileText,
+    Pencil, Save, BedDouble
 } from 'lucide-react';
 import { getInventoryPage, generateInvoice, getPharmacyQueue, markOrderAsPaid, addInventoryBatch, processDoctorOrder } from '@/app/actions/pharmacy-actions';
 import { useDebouncedValue } from '@/app/lib/hooks/useDebouncedValue';
-import { searchPatientsForBilling } from '@/app/actions/finance-actions';
+import { searchPatientsForBilling, removeInvoiceItem, updateInvoiceItem } from '@/app/actions/finance-actions';
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { fetchBillBranding, fetchPharmacyBranding } from '@/app/actions/branding-actions';
 import type { BillBranding } from '@/app/lib/bill-branding';
 import type { PharmacyBranding } from '@/app/lib/pharmacy-branding';
 import { formatDoctorName } from '@/app/lib/format-name';
+import { getIPDAdmissions } from '@/app/actions/ipd-actions';
+import { generateInterimBill, postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
 
 type InventoryItem = {
     batch_id: string;
@@ -66,8 +69,29 @@ export default function PharmacyPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState('Cash');
 
-    const [activeTab, setActiveTab] = useState<'billing' | 'orders'>('billing');
+    const [activeTab, setActiveTab] = useState<'billing' | 'orders' | 'ipd-bills'>('billing');
     const [orderQueue, setOrderQueue] = useState<any[]>([]);
+
+    // ── IPD Bills Tab State ─────────────────────────────────────────────────────
+    const [ipdAdmissions, setIpdAdmissions] = useState<any[]>([]);
+    const [ipdSearch, setIpdSearch] = useState('');
+    const [selectedAdmission, setSelectedAdmission] = useState<any>(null);
+    const [ipdBillData, setIpdBillData] = useState<any>(null);
+    const [ipdBillLoading, setIpdBillLoading] = useState(false);
+    const [ipdActionLoading, setIpdActionLoading] = useState<number | null>(null);
+    const [ipdRemovingId, setIpdRemovingId] = useState<number | null>(null);
+    const [ipdEditingId, setIpdEditingId] = useState<number | null>(null);
+    const [ipdEditRow, setIpdEditRow] = useState<{ description: string; quantity: number; unit_price: number }>({ description: '', quantity: 1, unit_price: 0 });
+    const [ipdToast, setIpdToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    // Add-charge modal
+    const [showIpdAddModal, setShowIpdAddModal] = useState(false);
+    const [ipdAddSearch, setIpdAddSearch] = useState('');
+    const [ipdAddInventory, setIpdAddInventory] = useState<any[]>([]);
+    const [ipdAddLoading, setIpdAddLoading] = useState(false);
+    const [ipdAddItem, setIpdAddItem] = useState<any>(null);
+    const [ipdAddQty, setIpdAddQty] = useState(1);
+    const [ipdAddPrice, setIpdAddPrice] = useState('');
+    const [ipdAddDesc, setIpdAddDesc] = useState('');
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
     // Patient search state
@@ -150,6 +174,131 @@ export default function PharmacyPage() {
         const interval = setInterval(loadQueue, 15000);
         return () => clearInterval(interval);
     }, [loadQueue]);
+
+    // ── IPD Bills: load admitted patients when tab is active ────────────────────
+    useEffect(() => {
+        if (activeTab === 'ipd-bills') {
+            getIPDAdmissions('Admitted').then(r => {
+                if (r.success) setIpdAdmissions(r.data);
+            });
+        }
+    }, [activeTab]);
+
+    // IPD Add-charge inventory search
+    useEffect(() => {
+        if (!showIpdAddModal || ipdAddSearch.trim().length < 2) { setIpdAddInventory([]); return; }
+        const t = setTimeout(async () => {
+            setIpdAddLoading(true);
+            const res = await getInventoryPage({ search: ipdAddSearch.trim(), limit: 20 });
+            if (res.success) {
+                setIpdAddInventory(res.data.map((item: any) => ({
+                    batch_id: item.batch_no,
+                    medicine_name: item.medicine?.brand_name || 'Unknown',
+                    medicine_id: item.medicine_id,
+                    stock_count: item.current_stock,
+                    unit_price: Number(item.mrp) || Number(item.medicine?.mrp) || 0,
+                    gst_percent: Number(item.medicine?.gst_percent) || 0,
+                    is_catalog: item._catalog === true,
+                })));
+            }
+            setIpdAddLoading(false);
+        }, 300);
+        return () => clearTimeout(t);
+    }, [ipdAddSearch, showIpdAddModal]);
+
+    function showIpdToast(message: string, type: 'success' | 'error' = 'success') {
+        setIpdToast({ message, type });
+        setTimeout(() => setIpdToast(null), 3000);
+    }
+
+    async function loadIpdBill(admission: any) {
+        setSelectedAdmission(admission);
+        setIpdBillData(null);
+        setIpdEditingId(null);
+        setIpdBillLoading(true);
+        const res = await generateInterimBill(admission.admission_id);
+        if (res.success && res.data) setIpdBillData(res.data);
+        setIpdBillLoading(false);
+    }
+
+    async function refreshIpdBill() {
+        if (!selectedAdmission) return;
+        const res = await generateInterimBill(selectedAdmission.admission_id);
+        if (res.success && res.data) setIpdBillData(res.data);
+    }
+
+    async function handleIpdRemove(item: any) {
+        if (!ipdBillData?.invoice?.id) return;
+        if (!confirm(`Remove "${item.description}" from the IPD bill?`)) return;
+        setIpdRemovingId(item.id);
+        const res = await removeInvoiceItem(item.id, ipdBillData.invoice.id);
+        setIpdRemovingId(null);
+        if (res.success) {
+            showIpdToast('Item removed from bill');
+            await refreshIpdBill();
+        } else {
+            showIpdToast(res.error || 'Failed to remove item', 'error');
+        }
+    }
+
+    function startIpdEdit(item: any) {
+        setIpdEditingId(item.id);
+        setIpdEditRow({ description: item.description, quantity: item.quantity, unit_price: item.unit_price });
+    }
+
+    async function saveIpdEdit(item: any) {
+        setIpdActionLoading(item.id);
+        const res = await updateInvoiceItem(item.id, {
+            description: ipdEditRow.description,
+            quantity: Number(ipdEditRow.quantity),
+            unit_price: Number(ipdEditRow.unit_price),
+        });
+        setIpdActionLoading(null);
+        if (res.success) {
+            setIpdEditingId(null);
+            showIpdToast('Item updated');
+            await refreshIpdBill();
+        } else {
+            showIpdToast(res.error || 'Failed to update item', 'error');
+        }
+    }
+
+    async function handleIpdAddCharge() {
+        if (!selectedAdmission || !ipdAddItem || !ipdAddDesc.trim()) return;
+        setIpdActionLoading(-1);
+        const res = await postChargeToIpdBill({
+            admission_id: selectedAdmission.admission_id,
+            source_module: 'pharmacy',
+            description: ipdAddDesc.trim(),
+            quantity: Number(ipdAddQty),
+            unit_price: Number(ipdAddPrice),
+            service_category: 'Pharmacy',
+        });
+        setIpdActionLoading(null);
+        if (res.success) {
+            showIpdToast('Pharmacy charge added to IPD bill ✓');
+            setShowIpdAddModal(false);
+            setIpdAddItem(null);
+            setIpdAddSearch('');
+            setIpdAddInventory([]);
+            setIpdAddQty(1);
+            setIpdAddPrice('');
+            setIpdAddDesc('');
+            await refreshIpdBill();
+        } else {
+            showIpdToast(res.error || 'Failed to add charge', 'error');
+        }
+    }
+
+    const filteredIpdAdmissions = ipdAdmissions.filter((a: any) => {
+        if (!ipdSearch.trim()) return true;
+        const q = ipdSearch.toLowerCase();
+        return (
+            (a.patient?.full_name || '').toLowerCase().includes(q) ||
+            (a.patient?.phone || '').includes(q) ||
+            (a.admission_id || '').toLowerCase().includes(q)
+        );
+    });
 
     // Server-side debounced inventory search.
     useEffect(() => {
@@ -387,6 +536,12 @@ export default function PharmacyPage() {
                                     <Package className="h-3.5 w-3.5" /> Doctor Orders
                                     {orderQueue.length > 0 && <span className="ml-0.5 bg-rose-500 text-white px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none">{orderQueue.length}</span>}
                                 </button>
+                                <button
+                                    onClick={() => setActiveTab('ipd-bills')}
+                                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${activeTab === 'ipd-bills' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    <BedDouble className="h-3.5 w-3.5" /> IPD Bills
+                                </button>
                             </div>
                         </div>
                         <button
@@ -397,7 +552,414 @@ export default function PharmacyPage() {
                         </button>
                     </div>
 
-                    {activeTab === 'orders' ? (
+                    {activeTab === 'ipd-bills' ? (
+                        <div className="grid grid-cols-12 gap-4">
+                            {/* IPD Toast */}
+                            {ipdToast && (
+                                <div className={`fixed top-4 right-4 z-[100] px-5 py-3 rounded-xl shadow-xl text-sm font-bold flex items-center gap-2 transition-all ${
+                                    ipdToast.type === 'error' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'
+                                }`}>
+                                    {ipdToast.type === 'error' ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                                    {ipdToast.message}
+                                </div>
+                            )}
+
+                            {/* Left: Admitted Patient List */}
+                            <div className="col-span-3 bg-white rounded-2xl shadow-sm border border-gray-200 p-4 max-h-[85vh] overflow-y-auto">
+                                <div className="mb-3">
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                                        <input
+                                            type="text"
+                                            value={ipdSearch}
+                                            onChange={e => setIpdSearch(e.target.value)}
+                                            placeholder="Search patient, ID, phone..."
+                                            className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+                                        />
+                                    </div>
+                                    <p className="text-[10px] font-bold text-blue-600 mt-2 uppercase tracking-wider">Admitted Patients Only</p>
+                                </div>
+                                <div className="space-y-2">
+                                    {filteredIpdAdmissions.length === 0 ? (
+                                        <div className="text-center py-10 text-gray-400 text-xs font-medium">
+                                            <BedDouble className="h-8 w-8 mx-auto text-gray-200 mb-2" />
+                                            No admitted patients found
+                                        </div>
+                                    ) : filteredIpdAdmissions.map((a: any) => (
+                                        <button
+                                            key={a.admission_id}
+                                            onClick={() => loadIpdBill(a)}
+                                            className={`w-full text-left p-3 rounded-xl border transition-all ${
+                                                selectedAdmission?.admission_id === a.admission_id
+                                                    ? 'bg-blue-50 border-blue-400 shadow-sm'
+                                                    : 'border-gray-200 hover:bg-gray-50 hover:border-blue-200'
+                                            }`}
+                                        >
+                                            <p className="font-bold text-sm text-gray-900 truncate">{a.patient?.full_name}</p>
+                                            <p className="text-[10px] font-mono text-gray-400 mt-0.5">{a.admission_id}</p>
+                                            <p className="text-[10px] text-gray-500 mt-0.5">{a.wardName} · Bed {a.bed_id} · Day {a.daysAdmitted}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Right: IPD Bill Editor */}
+                            <div className="col-span-9">
+                                {!selectedAdmission ? (
+                                    <div className="bg-white rounded-2xl shadow-sm border border-dashed border-gray-300 flex flex-col items-center justify-center h-96 text-gray-400">
+                                        <BedDouble className="h-12 w-12 text-gray-200 mb-3" />
+                                        <p className="font-bold text-sm">Select an admitted patient to view &amp; edit their IPD bill</p>
+                                        <p className="text-xs mt-1">Only pharmacy items can be added, edited, or deleted</p>
+                                    </div>
+                                ) : ipdBillLoading ? (
+                                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 flex items-center justify-center h-96">
+                                        <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
+                                    </div>
+                                ) : ipdBillData ? (
+                                    <div className="space-y-4">
+                                        {/* Bill Header */}
+                                        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+                                            <div className="flex items-start justify-between">
+                                                <div>
+                                                    <h2 className="text-lg font-black text-gray-900">{ipdBillData.admission.patient_name}</h2>
+                                                    <p className="text-sm text-gray-500 mt-0.5">
+                                                        {ipdBillData.admission.admission_id} &nbsp;·&nbsp;
+                                                        {formatDoctorName(ipdBillData.admission.doctor_name)} &nbsp;·&nbsp;
+                                                        {ipdBillData.admission.ward_name} / Bed {ipdBillData.admission.bed_id}
+                                                    </p>
+                                                    <p className="text-xs text-gray-400 mt-0.5">Day {ipdBillData.admission.days_admitted} &nbsp;·&nbsp; {ipdBillData.admission.diagnosis || 'No diagnosis'}</p>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="text-right">
+                                                        <p className="text-xs text-gray-400">Bill Total</p>
+                                                        <p className="text-2xl font-black text-gray-900">₹{ipdBillData.invoice.net_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                                                        {ipdBillData.invoice.balance_due > 0 && (
+                                                            <p className="text-xs font-bold text-rose-600">Due: ₹{ipdBillData.invoice.balance_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                                                        )}
+                                                    </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            setIpdAddItem(null);
+                                                            setIpdAddSearch('');
+                                                            setIpdAddInventory([]);
+                                                            setIpdAddQty(1);
+                                                            setIpdAddPrice('');
+                                                            setIpdAddDesc('');
+                                                            setShowIpdAddModal(true);
+                                                        }}
+                                                        className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-blue-600/20 whitespace-nowrap"
+                                                    >
+                                                        <Plus className="h-3.5 w-3.5" /> Add Pharmacy Item
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Bill Line Items */}
+                                        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                                            <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 bg-gray-50/60">
+                                                <FileText className="h-4 w-4 text-gray-400" />
+                                                <span className="text-xs font-black uppercase tracking-wider text-gray-600">Bill Line Items</span>
+                                                <span className="ml-auto text-[10px] font-bold text-gray-400">{ipdBillData.items.length} items</span>
+                                            </div>
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-sm">
+                                                    <thead className="bg-gray-50 border-b border-gray-200">
+                                                        <tr>
+                                                            <th className="text-left px-5 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Description</th>
+                                                            <th className="text-left px-5 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Category</th>
+                                                            <th className="text-center px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Qty</th>
+                                                            <th className="text-right px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Unit Price</th>
+                                                            <th className="text-right px-5 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Total</th>
+                                                            <th className="text-center px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Actions</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100">
+                                                        {ipdBillData.items.length === 0 ? (
+                                                            <tr><td colSpan={6} className="text-center py-10 text-gray-400 text-xs font-medium">No charges posted yet</td></tr>
+                                                        ) : ipdBillData.items.map((item: any) => {
+                                                            const isPharmacy = (item.service_category || '').toLowerCase() === 'pharmacy' || (item.department || '').toLowerCase() === 'pharmacy';
+                                                            const isEditing = ipdEditingId === item.id;
+                                                            const isRemoving = ipdRemovingId === item.id;
+                                                            const isSaving = ipdActionLoading === item.id;
+                                                            return (
+                                                                <tr
+                                                                    key={item.id}
+                                                                    className={`transition-colors ${
+                                                                        isPharmacy
+                                                                            ? isEditing ? 'bg-blue-50' : 'hover:bg-blue-50/40'
+                                                                            : 'opacity-60 bg-gray-50/50'
+                                                                    }`}
+                                                                >
+                                                                    {/* Description */}
+                                                                    <td className="px-5 py-3">
+                                                                        {isEditing ? (
+                                                                            <input
+                                                                                value={ipdEditRow.description}
+                                                                                onChange={e => setIpdEditRow(r => ({ ...r, description: e.target.value }))}
+                                                                                className="w-full px-2 py-1 border border-blue-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 font-medium"
+                                                                            />
+                                                                        ) : (
+                                                                            <span className="font-medium text-gray-800">{item.description}</span>
+                                                                        )}
+                                                                    </td>
+                                                                    {/* Category badge */}
+                                                                    <td className="px-5 py-3">
+                                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                                                            isPharmacy
+                                                                                ? 'bg-blue-100 text-blue-700'
+                                                                                : 'bg-gray-100 text-gray-500'
+                                                                        }`}>
+                                                                            {isPharmacy ? <Pill className="h-2.5 w-2.5 mr-1" /> : null}
+                                                                            {item.service_category || item.department || 'General'}
+                                                                        </span>
+                                                                    </td>
+                                                                    {/* Qty */}
+                                                                    <td className="px-4 py-3 text-center">
+                                                                        {isEditing ? (
+                                                                            <input
+                                                                                type="number" min="1"
+                                                                                value={ipdEditRow.quantity}
+                                                                                onChange={e => setIpdEditRow(r => ({ ...r, quantity: Number(e.target.value) }))}
+                                                                                className="w-16 text-center px-2 py-1 border border-blue-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 font-bold"
+                                                                            />
+                                                                        ) : (
+                                                                            <span className="font-semibold text-gray-700">{item.quantity}</span>
+                                                                        )}
+                                                                    </td>
+                                                                    {/* Unit Price */}
+                                                                    <td className="px-4 py-3 text-right">
+                                                                        {isEditing ? (
+                                                                            <div className="flex items-center justify-end gap-1">
+                                                                                <span className="text-xs text-gray-400">₹</span>
+                                                                                <input
+                                                                                    type="number" min="0" step="0.01"
+                                                                                    value={ipdEditRow.unit_price}
+                                                                                    onChange={e => setIpdEditRow(r => ({ ...r, unit_price: Number(e.target.value) }))}
+                                                                                    className="w-24 text-right px-2 py-1 border border-blue-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 font-bold"
+                                                                                />
+                                                                            </div>
+                                                                        ) : (
+                                                                            <span className="font-semibold text-gray-700">₹{item.unit_price.toFixed(2)}</span>
+                                                                        )}
+                                                                    </td>
+                                                                    {/* Row total */}
+                                                                    <td className="px-5 py-3 text-right">
+                                                                        <span className="font-bold text-gray-900">
+                                                                            ₹{isEditing
+                                                                                ? (ipdEditRow.quantity * ipdEditRow.unit_price).toFixed(2)
+                                                                                : (item.quantity * item.unit_price).toFixed(2)}
+                                                                        </span>
+                                                                    </td>
+                                                                    {/* Action buttons */}
+                                                                    <td className="px-4 py-3 text-center">
+                                                                        {isPharmacy ? (
+                                                                            <div className="flex items-center justify-center gap-1.5">
+                                                                                {isEditing ? (
+                                                                                    <>
+                                                                                        <button
+                                                                                            onClick={() => saveIpdEdit(item)}
+                                                                                            disabled={isSaving}
+                                                                                            className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg transition-all disabled:opacity-50"
+                                                                                        >
+                                                                                            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                                                                                            Save
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => setIpdEditingId(null)}
+                                                                                            disabled={isSaving}
+                                                                                            className="flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-bold rounded-lg transition-all"
+                                                                                        >
+                                                                                            <X className="h-3 w-3" /> Cancel
+                                                                                        </button>
+                                                                                    </>
+                                                                                ) : (
+                                                                                    <>
+                                                                                        <button
+                                                                                            onClick={() => startIpdEdit(item)}
+                                                                                            title="Edit this item"
+                                                                                            className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-all"
+                                                                                        >
+                                                                                            <Pencil className="h-3.5 w-3.5" />
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => handleIpdRemove(item)}
+                                                                                            disabled={isRemoving}
+                                                                                            title="Remove this item"
+                                                                                            className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-500 rounded-lg transition-all disabled:opacity-40"
+                                                                                        >
+                                                                                            {isRemoving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                                                                                        </button>
+                                                                                    </>
+                                                                                )}
+                                                                            </div>
+                                                                        ) : (
+                                                                            <span className="text-[10px] text-gray-300 font-medium">Read-only</span>
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {/* Bill summary footer */}
+                                            <div className="px-5 py-4 bg-gray-50/60 border-t border-gray-200 grid grid-cols-3 gap-4 text-xs">
+                                                <div>
+                                                    <p className="text-gray-400 font-medium">Subtotal</p>
+                                                    <p className="font-black text-gray-800 text-base">₹{ipdBillData.invoice.total_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-gray-400 font-medium">Pharmacy items total</p>
+                                                    <p className="font-bold text-blue-700 text-base">
+                                                        ₹{ipdBillData.items
+                                                            .filter((i: any) => (i.service_category || '').toLowerCase() === 'pharmacy' || (i.department || '').toLowerCase() === 'pharmacy')
+                                                            .reduce((s: number, i: any) => s + i.quantity * i.unit_price, 0)
+                                                            .toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                    </p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-gray-400 font-medium">Balance Due</p>
+                                                    <p className={`font-black text-base ${ ipdBillData.invoice.balance_due > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                        ₹{ipdBillData.invoice.balance_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Legend */}
+                                        <div className="flex items-center gap-4 text-[10px] font-bold text-gray-400 px-1">
+                                            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-200 inline-block" /> Pharmacy items — editable</span>
+                                            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gray-200 inline-block" /> Other charges — read-only</span>
+                                        </div>
+                                    </div>
+                                ) : null}
+                            </div>
+
+                            {/* Add Pharmacy Item Modal */}
+                            {showIpdAddModal && (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                                    <div className="bg-white w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden">
+                                        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                                            <div>
+                                                <h3 className="text-base font-black text-gray-900">Add Pharmacy Charge</h3>
+                                                <p className="text-xs text-gray-500 mt-0.5">Patient: <span className="font-bold text-blue-700">{ipdBillData?.admission?.patient_name}</span></p>
+                                            </div>
+                                            <button onClick={() => setShowIpdAddModal(false)}><X className="h-5 w-5 text-gray-400 hover:text-gray-700" /></button>
+                                        </div>
+                                        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                                            {/* Medicine search */}
+                                            <div>
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1.5 block">Search Medicine</label>
+                                                <div className="relative">
+                                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                                                    <input
+                                                        value={ipdAddSearch}
+                                                        onChange={e => { setIpdAddSearch(e.target.value); setIpdAddItem(null); }}
+                                                        className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                                                        placeholder="Type medicine name..."
+                                                    />
+                                                </div>
+                                                {/* Results */}
+                                                {ipdAddLoading && <p className="text-xs text-gray-400 mt-2">Searching...</p>}
+                                                {!ipdAddItem && ipdAddInventory.length > 0 && (
+                                                    <div className="mt-2 border border-gray-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                                                        {ipdAddInventory.map((inv: any) => (
+                                                            <button
+                                                                key={inv.batch_id}
+                                                                onClick={() => {
+                                                                    setIpdAddItem(inv);
+                                                                    setIpdAddDesc(inv.medicine_name);
+                                                                    setIpdAddPrice(String(inv.unit_price));
+                                                                    setIpdAddQty(1);
+                                                                    setIpdAddSearch(inv.medicine_name);
+                                                                    setIpdAddInventory([]);
+                                                                }}
+                                                                className="w-full text-left px-4 py-2.5 hover:bg-blue-50 border-b border-gray-100 last:border-0 flex items-center justify-between transition-colors"
+                                                            >
+                                                                <div>
+                                                                    <p className="text-sm font-bold text-gray-800">{inv.medicine_name}</p>
+                                                                    <p className="text-[10px] text-gray-400">{inv.is_catalog ? 'Catalog' : `Batch: ${inv.batch_id}`} &nbsp;·&nbsp; Stock: {inv.stock_count}</p>
+                                                                </div>
+                                                                <span className="font-bold text-blue-700 text-sm">₹{inv.unit_price.toFixed(2)}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {ipdAddItem && (
+                                                    <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl">
+                                                        <CheckCircle className="h-4 w-4 text-blue-600 shrink-0" />
+                                                        <span className="text-sm font-bold text-blue-800">{ipdAddItem.medicine_name}</span>
+                                                        <button onClick={() => { setIpdAddItem(null); setIpdAddDesc(''); setIpdAddPrice(''); setIpdAddSearch(''); }} className="ml-auto text-blue-400 hover:text-blue-600"><X className="h-3.5 w-3.5" /></button>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Description */}
+                                            <div>
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1.5 block">Description on Bill</label>
+                                                <input
+                                                    value={ipdAddDesc}
+                                                    onChange={e => setIpdAddDesc(e.target.value)}
+                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                                                    placeholder="e.g. Paracetamol 500mg"
+                                                />
+                                            </div>
+
+                                            {/* Qty + Price */}
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1.5 block">Quantity</label>
+                                                    <input
+                                                        type="number" min="1"
+                                                        value={ipdAddQty}
+                                                        onChange={e => setIpdAddQty(Number(e.target.value))}
+                                                        className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 font-bold"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1.5 block">Unit Price (₹)</label>
+                                                    <input
+                                                        type="number" min="0" step="0.01"
+                                                        value={ipdAddPrice}
+                                                        onChange={e => setIpdAddPrice(e.target.value)}
+                                                        className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 font-bold"
+                                                        placeholder="0.00"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Line total preview */}
+                                            {ipdAddQty > 0 && Number(ipdAddPrice) > 0 && (
+                                                <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5">
+                                                    <span className="text-xs font-bold text-blue-700">Line Total</span>
+                                                    <span className="text-lg font-black text-blue-800">₹{(ipdAddQty * Number(ipdAddPrice)).toFixed(2)}</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end">
+                                            <button
+                                                onClick={() => setShowIpdAddModal(false)}
+                                                className="px-5 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                onClick={handleIpdAddCharge}
+                                                disabled={!ipdAddItem || !ipdAddDesc.trim() || !ipdAddPrice || ipdActionLoading === -1}
+                                                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-lg shadow-blue-600/20 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                                            >
+                                                {ipdActionLoading === -1 ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                                                Add to IPD Bill
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    ) : activeTab === 'orders' ? (
                         <div>
                             {orderQueue.length === 0 ? (
                                 <div className="text-center p-20 flex flex-col items-center">
