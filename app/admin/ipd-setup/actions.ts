@@ -1,6 +1,7 @@
 'use server';
 
 import { requireTenantContext, requireRoleAndTenant } from '@/backend/tenant';
+import { serializePrisma } from '@/app/lib/serialize-prisma';
 import { revalidatePath } from 'next/cache';
 
 export async function getIpdInventory() {
@@ -20,7 +21,7 @@ export async function getIpdInventory() {
         orderBy: { ward_name: 'asc' }
     });
     
-    return JSON.parse(JSON.stringify({ wards, departments }));
+    return serializePrisma({ wards, departments });
 }
 
 export async function createWard(data: {

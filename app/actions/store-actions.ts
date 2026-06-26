@@ -95,6 +95,63 @@ export async function ensureDefaultStores() {
   }
 }
 
+/** Ensures Central Store + common ward stores exist for indent workflows (even if other stores already exist). */
+export async function ensureIndentStoreDefaults() {
+  try {
+    const { db, organizationId } = await requireRoleAndTenant([...INVENTORY_VIEW_ROLES]);
+    const now = new Date();
+    const branch = await db.branch.findFirst({ where: { organizationId } });
+
+    let central = await db.stores.findFirst({
+      where: { organizationId, store_type: 'CENTRAL', is_active: true },
+    });
+    if (!central) {
+      central = await db.stores.create({
+        data: {
+          store_code: 'CS-001',
+          name: 'Central Store',
+          store_type: 'CENTRAL',
+          cost_center: 'CENTRAL',
+          branch_id: branch?.id || null,
+          organizationId,
+          is_active: true,
+          updated_at: now,
+        },
+      });
+    }
+
+    const wardDefaults = [
+      { store_code: 'WRD-WARD-A', name: 'WARD-A Ward Store', cost_center: 'WARD-A' },
+      { store_code: 'WRD-WARD-B', name: 'WARD-B Ward Store', cost_center: 'WARD-B' },
+      { store_code: 'WRD-ICU', name: 'ICU Ward Store', cost_center: 'ICU' },
+    ];
+
+    for (const w of wardDefaults) {
+      const existing = await db.stores.findFirst({
+        where: { organizationId, store_code: w.store_code },
+      });
+      if (!existing) {
+        await db.stores.create({
+          data: {
+            ...w,
+            store_type: 'WARD',
+            branch_id: branch?.id || null,
+            parent_store_id: central.id,
+            organizationId,
+            is_active: true,
+            updated_at: now,
+          },
+        });
+      }
+    }
+
+    revalidateStores();
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
 export async function listStores(params?: { store_type?: string; active_only?: boolean }) {
   try {
     const { db } = await requireRoleAndTenant([...INVENTORY_VIEW_ROLES]);

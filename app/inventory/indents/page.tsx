@@ -10,47 +10,81 @@ import {
   issueIndent,
   confirmIndentReceipt,
 } from '@/app/actions/indent-actions';
-import { listStores } from '@/app/actions/store-actions';
-import { searchItems } from '@/app/actions/item-master-actions';
+import { listStores, ensureIndentStoreDefaults } from '@/app/actions/store-actions';
+import { listItems } from '@/app/actions/item-master-actions';
 import { StatusBadge, btnPrimary, btnSecondary, inputCls, cardCls } from '../components/InventoryUI';
+
+const emptyForm = () => ({
+  from_store_id: '',
+  to_store_id: '',
+  priority: 'NORMAL',
+  item_id: '',
+  qty: '',
+});
 
 export default function InventoryIndentsPage() {
   const [indents, setIndents] = useState<any[]>([]);
   const [stores, setStores] = useState<any[]>([]);
+  const [activeItems, setActiveItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [itemSearch, setItemSearch] = useState('');
-  const [itemResults, setItemResults] = useState<any[]>([]);
-  const [form, setForm] = useState({
-    from_store_id: '',
-    to_store_id: '',
-    priority: 'NORMAL',
-    item_id: '',
-    qty: '',
-  });
+  const [form, setForm] = useState(emptyForm());
 
   const load = async () => {
     setLoading(true);
+    await ensureIndentStoreDefaults();
     const [indRes, storeRes] = await Promise.all([listIndents(), listStores()]);
     if (indRes.success) setIndents(indRes.data as any[]);
     if (storeRes.success) setStores(storeRes.data as any[]);
     setLoading(false);
   };
 
+  const centralStores = stores.filter((s) => s.store_type === 'CENTRAL');
+  const requestingStores = stores.filter((s) => s.store_type !== 'CENTRAL');
+  const supplyStores = centralStores.length > 0
+    ? centralStores
+    : stores.filter((s) => ['CENTRAL', 'PHARMACY', 'MAIN'].includes(s.store_type) || s.name?.toLowerCase().includes('central'));
+
   useEffect(() => { load(); }, []);
 
   useEffect(() => {
-    if (itemSearch.length < 2) { setItemResults([]); return; }
-    searchItems(itemSearch, 10).then((res) => {
-      if (res.success) setItemResults(res.data as any[]);
+    if (!modalOpen) return;
+    listItems({ status: 'Active', limit: 200 }).then((res) => {
+      if (res.success) setActiveItems(res.data as any[]);
     });
-  }, [itemSearch]);
+    setItemSearch('');
+    const supply = supplyStores[0];
+    setForm({
+      ...emptyForm(),
+      to_store_id: supply ? String(supply.id) : '',
+    });
+  }, [modalOpen, stores]);
+
+  const filteredItems = activeItems.filter((item) => {
+    if (!itemSearch.trim()) return true;
+    const q = itemSearch.trim().toLowerCase();
+    return (
+      item.name?.toLowerCase().includes(q) ||
+      item.item_code?.toLowerCase().includes(q)
+    );
+  });
+
+  const selectedItem = activeItems.find((i) => String(i.id) === form.item_id);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.from_store_id || !form.to_store_id || !form.item_id || !form.qty) {
-      return alert('Fill all required fields');
+    const missing: string[] = [];
+    if (!form.from_store_id) missing.push('Requesting store (ward/sub-store)');
+    if (!form.to_store_id) missing.push('Supply from store');
+    if (!form.item_id) missing.push('Item (select from dropdown after search)');
+    if (!form.qty || Number(form.qty) < 1) missing.push('Quantity');
+    if (form.from_store_id && form.to_store_id && form.from_store_id === form.to_store_id) {
+      return alert('Requesting store and supply store must be different');
+    }
+    if (missing.length) {
+      return alert(`Please complete:\n• ${missing.join('\n• ')}`);
     }
     setSaving(true);
     const res = await createIndent({
@@ -62,6 +96,8 @@ export default function InventoryIndentsPage() {
     setSaving(false);
     if (res.success) {
       setModalOpen(false);
+      setForm(emptyForm());
+      setItemSearch('');
       load();
     } else alert(res.error);
   };
@@ -152,34 +188,61 @@ export default function InventoryIndentsPage() {
             <div className="p-4 border-b bg-gray-50"><h3 className="font-bold">Raise Indent</h3></div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="text-xs font-bold text-gray-500">Requesting store (from)</label>
+                <label className="text-xs font-bold text-gray-500">Requesting store (ward / sub-store) *</label>
                 <select required className={inputCls} value={form.from_store_id} onChange={(e) => setForm({ ...form, from_store_id: e.target.value })}>
-                  <option value="">Select ward/sub-store</option>
-                  {stores.filter((s) => s.store_type !== 'CENTRAL').map((s) => (
+                  <option value="">Select requesting store</option>
+                  {requestingStores.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="text-xs font-bold text-gray-500">Issuing store (to)</label>
+                <label className="text-xs font-bold text-gray-500">Central Store (supply from) *</label>
                 <select required className={inputCls} value={form.to_store_id} onChange={(e) => setForm({ ...form, to_store_id: e.target.value })}>
-                  <option value="">Select source store</option>
-                  {stores.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.store_type})</option>)}
+                  <option value="">Select central store</option>
+                  {supplyStores.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
                 </select>
               </div>
-              <select className={inputCls} value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-                <option value="NORMAL">Normal</option>
-                <option value="URGENT">Urgent</option>
-                <option value="EMERGENCY">Emergency</option>
-              </select>
-              <input placeholder="Search item..." className={inputCls} value={itemSearch} onChange={(e) => setItemSearch(e.target.value)} />
-              {itemResults.length > 0 && (
-                <select required className={inputCls} value={form.item_id} onChange={(e) => setForm({ ...form, item_id: e.target.value })}>
-                  <option value="">Select item</option>
-                  {itemResults.map((i) => <option key={i.id} value={i.id}>{i.item_code} — {i.name}</option>)}
+              <div>
+                <label className="text-xs font-bold text-gray-500">Priority</label>
+                <select className={inputCls} value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
+                  <option value="NORMAL">Normal</option>
+                  <option value="URGENT">Urgent</option>
+                  <option value="EMERGENCY">Emergency</option>
                 </select>
-              )}
-              <input required type="number" min="1" placeholder="Quantity" className={inputCls} value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500">Item *</label>
+                <input
+                  placeholder="Search by item name or code..."
+                  className={inputCls}
+                  value={itemSearch}
+                  onChange={(e) => setItemSearch(e.target.value)}
+                />
+                <select
+                  required
+                  className={`${inputCls} mt-2`}
+                  value={form.item_id}
+                  onChange={(e) => setForm({ ...form, item_id: e.target.value })}
+                >
+                  <option value="">Select item from list</option>
+                  {filteredItems.map((i) => (
+                    <option key={i.id} value={i.id}>{i.item_code} — {i.name}</option>
+                  ))}
+                </select>
+                {itemSearch && filteredItems.length === 0 && (
+                  <p className="text-[11px] text-amber-600 mt-1">No active items match &quot;{itemSearch}&quot;. Try another search or approve items in Item Master.</p>
+                )}
+                {selectedItem && (
+                  <p className="text-[11px] text-teal-700 font-bold mt-1">Selected: {selectedItem.item_code} — {selectedItem.name}</p>
+                )}
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500">Quantity *</label>
+                <input required type="number" min="1" placeholder="Quantity" className={inputCls} value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} />
+              </div>
             </div>
             <div className="p-4 border-t flex gap-3 justify-end">
               <button type="button" onClick={() => setModalOpen(false)} className={btnSecondary}>Cancel</button>

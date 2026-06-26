@@ -62,7 +62,8 @@ function LoginForm({ isTimeout }: { isTimeout: boolean }) {
                     </button>
                 </form>
                 
-                <div className="mt-8 pt-6 border-t border-gray-100">                  
+                <div className="mt-8 pt-6 border-t border-gray-100">
+                                      
                     <p className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Authorized Roles</p>
                     <div className="flex flex-wrap justify-center gap-2">
                         {['Admin', 'Store Manager', 'Procurement', 'Doctor', 'Nurse', 'Lab Tech'].map(role => (
@@ -70,6 +71,7 @@ function LoginForm({ isTimeout }: { isTimeout: boolean }) {
                         ))}
                     </div>
                 </div>
+                
             </div>
         </div>
     );

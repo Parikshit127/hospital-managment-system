@@ -1,6 +1,7 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
+import { serializePrisma } from '@/app/lib/serialize-prisma';
 import { revalidatePath } from 'next/cache';
 
 // ========================================
@@ -415,7 +416,7 @@ export async function getWardsList() {
     try {
         const { db } = await requireTenantContext();
         const wards = await db.wards.findMany({ orderBy: { ward_name: 'asc' } });
-        return { success: true, data: wards };
+        return { success: true, data: serializePrisma(wards) };
     } catch (error) {
         console.error('Get Wards Error:', error);
         return { success: false, data: [] };
