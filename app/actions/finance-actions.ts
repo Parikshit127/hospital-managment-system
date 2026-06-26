@@ -2916,8 +2916,61 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
 
         const originalStatus = invoice.status;
 
+        // Snapshot the bill state BEFORE this edit so it can be printed later
+        const snapshotItems = await db.invoice_items.findMany({ where: { invoice_id: invoiceId } });
+        const _changeParts: string[] = [];
+        if (payload.items_to_remove?.length) _changeParts.push(`Removed ${payload.items_to_remove.length} item(s)`);
+        if (payload.items_to_update?.length) _changeParts.push(`Updated ${payload.items_to_update.length} item(s)`);
+        if (payload.items_to_add?.length) _changeParts.push(`Added ${payload.items_to_add.length} item(s)`);
+        if (payload.header && Object.keys(payload.header).length) _changeParts.push('Header changed');
+        const _changeSummary = _changeParts.join(', ') || 'Bill modified';
+        const _snapshotData = {
+            id: invoice.id,
+            patient_id: invoice.patient_id,
+            invoice_number: (invoice as any).invoice_number,
+            invoice_type: invoice.invoice_type,
+            total_amount: Number((invoice as any).total_amount),
+            total_discount: Number((invoice as any).total_discount),
+            net_amount: Number((invoice as any).net_amount),
+            paid_amount: Number((invoice as any).paid_amount),
+            balance_due: Number((invoice as any).balance_due),
+            status: invoice.status,
+            notes: invoice.notes,
+            billing_patient_type: invoice.billing_patient_type,
+            bill_discount: Number((invoice as any).bill_discount || 0),
+            concession_amount: Number((invoice as any).concession_amount || 0),
+            concession_reason: (invoice as any).concession_reason,
+            created_at: invoice.created_at,
+            items: snapshotItems.map((it: any) => ({
+                id: it.id,
+                department: it.department,
+                description: it.description,
+                quantity: Number(it.quantity),
+                unit_price: Number(it.unit_price),
+                discount: Number(it.discount),
+                net_price: Number(it.net_price),
+                tax_rate: Number(it.tax_rate || 0),
+                tax_amount: Number(it.tax_amount || 0),
+                service_category: it.service_category,
+                created_at: it.created_at,
+            })),
+        };
+
         // Apply all mutations in a single transaction so a mid-save failure rolls back.
         await db.$transaction(async (tx: any) => {
+            // Save snapshot of the pre-edit state first
+            await tx.invoice_snapshots.create({
+                data: {
+                    invoice_id: invoiceId,
+                    invoice_number: (invoice as any).invoice_number,
+                    version_number: Number(invoice.version),
+                    snapshot_data: _snapshotData,
+                    changed_by: session?.username || (session as any)?.email || null,
+                    change_summary: _changeSummary,
+                    organizationId,
+                },
+            });
+
             // Removes first — frees up IDs / decouples references
             if (payload.items_to_remove?.length) {
                 await tx.invoice_items.deleteMany({
@@ -3339,6 +3392,28 @@ export async function getDrillDownData(type: DrillDownType, filters: Record<stri
         return { success: false, error: 'Unknown drill-down type' };
     } catch (error: any) {
         console.error('getDrillDownData error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function getInvoiceHistory(invoiceId: number) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const snapshots = await db.invoice_snapshots.findMany({
+            where: { invoice_id: invoiceId, organizationId },
+            orderBy: { version_number: 'desc' },
+            select: {
+                id: true,
+                invoice_number: true,
+                version_number: true,
+                changed_by: true,
+                changed_at: true,
+                change_summary: true,
+            },
+        });
+        return { success: true, data: serialize(snapshots) };
+    } catch (error: any) {
+        console.error('getInvoiceHistory error:', error);
         return { success: false, error: error.message };
     }
 }
