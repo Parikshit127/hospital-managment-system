@@ -3338,9 +3338,6 @@ function parsePoExpiry(raw: any): Date | null {
     if (!raw) return null;
     const s = String(raw).trim();
     if (!s) return null;
-    // ISO / native-parseable
-    const native = new Date(s);
-    if (!isNaN(native.getTime()) && native.getFullYear() > 2000 && native.getFullYear() < 2100) return native;
     // DD/MM/YYYY or DD-MM-YYYY
     let m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(s);
     if (m) {
@@ -3354,6 +3351,9 @@ function parsePoExpiry(raw: any): Date | null {
         let mm = +m[1], yy = +m[2]; if (yy < 100) yy += 2000;
         if (mm >= 1 && mm <= 12) return new Date(yy, mm, 0);
     }
+    // ISO / native-parseable fallback
+    const native = new Date(s);
+    if (!isNaN(native.getTime()) && native.getFullYear() > 2000 && native.getFullYear() < 2100) return native;
     return null;
 }
 
@@ -3450,6 +3450,7 @@ export async function postPurchaseInvoice(invoiceId: number) {
                         cost_price: Number(line.unit_price),
                         actual_cost: Number(line.unit_price),
                         vendor_id: invoice.vendor_id,
+                        expiry_date: expiryDate,
                         ...(mrp != null ? { mrp } : {}),
                     },
                     create: {
