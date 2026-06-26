@@ -638,15 +638,19 @@ function InvoicesTab({
   const [historyMap, setHistoryMap] = useState<Record<number, any[]>>({});
   const [loadingHistoryId, setLoadingHistoryId] = useState<number | null>(null);
   const [openHistoryId, setOpenHistoryId] = useState<number | null>(null);
+  const [historyAnchor, setHistoryAnchor] = useState<{ top: number; left: number } | null>(null);
 
-  async function fetchHistory(invoiceId: number) {
-    if (openHistoryId === invoiceId) { setOpenHistoryId(null); return; }
-    if (historyMap[invoiceId]) { setOpenHistoryId(invoiceId); return; }
+  async function fetchHistory(invoiceId: number, btnEl: HTMLElement) {
+    if (openHistoryId === invoiceId) { setOpenHistoryId(null); setHistoryAnchor(null); return; }
+    const rect = btnEl.getBoundingClientRect();
+    const anchor = { top: rect.bottom + window.scrollY + 4, left: rect.left + window.scrollX };
+    if (historyMap[invoiceId]) { setOpenHistoryId(invoiceId); setHistoryAnchor(anchor); return; }
     setLoadingHistoryId(invoiceId);
     const res = await getInvoiceHistory(invoiceId);
     if (res.success) setHistoryMap((prev) => ({ ...prev, [invoiceId]: res.data || [] }));
     setLoadingHistoryId(null);
     setOpenHistoryId(invoiceId);
+    setHistoryAnchor(anchor);
   }
 
   if (!invoices.length) {
@@ -921,63 +925,18 @@ function InvoicesTab({
                     Detailed
                   </button>
                   {/* Bill Version History */}
-                  <div className="relative">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); fetchHistory(inv.id); }}
-                      className="px-2.5 py-1 bg-white border border-amber-200 hover:border-amber-400 hover:bg-amber-50 text-xs font-bold text-amber-700 rounded flex items-center gap-1"
-                    >
-                      <History className="h-3 w-3" />
-                      {loadingHistoryId === inv.id ? 'Loading…' : 'History'}
-                      {historyMap[inv.id]?.length > 0 && (
-                        <span className="ml-0.5 bg-amber-100 text-amber-700 rounded-full px-1.5 py-0 text-[10px] font-black">
-                          {historyMap[inv.id].length}
-                        </span>
-                      )}
-                    </button>
-                    {openHistoryId === inv.id && historyMap[inv.id] && (
-                      <div
-                        className="absolute left-0 top-full mt-1 z-50 w-80 bg-white border border-amber-200 rounded-xl shadow-xl overflow-hidden"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="px-3 py-2 bg-amber-50 border-b border-amber-100 flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-amber-800 flex items-center gap-1">
-                            <History className="h-3 w-3" /> Previously Modified Versions
-                          </span>
-                          <button onClick={() => setOpenHistoryId(null)} className="text-amber-600 hover:text-amber-900 text-xs font-bold">✕</button>
-                        </div>
-                        {historyMap[inv.id].length === 0 ? (
-                          <div className="px-4 py-3 text-xs text-gray-400">No prior versions — bill has not been modified yet.</div>
-                        ) : (
-                          <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
-                            {historyMap[inv.id].map((snap: any) => (
-                              <div key={snap.id} className="px-3 py-2.5 hover:bg-amber-50/60">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="min-w-0">
-                                    <div className="text-[11px] font-bold text-gray-800">
-                                      Version {snap.version_number}
-                                      {snap.changed_by && (
-                                        <span className="ml-1.5 font-normal text-gray-500">by {snap.changed_by}</span>
-                                      )}
-                                    </div>
-                                    <div className="text-[10px] text-gray-500 mt-0.5">{new Date(snap.changed_at).toLocaleString()}</div>
-                                    {snap.change_summary && (
-                                      <div className="text-[10px] text-amber-700 mt-0.5 font-medium">{snap.change_summary}</div>
-                                    )}
-                                  </div>
-                                  <button
-                                    onClick={() => window.open(`/api/invoice/${inv.id}/snapshot/${snap.version_number}/bill`, '_blank')}
-                                    className="shrink-0 px-2 py-1 bg-white border border-amber-300 hover:bg-amber-50 text-[10px] font-bold text-amber-700 rounded flex items-center gap-1"
-                                  >
-                                    <Printer className="h-3 w-3" /> Print
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); fetchHistory(inv.id, e.currentTarget); }}
+                    className="px-2.5 py-1 bg-white border border-amber-200 hover:border-amber-400 hover:bg-amber-50 text-xs font-bold text-amber-700 rounded flex items-center gap-1"
+                  >
+                    <History className="h-3 w-3" />
+                    {loadingHistoryId === inv.id ? 'Loading…' : 'History'}
+                    {historyMap[inv.id]?.length > 0 && (
+                      <span className="ml-0.5 bg-amber-100 text-amber-700 rounded-full px-1.5 py-0 text-[10px] font-black">
+                        {historyMap[inv.id].length}
+                      </span>
                     )}
-                  </div>
+                  </button>
                   {/* TPA claim bill — addressed to the insurer/TPA, showing the
                       actual treatment amount being claimed (separate from the
                       patient's own bill). Always available so it can be raised
@@ -1019,6 +978,70 @@ function InvoicesTab({
           </div>
         );
       })}
+
+      {/* Fixed-position history dropdown — rendered outside overflow-hidden invoice cards */}
+      {openHistoryId !== null && historyAnchor && historyMap[openHistoryId] && (
+        <>
+          {/* Backdrop to close on outside click */}
+          <div
+            className="fixed inset-0 z-[200]"
+            onClick={() => { setOpenHistoryId(null); setHistoryAnchor(null); }}
+          />
+          <div
+            style={{ position: 'fixed', top: historyAnchor.top, left: historyAnchor.left, zIndex: 201 }}
+            className="w-80 bg-white border border-amber-200 rounded-xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-3 py-2 bg-amber-50 border-b border-amber-100 flex items-center justify-between">
+              <span className="text-[11px] font-bold text-amber-800 flex items-center gap-1">
+                <History className="h-3 w-3" /> Previously Modified Versions
+              </span>
+              <button
+                onClick={() => { setOpenHistoryId(null); setHistoryAnchor(null); }}
+                className="text-amber-600 hover:text-amber-900 text-xs font-bold"
+              >✕</button>
+            </div>
+            {historyMap[openHistoryId].length === 0 ? (
+              <div className="px-4 py-3 text-xs text-gray-400">No prior versions — bill has not been modified yet.</div>
+            ) : (
+              <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
+                {historyMap[openHistoryId].map((snap: any) => (
+                  <div key={snap.id} className="px-3 py-2.5 hover:bg-amber-50/60">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-bold text-gray-800">
+                          Version {snap.version_number}
+                          {snap.changed_by && (
+                            <span className="ml-1.5 font-normal text-gray-500">by {snap.changed_by}</span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-gray-500 mt-0.5">{new Date(snap.changed_at).toLocaleString()}</div>
+                        {snap.change_summary && (
+                          <div className="text-[10px] text-amber-700 mt-0.5 font-medium">{snap.change_summary}</div>
+                        )}
+                      </div>
+                      <div className="shrink-0 flex flex-col gap-1">
+                        <button
+                          onClick={() => window.open(`/api/invoice/${openHistoryId}/snapshot/${snap.version_number}/bill`, '_blank')}
+                          className="px-2 py-1 bg-white border border-amber-300 hover:bg-amber-50 text-[10px] font-bold text-amber-700 rounded flex items-center gap-1"
+                        >
+                          <Printer className="h-3 w-3" /> Summary
+                        </button>
+                        <button
+                          onClick={() => window.open(`/api/invoice/${openHistoryId}/snapshot/${snap.version_number}/bill?detailed=true`, '_blank')}
+                          className="px-2 py-1 bg-white border border-amber-300 hover:bg-amber-50 text-[10px] font-bold text-amber-700 rounded flex items-center gap-1"
+                        >
+                          <Printer className="h-3 w-3" /> Detailed
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

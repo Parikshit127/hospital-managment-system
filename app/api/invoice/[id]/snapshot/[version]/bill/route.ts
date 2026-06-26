@@ -30,6 +30,7 @@ export async function GET(
         const { id: rawId, version: rawVersion } = await params;
         const invoiceId = parseInt(rawId, 10);
         const versionNumber = parseInt(rawVersion, 10);
+        const detailed = new URL(req.url).searchParams.get('detailed') === 'true';
         if (isNaN(invoiceId) || isNaN(versionNumber)) {
             return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 });
         }
@@ -88,9 +89,7 @@ export async function GET(
             branding,
             sections,
             versionNumber,
-            changedBy: (snapshot as any).changed_by,
-            changedAt: (snapshot as any).changed_at,
-            changeSummary: (snapshot as any).change_summary,
+            detailed,
             opdDoctor: liveInvoice?.doctor_name || '',
         });
 
@@ -128,9 +127,7 @@ function renderSnapshotBillHTML({
     branding,
     sections,
     versionNumber,
-    changedBy,
-    changedAt,
-    changeSummary,
+    detailed,
     opdDoctor,
 }: {
     snapshot: any;
@@ -140,9 +137,7 @@ function renderSnapshotBillHTML({
     branding: BillBranding;
     sections: any;
     versionNumber: number;
-    changedBy: string | null;
-    changedAt: string | Date;
-    changeSummary: string | null;
+    detailed: boolean;
     opdDoctor: string;
 }) {
     const items: any[] = snapshot.items || [];
@@ -150,7 +145,7 @@ function renderSnapshotBillHTML({
     const fmtDate = fmtBillDate;
     const gstin = branding.gstin;
 
-    // Recompute totals from snapshot items (stored values may already be correct)
+    // Recompute totals from snapshot items
     const total = items.reduce((s: number, i: any) => s + (Number(i.unit_price) * Number(i.quantity)), 0);
     const totalDiscount = items.reduce((s: number, i: any) => s + Number(i.discount || 0), 0);
     const net = items.reduce((s: number, i: any) => s + Number(i.net_price), 0);
@@ -172,15 +167,19 @@ function renderSnapshotBillHTML({
             <td colspan="5" style="padding:5px 8px;font-size:11px;font-weight:700;">${cat}</td>
             <td style="padding:5px 8px;font-size:11px;font-weight:700;text-align:right;">Total Rs. ${catTotal.toFixed(2)}/-</td>
         </tr>`;
-        for (const item of catItems) {
-            detailRows += `<tr>
-                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;">${fmtDate(item.created_at)}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;">${item.description}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${Number(item.unit_price).toFixed(2)}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:center;">${item.quantity}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${Number(item.discount || 0).toFixed(2)}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${Number(item.net_price).toFixed(2)}</td>
-            </tr>`;
+        // In detailed mode: list every item. In summary mode: collapse pharmacy to category total only.
+        const isBulkPharmacy = cat.toLowerCase() === 'pharmacy';
+        if (detailed || !isBulkPharmacy) {
+            for (const item of catItems) {
+                detailRows += `<tr>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;">${fmtDate(item.created_at)}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;">${item.description}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${Number(item.unit_price).toFixed(2)}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:center;">${item.quantity}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${Number(item.discount || 0).toFixed(2)}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:11px;text-align:right;">${Number(item.net_price).toFixed(2)}</td>
+                </tr>`;
+            }
         }
     }
 
@@ -197,7 +196,14 @@ function renderSnapshotBillHTML({
     }
 
     const invoiceDate = fmtDate(snapshot.created_at);
-    const snapshotDate = fmtBillDateTime(changedAt);
+
+    // Derive the same bill type label as summary-bill does
+    const isDischarged = admission?.status === 'Discharged' || !!admission?.discharge_date;
+    const isFinal = isIPD ? isDischarged : (snapshot.status === 'Paid' || snapshot.status === 'Final');
+    const billType = isIPD
+        ? (isFinal ? 'FINAL BILL' : 'INTERIM BILL')
+        : 'TAX INVOICE';
+    const billColor = isFinal ? branding.accentColor : '#f97316';
 
     let patientInfoHTML = `
         <p style="font-size:11px;"><strong>Patient:</strong> ${patient.full_name || '—'}</p>
@@ -221,29 +227,18 @@ function renderSnapshotBillHTML({
 <html>
 <head>
     <meta charset="utf-8">
-    <title>HISTORICAL BILL v${versionNumber} - ${snapshot.invoice_number}</title>
+    <title>${billType} - ${snapshot.invoice_number}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; background: #fff; }
         ${letterheadCss(branding)}
-        .watermark { color: #d97706; }
+        .watermark { color: ${billColor}; }
     </style>
 </head>
 <body>
     ${letterheadBackgroundHtml(branding)}
-    <div class="watermark">HISTORICAL BILL — VERSION ${versionNumber}</div>
-    ${printButtonHtml(branding, `Historical bill v${versionNumber} for ${snapshot.invoice_number}`)}
-
-    <!-- Historical bill banner -->
-    <div style="background:#fef3c7;border:2px solid #f59e0b;color:#92400e;padding:10px 16px;margin:0 60px 12px;border-radius:6px;text-align:center;">
-        <div style="font-weight:800;font-size:13px;letter-spacing:0.5px;">PREVIOUSLY MODIFIED BILL — VERSION ${versionNumber}</div>
-        <div style="font-size:11px;margin-top:4px;">
-            This is a historical snapshot. Current bill may differ.
-            ${changeSummary ? `<strong>Change:</strong> ${changeSummary}` : ''}
-            ${changedBy ? ` &nbsp;·&nbsp; <strong>Modified by:</strong> ${changedBy}` : ''}
-            &nbsp;·&nbsp; <strong>Snapshot captured:</strong> ${snapshotDate}
-        </div>
-    </div>
+    <div class="watermark">${billType}</div>
+    ${printButtonHtml(branding, `${billType} for ${snapshot.invoice_number}`)}
 
     <table class="print-layout-table">
         <thead><tr><td class="print-layout-header-spacer"></td></tr></thead>
@@ -258,10 +253,9 @@ function renderSnapshotBillHTML({
                         ${branding.hospitalEmail ? `<p style="font-size:10px;color:#6b7280;">Email: ${branding.hospitalEmail}</p>` : ''}
                     </div>
                     <div style="text-align:right;">
-                        <h2 style="font-size:16px;font-weight:800;color:#d97706;">HISTORICAL BILL</h2>
+                        <h2 style="font-size:16px;font-weight:800;color:${billColor};">${billType}</h2>
                         <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${snapshot.invoice_number}</p>
-                        <p style="font-size:10px;color:#6b7280;">Version: <strong>${versionNumber}</strong></p>
-                        <p style="font-size:10px;color:#6b7280;">Invoice Date: ${invoiceDate}</p>
+                        <p style="font-size:10px;color:#6b7280;">Date: ${invoiceDate}</p>
                         <p style="font-size:10px;color:#6b7280;">Type: <strong>${snapshot.invoice_type || 'OPD'}</strong></p>
                     </div>
                 </div>
