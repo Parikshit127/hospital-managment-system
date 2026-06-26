@@ -143,7 +143,11 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     // invoice="Paid" wrongly stamped admitted patients as discharged with today's date.)
     const isDischarged = admission?.status === 'Discharged' || !!admission?.discharge_date;
     const isFinal = isIPD ? isDischarged : (invoice.status === 'Paid' || invoice.status === 'Final');
-    const billType = isIPD ? (isFinal ? 'FINAL SUMMARY BILL' : 'INTERIM SUMMARY') : 'TAX INVOICE';
+    const billType = isIPD
+        ? (detailed
+            ? (isFinal ? 'FINAL BILL' : 'INTERIM BILL')
+            : (isFinal ? 'FINAL SUMMARY BILL' : 'INTERIM SUMMARY'))
+        : 'TAX INVOICE';
     const billColor = isFinal ? branding.accentColor : '#f97316';
     // For final IPD bills use the discharge date (when the bill was finalised),
     // not the invoice creation date (when the first charge was posted).
@@ -307,7 +311,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
 <body>
     ${letterheadBackgroundHtml(branding)}
     <div class="watermark">${billType}</div>
-    ${printButtonHtml(branding, 'Category-level summary bill for ' + invoice.invoice_number)}
+    ${printButtonHtml(branding, (detailed ? 'Detailed bill for ' : 'Category-level summary bill for ') + invoice.invoice_number)}
     ${medsToggle}
     ${showInterimBanner ? `<div style="background:#fef3c7;border:2px solid #f59e0b;color:#92400e;padding:10px 16px;margin:0 60px 12px;border-radius:6px;font-weight:800;text-align:center;font-size:13px;letter-spacing:0.5px;">TPA APPROVED &mdash; INTERIM BILL (Awaiting insurer settlement)</div>` : ''}
     <table class="print-layout-table">

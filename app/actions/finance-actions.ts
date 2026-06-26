@@ -1386,6 +1386,108 @@ export async function updateCatalogItem(id: number, data: {
 // FINANCE ANALYTICS
 // ============================================
 
+async function getHospitalOutstandingSnapshot(db: any, options?: { takeRows?: number }) {
+    const invoices = await db.invoices.findMany({
+        where: {
+            status: { notIn: ['Cancelled'] },
+            is_archived: false,
+            invoice_type: { notIn: ['Pharmacy', 'PHARMACY'] },
+        },
+        select: {
+            id: true,
+            invoice_number: true,
+            patient_id: true,
+            invoice_type: true,
+            status: true,
+            created_at: true,
+            admission_id: true,
+            total_amount: true,
+            total_discount: true,
+            total_tax: true,
+            patient: { select: { full_name: true } },
+            payments: {
+                where: { status: 'Completed' },
+                select: { amount: true, payment_method: true },
+            },
+        },
+        orderBy: { created_at: 'asc' },
+    });
+
+    const invoiceIds = invoices.map((i: any) => i.id);
+    const admissionIds = [...new Set(invoices.map((i: any) => i.admission_id).filter(Boolean))] as string[];
+    const depositRows = invoiceIds.length || admissionIds.length
+        ? await db.patientDeposit.findMany({
+            where: {
+                OR: [
+                    ...(invoiceIds.length ? [{ applied_to_invoice: { in: invoiceIds } }] : []),
+                    ...(admissionIds.length ? [{ admission_id: { in: admissionIds } }] : []),
+                ],
+            },
+            select: {
+                applied_to_invoice: true,
+                admission_id: true,
+                amount: true,
+                applied_amount: true,
+                refunded_amount: true,
+                status: true,
+            },
+        })
+        : [];
+
+    const appliedDepByInvoice: Record<number, number> = {};
+    const availDepByAdmission: Record<string, number> = {};
+    for (const d of depositRows as any[]) {
+        if (d.applied_to_invoice != null) {
+            appliedDepByInvoice[d.applied_to_invoice] = (appliedDepByInvoice[d.applied_to_invoice] || 0) + Number(d.applied_amount || 0);
+        }
+        if (d.admission_id && d.status === 'Active') {
+            const available = Math.max(0, Number(d.amount || 0) - Number(d.applied_amount || 0) - Number(d.refunded_amount || 0));
+            availDepByAdmission[d.admission_id] = (availDepByAdmission[d.admission_id] || 0) + available;
+        }
+    }
+
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const sixtyDaysAgo = new Date(now);
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+    const outstandingRows = invoices
+        .map((inv: any) => {
+            const nonDepositPaid = (inv.payments || [])
+                .filter((p: any) => String(p.payment_method || '').toLowerCase() !== 'deposit')
+                .reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+            const appliedDeposit = appliedDepByInvoice[inv.id] || 0;
+            const availableAdmissionDeposit = inv.admission_id ? (availDepByAdmission[inv.admission_id] || 0) : 0;
+            const receivedAmount = nonDepositPaid + appliedDeposit + availableAdmissionDeposit;
+            const netAmount = Number(inv.total_amount || 0) - Number(inv.total_discount || 0) + Number(inv.total_tax || 0);
+            const outstandingAmount = Math.max(0, netAmount - receivedAmount);
+
+            return {
+                ...inv,
+                netAmount,
+                receivedAmount,
+                outstandingAmount,
+            };
+        })
+        .filter((inv: any) => inv.outstandingAmount > 0.01);
+
+    const aging = outstandingRows.reduce((acc: any, inv: any) => {
+        const created = new Date(inv.created_at);
+        if (created >= thirtyDaysAgo) acc.days0to30 += inv.outstandingAmount;
+        else if (created >= sixtyDaysAgo) acc.days30to60 += inv.outstandingAmount;
+        else acc.days60plus += inv.outstandingAmount;
+        return acc;
+    }, { days0to30: 0, days30to60: 0, days60plus: 0 });
+
+    return {
+        total: outstandingRows.reduce((s: number, inv: any) => s + inv.outstandingAmount, 0),
+        count: outstandingRows.length,
+        aging,
+        rows: typeof options?.takeRows === 'number' ? outstandingRows.slice(0, options.takeRows) : outstandingRows,
+    };
+}
+
 export async function getFinanceDashboardStats(params?: {
     period?: 'today' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
     startDate?: string;
@@ -1431,27 +1533,16 @@ export async function getFinanceDashboardStats(params?: {
             ? { gte: filterStart, ...(filterEnd ? { lte: filterEnd } : {}) }
             : undefined;
 
-        // Outstanding aging dates
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const sixtyDaysAgo = new Date();
-        sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-
         // Single Promise.all for ALL queries
         const [
             totalInvoices,
             draftInvoices,
-            pendingBalance,
             todayCollection,
             totalCollection,
             periodCollection,
             totalPaymentsToday,
-            outstandingInvoices,
             revenueByDept,
             revenueByDoctorRaw,
-            aging0to30,
-            aging30to60,
-            aging60plus,
             ipdRevenue,
             opdRevenue,
             todayRevenueInv,
@@ -1460,10 +1551,6 @@ export async function getFinanceDashboardStats(params?: {
         ] = await Promise.all([
             db.invoices.count({ where: { status: { not: 'Cancelled' } } }),
             db.invoices.count({ where: { status: 'Draft' } }),
-            db.invoices.aggregate({
-                _sum: { balance_due: true },
-                where: { status: { in: ['Final', 'Partial'] } },
-            }),
             db.payments.aggregate({
                 _sum: { amount: true },
                 where: { status: 'Completed', created_at: { gte: today } },
@@ -1482,9 +1569,6 @@ export async function getFinanceDashboardStats(params?: {
             db.payments.count({
                 where: { status: 'Completed', created_at: { gte: today } },
             }),
-            db.invoices.count({
-                where: { status: { in: ['Final', 'Partial'] }, balance_due: { gt: 0 } },
-            }),
             db.invoice_items.groupBy({
                 by: ['department'],
                 _sum: { net_price: true },
@@ -1497,30 +1581,6 @@ export async function getFinanceDashboardStats(params?: {
                     service_category: 'Consultation',
                     ref_id: { not: null },
                     ...(dateFilter ? { created_at: dateFilter } : {}),
-                },
-            }),
-            db.invoices.aggregate({
-                _sum: { balance_due: true },
-                where: {
-                    status: { in: ['Final', 'Partial'] },
-                    balance_due: { gt: 0 },
-                    created_at: { gte: thirtyDaysAgo },
-                },
-            }),
-            db.invoices.aggregate({
-                _sum: { balance_due: true },
-                where: {
-                    status: { in: ['Final', 'Partial'] },
-                    balance_due: { gt: 0 },
-                    created_at: { gte: sixtyDaysAgo, lt: thirtyDaysAgo },
-                },
-            }),
-            db.invoices.aggregate({
-                _sum: { balance_due: true },
-                where: {
-                    status: { in: ['Final', 'Partial'] },
-                    balance_due: { gt: 0 },
-                    created_at: { lt: sixtyDaysAgo },
                 },
             }),
             db.invoices.aggregate({
@@ -1558,13 +1618,14 @@ export async function getFinanceDashboardStats(params?: {
             })
             : [];
         const doctorMap = Object.fromEntries(doctors.map((d: any) => [d.id, d]));
+        const outstandingSnapshot = await getHospitalOutstandingSnapshot(db);
 
         return {
             success: true,
             data: {
                 totalInvoices,
                 draftInvoices,
-                pendingBalance: Number(pendingBalance._sum.balance_due || 0),
+                pendingBalance: outstandingSnapshot.total,
                 todayRevenue: Number(todayRevenueInv._sum.net_amount || 0),
                 totalRevenue: Number(totalRevenueInv._sum.net_amount || 0),
                 periodRevenue: Number(periodRevenueInv._sum.net_amount || 0),
@@ -1572,7 +1633,7 @@ export async function getFinanceDashboardStats(params?: {
                 totalCollection: Number(totalCollection._sum.amount || 0),
                 periodCollection: Number(periodCollection._sum.amount || 0),
                 totalPaymentsToday,
-                outstandingInvoices,
+                outstandingInvoices: outstandingSnapshot.count,
                 revenueByDepartment: revenueByDept.map((d: any) => ({
                     department: d.department,
                     amount: Number(d._sum.net_price || 0),
@@ -1586,9 +1647,9 @@ export async function getFinanceDashboardStats(params?: {
                     }))
                     .sort((a: any, b: any) => b.amount - a.amount),
                 aging: {
-                    days0to30: Number(aging0to30._sum.balance_due || 0),
-                    days30to60: Number(aging30to60._sum.balance_due || 0),
-                    days60plus: Number(aging60plus._sum.balance_due || 0),
+                    days0to30: outstandingSnapshot.aging.days0to30,
+                    days30to60: outstandingSnapshot.aging.days30to60,
+                    days60plus: outstandingSnapshot.aging.days60plus,
                 },
                 ipdRevenue: Number(ipdRevenue._sum.net_amount || 0),
                 ipdCount: ipdRevenue._count._all,
@@ -3117,21 +3178,17 @@ export async function getDrillDownData(type: DrillDownType, filters: Record<stri
 
         if (type === 'outstanding') {
             const now = new Date();
-            const invoices = await db.invoices.findMany({
-                where: { status: { in: ['Final', 'Partial'] }, balance_due: { gt: 0 } },
-                include: { patient: { select: { full_name: true } } },
-                orderBy: { created_at: 'asc' },
-                take: 200,
-            });
+            const outstanding = await getHospitalOutstandingSnapshot(db, { takeRows: 200 });
             return {
                 success: true, data: {
                     title: 'Pending / Outstanding Invoices',
-                    columns: ['Invoice #', 'Patient', 'Net Amount', 'Balance Due', 'Age (days)'],
-                    rows: serialize(invoices).map((inv: any) => ({
+                    columns: ['Invoice #', 'Patient', 'Net Amount', 'Received', 'Outstanding', 'Age (days)'],
+                    rows: serialize(outstanding.rows).map((inv: any) => ({
                         invoice: inv.invoice_number,
                         patient: inv.patient?.full_name || inv.patient_id,
-                        amount: fmt(Number(inv.net_amount)),
-                        balance: fmt(Number(inv.balance_due)),
+                        amount: fmt(Number(inv.netAmount)),
+                        received: fmt(Number(inv.receivedAmount)),
+                        balance: fmt(Number(inv.outstandingAmount)),
                         age: Math.floor((now.getTime() - new Date(inv.created_at).getTime()) / (1000 * 60 * 60 * 24)) + 'd',
                         invoiceId: inv.id,
                     })),
@@ -3285,4 +3342,3 @@ export async function getDrillDownData(type: DrillDownType, filters: Record<stri
         return { success: false, error: error.message };
     }
 }
-
