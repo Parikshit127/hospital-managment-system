@@ -97,6 +97,7 @@ export default function PurchaseInvoicesPage() {
                 expiry: item.expiry || '',
                 mrp: item.mrp || 0,
                 discount_pct: item.discount_pct || 0,
+                po_item_id: String(item.id),
             }));
             setLines(autoLines);
         }
@@ -151,6 +152,7 @@ export default function PurchaseInvoicesPage() {
                 discount_pct: l.discount_pct ? parseFloat(l.discount_pct) : 0,
                 discount_amount: l.discount_amount ? parseFloat(l.discount_amount) : 0,
                 scheme_amount: l.scheme_amount ? parseFloat(l.scheme_amount) : 0,
+                po_item_id: l.po_item_id ? parseInt(l.po_item_id) : undefined,
             })),
         });
         setSaving(false);
