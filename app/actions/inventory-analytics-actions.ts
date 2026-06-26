@@ -350,7 +350,7 @@ export async function getStockAging(daysThreshold = 90) {
 export async function getVendorPerformance() {
   try {
     const { db } = await requireRoleAndTenant([...INVENTORY_VIEW_ROLES]);
-    const grns = await db.goods_receipt_notes.findMany({
+    const grns = await db.goodsReceiptNote.findMany({
       where: { vendor_id: { not: null } },
       include: {
         vendor: { select: { id: true, vendor_name: true } },

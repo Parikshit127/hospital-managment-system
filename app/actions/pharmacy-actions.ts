@@ -20,7 +20,7 @@ import { getPatientBalances } from '@/app/actions/balance-actions';
 import { postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
 import { postInvoiceToGL } from '@/app/actions/gl-actions';
 import { syncInvoiceToGSTRegister } from '@/app/actions/gst-compliance-actions';
-import { generateSequentialNumber, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
+import { generateSequentialNumber, generateReceiptNumber as genRcpNum, generatePurchaseInvoiceNumber } from '@/app/lib/sequence-generator';
 import { formatDoctorName } from '@/app/lib/format-name';
 import { validateBackdate } from '@/app/lib/backdate';
 import { dispensingKey } from '@/app/lib/pharmacy-bill-group';
@@ -3160,7 +3160,7 @@ export async function getInventoryMovements(filters?: {
 export async function createPurchaseInvoice(data: {
     vendor_id: number;
     po_id?: number;
-    invoice_number: string;
+    invoice_number?: string;
     invoice_date: string;
     due_date?: string;
     vendor_gstin?: string;
@@ -3218,10 +3218,12 @@ export async function createPurchaseInvoice(data: {
         const totalIgst = r2(lines.reduce((s, l) => s + l.igst_amount, 0));
         const totalAmount = r2(lines.reduce((s, l) => s + l.line_total, 0));
 
+        const invoiceNumber = data.invoice_number?.trim() || await generatePurchaseInvoiceNumber(organizationId, db);
+
         const invoice = await db.pharmacyPurchaseInvoice.create({
             data: {
                 organizationId,
-                invoice_number: data.invoice_number,
+                invoice_number: invoiceNumber,
                 vendor_id: data.vendor_id,
                 po_id: data.po_id || null,
                 invoice_date: new Date(data.invoice_date),

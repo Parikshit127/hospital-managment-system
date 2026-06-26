@@ -6,6 +6,7 @@ import { logAuditEvent } from '@/app/actions/audit-actions';
 import { INVENTORY_PROCUREMENT_ROLES, INVENTORY_VIEW_ROLES } from '@/app/lib/inventory-roles';
 import { nextDocNumber } from '@/app/lib/inventory-utils';
 import { postPurchaseInvoiceToGL } from '@/app/actions/inventory-gl-actions';
+import { generatePurchaseInvoiceNumber } from '@/app/lib/sequence-generator';
 
 const REVALIDATE = ['/inventory/procurement', '/pharmacy/purchase-orders', '/pharmacy/purchase-invoices'];
 
@@ -160,11 +161,11 @@ export async function convertPRtoPO(prId: number, vendorId: number) {
 
 export async function submitItemPO(poId: number) {
   try {
-    const { db, session } = await requireRoleAndTenant([...INVENTORY_PROCUREMENT_ROLES]);
+    const { db, session, organizationId } = await requireRoleAndTenant([...INVENTORY_PROCUREMENT_ROLES]);
     const po = await db.purchaseOrder.findFirst({ where: { id: poId }, include: { items: true } });
     if (!po) return { success: false, error: 'PO not found' };
 
-    const config = await db.moduleConfig.findFirst({ where: { module_key: 'inventory' } });
+    const config = await db.moduleConfig.findFirst({ where: { organizationId, module_key: 'inventory' } });
     const settings = (config?.config_json as any) || {};
     const autoBelow = settings.po_auto_approve_below ?? 50000;
 
@@ -221,7 +222,7 @@ export async function listItemPOs(limit = 50) {
 export async function createItemPurchaseInvoice(data: {
   vendor_id: number;
   po_id?: number;
-  invoice_number: string;
+  invoice_number?: string;
   invoice_date: string;
   lines: Array<{
     item_id: number;
@@ -259,10 +260,12 @@ export async function createItemPurchaseInvoice(data: {
     const subtotal = r2(lines.reduce((s, l) => s + l.quantity * l.unit_price, 0));
     const totalAmount = r2(lines.reduce((s, l) => s + l.line_total, 0));
 
+    const invoiceNumber = data.invoice_number?.trim() || await generatePurchaseInvoiceNumber(organizationId, db);
+
     const invoice = await db.pharmacyPurchaseInvoice.create({
       data: {
         organizationId,
-        invoice_number: data.invoice_number,
+        invoice_number: invoiceNumber,
         vendor_id: data.vendor_id,
         po_id: data.po_id || null,
         invoice_date: new Date(data.invoice_date),
@@ -295,7 +298,9 @@ export async function matchItemPurchaseInvoice(invoiceId: number) {
     });
     if (!invoice) return { success: false, error: 'Invoice not found' };
 
-    const config = await db.moduleConfig.findFirst({ where: { module_key: 'inventory' } });
+    const config = await db.moduleConfig.findFirst({
+      where: { organizationId: invoice.organizationId, module_key: 'inventory' },
+    });
     const tolerance = (config?.config_json as any)?.matching_tolerance_pct ?? 5;
 
     let allOk = true;
@@ -336,7 +341,7 @@ export async function matchItemPurchaseInvoice(invoiceId: number) {
 
 export async function postItemPurchaseInvoice(invoiceId: number) {
   try {
-    const { db } = await requireRoleAndTenant(['admin', 'finance', 'procurement_officer']);
+    const { db } = await requireRoleAndTenant([...INVENTORY_PROCUREMENT_ROLES, 'finance']);
     const invoice = await db.pharmacyPurchaseInvoice.findFirst({ where: { id: invoiceId } });
     if (!invoice) return { success: false, error: 'Invoice not found' };
     if (!invoice.variance_approved && invoice.status === 'Variance') {

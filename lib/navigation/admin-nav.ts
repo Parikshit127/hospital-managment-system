@@ -4,7 +4,7 @@ import {
     Users, UserCog, Building2, ShieldCheck, UserRound,
     Settings, Palette, FileText, Bell, Plug, Clock, BarChart3, Lock,
     Workflow, Scissors, GitBranch, DatabaseBackup, BookOpen, Database,
-    ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck, Warehouse,
+    ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck, Warehouse, Package,
     type LucideIcon,
 } from 'lucide-react';
 

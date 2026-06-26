@@ -66,7 +66,6 @@ export default function ProcurementClient() {
   const [invForm, setInvForm] = useState({
     po_id: '',
     vendor_id: '',
-    invoice_number: '',
     invoice_date: new Date().toISOString().slice(0, 10),
     qty: '',
     unit_price: '',
@@ -88,6 +87,7 @@ export default function ProcurementClient() {
     ]);
     if (prRes.success) setPrs(prRes.data as any[]);
     if (poRes.success) setPos(poRes.data as any[]);
+    else console.error('Failed to load POs:', poRes.error);
     if (grnRes.success) setGrns(grnRes.data as any[]);
     if (invRes.success) setInvoices(invRes.data as any[]);
     if (storeRes.success) setStores(storeRes.data as any[]);
@@ -101,7 +101,11 @@ export default function ProcurementClient() {
     searchItems(itemSearch, 15).then((r) => { if (r.success) setItems(r.data as any[]); });
   }, [itemSearch]);
 
-  const approvedPos = pos.filter((p) => p.status === 'Approved');
+  const PO_FOR_GRN = ['Approved', 'Partially Received'];
+  const PO_FOR_INVOICE = ['Approved', 'Partially Received', 'Received'];
+
+  const grnEligiblePos = pos.filter((p) => PO_FOR_GRN.includes(p.status));
+  const invoiceEligiblePos = pos.filter((p) => PO_FOR_INVOICE.includes(p.status));
 
   const onPoSelectForGrn = (poId: string) => {
     const po = pos.find((p) => String(p.id) === poId);
@@ -125,11 +129,13 @@ export default function ProcurementClient() {
   const onPoSelectForInvoice = (poId: string) => {
     const po = pos.find((p) => String(p.id) === poId);
     const firstLine = po?.items?.[0];
+    const grnQty = firstLine?.quantity_received;
+    const defaultQty = grnQty != null && grnQty > 0 ? grnQty : firstLine?.quantity_ordered;
     setInvForm((f) => ({
       ...f,
       po_id: poId,
       vendor_id: po ? String(po.vendor_id || '') : f.vendor_id,
-      qty: firstLine ? String(firstLine.quantity_ordered) : f.qty,
+      qty: defaultQty != null ? String(defaultQty) : f.qty,
       unit_price: firstLine ? String(firstLine.unit_price) : f.unit_price,
     }));
   };
@@ -188,36 +194,48 @@ export default function ProcurementClient() {
     const po = pos.find((p) => String(p.id) === invForm.po_id);
     const poItem = po?.items?.[0];
     if (!poItem) return alert('Select a valid PO with line items');
+    if (!invForm.vendor_id) return alert('Selected PO has no vendor');
+    const qty = Number(invForm.qty);
+    const unitPrice = Number(invForm.unit_price);
+    if (!qty || qty <= 0) return alert('Enter a valid quantity');
+    if (unitPrice < 0 || Number.isNaN(unitPrice)) return alert('Enter a valid unit price');
 
     setSaving(true);
     const createRes = await createItemPurchaseInvoice({
       vendor_id: Number(invForm.vendor_id),
       po_id: Number(invForm.po_id),
-      invoice_number: invForm.invoice_number,
       invoice_date: invForm.invoice_date,
       lines: [{
         item_id: poItem.itemMasterId,
         po_item_id: poItem.id,
-        quantity: Number(invForm.qty),
-        unit_price: Number(invForm.unit_price),
+        quantity: qty,
+        unit_price: unitPrice,
         gst_rate: poItem.gst_rate || 0,
         hsn_code: poItem.hsn_code || undefined,
       }],
     });
     if (!createRes.success) {
       setSaving(false);
-      return alert(createRes.error);
+      return alert(createRes.error || 'Failed to create invoice');
     }
 
     const matchRes = await matchItemPurchaseInvoice(createRes.data.id);
-    if (matchRes.success && matchRes.data.allOk) {
+    if (!matchRes.success) {
+      setSaving(false);
+      return alert(matchRes.error || 'Matching failed');
+    }
+
+    if (matchRes.data.allOk) {
       const postRes = await postItemPurchaseInvoice(createRes.data.id);
       setSaving(false);
-      if (!postRes.success) alert(postRes.error);
+      if (!postRes.success) {
+        alert(`Invoice ${createRes.data.invoice_number} saved and matched, but posting failed: ${postRes.error}`);
+      } else {
+        alert(`Invoice ${createRes.data.invoice_number} saved, matched, and posted.`);
+      }
     } else {
       setSaving(false);
-      if (matchRes.success) alert(`Invoice saved with status: ${matchRes.data.status}`);
-      else alert(matchRes.error);
+      alert(`Invoice ${createRes.data.invoice_number} saved with status: ${matchRes.data.status}. Finance approval may be required before posting.`);
     }
     setInvModal(false);
     setTab('invoices');
@@ -439,7 +457,7 @@ export default function ProcurementClient() {
             <div className="p-6 space-y-4">
               <select className={inputCls} value={grnForm.po_id} onChange={(e) => onPoSelectForGrn(e.target.value)}>
                 <option value="">Link to PO (recommended)</option>
-                {approvedPos.map((po) => <option key={po.id} value={po.id}>{po.po_number} — {po.vendor?.vendor_name}</option>)}
+                {grnEligiblePos.map((po) => <option key={po.id} value={po.id}>{po.po_number} — {po.vendor?.vendor_name}</option>)}
               </select>
               <select required className={inputCls} value={grnForm.store_id} onChange={(e) => setGrnForm({ ...grnForm, store_id: e.target.value })}>
                 <option value="">Receiving store</option>
@@ -476,9 +494,17 @@ export default function ProcurementClient() {
             <div className="p-6 space-y-4">
               <select required className={inputCls} value={invForm.po_id} onChange={(e) => onPoSelectForInvoice(e.target.value)}>
                 <option value="">Select PO</option>
-                {approvedPos.map((po) => <option key={po.id} value={po.id}>{po.po_number}</option>)}
+                {invoiceEligiblePos.map((po) => (
+                  <option key={po.id} value={po.id}>
+                    {po.po_number}{po.status !== 'Approved' ? ` (${po.status})` : ''}
+                  </option>
+                ))}
               </select>
-              <input required placeholder="Invoice number" className={inputCls} value={invForm.invoice_number} onChange={(e) => setInvForm({ ...invForm, invoice_number: e.target.value })} />
+              {invoiceEligiblePos.length === 0 && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                  No eligible POs found. Create a PO, approve it, and receive goods (GRN) first.
+                </p>
+              )}
               <DateField required className={inputCls} value={invForm.invoice_date} onChange={(e) => setInvForm({ ...invForm, invoice_date: e.target.value })} />
               <div className="grid grid-cols-2 gap-3">
                 <input required type="number" placeholder="Qty" className={inputCls} value={invForm.qty} onChange={(e) => setInvForm({ ...invForm, qty: e.target.value })} />

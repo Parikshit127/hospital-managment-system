@@ -47,8 +47,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS "item_kits_kit_item_id_organizationId_key" ON 
 CREATE UNIQUE INDEX IF NOT EXISTS "cssd_instruments_instrument_code_organizationId_key" ON "cssd_instruments"("instrument_code", "organizationId");
 
 ALTER TABLE "item_kits" ADD CONSTRAINT "item_kits_kit_item_id_fkey" FOREIGN KEY ("kit_item_id") REFERENCES "item_master"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "item_kits" ADD CONSTRAINT "item_kits_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "item_kits" ADD CONSTRAINT "item_kits_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "item_kit_components" ADD CONSTRAINT "item_kit_components_kit_id_fkey" FOREIGN KEY ("kit_id") REFERENCES "item_kits"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "item_kit_components" ADD CONSTRAINT "item_kit_components_component_item_id_fkey" FOREIGN KEY ("component_item_id") REFERENCES "item_master"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "cssd_instruments" ADD CONSTRAINT "cssd_instruments_store_id_fkey" FOREIGN KEY ("store_id") REFERENCES "stores"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "cssd_instruments" ADD CONSTRAINT "cssd_instruments_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "cssd_instruments" ADD CONSTRAINT "cssd_instruments_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

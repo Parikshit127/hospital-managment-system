@@ -31,7 +31,7 @@ function getFYStartDate(date: Date = new Date()): Date {
     return new Date(fyStartYear, 3, 1); // April 1st
 }
 
-export type NumberType = 'OPD' | 'IPD' | 'RCP' | 'DEP' | 'PHM' | 'CN' | 'EXP' | 'CLM' | 'WO' | 'REF' | 'IRC';
+export type NumberType = 'OPD' | 'IPD' | 'RCP' | 'DEP' | 'PHM' | 'CN' | 'EXP' | 'CLM' | 'WO' | 'REF' | 'IRC' | 'PUR';
 
 /**
  * Generate a sequential number for the given org and type.
@@ -112,6 +112,14 @@ export async function generateSequentialNumber(
             },
         });
         lastSeq = count;
+    } else if (type === 'PUR') {
+        const count = await database.pharmacyPurchaseInvoice.count({
+            where: {
+                organizationId,
+                invoice_number: { startsWith: prefix },
+            },
+        });
+        lastSeq = count;
     } else {
         const count = await database.invoices.count({
             where: {
@@ -130,7 +138,7 @@ export async function generateSequentialNumber(
     let attempt = lastSeq + 1;
     while (true) {
         const field = type === 'RCP' ? 'receipt_number' : type === 'DEP' ? 'deposit_number' : type === 'CN' ? 'credit_note_number' : type === 'IRC' ? 'receipt_number' : 'invoice_number';
-        const table = type === 'RCP' ? database.payments : type === 'DEP' ? database.patientDeposit : type === 'CN' ? database.creditNote : type === 'IRC' ? database.insuranceReceipt : database.invoices;
+        const table = type === 'RCP' ? database.payments : type === 'DEP' ? database.patientDeposit : type === 'CN' ? database.creditNote : type === 'IRC' ? database.insuranceReceipt : type === 'PUR' ? database.pharmacyPurchaseInvoice : database.invoices;
         const existing = await table.findFirst({
             where: { [field]: finalNumber },
             select: { id: true },
@@ -177,4 +185,11 @@ export async function generateReceiptNumber(organizationId: string, db?: any): P
  */
 export async function generateDepositNumber(organizationId: string, db?: any): Promise<string> {
     return generateSequentialNumber(organizationId, 'DEP', db);
+}
+
+/**
+ * Generate supplier purchase invoice number (pharmacy/inventory procurement)
+ */
+export async function generatePurchaseInvoiceNumber(organizationId: string, db?: any): Promise<string> {
+    return generateSequentialNumber(organizationId, 'PUR', db);
 }

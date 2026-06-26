@@ -37,7 +37,7 @@ export default function PurchaseInvoicesPage() {
     // Create form
     const [vendors, setVendors] = useState<any[]>([]);
     const [pos, setPos] = useState<any[]>([]);
-    const [form, setForm] = useState({ vendor_id: '', po_id: '', invoice_number: '', invoice_date: new Date().toISOString().slice(0, 10), due_date: '', vendor_gstin: '' });
+    const [form, setForm] = useState({ vendor_id: '', po_id: '', invoice_date: new Date().toISOString().slice(0, 10), due_date: '', vendor_gstin: '' });
     const [lines, setLines] = useState<any[]>([{ medicine_id: '', medicine_name: '', quantity: 1, unit_price: 0, gst_rate: 12, hsn_code: '3004' }]);
     const [medSearch, setMedSearch] = useState('');
     const [medResults, setMedResults] = useState<any[]>([]);
@@ -67,7 +67,7 @@ export default function PurchaseInvoicesPage() {
         if (v.success) setVendors(v.data || []);
         // Show all POs that are not cancelled — invoice can be created for any stage
         if (p.success) setPos(p.data || []);
-        setForm({ vendor_id: '', po_id: '', invoice_number: '', invoice_date: new Date().toISOString().slice(0, 10), due_date: '', vendor_gstin: '' });
+        setForm({ vendor_id: '', po_id: '', invoice_date: new Date().toISOString().slice(0, 10), due_date: '', vendor_gstin: '' });
         setLines([{ medicine_id: '', medicine_name: '', quantity: 1, unit_price: 0, gst_rate: 12, hsn_code: '3004' }]);
         setShowCreate(true);
     };
@@ -126,15 +126,14 @@ export default function PurchaseInvoicesPage() {
     const removeLine = (idx: number) => setLines(lines.filter((_, i) => i !== idx));
 
     const handleCreate = async () => {
-        if (!form.vendor_id || !form.invoice_number || lines.some(l => !l.medicine_id)) {
-            toast.error('Fill vendor, invoice number, and all medicine lines');
+        if (!form.vendor_id || lines.some(l => !l.medicine_id)) {
+            toast.error('Fill vendor and all medicine lines');
             return;
         }
         setSaving(true);
         const res = await createPurchaseInvoice({
             vendor_id: parseInt(form.vendor_id),
             po_id: form.po_id ? parseInt(form.po_id) : undefined,
-            invoice_number: form.invoice_number,
             invoice_date: form.invoice_date,
             due_date: form.due_date || undefined,
             vendor_gstin: form.vendor_gstin || undefined,
@@ -406,10 +405,6 @@ export default function PurchaseInvoicesPage() {
                                         {pos.map((p: any) => <option key={p.id} value={p.id}>{p.po_number} — {p.vendor?.vendor_name || p.supplier?.name}</option>)}
                                     </select>
                                     {form.po_id && <p className="text-[10px] text-blue-600 font-bold">✓ PO items auto-loaded below</p>}
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase">Invoice Number *</label>
-                                    <input value={form.invoice_number} onChange={e => setForm({ ...form, invoice_number: e.target.value })} className="w-full p-3 border border-gray-300 rounded-xl text-sm font-bold" placeholder="SUPINV-001" />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-black text-gray-400 uppercase">Vendor GSTIN</label>

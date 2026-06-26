@@ -217,12 +217,12 @@ export async function receiveGrn(data: {
     const store = await db.stores.findFirst({ where: { id: data.store_id } });
     if (!store) return { success: false, error: 'Store not found' };
 
-    const grnNumber = await nextDocNumber(db, 'GRN', 'goods_receipt_notes', 'grn_number');
+    const grnNumber = await nextDocNumber(db, 'GRN', 'goodsReceiptNote', 'grn_number');
     let totalAmount = 0;
     const movementIds: number[] = [];
 
     const result = await db.$transaction(async (tx: any) => {
-      const grn = await tx.goods_receipt_notes.create({
+      const grn = await tx.goodsReceiptNote.create({
         data: {
           grn_number: grnNumber,
           po_id: data.po_id || null,
@@ -323,10 +323,25 @@ export async function receiveGrn(data: {
         movementIds.push(mov.id);
       }
 
-      await tx.goods_receipt_notes.update({
+      await tx.goodsReceiptNote.update({
         where: { id: grn.id },
         data: { total_amount: totalAmount },
       });
+
+      if (data.po_id) {
+        const poItems = await tx.purchaseOrderItem.findMany({ where: { po_id: data.po_id } });
+        const allReceived = poItems.length > 0 && poItems.every((i: any) => i.quantity_received >= i.quantity_ordered);
+        const someReceived = poItems.some((i: any) => i.quantity_received > 0);
+        if (someReceived) {
+          await tx.purchaseOrder.update({
+            where: { id: data.po_id },
+            data: {
+              status: allReceived ? 'Received' : 'Partially Received',
+              received_at: allReceived ? new Date() : null,
+            },
+          });
+        }
+      }
 
       return grn;
     });
@@ -419,7 +434,7 @@ export async function recordOpeningStock(data: {
 export async function listGRNs(limit = 30) {
   try {
     const { db } = await requireRoleAndTenant([...INVENTORY_VIEW_ROLES]);
-    const rows = await db.goods_receipt_notes.findMany({
+    const rows = await db.goodsReceiptNote.findMany({
       where: { goods_receipt_note_items: { some: {} } },
       include: {
         stores: { select: { name: true } },
