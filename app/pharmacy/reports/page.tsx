@@ -5,7 +5,8 @@ import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     BarChart3, TrendingUp, AlertTriangle, IndianRupee, Package,
-    ArrowUpRight, ArrowDownRight, Pill, Clock, RotateCcw, Bed, UserRound, Store, Search
+    ArrowUpRight, ArrowDownRight, Pill, Clock, RotateCcw, Bed, UserRound, Store, Search,
+    Loader2, FileSpreadsheet, FileCode, FileText
 } from 'lucide-react';
 import { getPharmacyAnalytics, getPharmacyRevenueReport, getExpiringBatches, getLowStockAlerts, getInventoryMovements, getNarcoticRegister } from '@/app/actions/pharmacy-actions';
 import { SkeletonCard } from '@/app/components/ui/Skeleton';
@@ -38,6 +39,10 @@ export default function PharmacyReportsPage() {
     const [movements, setMovements] = useState<any[]>([]);
     const [movementFilter, setMovementFilter] = useState('');
     const [narcotics, setNarcotics] = useState<any[]>([]);
+
+    const [exportingExcel, setExportingExcel] = useState(false);
+    const [exportingXML, setExportingXML] = useState(false);
+    const [exportingPDF, setExportingPDF] = useState(false);
 
     // Filters
     const [preset, setPreset] = useState<Preset>('30d');
@@ -94,6 +99,216 @@ export default function PharmacyReportsPage() {
     const loadNarcotics = async () => {
         const res = await getNarcoticRegister();
         if (res.success) setNarcotics(res.data || []);
+    };
+
+    function escapeXML(str: string) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;')
+                  .replace(/"/g, '&quot;')
+                  .replace(/'/g, '&apos;');
+    }
+
+    const handleExportExcel = async () => {
+        if (!rev) return;
+        setExportingExcel(true);
+        try {
+            const xlsxModule = await import('xlsx');
+            const XLSX = xlsxModule.default ?? xlsxModule;
+            const wb = XLSX.utils.book_new();
+
+            // Sheet 1: Summary
+            const summaryRows = [
+                { Metric: 'Total Revenue', Value: rev.totalRevenue },
+                { Metric: 'Total Bills Issued', Value: rev.totalBills },
+                { Metric: 'IPD Pharmacy Revenue', Value: rev.byChannel.ipd.revenue },
+                { Metric: 'IPD Bills Count', Value: rev.byChannel.ipd.billCount },
+                { Metric: 'OPD Pharmacy Revenue', Value: rev.byChannel.opd.revenue },
+                { Metric: 'OPD Bills Count', Value: rev.byChannel.opd.billCount },
+                { Metric: 'Counter Sales Revenue', Value: rev.byChannel.counter.revenue },
+                { Metric: 'Counter Bills Count', Value: rev.byChannel.counter.billCount },
+                { Metric: 'Gross Margin %', Value: `${rev.grossMarginPct}%` },
+                { Metric: 'COGS', Value: rev.cogs },
+                { Metric: 'Expiry Write-off Value', Value: data?.expiryWriteOffValue || 0 },
+                { Metric: 'Expired Batches Count', Value: data?.expiredCount || 0 },
+                { Metric: 'Total Stock Asset Value', Value: data?.totalStockValue || 0 },
+            ];
+            const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+            XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+
+            // Sheet 2: Bills List
+            const billsRows = (rev.bills || []).map((b: any) => ({
+                'Bill No': b.billNo,
+                'Patient': b.patient,
+                'Channel': b.channel.toUpperCase(),
+                'Doctor': b.doctor || 'Self',
+                'Date': new Date(b.date).toLocaleDateString('en-GB'),
+                'Items': b.items,
+                'Revenue': b.revenue,
+            }));
+            const wsBills = XLSX.utils.json_to_sheet(billsRows);
+            XLSX.utils.book_append_sheet(wb, wsBills, 'Bills List');
+
+            // Sheet 3: Top Movers
+            const moversRows = (rev.topMovers || []).map((m: any) => ({
+                'Medicine Name': m.name,
+                'Units Sold': m.qty,
+                'Revenue': m.revenue,
+            }));
+            const wsMovers = XLSX.utils.json_to_sheet(moversRows);
+            XLSX.utils.book_append_sheet(wb, wsMovers, 'Top Movers');
+
+            // Sheet 4: Doctor Revenue Split
+            const doctorRows = (rev.byDoctor || []).map((d: any) => ({
+                'Doctor': d.name,
+                'Revenue': d.revenue,
+            }));
+            const wsDoctors = XLSX.utils.json_to_sheet(doctorRows);
+            XLSX.utils.book_append_sheet(wb, wsDoctors, 'Doctor Revenue');
+
+            // Sheet 5: Daily Revenue
+            const dailyRows = (rev.revenueByDay || []).map((d: any) => ({
+                'Date': d.date,
+                'Total Revenue': d.revenue,
+                'IPD Revenue': d.ipd,
+                'OPD Revenue': d.opd,
+                'Counter Revenue': d.counter,
+            }));
+            const wsDaily = XLSX.utils.json_to_sheet(dailyRows);
+            XLSX.utils.book_append_sheet(wb, wsDaily, 'Daily Revenue');
+
+            XLSX.writeFile(wb, `pharmacy-finance-report-${dateRange.from}-to-${dateRange.to}.xlsx`);
+        } catch (err) {
+            console.error('Excel export failed:', err);
+            alert('Excel export failed. Please try again.');
+        } finally {
+            setExportingExcel(false);
+        }
+    };
+
+    const handleExportXML = async () => {
+        if (!rev) return;
+        setExportingXML(true);
+        try {
+            let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<PharmacyFinanceReport dateRangeFrom="${dateRange.from}" dateRangeTo="${dateRange.to}">\n`;
+            
+            // Summary
+            xml += `  <Summary>\n`;
+            xml += `    <TotalRevenue>${rev.totalRevenue}</TotalRevenue>\n`;
+            xml += `    <TotalBills>${rev.totalBills}</TotalBills>\n`;
+            xml += `    <IpdRevenue>${rev.byChannel.ipd.revenue}</IpdRevenue>\n`;
+            xml += `    <IpdBills>${rev.byChannel.ipd.billCount}</IpdBills>\n`;
+            xml += `    <OpdRevenue>${rev.byChannel.opd.revenue}</OpdRevenue>\n`;
+            xml += `    <OpdBills>${rev.byChannel.opd.billCount}</OpdBills>\n`;
+            xml += `    <CounterRevenue>${rev.byChannel.counter.revenue}</CounterRevenue>\n`;
+            xml += `    <CounterBills>${rev.byChannel.counter.billCount}</CounterBills>\n`;
+            xml += `    <GrossMarginPct>${rev.grossMarginPct}</GrossMarginPct>\n`;
+            xml += `    <Cogs>${rev.cogs}</Cogs>\n`;
+            xml += `    <ExpiryWriteOffValue>${data?.expiryWriteOffValue || 0}</ExpiryWriteOffValue>\n`;
+            xml += `    <TotalStockValue>${data?.totalStockValue || 0}</TotalStockValue>\n`;
+            xml += `  </Summary>\n`;
+            
+            // Bills List
+            xml += `  <Bills>\n`;
+            (rev.bills || []).forEach((b: any) => {
+                xml += `    <Bill>\n`;
+                xml += `      <BillNo>${escapeXML(b.billNo)}</BillNo>\n`;
+                xml += `      <Patient>${escapeXML(b.patient)}</Patient>\n`;
+                xml += `      <Channel>${escapeXML(b.channel)}</Channel>\n`;
+                xml += `      <Doctor>${escapeXML(b.doctor)}</Doctor>\n`;
+                xml += `      <Date>${escapeXML(b.date)}</Date>\n`;
+                xml += `      <Items>${b.items}</Items>\n`;
+                xml += `      <Revenue>${b.revenue}</Revenue>\n`;
+                xml += `    </Bill>\n`;
+            });
+            xml += `  </Bills>\n`;
+            
+            // Top Movers
+            xml += `  <TopMovers>\n`;
+            (rev.topMovers || []).forEach((m: any) => {
+                xml += `    <Mover>\n`;
+                xml += `      <Medicine>${escapeXML(m.name)}</Medicine>\n`;
+                xml += `      <Quantity>${m.qty}</Quantity>\n`;
+                xml += `      <Revenue>${m.revenue}</Revenue>\n`;
+                xml += `    </Mover>\n`;
+            });
+            xml += `  </TopMovers>\n`;
+            
+            // Doctor Revenue
+            xml += `  <DoctorRevenue>\n`;
+            (rev.byDoctor || []).forEach((d: any) => {
+                xml += `    <Doctor>\n`;
+                xml += `      <Name>${escapeXML(d.name)}</Name>\n`;
+                xml += `      <Revenue>${d.revenue}</Revenue>\n`;
+                xml += `    </Doctor>\n`;
+            });
+            xml += `  </DoctorRevenue>\n`;
+            
+            // Daily Revenue
+            xml += `  <DailyRevenue>\n`;
+            (rev.revenueByDay || []).forEach((d: any) => {
+                xml += `    <Day>\n`;
+                xml += `      <Date>${escapeXML(d.date)}</Date>\n`;
+                xml += `      <TotalRevenue>${d.revenue}</TotalRevenue>\n`;
+                xml += `      <IpdRevenue>${d.ipd}</IpdRevenue>\n`;
+                xml += `      <OpdRevenue>${d.opd}</OpdRevenue>\n`;
+                xml += `      <CounterRevenue>${d.counter}</CounterRevenue>\n`;
+                xml += `    </Day>\n`;
+            });
+            xml += `  </DailyRevenue>\n`;
+            
+            xml += `</PharmacyFinanceReport>`;
+
+            const blob = new Blob([xml], { type: 'application/xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `pharmacy-finance-report-${dateRange.from}-to-${dateRange.to}.xml`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('XML export failed:', err);
+            alert('XML export failed. Please try again.');
+        } finally {
+            setExportingXML(false);
+        }
+    };
+
+    const handleExportPDF = async () => {
+        if (!rev) return;
+        setExportingPDF(true);
+        try {
+            const [{ pdf }, { PharmacyFinanceReportPDF }] = await Promise.all([
+                import('@react-pdf/renderer'),
+                import('@/app/components/pharmacy/PharmacyFinanceReportPDF'),
+            ]);
+
+            const doc = (
+                <PharmacyFinanceReportPDF
+                    dateRange={dateRange}
+                    rev={rev}
+                    data={data}
+                />
+            );
+
+            const blob = await pdf(doc).toBlob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `pharmacy-finance-report-${dateRange.from}-to-${dateRange.to}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('PDF export failed:', err);
+            alert('PDF generation failed. Please try again.');
+        } finally {
+            setExportingPDF(false);
+        }
     };
 
     useEffect(() => {
@@ -263,6 +478,62 @@ export default function PharmacyReportsPage() {
 
                     {activeTab === 'overview' && (
                         <div className="space-y-6">
+                            {/* ===== Financial Export Bar ===== */}
+                            <div className="bg-gradient-to-r from-indigo-50/50 via-violet-50/50 to-indigo-50/50 border border-indigo-100/80 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                <div className="space-y-1">
+                                    <h4 className="text-sm font-black text-indigo-900 flex items-center gap-1.5">
+                                        <FileSpreadsheet className="h-4 w-4 text-indigo-600" />
+                                        Finance Reports & Exports
+                                    </h4>
+                                    <p className="text-xs text-indigo-700 font-medium leading-relaxed max-w-xl">
+                                        Export compiled revenue breakdowns, drug sales volume, prescriber splits, and full transaction history for the selected date range.
+                                    </p>
+                                </div>
+                                <div className="flex flex-wrap gap-2 sm:self-center">
+                                    {/* Excel Export Button */}
+                                    <button
+                                        onClick={handleExportExcel}
+                                        disabled={exportingExcel || !rev}
+                                        className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+                                    >
+                                        {exportingExcel ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                            <FileSpreadsheet className="h-3.5 w-3.5" />
+                                        )}
+                                        {exportingExcel ? 'Exporting...' : 'Export Excel'}
+                                    </button>
+
+                                    {/* XML Export Button */}
+                                    <button
+                                        onClick={handleExportXML}
+                                        disabled={exportingXML || !rev}
+                                        className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 rounded-xl hover:bg-amber-100 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+                                    >
+                                        {exportingXML ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                            <FileCode className="h-3.5 w-3.5" />
+                                        )}
+                                        {exportingXML ? 'Exporting...' : 'Export XML'}
+                                    </button>
+
+                                    {/* PDF Export Button */}
+                                    <button
+                                        onClick={handleExportPDF}
+                                        disabled={exportingPDF || !rev}
+                                        className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-xl hover:bg-indigo-100 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+                                    >
+                                        {exportingPDF ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                            <FileText className="h-3.5 w-3.5" />
+                                        )}
+                                        {exportingPDF ? 'Generating...' : 'Export PDF'}
+                                    </button>
+                                </div>
+                            </div>
+
                             {/* Channel breakdown table */}
                             <div className="bg-white border border-gray-200 rounded-2xl p-6">
                                 <h3 className="text-sm font-black text-gray-700 mb-4">Revenue by Channel</h3>

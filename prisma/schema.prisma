@@ -4366,6 +4366,10 @@ model PharmacyPurchaseInvoiceLine {
   scheme_amount   Float   @default(0)
   line_total      Float
   hsn_code        String?
+  batch_no        String?
+  expiry          String?
+  pack            String?
+  mrp             Float?
 
   invoice      PharmacyPurchaseInvoice  @relation(fields: [invoice_id], references: [id])
   medicine     pharmacy_medicine_master @relation(fields: [medicine_id], references: [id])

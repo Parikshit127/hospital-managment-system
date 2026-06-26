@@ -3175,6 +3175,10 @@ export async function createPurchaseInvoice(data: {
         discount_pct?: number;
         discount_amount?: number;   // flat trade discount in ₹
         scheme_amount?: number;     // scheme / free-goods value in ₹
+        batch_no?: string;
+        expiry?: string;
+        pack?: string;
+        mrp?: number;
     }>;
 }) {
     try {
@@ -3249,6 +3253,10 @@ export async function createPurchaseInvoice(data: {
                         igst_amount: l.igst_amount,
                         line_total: l.line_total,
                         hsn_code: l.hsn_code || null,
+                        batch_no: l.batch_no || null,
+                        expiry: l.expiry || null,
+                        pack: l.pack || null,
+                        mrp: l.mrp != null ? Number(l.mrp) : null,
                     }))
                 }
             }
@@ -3330,9 +3338,6 @@ function parsePoExpiry(raw: any): Date | null {
     if (!raw) return null;
     const s = String(raw).trim();
     if (!s) return null;
-    // ISO / native-parseable
-    const native = new Date(s);
-    if (!isNaN(native.getTime()) && native.getFullYear() > 2000 && native.getFullYear() < 2100) return native;
     // DD/MM/YYYY or DD-MM-YYYY
     let m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(s);
     if (m) {
@@ -3346,6 +3351,9 @@ function parsePoExpiry(raw: any): Date | null {
         let mm = +m[1], yy = +m[2]; if (yy < 100) yy += 2000;
         if (mm >= 1 && mm <= 12) return new Date(yy, mm, 0);
     }
+    // ISO / native-parseable fallback
+    const native = new Date(s);
+    if (!isNaN(native.getTime()) && native.getFullYear() > 2000 && native.getFullYear() < 2100) return native;
     return null;
 }
 
@@ -3430,18 +3438,19 @@ export async function postPurchaseInvoice(invoiceId: number) {
                 if (line.grn_id) continue;                 // already received via GRN
                 if (Number(line.quantity) <= 0) continue;
                 const poItem = line.po_item_id ? poItemMap.get(line.po_item_id) : null;
-                const batchNo = (poItem?.batch_no || '').trim() || `PI-${invoice.invoice_number}`;
-                // Expiry: from PO line; fall back to ~2 years out so stock isn't lost.
-                const expiryDate = parsePoExpiry(poItem?.expiry) || new Date(Date.now() + 730 * 24 * 60 * 60 * 1000);
-                const mrp = poItem?.mrp != null ? Number(poItem.mrp) : null;
+                const batchNo = (line.batch_no || poItem?.batch_no || '').trim() || `PI-${invoice.invoice_number}`;
+                // Expiry: from line, then from PO line; fall back to ~2 years out.
+                const expiryDate = parsePoExpiry(line.expiry || poItem?.expiry) || new Date(Date.now() + 730 * 24 * 60 * 60 * 1000);
+                const mrp = line.mrp != null ? Number(line.mrp) : (poItem?.mrp != null ? Number(poItem.mrp) : null);
 
-                await tx.pharmacy_batch_inventory.upsert({
+                const batchRecord = await tx.pharmacy_batch_inventory.upsert({
                     where: { medicine_id_batch_no: { medicine_id: line.medicine_id, batch_no: batchNo } },
                     update: {
                         current_stock: { increment: Number(line.quantity) },
                         cost_price: Number(line.unit_price),
                         actual_cost: Number(line.unit_price),
                         vendor_id: invoice.vendor_id,
+                        expiry_date: expiryDate,
                         ...(mrp != null ? { mrp } : {}),
                     },
                     create: {
@@ -3455,6 +3464,21 @@ export async function postPurchaseInvoice(invoiceId: number) {
                         vendor_id: invoice.vendor_id,
                         rack_location: 'PURCHASE-INVOICE',
                     },
+                });
+
+                // Record inventory movement
+                await tx.pharmacyInventoryMovement.create({
+                    data: {
+                        organizationId,
+                        medicine_id: line.medicine_id,
+                        batch_id: batchRecord.id,
+                        movement_type: 'GRN_RECEIPT',
+                        quantity_in: Number(line.quantity),
+                        unit_cost: Number(line.unit_price),
+                        balance_after: batchRecord.current_stock,
+                        source_type: 'PURCHASE_INVOICE',
+                        source_id: String(invoice.id),
+                    }
                 });
 
                 // Mark the PO line received so a later GRN won't double-receive it.

@@ -41,11 +41,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         const poi = l.po_item_id ? poItemMap.get(l.po_item_id) : null;
         return {
             name: l.medicine?.brand_name || `#${l.medicine_id}`,
-            pack: poi?.pack || null,
+            pack: l.pack || poi?.pack || null,
             hsn: l.hsn_code || poi?.hsn_code || null,
-            batch: poi?.batch_no || null,
-            expiry: poi?.expiry || null,
-            mrp: poi?.mrp != null ? Number(poi.mrp) : 0,
+            batch: l.batch_no || poi?.batch_no || null,
+            expiry: l.expiry || poi?.expiry || null,
+            mrp: l.mrp != null ? Number(l.mrp) : (poi?.mrp != null ? Number(poi.mrp) : 0),
             qty,
             rate,
             disPct: Number(l.discount_pct) || 0,
