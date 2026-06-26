@@ -312,6 +312,18 @@ export default function AdmissionDetailPage() {
         getAdmissionConsultants(data.admission_id).then(res => { if (res.success) setConsultants(res.data as any[]); });
     };
 
+    const openAdmissionEdit = () => {
+        setEditDiagnosis(data.diagnosis || '');
+        setEditAdmissionType(data.admission_type || '');
+        setEditLineOfTreatment(data.line_of_treatment || '');
+        // Convert UTC to IST for datetime-local input, which stores no TZ info.
+        const admUtc = new Date(data.admission_date);
+        const admIst = new Date(admUtc.getTime() + 5.5 * 60 * 60 * 1000);
+        setEditAdmissionDate(admIst.toISOString().slice(0, 16));
+        setActiveTab('overview');
+        setShowAdmissionEdit(true);
+    };
+
     const handleSaveAdmissionEdit = async () => {
         setSavingAdmissionEdit(true);
         const dateChanged = !!editAdmissionDate;
@@ -656,6 +668,21 @@ export default function AdmissionDetailPage() {
                                 )}
                             </div>
                             <div className="mt-2 text-xs font-medium text-gray-500 flex flex-wrap gap-x-5 gap-y-1.5">
+                                <span className="flex items-center gap-1.5">
+                                    <ClipboardEdit className="h-3.5 w-3.5 text-orange-400" />
+                                    <span className="max-w-md truncate">
+                                        {data.diagnosis || 'No diagnosis recorded'}
+                                    </span>
+                                    {data.status === 'Admitted' && !showAdmissionEdit && (
+                                        <button
+                                            onClick={openAdmissionEdit}
+                                            className="ml-0.5 inline-flex items-center gap-1 rounded px-1 py-0.5 text-orange-600 hover:bg-orange-50 hover:text-orange-700"
+                                        >
+                                            <Pencil className="h-3 w-3" />
+                                            <span className="text-[10px] font-bold">Edit Diagnosis</span>
+                                        </button>
+                                    )}
+                                </span>
                                 <span className="flex items-center gap-1.5">
                                     <User className="h-3.5 w-3.5 text-gray-400" />
                                     {data.patient?.age} yrs • {data.patient?.gender}

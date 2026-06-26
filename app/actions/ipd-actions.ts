@@ -1697,6 +1697,7 @@ export async function admitEmergency(data: {
 
 export async function updateAdmissionDiagnosis(data: {
   admission_id: string;
+  diagnosis?: string;
   primary_diagnosis_icd?: string;
   secondary_diagnoses?: string[];
   discharge_type?: string;
@@ -1706,9 +1707,10 @@ export async function updateAdmissionDiagnosis(data: {
 }) {
   try {
     const { db } = await requireTenantContext();
-    await db.admissions.update({
+    const admission = await db.admissions.update({
       where: { admission_id: data.admission_id },
       data: {
+        ...(data.diagnosis !== undefined && { diagnosis: data.diagnosis || null }),
         primary_diagnosis_icd: data.primary_diagnosis_icd,
         secondary_diagnoses: data.secondary_diagnoses ?? undefined,
         discharge_type: data.discharge_type,
@@ -1716,8 +1718,12 @@ export async function updateAdmissionDiagnosis(data: {
         patient_class: data.patient_class,
         isolation_type: data.isolation_type,
       },
+      select: { patient_id: true },
     });
     revalidatePath(`/ipd/admission/${data.admission_id}`);
+    if (admission.patient_id) {
+      revalidatePath(`/admin/patients/${admission.patient_id}`);
+    }
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };

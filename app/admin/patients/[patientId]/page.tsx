@@ -518,7 +518,7 @@ export default function AdminPatientDetailsPage() {
                   />
                 )}
                 {activeTab === "ipd" && (
-                  <IPDJourneyTab admissions={data.admissions || []} />
+                  <IPDJourneyTab admissions={data.admissions || []} onAdmissionUpdated={loadData} />
                 )}
                 {activeTab === "prescriptions" && (
                   <PrescriptionsLabTab

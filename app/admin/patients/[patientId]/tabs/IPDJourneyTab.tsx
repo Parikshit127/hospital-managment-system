@@ -12,12 +12,18 @@ import {
   CheckCircle2,
   FileText,
   AlertTriangle,
-  Users,
   ExternalLink,
+  Loader2,
+  Pencil,
+  Save,
+  X,
 } from 'lucide-react';
+import { updateAdmissionDiagnosis } from '@/app/actions/ipd-actions';
+import { useToast } from '@/app/components/ui/Toast';
 
 interface IPDJourneyTabProps {
   admissions: any[];
+  onAdmissionUpdated?: () => void;
 }
 
 const fmtDate = (v?: string | Date | null) => {
@@ -29,7 +35,8 @@ const fmtDate = (v?: string | Date | null) => {
   });
 };
 
-export default function IPDJourneyTab({ admissions }: IPDJourneyTabProps) {
+export default function IPDJourneyTab({ admissions, onAdmissionUpdated }: IPDJourneyTabProps) {
+  const toast = useToast();
   const [expandedAdmissions, setExpandedAdmissions] = useState<Set<string>>(() => {
     const initial = new Set<string>();
     admissions.forEach((a: any) => {
@@ -39,6 +46,9 @@ export default function IPDJourneyTab({ admissions }: IPDJourneyTabProps) {
     });
     return initial;
   });
+  const [editingDiagnosisId, setEditingDiagnosisId] = useState<string | null>(null);
+  const [diagnosisDraft, setDiagnosisDraft] = useState('');
+  const [savingDiagnosisId, setSavingDiagnosisId] = useState<string | null>(null);
 
   const toggleAdmission = (id: string) => {
     setExpandedAdmissions((prev) => {
@@ -50,6 +60,34 @@ export default function IPDJourneyTab({ admissions }: IPDJourneyTabProps) {
       }
       return next;
     });
+  };
+
+  const startDiagnosisEdit = (admission: any) => {
+    const aId = admission.admission_id || admission.id;
+    if (!aId) return;
+    setEditingDiagnosisId(aId);
+    setDiagnosisDraft(admission.diagnosis || '');
+  };
+
+  const cancelDiagnosisEdit = () => {
+    setEditingDiagnosisId(null);
+    setDiagnosisDraft('');
+  };
+
+  const saveDiagnosis = async (admissionId: string) => {
+    setSavingDiagnosisId(admissionId);
+    const res = await updateAdmissionDiagnosis({
+      admission_id: admissionId,
+      diagnosis: diagnosisDraft.trim(),
+    });
+    setSavingDiagnosisId(null);
+    if (res.success) {
+      toast.success('Diagnosis updated');
+      cancelDiagnosisEdit();
+      onAdmissionUpdated?.();
+    } else {
+      toast.error(res.error || 'Failed to update diagnosis');
+    }
   };
 
   if (admissions.length === 0) {
@@ -66,6 +104,8 @@ export default function IPDJourneyTab({ admissions }: IPDJourneyTabProps) {
       {admissions.map((admission: any, aIdx: number) => {
         const aId = admission.admission_id || admission.id || String(aIdx);
         const isExpanded = expandedAdmissions.has(aId);
+        const isDiagnosisEditing = editingDiagnosisId === aId;
+        const isDiagnosisSaving = savingDiagnosisId === aId;
         const statusNorm = (admission.status || '').toLowerCase();
         const statusCls =
           statusNorm === 'admitted'
@@ -120,9 +160,11 @@ export default function IPDJourneyTab({ admissions }: IPDJourneyTabProps) {
                   <ChevronDown className="h-5 w-5 text-gray-400 shrink-0" />
                 )}
               </div>
-              <p className="text-sm font-semibold text-gray-700 mb-2">
-                {admission.diagnosis || 'No diagnosis recorded'}
-              </p>
+              {!isDiagnosisEditing && (
+                <p className="text-sm font-semibold text-gray-700 mb-2">
+                  {admission.diagnosis || 'No diagnosis recorded'}
+                </p>
+              )}
               {statusNorm === 'cancelled' && admission.cancellation_reason && (
                 <p className="mb-2 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
                   Cancellation Reason: {admission.cancellation_reason}
@@ -142,9 +184,55 @@ export default function IPDJourneyTab({ admissions }: IPDJourneyTabProps) {
               </div>
             </button>
 
+            {isDiagnosisEditing && (
+              <div className="px-5 pb-4 -mt-2">
+                <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-3">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-orange-700">
+                    Diagnosis
+                  </label>
+                  <textarea
+                    value={diagnosisDraft}
+                    onChange={(e) => setDiagnosisDraft(e.target.value)}
+                    rows={2}
+                    placeholder="Primary diagnosis / chief complaint"
+                    className="mt-1 w-full resize-none rounded-lg border border-orange-200 bg-white px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    autoFocus
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => saveDiagnosis(aId)}
+                      disabled={isDiagnosisSaving}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-orange-700 disabled:opacity-50"
+                    >
+                      {isDiagnosisSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                      {isDiagnosisSaving ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelDiagnosisEdit}
+                      disabled={isDiagnosisSaving}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <X className="h-3.5 w-3.5" /> Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Quick link to the full IPD Patient Chart (admin / clinical) */}
             {admission.admission_id && (
-              <div className="px-5 pb-3 -mt-1">
+              <div className="px-5 pb-3 -mt-1 flex flex-wrap items-center gap-3">
+                {!isDiagnosisEditing && (
+                  <button
+                    type="button"
+                    onClick={() => startDiagnosisEdit(admission)}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Edit Diagnosis
+                  </button>
+                )}
                 <a
                   href={`/ipd/admission/${admission.admission_id}`}
                   target="_blank"
