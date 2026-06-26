@@ -297,10 +297,11 @@ export async function generateInvoice(
                 });
 
                 // Use the price edited by the pharmacist in the cart (item.unit_price),
-                // falling back to the DB selling price if not provided.
+                // then batch MRP (the actual per-unit selling price on that batch),
+                // then medicine master selling_price / price_per_unit as final fallback.
                 const unitPrice = (item.unit_price !== undefined && Number(item.unit_price) > 0)
                     ? Number(item.unit_price)
-                    : (Number(batch.medicine.selling_price) || Number(batch.medicine.price_per_unit) || 0);
+                    : (Number(batch.mrp) || Number(batch.medicine.selling_price) || Number(batch.medicine.price_per_unit) || 0);
                 const netPrice = unitPrice * item.quantity;
                 const taxRate = Number(batch.medicine.gst_percent) || Number(batch.medicine.tax_rate) || 0;
                 const taxAmount = netPrice * taxRate / 100;
@@ -373,7 +374,7 @@ export async function generateInvoice(
 
                 const unitPrice = (item.unit_price !== undefined && Number(item.unit_price) > 0)
                     ? Number(item.unit_price)
-                    : (Number(medicine.selling_price) || Number(medicine.price_per_unit) || 0);
+                    : (Number(medicine.mrp) || Number(medicine.selling_price) || Number(medicine.price_per_unit) || 0);
                 const netPrice = unitPrice * item.quantity;
                 const taxRate = Number(medicine.gst_percent) || Number(medicine.tax_rate) || 0;
                 const taxAmount = netPrice * taxRate / 100;
@@ -1007,7 +1008,8 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
                     data: { current_stock: { decrement: item.quantity } }
                 });
 
-                const unitPrice = Number(batch.medicine.selling_price) || Number(batch.medicine.price_per_unit) || 0;
+                // Batch MRP (per-unit selling price) takes priority over medicine master prices
+                const unitPrice = Number(batch.mrp) || Number(batch.medicine.selling_price) || Number(batch.medicine.price_per_unit) || 0;
                 const netPrice = unitPrice * item.quantity;
                 const taxRate = Number(batch.medicine.gst_percent) || Number(batch.medicine.tax_rate) || 0;
                 const taxAmount = netPrice * taxRate / 100;
