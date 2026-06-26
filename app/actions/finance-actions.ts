@@ -200,7 +200,18 @@ export async function addInvoiceItem(data: {
     service_date?: string;
 }) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
+
+        const invoice = await db.invoices.findUnique({ where: { id: data.invoice_id } });
+        if (!invoice) return { success: false, error: 'Invoice not found' };
+
+        const isIpd = invoice.invoice_type === 'IPD' || invoice.admission_id !== null;
+        if (isIpd) {
+            const isPharm = data.department.toLowerCase() === 'pharmacy' || data.service_category?.toLowerCase() === 'pharmacy';
+            if (isPharm && session?.role !== 'pharmacist') {
+                return { success: false, error: 'Only a pharmacist can add pharmacy items to an IPD bill.' };
+            }
+        }
 
         const backdate = validateBackdate(data.service_date, { label: 'Service date' });
         if (!backdate.ok) {
@@ -2240,7 +2251,21 @@ export async function searchPatientsForBilling(query: string) {
 // Remove an invoice item
 export async function removeInvoiceItem(itemId: number, invoiceId: number) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, session } = await requireTenantContext();
+        const item = await db.invoice_items.findUnique({
+            where: { id: itemId },
+            include: { invoice: true }
+        });
+        if (!item) return { success: false, error: 'Invoice item not found' };
+
+        const isIpd = item.invoice && (item.invoice.invoice_type === 'IPD' || item.invoice.admission_id !== null);
+        if (isIpd) {
+            const isPharm = item.department.toLowerCase() === 'pharmacy' || item.service_category?.toLowerCase() === 'pharmacy';
+            if (isPharm && session?.role !== 'pharmacist') {
+                return { success: false, error: 'Only a pharmacist can modify or delete pharmacy bill items in an IPD bill.' };
+            }
+        }
+
         await db.invoice_items.delete({ where: { id: itemId } });
         await recalculateInvoice(invoiceId);
         return { success: true };
@@ -2519,6 +2544,15 @@ export async function updateInvoiceItem(itemId: number, patch: {
         });
         if (!item) return { success: false, error: 'Invoice item not found' };
 
+        const isIpd = item.invoice && (item.invoice.invoice_type === 'IPD' || item.invoice.admission_id !== null);
+        if (isIpd) {
+            const isPharm = item.department.toLowerCase() === 'pharmacy' || item.service_category?.toLowerCase() === 'pharmacy' ||
+                            patch.department?.toLowerCase() === 'pharmacy' || patch.service_category?.toLowerCase() === 'pharmacy';
+            if (isPharm && session?.role !== 'pharmacist') {
+                return { success: false, error: 'Only a pharmacist can modify pharmacy bill items in an IPD bill.' };
+            }
+        }
+
         const check = evaluateInvoiceEditable(item.invoice, undefined, { allowPaid: isPrivilegedBilling(session) });
         if (!check.editable) return { success: false, error: check.reason };
 
@@ -2773,6 +2807,51 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
         if (!check.editable) return { success: false, error: check.reason };
 
         await checkPeriodLock(db, invoice.created_at as any);
+
+        const isIpd = invoice.invoice_type === 'IPD' || invoice.admission_id !== null;
+        if (isIpd && session?.role !== 'pharmacist') {
+            // Check items_to_remove
+            if (payload.items_to_remove?.length) {
+                const removedItems = await db.invoice_items.findMany({
+                    where: { id: { in: payload.items_to_remove }, invoice_id: invoiceId },
+                });
+                const hasPharm = removedItems.some((item: any) =>
+                    item.department.toLowerCase() === 'pharmacy' || item.service_category?.toLowerCase() === 'pharmacy'
+                );
+                if (hasPharm) {
+                    return { success: false, error: 'Only a pharmacist can modify or delete pharmacy bill items in an IPD bill.' };
+                }
+            }
+
+            // Check items_to_update
+            if (payload.items_to_update?.length) {
+                const updatedItemIds = payload.items_to_update.map((u) => u.id);
+                const existingItems = await db.invoice_items.findMany({
+                    where: { id: { in: updatedItemIds }, invoice_id: invoiceId },
+                });
+                for (const u of payload.items_to_update) {
+                    const existing = existingItems.find((item: any) => item.id === u.id);
+                    if (!existing) continue;
+                    const isPharm = existing.department.toLowerCase() === 'pharmacy' ||
+                                    existing.service_category?.toLowerCase() === 'pharmacy' ||
+                                    u.department?.toLowerCase() === 'pharmacy' ||
+                                    u.service_category?.toLowerCase() === 'pharmacy';
+                    if (isPharm) {
+                        return { success: false, error: 'Only a pharmacist can modify pharmacy bill items in an IPD bill.' };
+                    }
+                }
+            }
+
+            // Check items_to_add
+            if (payload.items_to_add?.length) {
+                const hasPharm = payload.items_to_add.some((a) =>
+                    a.department.toLowerCase() === 'pharmacy' || a.service_category?.toLowerCase() === 'pharmacy'
+                );
+                if (hasPharm) {
+                    return { success: false, error: 'Only a pharmacist can add pharmacy items to an IPD bill.' };
+                }
+            }
+        }
 
         const originalStatus = invoice.status;
 

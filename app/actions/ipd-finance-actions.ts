@@ -203,6 +203,12 @@ export async function postChargeToIpdBill(data: {
         const hsnSacCode = masterService ? (masterService.hsn_sac_code || null) : (data.hsn_sac_code || null);
         const refId = data.service_id || data.source_ref_id || null;
 
+        const isManual = data.source_module === 'manual' || data.source_module === 'billing';
+        const isPharm = serviceCategory?.toLowerCase() === 'pharmacy' || data.service_category?.toLowerCase() === 'pharmacy';
+        if (isPharm && isManual && session?.role !== 'pharmacist') {
+            return { success: false, error: 'Only a pharmacist can add pharmacy items to an IPD bill.' };
+        }
+
         // Find the active IPD invoice
         let invoice = await db.invoices.findFirst({
             where: { admission_id: data.admission_id, status: { not: 'Cancelled' } },
