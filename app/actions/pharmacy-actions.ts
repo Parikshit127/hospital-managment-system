@@ -870,6 +870,7 @@ export async function addInventoryBatch(data: {
                 current_stock: { increment: data.stock },
                 expiry_date: data.expiry,
                 rack_location: data.rack,
+                mrp: data.price,
             },
         });
 
@@ -2036,7 +2037,6 @@ export async function processReturn(data: {
             const medicine = await tx.pharmacy_medicine_master.findUnique({
                 where: { id: data.medicine_id }
             });
-            const unitPrice = Number(medicine?.selling_price) || Number(medicine?.price_per_unit) || 0;
             const taxRate = Number(medicine?.gst_percent) || Number(medicine?.tax_rate) || 0;
 
             // Find the batch record
@@ -2046,6 +2046,7 @@ export async function processReturn(data: {
                     where: { batch_no: data.batch_id, medicine_id: data.medicine_id }
                 });
             }
+            const unitPrice = Number(batchRecord?.mrp) || Number(medicine?.mrp) || Number(medicine?.selling_price) || Number(medicine?.price_per_unit) || 0;
             const batchCost = Number(batchRecord?.actual_cost || batchRecord?.cost_price || unitPrice);
 
             // Determine movement type and stock action

@@ -199,7 +199,7 @@ export default function PharmacyInvoicesPage() {
                 medicine_id: med.medicine_id,
                 name: med.medicine?.brand_name || '',
                 qty: 1,
-                unit_price: Number(med.medicine?.selling_price || med.medicine?.price_per_unit || 0),
+                unit_price: Number(med.mrp || med.medicine?.mrp || med.medicine?.selling_price || med.medicine?.price_per_unit || 0),
                 tax_rate: Number(med.medicine?.gst_percent || med.medicine?.tax_rate || 0),
                 hsn: med.medicine?.hsn_sac_code || '3004',
                 batch_no: med.batch_no || 'N/A',
