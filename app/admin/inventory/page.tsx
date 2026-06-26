@@ -53,7 +53,8 @@ export default function AdminInventoryHub() {
   };
 
   const links = [
-    { href: '/inventory/items', label: 'Item Master', icon: Package, desc: 'Catalogue & approval' },
+    { href: '/admin/inventory/items', label: 'Item Approvals', icon: Package, desc: 'Maker-checker draft items' },
+    { href: '/inventory/items', label: 'Item Master', icon: Package, desc: 'Catalogue & categories' },
     { href: '/inventory/stores', label: 'Stores', icon: Warehouse, desc: 'Hierarchy & par levels' },
     { href: '/inventory/indents', label: 'Indents', icon: ClipboardList, desc: 'Internal supply chain' },
     { href: '/inventory/procurement', label: 'Procurement', icon: ShoppingCart, desc: 'PR & GRN' },

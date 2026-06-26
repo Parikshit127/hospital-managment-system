@@ -7,7 +7,7 @@ import {
     Loader2, ChevronRight,
     Stethoscope, FileText, Package, ArrowUpRight,
     Zap, Settings, UserPlus, X, Power, Building2,
-    CheckCircle2, XCircle, RefreshCw, LayoutGrid, Briefcase
+    CheckCircle2, XCircle, RefreshCw, LayoutGrid, Briefcase, Warehouse
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -54,6 +54,7 @@ const MODULE_META: Record<string, { label: string; icon: any; href: string; colo
     ipd: { label: 'IPD', icon: Bed, href: '/admin/ipd', color: 'text-violet-500' },
     lab: { label: 'Lab', icon: FlaskConical, href: '/admin/lab', color: 'text-amber-500' },
     pharmacy: { label: 'Pharmacy', icon: Pill, href: '/admin/pharmacy', color: 'text-cyan-500' },
+    inventory: { label: 'Inventory', icon: Warehouse, href: '/inventory/dashboard', color: 'text-teal-600' },
     finance: { label: 'Finance', icon: DollarSign, href: '/admin/finance', color: 'text-emerald-500' },
     hr: { label: 'HR', icon: Users, href: '/admin/hr', color: 'text-blue-500' },
     insurance: { label: 'Insurance', icon: Shield, href: '/insurance', color: 'text-indigo-500' },
@@ -524,8 +525,8 @@ export default function AdminDashboard() {
                                     <Package className="h-4 w-4 text-amber-500" />
                                     Inventory Alerts
                                 </h3>
-                                <Link href="/admin/pharmacy" className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1 hover:opacity-80" style={{ color: 'var(--admin-primary)' }}>
-                                    Pharmacy <ChevronRight className="h-3 w-3" />
+                                <Link href="/inventory/dashboard" className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1 hover:opacity-80" style={{ color: 'var(--admin-primary)' }}>
+                                    Inventory <ChevronRight className="h-3 w-3" />
                                 </Link>
                             </div>
                             <div className="p-5 space-y-3 max-h-[320px] overflow-auto">
@@ -832,7 +833,8 @@ export default function AdminDashboard() {
                             { href: '/admin/ipd', icon: Bed, title: 'IPD Management', subtitle: 'Beds, admissions & care', color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
                             { href: '/admin/finance', icon: DollarSign, title: 'Finance & Billing', subtitle: 'Invoices, payments & revenue', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
                             { href: '/admin/lab', icon: FlaskConical, title: 'Lab Management', subtitle: 'Test orders & result upload', color: 'text-amber-500', bg: 'bg-amber-500/10' },
-                            { href: '/admin/pharmacy', icon: Pill, title: 'Pharmacy', subtitle: 'Inventory & dispensing', color: 'text-cyan-500', bg: 'bg-cyan-500/10' },
+                            { href: '/admin/pharmacy', icon: Pill, title: 'Pharmacy', subtitle: 'Medicines & dispensing', color: 'text-cyan-500', bg: 'bg-cyan-500/10' },
+                            { href: '/inventory/dashboard', icon: Warehouse, title: 'Materials Inventory', subtitle: 'Stores, stock & procurement', color: 'text-teal-600', bg: 'bg-teal-500/10' },
                             { href: '/admin/integrations', icon: Shield, title: 'Insurance & TPA', subtitle: 'Claims & policy management', color: 'text-blue-500', bg: 'bg-blue-500/10' },
                             { href: '/admin/hr', icon: Briefcase, title: 'HR Management', subtitle: 'Staff, attendance & payroll', color: 'text-rose-500', bg: 'bg-rose-500/10' },
                             { href: '/admin/mfa-setup', icon: Shield, title: 'MFA Setup', subtitle: 'Two-factor authentication', color: 'text-purple-500', bg: 'bg-purple-500/10' },

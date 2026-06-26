@@ -11,7 +11,19 @@ const staffRoles = [
     'nurse',
     'opd_manager',
     'hr',
+    'store_manager',
+    'procurement_officer',
 ] as const;
+
+export { staffRoles };
+
+const staffPasswordSchema =
+    process.env.NODE_ENV === 'production'
+        ? z.string().min(8, 'Password must be at least 8 characters').max(100)
+            .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+            .regex(/[0-9]/, 'Password must contain at least one number')
+            .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character')
+        : z.string().min(6, 'Password must be at least 6 characters').max(100);
 
 // ========================================
 // Auth
@@ -49,10 +61,7 @@ export const registerPatientSchema = z.object({
 export const addUserSchema = z.object({
     // Mandatory
     username: z.string().min(3, 'Username must be at least 3 characters').max(50),
-    password: z.string().min(8, 'Password must be at least 8 characters').max(100)
-        .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-        .regex(/[0-9]/, 'Password must contain at least one number')
-        .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
+    password: staffPasswordSchema,
     name: z.string().min(2, 'Name is required').max(200),
     role: z.enum(staffRoles),
     phone: z.string().min(10, 'Phone is required').max(15),

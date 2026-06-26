@@ -89,6 +89,7 @@ import {
   Boxes,
   ScanLine,
 } from "lucide-react";
+import { inventoryNavSection } from "@/app/inventory/inventory-nav";
 
 interface NavItem {
   label: string;
@@ -122,7 +123,8 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Approval Center", href: "/billing/approvals", icon: ShieldAlert },
         { label: "Write-offs", href: "/billing/writeoffs", icon: Scale },
         { label: "HR", href: "/admin/hr", icon: Briefcase },
-        { label: "Inventory", href: "/admin/inventory", icon: Warehouse },
+        { label: "Pharmacy", href: "/admin/pharmacy", icon: Pill },
+        { label: "Inventory", href: "/inventory/dashboard", icon: Warehouse },
       ],
     },
     {
@@ -282,6 +284,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Returns", href: "/pharmacy/returns", icon: RotateCcw },
       ],
     },
+    inventoryNavSection("pharmacist", "Materials Store"),
     {
       title: "Reports",
       items: [
@@ -290,40 +293,8 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       ],
     },
   ],
-  store_manager: [
-    {
-      title: "Inventory",
-      items: [
-        { label: "Dashboard", href: "/inventory/dashboard", icon: LayoutDashboard },
-        { label: "Item Master", href: "/inventory/items", icon: Package },
-        { label: "Stores", href: "/inventory/stores", icon: Warehouse },
-        { label: "Stock & Ledger", href: "/inventory/stock", icon: PackageOpen },
-        { label: "Issues", href: "/inventory/issues", icon: Syringe },
-        { label: "Opening Stock", href: "/inventory/opening-stock", icon: PackageOpen },
-        { label: "Indents", href: "/inventory/indents", icon: ClipboardList },
-        { label: "Procurement", href: "/inventory/procurement", icon: ShoppingCart },
-        { label: "Transfers", href: "/inventory/transfers", icon: ArrowLeftRight },
-        { label: "Physical Count", href: "/inventory/counts", icon: ClipboardCheck },
-        { label: "Kits / BOM", href: "/inventory/kits", icon: Boxes },
-        { label: "CSSD", href: "/inventory/cssd", icon: ShieldCheck },
-        { label: "Barcode Scan", href: "/inventory/barcode", icon: ScanLine },
-        { label: "GL Reconcile", href: "/inventory/reconcile", icon: Scale },
-        { label: "Reports", href: "/inventory/reports", icon: BarChart3 },
-      ],
-    },
-  ],
-  procurement_officer: [
-    {
-      title: "Procurement",
-      items: [
-        { label: "Dashboard", href: "/inventory/dashboard", icon: LayoutDashboard },
-        { label: "Purchase Requisitions", href: "/inventory/procurement", icon: ShoppingCart },
-        { label: "GRN Receipt", href: "/inventory/procurement", icon: Truck },
-        { label: "Item Catalogue", href: "/inventory/items", icon: Package },
-        { label: "Stock View", href: "/inventory/stock", icon: PackageOpen },
-      ],
-    },
-  ],
+  store_manager: [inventoryNavSection("store_manager")],
+  procurement_officer: [inventoryNavSection("procurement_officer", "Procurement")],
   finance: [
     {
       title: "Finance",
@@ -363,14 +334,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Print Center", href: "/print-center", icon: Printer },
       ],
     },
-    {
-      title: "Inventory",
-      items: [
-        { label: "Valuation Reports", href: "/inventory/reports", icon: BarChart3 },
-        { label: "Count Approvals", href: "/inventory/counts", icon: ClipboardCheck },
-        { label: "Stock Ledger", href: "/inventory/stock", icon: Package },
-      ],
-    },
+    inventoryNavSection("finance"),
     {
       title: "Analytics",
       items: [
@@ -444,6 +408,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Audit Trail", href: "/ipd/audit-trail", icon: Activity },
       ],
     },
+    inventoryNavSection("ipd_manager", "Materials"),
   ],
   patient: [
     {
@@ -476,13 +441,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Handover", href: "/nurse/handover", icon: ArrowLeftRight },
       ],
     },
-    {
-      title: "Inventory",
-      items: [
-        { label: "Raise Indent", href: "/inventory/indents", icon: ClipboardList },
-        { label: "Stock Lookup", href: "/inventory/stock", icon: Package },
-      ],
-    },
+    inventoryNavSection("nurse"),
     {
       title: "Procedural",
       items: [
@@ -503,6 +462,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Reports", href: "/opd-manager/reports", icon: BarChart3 },
       ],
     },
+    inventoryNavSection("opd_manager", "Materials"),
   ],
   hr: [
     {
@@ -729,7 +689,20 @@ export function Sidebar({ session }: SidebarProps) {
   const effectiveRole = session
     ? (isAdmin ? (roleForPath(pathname) ?? "admin") : session.role)
     : "";
-  const sections = effectiveRole ? NAV_BY_ROLE[effectiveRole] || [] : [];
+  let sections = effectiveRole ? NAV_BY_ROLE[effectiveRole] || [] : [];
+  if (isAdmin && effectiveRole === "store_manager") {
+    sections = sections.map((s) =>
+      s.title === "Inventory"
+        ? {
+            ...s,
+            items: [
+              ...s.items,
+              { label: "Module Settings", href: "/admin/inventory", icon: Settings },
+            ],
+          }
+        : s,
+    );
+  }
   const orgName = session?.organization_name || "Hospital OS";
 
   const allHrefs = sections.flatMap((s) => s.items.map((i) => i.href));

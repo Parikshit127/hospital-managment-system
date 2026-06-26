@@ -243,6 +243,20 @@ export async function receiveGrn(data: {
         if (accepted <= 0) continue;
         totalAmount += accepted * line.unit_price;
 
+        if (data.po_id) {
+          const poItem = await tx.purchaseOrderItem.findFirst({
+            where: { po_id: data.po_id, itemMasterId: line.item_id },
+          });
+          if (poItem) {
+            await tx.purchaseOrderItem.update({
+              where: { id: poItem.id },
+              data: {
+                quantity_received: Number(poItem.quantity_received || 0) + accepted,
+              },
+            });
+          }
+        }
+
         let batchId: number | null = null;
         if (item.is_batch_tracked) {
           const batchNo = line.batch_no || `B-${Date.now()}`;

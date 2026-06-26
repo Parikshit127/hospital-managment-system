@@ -369,3 +369,22 @@ export async function approveInvoiceVariance(invoiceId: number) {
     return { success: false, error: e.message };
   }
 }
+
+export async function listItemPurchaseInvoices(limit = 50) {
+  try {
+    const { db } = await requireRoleAndTenant([...INVENTORY_VIEW_ROLES, 'finance']);
+    const rows = await db.pharmacyPurchaseInvoice.findMany({
+      where: { line_items: { some: { itemMasterId: { not: null } } } },
+      include: {
+        vendor: { select: { vendor_name: true } },
+        po: { select: { po_number: true } },
+        line_items: { include: { item_master: { select: { name: true, item_code: true } } } },
+      },
+      orderBy: { created_at: 'desc' },
+      take: limit,
+    });
+    return { success: true, data: rows };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}

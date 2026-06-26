@@ -34,11 +34,18 @@ export default function InventoryItemsPage() {
     base_uom: 'Piece',
     purchase_uom: 'Piece',
     std_purchase_price: '',
+    selling_price: '',
     reorder_point: '',
     is_batch_tracked: false,
     is_expiry_tracked: false,
+    is_patient_chargeable: true,
     ved_class: '',
   });
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/session').then((r) => r.json()).then((s) => setUserRole(s?.role || null)).catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,6 +71,8 @@ export default function InventoryItemsPage() {
       base_uom: form.base_uom,
       purchase_uom: form.purchase_uom,
       std_purchase_price: Number(form.std_purchase_price) || 0,
+      selling_price: Number(form.selling_price) || 0,
+      is_patient_chargeable: form.is_patient_chargeable,
       reorder_point: Number(form.reorder_point) || 0,
       is_batch_tracked: form.is_batch_tracked,
       is_expiry_tracked: form.is_expiry_tracked,
@@ -72,7 +81,7 @@ export default function InventoryItemsPage() {
     setSaving(false);
     if (res.success) {
       setModalOpen(false);
-      setForm({ name: '', category_id: '', item_type: 'CONSUMABLE', base_uom: 'Piece', purchase_uom: 'Piece', std_purchase_price: '', reorder_point: '', is_batch_tracked: false, is_expiry_tracked: false, ved_class: '' });
+      setForm({ name: '', category_id: '', item_type: 'CONSUMABLE', base_uom: 'Piece', purchase_uom: 'Piece', std_purchase_price: '', selling_price: '', reorder_point: '', is_batch_tracked: false, is_expiry_tracked: false, is_patient_chargeable: true, ved_class: '' });
       load();
     } else alert(res.error);
   };
@@ -138,10 +147,13 @@ export default function InventoryItemsPage() {
                   </td>
                   <td className="px-4 py-3"><StatusBadge status={item.status} /></td>
                   <td className="px-4 py-3">
-                    {item.status === 'Draft' && (
+                    {item.status === 'Draft' && userRole === 'admin' && (
                       <button onClick={() => handleApprove(item.id)} className="text-xs font-bold text-teal-600 hover:underline">
                         Approve
                       </button>
+                    )}
+                    {item.status === 'Draft' && userRole && userRole !== 'admin' && (
+                      <span className="text-[10px] text-gray-400 font-bold">Awaiting admin approval</span>
                     )}
                   </td>
                 </tr>
@@ -177,16 +189,21 @@ export default function InventoryItemsPage() {
                 <input placeholder="Purchase UOM" className={inputCls} value={form.purchase_uom} onChange={(e) => setForm({ ...form, purchase_uom: e.target.value })} />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <input type="number" step="0.01" placeholder="Std purchase price" className={inputCls} value={form.std_purchase_price} onChange={(e) => setForm({ ...form, std_purchase_price: e.target.value })} />
-                <input type="number" placeholder="Reorder point" className={inputCls} value={form.reorder_point} onChange={(e) => setForm({ ...form, reorder_point: e.target.value })} />
+                <input type="number" step="0.01" placeholder="Purchase price (₹)" className={inputCls} value={form.std_purchase_price} onChange={(e) => setForm({ ...form, std_purchase_price: e.target.value })} />
+                <input type="number" step="0.01" placeholder="Selling price (₹)" className={inputCls} value={form.selling_price} onChange={(e) => setForm({ ...form, selling_price: e.target.value })} />
               </div>
+              <input type="number" placeholder="Reorder point" className={inputCls} value={form.reorder_point} onChange={(e) => setForm({ ...form, reorder_point: e.target.value })} />
               <select className={inputCls} value={form.ved_class} onChange={(e) => setForm({ ...form, ved_class: e.target.value })}>
                 <option value="">VED class (optional)</option>
                 <option value="V">V — Vital</option>
                 <option value="E">E — Essential</option>
                 <option value="D">D — Desirable</option>
               </select>
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={form.is_patient_chargeable} onChange={(e) => setForm({ ...form, is_patient_chargeable: e.target.checked })} />
+                  Patient chargeable
+                </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={form.is_batch_tracked} onChange={(e) => setForm({ ...form, is_batch_tracked: e.target.checked })} />
                   Batch tracked

@@ -6,7 +6,7 @@ import {
     Users, UserPlus, Search, Filter, Shield, Stethoscope, Loader2,
     ChevronLeft, ChevronRight, Pencil, KeyRound, Power, X, Eye, EyeOff,
     FlaskConical, Pill, DollarSign, Bed, UserCheck, UserX,
-    HeartPulse, ClipboardList, Briefcase
+    HeartPulse, ClipboardList, Briefcase, Warehouse, ShoppingCart,
 } from 'lucide-react';
 import { AdminPage } from '@/app/admin/components/AdminPage';
 import {
@@ -27,6 +27,8 @@ const ROLES = [
     { value: 'ipd_manager', label: 'IPD Manager', icon: Bed },
     { value: 'opd_manager', label: 'OPD Manager', icon: ClipboardList },
     { value: 'hr', label: 'HR Manager', icon: Briefcase },
+    { value: 'store_manager', label: 'Store Manager', icon: Warehouse },
+    { value: 'procurement_officer', label: 'Procurement Officer', icon: ShoppingCart },
     { value: 'coordinator', label: 'Coordinator', icon: Users },
     { value: 'admin', label: 'Administrator', icon: Shield },
     { value: 'doctor', label: 'Doctor', icon: Stethoscope },
@@ -47,6 +49,8 @@ const roleColorMap: Record<string, string> = {
     nurse: 'bg-cyan-50 text-cyan-700 border border-cyan-200',
     opd_manager: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
     hr: 'bg-purple-50 text-purple-700 border border-purple-200',
+    store_manager: 'bg-teal-50 text-teal-700 border border-teal-200',
+    procurement_officer: 'bg-lime-50 text-lime-700 border border-lime-200',
     coordinator: 'bg-sky-50 text-sky-700 border border-sky-200',
 };
 

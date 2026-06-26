@@ -71,6 +71,14 @@ const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         'hr.view', 'hr.create', 'hr.edit', 'hr.approve', 'hr.export',
         'reports.view', 'reports.export',
     ],
+    store_manager: [
+        'inventory.view', 'inventory.manage', 'inventory.create', 'inventory.edit',
+        'reports.view', 'reports.export',
+    ],
+    procurement_officer: [
+        'inventory.view', 'inventory.procure', 'inventory.create',
+        'reports.view',
+    ],
 };
 
 const ALL_PERMISSIONS = [

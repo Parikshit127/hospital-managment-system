@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 import { isMfaRequiredRole } from '@/app/actions/mfa-actions';
 import { createSession, createMfaPendingSession, getMfaPendingSession } from '@/app/lib/session';
 import { loginSchema } from '@/app/lib/validations';
+import { getLoginRedirectForRole, ROLE_LOGIN_REDIRECTS } from '@/app/lib/role-login-redirects';
 import {
     checkLoginAttempt,
     clearLoginFailures,
@@ -31,32 +32,19 @@ export async function login(prevState: any, formData: FormData) {
     // SECURITY: this is a no-password login and must NEVER run in production.
     // Gated to non-production builds only (next start sets NODE_ENV=production).
     if (process.env.NODE_ENV !== 'production' && password === 'admin') {
-        const role = ['doctor', 'receptionist', 'admin', 'hr', 'finance', 'ipd_manager', 'nurse', 'opd_manager', 'lab_technician', 'pharmacist', 'coordinator'].includes(username) ? username : 'admin';
+        const demoRoles = Object.keys(ROLE_LOGIN_REDIRECTS);
+        const role = demoRoles.includes(username) ? username : 'admin';
         await createSession({
             id: 'demo-id',
             username: username,
             role: role,
-            name: `Demo ${role.toUpperCase()}`,
+            name: `Demo ${role.replace(/_/g, ' ').toUpperCase()}`,
             specialty: null,
             organization_id: 'demo-org',
             organization_slug: 'demo',
             organization_name: 'Demo Hospital',
         });
-        
-        switch (role) {
-            case 'receptionist': redirect('/reception');
-            case 'doctor': redirect('/doctor/dashboard');
-            case 'lab_technician': redirect('/lab/technician');
-            case 'pharmacist': redirect('/pharmacy/billing');
-            case 'admin': redirect('/admin/dashboard');
-            case 'finance': redirect('/finance/dashboard');
-            case 'ipd_manager': redirect('/ipd');
-            case 'nurse': redirect('/nurse/dashboard');
-            case 'opd_manager': redirect('/opd-manager/dashboard');
-            case 'hr': redirect('/hr/dashboard');
-            case 'coordinator': redirect('/coordinator/dashboard');
-            default: redirect('/admin/dashboard');
-        }
+        redirect(getLoginRedirectForRole(role));
     }
     // ----------------------------
 
@@ -147,20 +135,7 @@ export async function login(prevState: any, formData: FormData) {
     const user = await prisma.user.findUnique({ where: { username } });
     if (!user) return { success: false, error: 'User not found' };
 
-    switch (user.role) {
-        case 'receptionist': redirect('/reception');
-        case 'doctor': redirect('/doctor/dashboard');
-        case 'lab_technician': redirect('/lab/technician');
-        case 'pharmacist': redirect('/pharmacy/billing');
-        case 'admin': redirect('/admin/dashboard');
-        case 'finance': redirect('/finance/dashboard');
-        case 'ipd_manager': redirect('/ipd');
-        case 'nurse': redirect('/nurse/dashboard');
-        case 'opd_manager': redirect('/opd-manager/dashboard');
-        case 'hr': redirect('/hr/dashboard');
-        case 'coordinator': redirect('/coordinator/dashboard');
-        default: redirect('/');
-    }
+    redirect(getLoginRedirectForRole(user.role));
 }
 
 export async function completeMfaLogin(token: string) {

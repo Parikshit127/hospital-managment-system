@@ -101,6 +101,9 @@ async function main() {
         { username: 'pharm1', role: 'pharmacist', name: 'Priya Pharmacist', specialty: null, email: 'priya.pharm@avanihospital.com', phone: '+91 98000 40001' },
         { username: 'finance1', role: 'finance', name: 'Ankit Finance', specialty: null, email: 'ankit.finance@avanihospital.com', phone: '+91 98000 50001' },
         { username: 'ipd1', role: 'ipd_manager', name: 'Neha IPD Manager', specialty: null, email: 'neha.ipd@avanihospital.com', phone: '+91 98000 60001' },
+        { username: 'store1', role: 'store_manager', name: 'Raj Store Manager', specialty: null, email: 'raj.store@avanihospital.com', phone: '+91 98000 70001' },
+        { username: 'proc1', role: 'procurement_officer', name: 'Kiran Procurement', specialty: null, email: 'kiran.proc@avanihospital.com', phone: '+91 98000 70002' },
+        { username: 'nurse1', role: 'nurse', name: 'Sneha Ward Nurse', specialty: null, email: 'sneha.nurse@avanihospital.com', phone: '+91 98000 70003' },
     ];
 
     for (const u of users) {
@@ -206,6 +209,7 @@ async function main() {
     // 5. WARDS & BEDS (with organizationId)
     // =============================================
     const wardsData = [
+        { ward_name: 'WARD-A', ward_type: 'General', cost_per_day: 800, nursing_charge: 250 },
         { ward_name: 'General Ward', ward_type: 'General', cost_per_day: 500, nursing_charge: 200 },
         { ward_name: 'ICU', ward_type: 'ICU', cost_per_day: 5000, nursing_charge: 1500 },
         { ward_name: 'Private Room', ward_type: 'Private', cost_per_day: 3000, nursing_charge: 500 },
@@ -475,6 +479,21 @@ async function main() {
         });
     }
     console.log('Seeded Insurance Providers (' + insuranceProviders.length + ' providers)');
+
+    await prisma.vendor.upsert({
+        where: { vendor_code_organizationId: { vendor_code: 'INV-V001', organizationId: DEFAULT_ORG_ID } },
+        update: { is_active: true, vendor_name: 'MedSupply India Pvt Ltd' },
+        create: {
+            vendor_name: 'MedSupply India Pvt Ltd',
+            vendor_code: 'INV-V001',
+            contact_person: 'Supply Desk',
+            phone: '+91 90000 11111',
+            gst_number: '27AABCU9603R1ZM',
+            organizationId: DEFAULT_ORG_ID,
+            is_active: true,
+        },
+    });
+    console.log('Seeded inventory vendor (INV-V001)');
 
     console.log('\n=== Seeding Complete ===');
     console.log('Organization: Avani Hospital (org-avani-default)');
