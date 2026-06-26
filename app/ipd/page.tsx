@@ -26,6 +26,7 @@ import {
   Thermometer,
   XCircle,
   LogOut,
+  ArrowLeftRight,
   Siren,
   ClipboardCheck,
   ScrollText,
@@ -164,7 +165,7 @@ export default function IPDDashboard() {
         getIPDStats(),
         getWardsWithBeds(),
         getAllBeds(),
-        getIPDAdmissions(myFilter)
+        getIPDAdmissions(myFilter === "All" ? undefined : myFilter)
       ]);
       // If a newer load has started while we awaited, throw this response away.
       if (mySeq !== loadSeqRef.current) return;
@@ -855,6 +856,15 @@ export default function IPDDashboard() {
                                 >
                                   <ClipboardList className="h-3 w-3 text-gray-400 hover:text-gray-900" />
                                 </button>
+                                {["Admitted", "Discharged"].includes(adm.status) && (
+                                  <Link
+                                    href={`/ipd/admission/${adm.admission_id}`}
+                                    className="p-1 hover:bg-indigo-500/10 rounded transition-all"
+                                    title="Change Ward"
+                                  >
+                                    <ArrowLeftRight className="h-3 w-3 text-indigo-400 hover:text-indigo-600" />
+                                  </Link>
+                                )}
                                 {adm.status === "Admitted" && (
                                   <Link
                                     href={`/ipd/discharge-settlement/${adm.admission_id}`}
@@ -944,7 +954,7 @@ export default function IPDDashboard() {
             {activeTab === "admissions" && (
               <div className="space-y-4">
                 <div className="flex gap-2">
-                  {["Admitted", "Discharged", "Cancelled"].map((f) => (
+                  {["All", "Admitted", "Discharged", "Cancelled"].map((f) => (
                     <button
                       key={f}
                       onClick={() => setAdmissionFilter(f)}
@@ -1066,6 +1076,15 @@ export default function IPDDashboard() {
                                   >
                                     <FileText className="h-3.5 w-3.5 text-blue-500" />
                                   </a>
+                                  {["Admitted", "Discharged"].includes(adm.status) && (
+                                    <Link
+                                      href={`/ipd/admission/${adm.admission_id}`}
+                                      className="p-1.5 hover:bg-indigo-50 rounded-lg"
+                                      title="Change Ward"
+                                    >
+                                      <ArrowLeftRight className="h-3.5 w-3.5 text-indigo-500" />
+                                    </Link>
+                                  )}
                                   {adm.status === "Admitted" && (
                                     <button
                                       onClick={() => {

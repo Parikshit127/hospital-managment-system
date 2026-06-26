@@ -1158,14 +1158,15 @@ export async function transferPatient(data: {
         where: { admission_id: data.admission_id },
       });
 
-      if (!admission || admission.status !== "Admitted") {
-        throw new Error("Valid active admission not found");
+      if (!admission || !["Admitted", "Discharged"].includes(admission.status)) {
+        throw new Error("Valid admitted or discharged admission not found");
       }
 
       const fromBedId = admission.bed_id;
+      const isActiveAdmission = admission.status === "Admitted";
 
-      // Mark old bed cleaning
-      if (fromBedId) {
+      // Live transfers affect bed occupancy; discharged records are historical corrections.
+      if (isActiveAdmission && fromBedId) {
         await tx.beds.update({
           where: { bed_id: fromBedId },
           data: { status: "Cleaning" },
@@ -1180,11 +1181,12 @@ export async function transferPatient(data: {
         throw new Error("Destination bed is not available");
       }
 
-      // Update new bed
-      await tx.beds.update({
-        where: { bed_id: data.to_bed_id },
-        data: { status: "Occupied" },
-      });
+      if (isActiveAdmission) {
+        await tx.beds.update({
+          where: { bed_id: data.to_bed_id },
+          data: { status: "Occupied" },
+        });
+      }
 
       // Update admission
       await tx.admissions.update({
@@ -1198,7 +1200,7 @@ export async function transferPatient(data: {
           admission_id: data.admission_id,
           from_bed_id: fromBedId || "",
           to_bed_id: data.to_bed_id,
-          reason: data.reason,
+          reason: data.reason || (isActiveAdmission ? null : "Post-discharge ward/bed correction"),
           transferred_by: session.id, // Ensure your schema uses string or Int
           organizationId,
         },
@@ -1206,6 +1208,7 @@ export async function transferPatient(data: {
     });
 
     revalidatePath("/ipd");
+    revalidatePath(`/ipd/admission/${data.admission_id}`);
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };

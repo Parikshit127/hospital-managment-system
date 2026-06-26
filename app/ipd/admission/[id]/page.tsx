@@ -673,7 +673,7 @@ export default function AdmissionDetailPage() {
                                     <span className="max-w-md truncate">
                                         {data.diagnosis || 'No diagnosis recorded'}
                                     </span>
-                                    {data.status === 'Admitted' && !showAdmissionEdit && (
+                                    {['Admitted', 'Discharged'].includes(data.status) && !showAdmissionEdit && (
                                         <button
                                             onClick={openAdmissionEdit}
                                             className="ml-0.5 inline-flex items-center gap-1 rounded px-1 py-0.5 text-orange-600 hover:bg-orange-50 hover:text-orange-700"
@@ -690,6 +690,17 @@ export default function AdmissionDetailPage() {
                                 <span className="flex items-center gap-1.5">
                                     <Bed className="h-3.5 w-3.5 text-indigo-400" />
                                     {data.bed?.wards?.ward_name || 'Unassigned'} · {data.bed_id || 'No bed'}
+                                    {['Admitted', 'Discharged'].includes(data.status) && (
+                                        <button
+                                            type="button"
+                                            onClick={openTransfer}
+                                            title="Change Ward"
+                                            aria-label="Change Ward"
+                                            className="ml-0.5 p-0.5 rounded hover:bg-indigo-50 text-gray-400 hover:text-indigo-600"
+                                        >
+                                            <Pencil className="h-3 w-3" />
+                                        </button>
+                                    )}
                                 </span>
                                 <span className="flex items-center gap-1.5">
                                     <Stethoscope className="h-3.5 w-3.5 text-violet-400" />
@@ -724,20 +735,20 @@ export default function AdmissionDetailPage() {
                             >
                                 <Printer className="h-3.5 w-3.5" /> Print Stickers
                             </button>
+                            {['Admitted', 'Discharged'].includes(data.status) && (
+                                <button
+                                    onClick={openTransfer}
+                                    className="flex items-center gap-1.5 px-3 py-2 border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-xl hover:bg-indigo-100 transition-colors"
+                                >
+                                    <ArrowLeftRight className="h-3.5 w-3.5" /> Change Ward
+                                </button>
+                            )}
                             {data.status === 'Admitted' && (
-                                <>
-                                    <button
-                                        onClick={openTransfer}
-                                        className="flex items-center gap-1.5 px-3 py-2 border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-xl hover:bg-indigo-100 transition-colors"
-                                    >
-                                        <ArrowLeftRight className="h-3.5 w-3.5" /> Transfer Bed
+                                <Link href={`/ipd/discharge-settlement/${data.admission_id}`}>
+                                    <button className="flex items-center gap-1.5 px-3 py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-xl transition-colors shadow-sm">
+                                        <LogOut className="h-3.5 w-3.5" /> Discharge
                                     </button>
-                                    <Link href={`/ipd/discharge-settlement/${data.admission_id}`}>
-                                        <button className="flex items-center gap-1.5 px-3 py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-xl transition-colors shadow-sm">
-                                            <LogOut className="h-3.5 w-3.5" /> Discharge
-                                        </button>
-                                    </Link>
-                                </>
+                                </Link>
                             )}
                             {data.status === 'Discharged' && (data.viewer_role === 'admin' || data.viewer_role === 'finance') && (
                                 <button
@@ -866,7 +877,7 @@ export default function AdmissionDetailPage() {
                                     <div className="bg-gray-50 rounded-xl border border-gray-200 p-5 space-y-3">
                                         <div className="flex items-center justify-between">
                                             <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Admission Details</h4>
-                                            {data.status === 'Admitted' && !showAdmissionEdit && (
+                                            {['Admitted', 'Discharged'].includes(data.status) && !showAdmissionEdit && (
                                                 <button
                                                     onClick={() => {
                                                         setEditDiagnosis(data.diagnosis || '');
@@ -2136,7 +2147,7 @@ export default function AdmissionDetailPage() {
                     <div className="bg-white border border-gray-200 shadow-xl rounded-2xl w-full max-w-md p-6 space-y-5">
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-black text-gray-900 flex items-center gap-2">
-                                <ArrowLeftRight className="h-4 w-4 text-indigo-500" /> Transfer / Change Bed
+                                <ArrowLeftRight className="h-4 w-4 text-indigo-500" /> Change Ward / Bed
                             </h3>
                             <button onClick={() => setShowTransfer(false)} className="text-gray-400 hover:text-gray-900">
                                 <X className="h-5 w-5" />
@@ -2182,7 +2193,7 @@ export default function AdmissionDetailPage() {
                                     <input
                                         type="text"
                                         className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm"
-                                        placeholder="e.g. Condition improved, patient request..."
+                                        placeholder={data.status === 'Discharged' ? 'e.g. Correcting discharge record...' : 'e.g. Condition improved, patient request...'}
                                         value={transferReason}
                                         onChange={e => setTransferReason(e.target.value)}
                                     />
@@ -2193,7 +2204,7 @@ export default function AdmissionDetailPage() {
                                     className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2"
                                 >
                                     {transferring && <Loader2 className="h-4 w-4 animate-spin" />}
-                                    Confirm Transfer
+                                    Save Ward Change
                                 </button>
                             </div>
                         )}
