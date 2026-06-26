@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { PatientNotes } from "@/app/components/patient/PatientNotes";
@@ -106,6 +106,29 @@ export default function PatientFinancialProfilePage() {
   const [editingPayment, setEditingPayment] = useState<any | null>(null);
   const [reversingPayment, setReversingPayment] = useState<any | null>(null);
   const [refundOpen, setRefundOpen] = useState(false);
+
+  // Memoize initialPatient so its object reference is stable across parent re-renders.
+  // Without this, every render creates a new object literal, causing RefundModal's
+  // useEffect([open, initialPatient]) to fire on every render, which in turn triggers
+  // the invoice-loading effect (useEffect([open, patient, step])) because `patient`
+  // state gets set to a new reference — producing the infinite spinner flicker.
+  const initialPatientForModal = useMemo(
+    () =>
+      profile?.patient
+        ? {
+            patient_id: profile.patient.patient_id,
+            full_name: profile.patient.full_name,
+            phone: profile.patient.phone ?? null,
+          }
+        : null,
+    // Only recompute when the actual data values change, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      profile?.patient?.patient_id,
+      profile?.patient?.full_name,
+      profile?.patient?.phone,
+    ]
+  );
   // Viewer role — only admin/finance may edit a bill once a payment has been collected.
   const [myRole, setMyRole] = useState<string | null>(null);
   const canEditPaid = ['admin', 'finance', 'superadmin'].includes(myRole || '');
@@ -303,15 +326,7 @@ export default function PatientFinancialProfilePage() {
       <RefundModal
         open={refundOpen}
         onClose={() => setRefundOpen(false)}
-        initialPatient={
-          profile?.patient
-            ? {
-                patient_id: profile.patient.patient_id,
-                full_name: profile.patient.full_name,
-                phone: profile.patient.phone,
-              }
-            : null
-        }
+        initialPatient={initialPatientForModal}
         onRefunded={load}
       />
     </AppShell>
