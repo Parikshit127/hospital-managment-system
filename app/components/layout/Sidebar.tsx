@@ -86,6 +86,8 @@ import {
   Landmark,
   TrendingUp,
   Warehouse,
+  Boxes,
+  ScanLine,
 } from "lucide-react";
 
 interface NavItem {
@@ -296,10 +298,16 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Item Master", href: "/inventory/items", icon: Package },
         { label: "Stores", href: "/inventory/stores", icon: Warehouse },
         { label: "Stock & Ledger", href: "/inventory/stock", icon: PackageOpen },
+        { label: "Issues", href: "/inventory/issues", icon: Syringe },
+        { label: "Opening Stock", href: "/inventory/opening-stock", icon: PackageOpen },
         { label: "Indents", href: "/inventory/indents", icon: ClipboardList },
         { label: "Procurement", href: "/inventory/procurement", icon: ShoppingCart },
         { label: "Transfers", href: "/inventory/transfers", icon: ArrowLeftRight },
         { label: "Physical Count", href: "/inventory/counts", icon: ClipboardCheck },
+        { label: "Kits / BOM", href: "/inventory/kits", icon: Boxes },
+        { label: "CSSD", href: "/inventory/cssd", icon: ShieldCheck },
+        { label: "Barcode Scan", href: "/inventory/barcode", icon: ScanLine },
+        { label: "GL Reconcile", href: "/inventory/reconcile", icon: Scale },
         { label: "Reports", href: "/inventory/reports", icon: BarChart3 },
       ],
     },

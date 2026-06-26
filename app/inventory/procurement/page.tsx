@@ -11,14 +11,25 @@ import {
   listGRNs,
   receiveGrn,
 } from '@/app/actions/inventory-actions';
+import {
+  listItemPOs,
+  submitItemPO,
+  approveItemPO,
+  convertPRtoPO,
+  createItemPurchaseOrder,
+  matchItemPurchaseInvoice,
+  postItemPurchaseInvoice,
+  approveInvoiceVariance,
+} from '@/app/actions/inventory-procurement-actions';
 import { listStores } from '@/app/actions/store-actions';
 import { searchItems } from '@/app/actions/item-master-actions';
 import { listVendors } from '@/app/actions/indent-actions';
 import { StatusBadge, btnPrimary, btnSecondary, inputCls, cardCls } from '../components/InventoryUI';
 
 export default function InventoryProcurementPage() {
-  const [tab, setTab] = useState<'pr' | 'grn'>('pr');
+  const [tab, setTab] = useState<'pr' | 'po' | 'grn'>('pr');
   const [prs, setPrs] = useState<any[]>([]);
+  const [pos, setPos] = useState<any[]>([]);
   const [grns, setGrns] = useState<any[]>([]);
   const [stores, setStores] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
@@ -41,13 +52,15 @@ export default function InventoryProcurementPage() {
 
   const load = async () => {
     setLoading(true);
-    const [prRes, grnRes, storeRes, vendorRes] = await Promise.all([
+    const [prRes, poRes, grnRes, storeRes, vendorRes] = await Promise.all([
       listPurchaseRequisitions(),
+      listItemPOs(),
       listGRNs(),
       listStores(),
       listVendors(),
     ]);
     if (prRes.success) setPrs(prRes.data as any[]);
+    if (poRes.success) setPos(poRes.data as any[]);
     if (grnRes.success) setGrns(grnRes.data as any[]);
     if (storeRes.success) setStores(storeRes.data as any[]);
     if (vendorRes.success) setVendors(vendorRes.data as any[]);
@@ -109,12 +122,49 @@ export default function InventoryProcurementPage() {
         <button onClick={() => setTab('pr')} className={`px-4 py-2 rounded-xl text-sm font-bold border ${tab === 'pr' ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-white border-gray-200'}`}>
           Purchase Requisitions
         </button>
+        <button onClick={() => setTab('po')} className={`px-4 py-2 rounded-xl text-sm font-bold border ${tab === 'po' ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-white border-gray-200'}`}>
+          Purchase Orders
+        </button>
         <button onClick={() => setTab('grn')} className={`px-4 py-2 rounded-xl text-sm font-bold border ${tab === 'grn' ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-white border-gray-200'}`}>
           Goods Receipt (GRN)
         </button>
       </div>
 
-      {tab === 'pr' ? (
+      {tab === 'po' ? (
+        <div className={cardCls}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[10px] font-bold text-gray-400 uppercase bg-gray-50/80">
+                <th className="px-4 py-3">PO #</th>
+                <th className="px-4 py-3">Vendor</th>
+                <th className="px-4 py-3">Store</th>
+                <th className="px-4 py-3">Amount</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pos.map((po) => (
+                <tr key={po.id} className="border-t border-gray-100">
+                  <td className="px-4 py-3 font-mono text-xs font-bold">{po.po_number}</td>
+                  <td className="px-4 py-3">{po.vendor?.vendor_name}</td>
+                  <td className="px-4 py-3">{po.stores?.name}</td>
+                  <td className="px-4 py-3 font-bold">₹{Math.round(po.total_amount).toLocaleString('en-IN')}</td>
+                  <td className="px-4 py-3"><StatusBadge status={po.status} /></td>
+                  <td className="px-4 py-3">
+                    {po.status === 'Draft' && (
+                      <button onClick={() => submitItemPO(po.id).then(load)} className="text-xs font-bold text-blue-600">Submit</button>
+                    )}
+                    {['Submitted', 'Draft'].includes(po.status) && (
+                      <button onClick={() => approveItemPO(po.id).then(load)} className="text-xs font-bold text-emerald-600 ml-2">Approve</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : tab === 'pr' ? (
         <div className={cardCls}>
           <table className="w-full text-sm">
             <thead>
@@ -142,7 +192,19 @@ export default function InventoryProcurementPage() {
                       <button onClick={() => updatePRStatus(pr.id, 'Submitted').then(load)} className="text-xs font-bold text-blue-600">Submit</button>
                     )}
                     {pr.status === 'Submitted' && (
-                      <button onClick={() => updatePRStatus(pr.id, 'Approved').then(load)} className="text-xs font-bold text-emerald-600 ml-2">Approve</button>
+                      <>
+                        <button onClick={() => updatePRStatus(pr.id, 'Approved').then(load)} className="text-xs font-bold text-emerald-600">Approve</button>
+                        <button
+                          onClick={() => {
+                            const vendorId = vendors[0]?.id;
+                            if (!vendorId) return alert('Add a vendor first');
+                            convertPRtoPO(pr.id, vendorId).then(load);
+                          }}
+                          className="text-xs font-bold text-violet-600 ml-2"
+                        >
+                          Convert to PO
+                        </button>
+                      </>
                     )}
                   </td>
                 </tr>

@@ -351,7 +351,7 @@ export async function postItemPurchaseInvoice(invoiceId: number) {
       data: { status: 'Posted', posted_at: new Date() },
     });
     revalidateProcurement();
-    return { success: true, data: glRes.journal };
+    return { success: true, data: (glRes as any).journal };
   } catch (e: any) {
     return { success: false, error: e.message };
   }

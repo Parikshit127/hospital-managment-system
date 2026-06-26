@@ -10,6 +10,7 @@ import { ModuleHubLayout } from '../components/ModuleHubLayout';
 import { getInventoryDashboardStats } from '@/app/actions/inventory-actions';
 import { getItemMasterStats } from '@/app/actions/item-master-actions';
 import { createItemCategory } from '@/app/actions/item-master-actions';
+import { migrateLegacyInventory } from '@/app/actions/inventory-operations-actions';
 import { ITEM_TYPES } from '@/app/lib/inventory-roles';
 import { inputCls, btnPrimary } from '@/app/inventory/components/InventoryUI';
 
@@ -140,6 +141,15 @@ export default function AdminInventoryHub() {
             </form>
           </div>
           <p className="text-xs text-gray-500">Configure GL account mapping per category in Finance settings. Module can be enabled/disabled using the toggle above.</p>
+          <button
+            onClick={async () => {
+              const res = await migrateLegacyInventory();
+              alert(res.success ? `Migrated ${res.data?.migrated} records` : res.error);
+            }}
+            className="text-xs font-bold text-amber-700 px-4 py-2 border border-amber-200 rounded-xl hover:bg-amber-50"
+          >
+            Migrate WardStock + Lab Reagents
+          </button>
         </div>
       )}
     </ModuleHubLayout>

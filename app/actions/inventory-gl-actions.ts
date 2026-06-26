@@ -83,6 +83,7 @@ export async function postGrnToGL(grnId: number, movementIds: number[] = []) {
     const grn = await prisma.goodsReceiptNote.findFirst({
       where: { id: grnId },
       include: {
+        stores: { select: { cost_center: true, name: true } },
         goods_receipt_note_items: { include: { item_master: { include: { item_categories: true } } } },
       },
     });

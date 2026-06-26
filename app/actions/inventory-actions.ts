@@ -192,80 +192,6 @@ export async function getMovementLedger(params?: {
   }
 }
 
-async function upsertStoreStockLocal(
-  tx: any,
-  organizationId: string,
-  storeId: number,
-  itemId: number,
-  batchId: number | null,
-  qtyDelta: number,
-  unitCost: number,
-) {
-  const existing = await tx.store_stocks.findFirst({
-    where: { store_id: storeId, item_id: itemId, batch_id: batchId },
-  });
-
-  if (existing) {
-    const newQty = existing.quantity_on_hand + qtyDelta;
-    if (newQty < 0) throw new Error('Insufficient stock');
-    const newAvg =
-      qtyDelta > 0
-        ? calcMovingAverage(existing.quantity_on_hand, existing.avg_unit_cost, qtyDelta, unitCost)
-        : existing.avg_unit_cost;
-    return tx.store_stocks.update({
-      where: { id: existing.id },
-      data: {
-        quantity_on_hand: newQty,
-        avg_unit_cost: newAvg,
-        updated_at: new Date(),
-      },
-    });
-  }
-
-  if (qtyDelta < 0) throw new Error('Insufficient stock');
-  return tx.store_stocks.create({
-    data: {
-      store_id: storeId,
-      item_id: itemId,
-      batch_id: batchId,
-      quantity_on_hand: qtyDelta,
-      quantity_reserved: 0,
-      avg_unit_cost: unitCost,
-      organizationId,
-      updated_at: new Date(),
-    },
-  });
-}
-
-async function recordMovement(
-  tx: any,
-  params: {
-    organizationId: string;
-    store_id: number;
-    item_id: number;
-    batch_id?: number | null;
-    movement_type: string;
-    quantity_in: number;
-    quantity_out: number;
-    unit_cost: number;
-    balance_after: number;
-    source_type?: string;
-    source_id?: string;
-    cost_center?: string;
-    user_id?: string;
-    reason?: string;
-  },
-) {
-  return tx.inventory_movements.create({
-    data: {
-      ...params,
-      batch_id: params.batch_id ?? null,
-      value: (params.quantity_in - params.quantity_out) * params.unit_cost,
-      created_at: new Date(),
-    },
-  });
-}
-
 export async function receiveGrn(data: {
   store_id: number;
   vendor_id?: number;
@@ -293,6 +219,7 @@ export async function receiveGrn(data: {
 
     const grnNumber = await nextDocNumber(db, 'GRN', 'goods_receipt_notes', 'grn_number');
     let totalAmount = 0;
+    const movementIds: number[] = [];
 
     const result = await db.$transaction(async (tx: any) => {
       const grn = await tx.goods_receipt_notes.create({
@@ -364,7 +291,7 @@ export async function receiveGrn(data: {
           },
         });
 
-        await recordMovement(tx, {
+        const mov = await recordMovement(tx, {
           organizationId,
           store_id: data.store_id,
           item_id: line.item_id,
@@ -379,6 +306,7 @@ export async function receiveGrn(data: {
           cost_center: store.cost_center || undefined,
           user_id: session.id,
         });
+        movementIds.push(mov.id);
       }
 
       await tx.goods_receipt_notes.update({
@@ -388,6 +316,8 @@ export async function receiveGrn(data: {
 
       return grn;
     });
+
+    const glRes = await postGrnToGL(result.id, movementIds);
 
     await logAuditEvent({
       userId: session.id,
@@ -400,7 +330,7 @@ export async function receiveGrn(data: {
       details: `GRN ${grnNumber} received at ${store.name}`,
     });
     revalidateAll();
-    return { success: true, data: result };
+    return { success: true, data: result, glPosted: glRes.success };
   } catch (e: any) {
     return { success: false, error: e.message };
   }

@@ -362,3 +362,128 @@ export async function getItemMasterStats() {
     return { success: false, error: e.message };
   }
 }
+
+export async function importItemsFromRows(
+  rows: Array<{
+    name: string;
+    category_name: string;
+    item_type?: string;
+    base_uom?: string;
+    std_purchase_price?: number;
+    reorder_point?: number;
+    hsn_sac_code?: string;
+    gst_rate?: number;
+    is_batch_tracked?: boolean;
+    ved_class?: string;
+  }>,
+  dryRun = false,
+) {
+  try {
+    const { db, session, organizationId } = await requireRoleAndTenant([...INVENTORY_ADMIN_ROLES]);
+    const errors: string[] = [];
+    const created: string[] = [];
+    const duplicates: string[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const line = i + 2;
+      if (!row.name?.trim()) {
+        errors.push(`Row ${line}: name required`);
+        continue;
+      }
+
+      const dup = await db.item_master.findFirst({
+        where: { name: { equals: row.name.trim(), mode: 'insensitive' }, organizationId },
+      });
+      if (dup) {
+        duplicates.push(row.name);
+        continue;
+      }
+
+      let category = await db.item_categories.findFirst({
+        where: { name: { equals: row.category_name?.trim() || 'General Consumables', mode: 'insensitive' } },
+      });
+      if (!category) {
+        if (dryRun) {
+          errors.push(`Row ${line}: category "${row.category_name}" not found`);
+          continue;
+        }
+        category = await db.item_categories.create({
+          data: {
+            name: row.category_name || 'General Consumables',
+            item_type: row.item_type || 'CONSUMABLE',
+            organizationId,
+            updated_at: new Date(),
+          },
+        });
+      }
+
+      if (dryRun) {
+        created.push(row.name);
+        continue;
+      }
+
+      const itemType = row.item_type || category.item_type;
+      const item_code = await (async () => {
+        const prefix = itemCodePrefix(itemType);
+        const latest = await db.item_master.findFirst({
+          where: { organizationId, item_code: { startsWith: prefix } },
+          orderBy: { id: 'desc' },
+          select: { item_code: true },
+        });
+        const seq = latest?.item_code ? parseInt(latest.item_code.replace(prefix, ''), 10) || 0 : 0;
+        return `${prefix}${String(seq + 1).padStart(5, '0')}`;
+      })();
+
+      await db.item_master.create({
+        data: {
+          item_code,
+          name: row.name.trim(),
+          category_id: category.id,
+          item_type: itemType,
+          base_uom: row.base_uom || 'Piece',
+          purchase_uom: row.base_uom || 'Piece',
+          hsn_sac_code: row.hsn_sac_code,
+          gst_rate: row.gst_rate ?? category.default_gst_rate ?? 0,
+          std_purchase_price: row.std_purchase_price ?? 0,
+          reorder_point: row.reorder_point ?? 0,
+          is_batch_tracked: row.is_batch_tracked ?? false,
+          ved_class: row.ved_class,
+          status: session.role === 'admin' ? 'Active' : 'Draft',
+          organizationId,
+          updated_at: new Date(),
+        },
+      });
+      created.push(row.name);
+    }
+
+    if (!dryRun) revalidateInventory();
+    return {
+      success: true,
+      data: { created: created.length, duplicates, errors, preview: dryRun ? created : undefined },
+    };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
+export async function importItemsFromXlsx(base64: string, dryRun = false) {
+  const XLSX = await import('xlsx');
+  const buffer = Buffer.from(base64, 'base64');
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+  const rows = raw.map((r) => ({
+    name: String(r.name || r.Name || r.ITEM_NAME || ''),
+    category_name: String(r.category || r.Category || r.CATEGORY || 'General Consumables'),
+    item_type: r.item_type ? String(r.item_type) : undefined,
+    base_uom: r.base_uom ? String(r.base_uom) : undefined,
+    std_purchase_price: Number(r.std_purchase_price || r.price || 0),
+    reorder_point: Number(r.reorder_point || r.rop || 0),
+    hsn_sac_code: r.hsn ? String(r.hsn) : undefined,
+    gst_rate: Number(r.gst_rate || r.gst || 0),
+    is_batch_tracked: Boolean(r.batch_tracked),
+    ved_class: r.ved ? String(r.ved) : undefined,
+  }));
+  return importItemsFromRows(rows, dryRun);
+}
