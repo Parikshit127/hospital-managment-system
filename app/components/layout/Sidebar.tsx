@@ -38,6 +38,7 @@ import {
   BarChart3,
   FileSpreadsheet,
   Package,
+  PackageOpen,
   ShoppingCart,
   Truck,
   RotateCcw,
@@ -84,6 +85,7 @@ import {
   BookOpen,
   Landmark,
   TrendingUp,
+  Warehouse,
 } from "lucide-react";
 
 interface NavItem {
@@ -118,6 +120,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Approval Center", href: "/billing/approvals", icon: ShieldAlert },
         { label: "Write-offs", href: "/billing/writeoffs", icon: Scale },
         { label: "HR", href: "/admin/hr", icon: Briefcase },
+        { label: "Inventory", href: "/admin/inventory", icon: Warehouse },
       ],
     },
     {
@@ -249,6 +252,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Worklist", href: "/lab/worklist", icon: ClipboardCheck },
         { label: "Lab Orders", href: "/lab/technician", icon: FlaskConical },
         { label: "Inventory", href: "/lab/inventory", icon: Package },
+        { label: "Materials Store", href: "/inventory/indents", icon: Warehouse },
         { label: "Reports", href: "/lab/reports", icon: BarChart3 },
         { label: "MIS Reports", href: "/lab/mis-reports", icon: FileSpreadsheet },
       ],
@@ -281,6 +285,34 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       items: [
         { label: "Pharmacy Reports", href: "/pharmacy/reports", icon: BarChart3 },
         { label: "MIS Reports", href: "/pharmacy/mis-reports", icon: FileSpreadsheet },
+      ],
+    },
+  ],
+  store_manager: [
+    {
+      title: "Inventory",
+      items: [
+        { label: "Dashboard", href: "/inventory/dashboard", icon: LayoutDashboard },
+        { label: "Item Master", href: "/inventory/items", icon: Package },
+        { label: "Stores", href: "/inventory/stores", icon: Warehouse },
+        { label: "Stock & Ledger", href: "/inventory/stock", icon: PackageOpen },
+        { label: "Indents", href: "/inventory/indents", icon: ClipboardList },
+        { label: "Procurement", href: "/inventory/procurement", icon: ShoppingCart },
+        { label: "Transfers", href: "/inventory/transfers", icon: ArrowLeftRight },
+        { label: "Physical Count", href: "/inventory/counts", icon: ClipboardCheck },
+        { label: "Reports", href: "/inventory/reports", icon: BarChart3 },
+      ],
+    },
+  ],
+  procurement_officer: [
+    {
+      title: "Procurement",
+      items: [
+        { label: "Dashboard", href: "/inventory/dashboard", icon: LayoutDashboard },
+        { label: "Purchase Requisitions", href: "/inventory/procurement", icon: ShoppingCart },
+        { label: "GRN Receipt", href: "/inventory/procurement", icon: Truck },
+        { label: "Item Catalogue", href: "/inventory/items", icon: Package },
+        { label: "Stock View", href: "/inventory/stock", icon: PackageOpen },
       ],
     },
   ],
@@ -321,6 +353,14 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Deposits", href: "/finance/deposits", icon: Wallet },
         { label: "Credit Notes", href: "/finance/credit-notes", icon: FileText },
         { label: "Print Center", href: "/print-center", icon: Printer },
+      ],
+    },
+    {
+      title: "Inventory",
+      items: [
+        { label: "Valuation Reports", href: "/inventory/reports", icon: BarChart3 },
+        { label: "Count Approvals", href: "/inventory/counts", icon: ClipboardCheck },
+        { label: "Stock Ledger", href: "/inventory/stock", icon: Package },
       ],
     },
     {
@@ -426,6 +466,13 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Medications", href: "/nurse/medications", icon: Syringe },
         { label: "Tasks", href: "/nurse/tasks", icon: ClipboardCheck },
         { label: "Handover", href: "/nurse/handover", icon: ArrowLeftRight },
+      ],
+    },
+    {
+      title: "Inventory",
+      items: [
+        { label: "Raise Indent", href: "/inventory/indents", icon: ClipboardList },
+        { label: "Stock Lookup", href: "/inventory/stock", icon: Package },
       ],
     },
     {
@@ -584,6 +631,8 @@ const roleLabelMap: Record<string, string> = {
   ot_manager: "OT Manager",
   er_staff: "ER Staff",
   crm_manager: "CRM Manager",
+  store_manager: "Store Manager",
+  procurement_officer: "Procurement Officer",
 };
 
 // Map a URL path to the portal role whose nav it belongs to. Used so an admin
@@ -597,6 +646,7 @@ const PATH_ROLE: { prefix: string; role: string }[] = [
   { prefix: "/ipd", role: "ipd_manager" },
   { prefix: "/lab", role: "lab_technician" },
   { prefix: "/pharmacy", role: "pharmacist" },
+  { prefix: "/inventory", role: "store_manager" },
   { prefix: "/finance", role: "finance" },
   { prefix: "/billing", role: "finance" },
   { prefix: "/hr", role: "hr" },
@@ -623,6 +673,7 @@ const ADMIN_SWITCH_PORTALS: { label: string; path: string }[] = [
   { label: "OPD Manager", path: "/opd-manager/dashboard" },
   { label: "Lab", path: "/lab/technician" },
   { label: "Pharmacy", path: "/pharmacy/billing" },
+  { label: "Inventory", path: "/inventory/dashboard" },
   { label: "Finance", path: "/finance/dashboard" },
   { label: "HR", path: "/hr/dashboard" },
   { label: "Coordinator", path: "/coordinator/dashboard" },
