@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { FileText, Search, Eye, CreditCard, X, Pencil, Plus, Trash2, IndianRupee, Receipt, TrendingDown, ShoppingBag } from 'lucide-react';
-import { getInvoices, addInvoiceItem, recordPayment } from '@/app/actions/finance-actions';
+import { getInvoices, addInvoiceItem, recordPayment, getInvoiceDetail, updateInvoiceItem, removeInvoiceItem } from '@/app/actions/finance-actions';
 import { parseWalkinNote } from '@/app/lib/walkin-note';
 import { getInventory } from '@/app/actions/pharmacy-actions';
 import Link from 'next/link';
@@ -22,7 +22,19 @@ const STATUS_COLOR: Record<string, string> = {
 type DatePreset = 'today' | 'week' | 'month' | 'custom';
 type CategoryFilter = 'all' | 'counter' | 'ipd-admitted' | 'ipd-discharged';
 
-type MedRow = { medicine_id: number; name: string; qty: number; unit_price: number; tax_rate: number; hsn: string; batch_no: string };
+type MedRow = { medicine_id?: number; id?: number; name: string; qty: number; unit_price: number; tax_rate: number; hsn: string; batch_no: string; description?: string };
+
+function updateDescriptionQty(desc: string, newQty: number) {
+    const match = desc.match(/^(Pharmacy:\s+.*?\s*\(Batch\s+.*?\))\s*(?:x|×)\s*\d+$/i);
+    if (match) {
+        return `${match[1]} × ${newQty}`;
+    }
+    const matchSimple = desc.match(/^(.*?)\s*(?:x|×)\s*\d+$/i);
+    if (matchSimple) {
+        return `${matchSimple[1]} × ${newQty}`;
+    }
+    return desc;
+}
 
 function getPresetRange(preset: DatePreset): { from: Date; to: Date } | null {
     const now = new Date();
@@ -80,6 +92,8 @@ export default function PharmacyInvoicesPage() {
     const [editRows, setEditRows] = useState<MedRow[]>([]);
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState('');
+    const [deletedItemIds, setDeletedItemIds] = useState<number[]>([]);
+    const [editModalLoading, setEditModalLoading] = useState(false);
 
     const load = async () => {
         setLoading(true);
@@ -177,11 +191,49 @@ export default function PharmacyInvoicesPage() {
     const openEditModal = useCallback(async (inv: any) => {
         setEditInvoice(inv);
         setEditRows([]);
+        setDeletedItemIds([]);
         setMedSearch('');
         setSaveError('');
         setEditModal(true);
-        const res = await getInventory();
-        if (res.success) setInventory(res.data || []);
+        setEditModalLoading(true);
+        
+        try {
+            const detailsRes = await getInvoiceDetail(inv.id);
+            let existingRows: MedRow[] = [];
+            if (detailsRes.success && detailsRes.data) {
+                const items = detailsRes.data.items || [];
+                const pharmItems = items.filter((item: any) => {
+                    return (item.department || '').toLowerCase() === 'pharmacy' || 
+                           (item.service_category || '').toLowerCase() === 'pharmacy';
+                });
+                existingRows = pharmItems.map((item: any) => {
+                    const match = (item.description || '').match(/^Pharmacy:\s+(.*?)\s+\(Batch\s+(.*?)\)/i);
+                    const name = match ? match[1] : (item.description || '').replace(/^Pharmacy:\s*/, '');
+                    const batch = match ? match[2] : 'N/A';
+                    return {
+                        id: item.id,
+                        name: name,
+                        qty: item.quantity,
+                        unit_price: Number(item.unit_price || 0),
+                        tax_rate: Number(item.tax_rate || 0),
+                        hsn: item.hsn_sac_code || '3004',
+                        batch_no: batch,
+                        description: item.description || ''
+                    };
+                });
+            }
+            setEditRows(existingRows);
+        } catch (err: any) {
+            console.error('Failed to load invoice items:', err);
+        }
+
+        try {
+            const res = await getInventory();
+            if (res.success) setInventory(res.data || []);
+        } catch (err: any) {
+            console.error('Failed to load inventory:', err);
+        }
+        setEditModalLoading(false);
     }, []);
 
     const filteredMeds = inventory.filter(m =>
@@ -191,9 +243,9 @@ export default function PharmacyInvoicesPage() {
     );
 
     const addMedRow = (med: any) => {
-        const existing = editRows.find(r => r.medicine_id === med.medicine_id);
+        const existing = editRows.find(r => r.medicine_id === med.medicine_id && r.batch_no === med.batch_no);
         if (existing) {
-            setEditRows(rows => rows.map(r => r.medicine_id === med.medicine_id ? { ...r, qty: r.qty + 1 } : r));
+            setEditRows(rows => rows.map(r => (r.medicine_id === med.medicine_id && r.batch_no === med.batch_no) ? { ...r, qty: r.qty + 1 } : r));
         } else {
             setEditRows(rows => [...rows, {
                 medicine_id: med.medicine_id,
@@ -208,22 +260,60 @@ export default function PharmacyInvoicesPage() {
         setMedSearch('');
     };
 
+    const removeRow = (index: number) => {
+        const row = editRows[index];
+        if (row.id) {
+            setDeletedItemIds(prev => [...prev, row.id!]);
+        }
+        setEditRows(rows => rows.filter((_, ri) => ri !== index));
+    };
+
     const handleSaveMedicines = async () => {
-        if (!editInvoice || editRows.length === 0) { setSaveError('Add at least one medicine'); return; }
+        if (!editInvoice) return;
+        if (editRows.length === 0 && deletedItemIds.length === 0) { setSaveError('No changes to save'); return; }
         setSaving(true); setSaveError('');
         try {
+            // 1. Delete removed items
+            for (const id of deletedItemIds) {
+                const res = await removeInvoiceItem(id, editInvoice.id);
+                if (!res.success) {
+                    setSaveError(res.error || 'Failed to remove item');
+                    setSaving(false);
+                    return;
+                }
+            }
+
+            // 2. Add or update items
             for (const row of editRows) {
-                const res = await addInvoiceItem({
-                    invoice_id: editInvoice.id,
-                    department: 'Pharmacy',
-                    description: `Pharmacy: ${row.name} (Batch ${row.batch_no}) × ${row.qty}`,
-                    quantity: row.qty,
-                    unit_price: row.unit_price,
-                    tax_rate: row.tax_rate,
-                    hsn_sac_code: row.hsn,
-                    service_category: 'Pharmacy',
-                });
-                if (!res.success) { setSaveError(res.error || 'Failed to add item'); setSaving(false); return; }
+                if (row.id) {
+                    const newDesc = row.description ? updateDescriptionQty(row.description, row.qty) : `Pharmacy: ${row.name} (Batch ${row.batch_no}) × ${row.qty}`;
+                    const res = await updateInvoiceItem(row.id, {
+                        quantity: row.qty,
+                        unit_price: row.unit_price,
+                        description: newDesc
+                    });
+                    if (!res.success) {
+                        setSaveError(res.error || 'Failed to update item');
+                        setSaving(false);
+                        return;
+                    }
+                } else {
+                    const res = await addInvoiceItem({
+                        invoice_id: editInvoice.id,
+                        department: 'Pharmacy',
+                        description: `Pharmacy: ${row.name} (Batch ${row.batch_no}) × ${row.qty}`,
+                        quantity: row.qty,
+                        unit_price: row.unit_price,
+                        tax_rate: row.tax_rate,
+                        hsn_sac_code: row.hsn,
+                        service_category: 'Pharmacy',
+                    });
+                    if (!res.success) {
+                        setSaveError(res.error || 'Failed to add item');
+                        setSaving(false);
+                        return;
+                    }
+                }
             }
             setEditModal(false);
             await load();
@@ -447,7 +537,7 @@ export default function PharmacyInvoicesPage() {
                                                     {isIpd && isAdmitted && notCancelled && (
                                                         <button onClick={() => openEditModal(inv)}
                                                             className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold rounded-lg hover:bg-blue-100 transition-colors">
-                                                            <Pencil className="h-3 w-3" /> Add Meds
+                                                            <Pencil className="h-3 w-3" /> Edit Meds
                                                         </button>
                                                     )}
                                                     {hasBalance && notCancelled && (!isIpd || isDischarged) && (
@@ -527,93 +617,105 @@ export default function PharmacyInvoicesPage() {
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
                         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
                             <div>
-                                <h2 className="font-bold text-gray-900">Add Medicines to IPD Bill</h2>
+                                <h2 className="font-bold text-gray-900">Edit / Add Medicines to IPD Bill</h2>
                                 <p className="text-xs text-gray-500 mt-0.5">{editInvoice.invoice_number} · {editInvoice.patient?.full_name}</p>
                             </div>
                             <button onClick={() => setEditModal(false)} className="p-2 hover:bg-gray-100 rounded-lg"><X className="h-4 w-4 text-gray-500" /></button>
                         </div>
 
                         <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
-                            <div>
-                                <label className="text-xs font-semibold text-gray-600 mb-1 block">Search & Add Medicine</label>
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                                    <input type="text" value={medSearch} onChange={e => setMedSearch(e.target.value)}
-                                        placeholder="Type medicine name..."
-                                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                            {editModalLoading ? (
+                                <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                    <p className="text-sm text-gray-500 font-medium animate-pulse">Loading bill items...</p>
                                 </div>
-                                {medSearch.length >= 2 && (
-                                    <div className="mt-1 border border-gray-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto shadow-lg">
-                                        {filteredMeds.slice(0, 20).map((med: any, i: number) => (
-                                            <button key={i} onClick={() => addMedRow(med)}
-                                                className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-blue-50 text-left text-sm border-b border-gray-100 last:border-0">
-                                                <div>
-                                                    <span className="font-semibold text-gray-900">{med.medicine?.brand_name}</span>
-                                                    <span className="text-gray-400 text-xs ml-2">{med.medicine?.generic_name}</span>
-                                                </div>
-                                                <div className="flex items-center gap-2 text-xs text-gray-500">
-                                                    <span>Batch: {med.batch_no}</span>
-                                                    <span className={`font-bold ${med.current_stock > 10 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                                        Qty: {med.current_stock === 999999 ? '∞' : med.current_stock}
-                                                    </span>
-                                                    <span className="text-blue-600 font-bold">₹{Number(med.medicine?.selling_price || 0).toFixed(2)}</span>
-                                                    <Plus className="h-3.5 w-3.5 text-blue-600" />
-                                                </div>
-                                            </button>
-                                        ))}
-                                        {filteredMeds.length === 0 && (
-                                            <div className="px-4 py-3 text-xs text-gray-400">No medicines found</div>
+                            ) : (
+                                <>
+                                    <div>
+                                        <label className="text-xs font-semibold text-gray-600 mb-1 block">Search & Add Medicine</label>
+                                        <div className="relative">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                            <input type="text" value={medSearch} onChange={e => setMedSearch(e.target.value)}
+                                                placeholder="Type medicine name..."
+                                                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                                        </div>
+                                        {medSearch.length >= 2 && (
+                                            <div className="mt-1 border border-gray-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto shadow-lg">
+                                                {filteredMeds.slice(0, 20).map((med: any, i: number) => (
+                                                    <button key={i} onClick={() => addMedRow(med)}
+                                                        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-blue-50 text-left text-sm border-b border-gray-100 last:border-0">
+                                                        <div>
+                                                            <span className="font-semibold text-gray-900">{med.medicine?.brand_name}</span>
+                                                            <span className="text-gray-400 text-xs ml-2">{med.medicine?.generic_name}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                            <span>Batch: {med.batch_no}</span>
+                                                            <span className={`font-bold ${med.current_stock > 10 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                                Qty: {med.current_stock === 999999 ? '∞' : med.current_stock}
+                                                            </span>
+                                                            <span className="text-blue-600 font-bold">₹{Number(med.medicine?.selling_price || 0).toFixed(2)}</span>
+                                                            <Plus className="h-3.5 w-3.5 text-blue-600" />
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                                {filteredMeds.length === 0 && (
+                                                    <div className="px-4 py-3 text-xs text-gray-400">No medicines found</div>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
-                                )}
-                            </div>
 
-                            {editRows.length > 0 && (
-                                <div>
-                                    <label className="text-xs font-semibold text-gray-600 mb-2 block">Medicines to Add ({editRows.length})</label>
-                                    <div className="border border-gray-200 rounded-xl overflow-hidden">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-gray-50 text-xs text-gray-500 font-bold uppercase">
-                                                <tr>
-                                                    <th className="px-3 py-2 text-left">Medicine</th>
-                                                    <th className="px-3 py-2 text-center w-24">Qty</th>
-                                                    <th className="px-3 py-2 text-right w-28">Unit Price</th>
-                                                    <th className="px-3 py-2 text-right w-24">Total</th>
-                                                    <th className="px-3 py-2 w-8"></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100">
-                                                {editRows.map((row, i) => (
-                                                    <tr key={i}>
-                                                        <td className="px-3 py-2 font-medium text-gray-900">{row.name}</td>
-                                                        <td className="px-3 py-2 text-center">
-                                                            <input type="number" min={1} value={row.qty}
-                                                                onChange={e => setEditRows(rows => rows.map((r, ri) => ri === i ? { ...r, qty: Math.max(1, parseInt(e.target.value) || 1) } : r))}
-                                                                className="w-16 text-center px-2 py-1 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
-                                                        </td>
-                                                        <td className="px-3 py-2 text-right">
-                                                            <input type="number" min={0} value={row.unit_price}
-                                                                onChange={e => setEditRows(rows => rows.map((r, ri) => ri === i ? { ...r, unit_price: parseFloat(e.target.value) || 0 } : r))}
-                                                                className="w-24 text-right px-2 py-1 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
-                                                        </td>
-                                                        <td className="px-3 py-2 text-right font-bold text-gray-900">
-                                                            ₹{(row.qty * row.unit_price).toFixed(2)}
-                                                        </td>
-                                                        <td className="px-3 py-2">
-                                                            <button onClick={() => setEditRows(rows => rows.filter((_, ri) => ri !== i))}
-                                                                className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded">
-                                                                <Trash2 className="h-3.5 w-3.5" />
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                        <div className="px-3 py-2 bg-gray-50 border-t border-gray-200 text-right text-sm font-bold text-gray-900">
-                                            Total: ₹{editRows.reduce((s, r) => s + r.qty * r.unit_price, 0).toFixed(2)}
+                                    {editRows.length > 0 && (
+                                        <div>
+                                            <label className="text-xs font-semibold text-gray-600 mb-2 block">Bill Items ({editRows.length})</label>
+                                            <div className="border border-gray-200 rounded-xl overflow-hidden">
+                                                <table className="w-full text-sm">
+                                                    <thead className="bg-gray-50 text-xs text-gray-500 font-bold uppercase">
+                                                        <tr>
+                                                            <th className="px-3 py-2 text-left">Medicine</th>
+                                                            <th className="px-3 py-2 text-center w-24">Qty</th>
+                                                            <th className="px-3 py-2 text-right w-28">Unit Price</th>
+                                                            <th className="px-3 py-2 text-right w-24">Total</th>
+                                                            <th className="px-3 py-2 w-8"></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100">
+                                                        {editRows.map((row, i) => (
+                                                            <tr key={i}>
+                                                                <td className="px-3 py-2 font-medium text-gray-900">
+                                                                    {row.name}
+                                                                    <span className="block text-[10px] text-gray-400 mt-0.5">Batch: {row.batch_no}</span>
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center">
+                                                                    <input type="number" min={1} value={row.qty}
+                                                                        onChange={e => setEditRows(rows => rows.map((r, ri) => ri === i ? { ...r, qty: Math.max(1, parseInt(e.target.value) || 1) } : r))}
+                                                                        className="w-16 text-center px-2 py-1 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
+                                                                </td>
+                                                                <td className="px-3 py-2 text-right">
+                                                                    <input type="number" min={0} value={row.unit_price}
+                                                                        onChange={e => setEditRows(rows => rows.map((r, ri) => ri === i ? { ...r, unit_price: parseFloat(e.target.value) || 0 } : r))}
+                                                                        className="w-24 text-right px-2 py-1 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
+                                                                </td>
+                                                                <td className="px-3 py-2 text-right font-bold text-gray-900">
+                                                                    ₹{(row.qty * row.unit_price).toFixed(2)}
+                                                                </td>
+                                                                <td className="px-3 py-2">
+                                                                    <button onClick={() => removeRow(i)}
+                                                                        className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded">
+                                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                                <div className="px-3 py-2 bg-gray-50 border-t border-gray-200 text-right text-sm font-bold text-gray-900">
+                                                    Total: ₹{editRows.reduce((s, r) => s + r.qty * r.unit_price, 0).toFixed(2)}
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                </div>
+                                    )}
+                                </>
                             )}
 
                             {saveError && <p className="text-xs text-rose-600 font-medium">{saveError}</p>}
@@ -622,9 +724,9 @@ export default function PharmacyInvoicesPage() {
                         <div className="px-6 py-4 border-t border-gray-100 flex gap-3 shrink-0">
                             <button onClick={() => setEditModal(false)}
                                 className="flex-1 px-4 py-2 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancel</button>
-                            <button onClick={handleSaveMedicines} disabled={saving || editRows.length === 0}
+                            <button onClick={handleSaveMedicines} disabled={saving || (editRows.length === 0 && deletedItemIds.length === 0)}
                                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 disabled:opacity-50">
-                                {saving ? 'Saving...' : `Add ${editRows.length} Medicine${editRows.length !== 1 ? 's' : ''} to Bill`}
+                                {saving ? 'Saving...' : 'Save Changes'}
                             </button>
                         </div>
                     </div>
