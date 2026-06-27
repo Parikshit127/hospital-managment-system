@@ -317,7 +317,6 @@ async function recalculateInvoiceWithGst(invoiceId: number) {
             sgst_amount: isInterState ? 0 : total_tax / 2,
             igst_amount: isInterState ? total_tax : 0,
             balance_due: balance_due > 0 ? balance_due : 0,
-            status: balance_due <= 0 && net_amount > 0 ? 'Paid' : invoice?.status,
         },
     });
 }
@@ -814,7 +813,6 @@ export async function settleAndDischarge(data: {
                 data: {
                     paid_amount: totalPaid,
                     balance_due: balance > 0 ? balance : 0,
-                    status: balance <= 0 ? 'Paid' : totalPaid > 0 ? 'Partial' : invoice.status,
                 },
             });
         }
@@ -889,7 +887,6 @@ export async function settleAndDischarge(data: {
                 data: {
                     paid_amount: totalPaid,
                     balance_due: balance > 0 ? balance : 0,
-                    status: balance <= 0 ? 'Paid' : 'Partial',
                 },
             });
         }
