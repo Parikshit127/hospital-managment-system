@@ -86,10 +86,8 @@ export default function InvoicesPage() {
                             className="flex-1 md:w-56 p-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 text-sm font-bold outline-none transition-colors text-gray-700 shadow-sm hover:border-gray-300"
                         >
                             <option value="">All Statuses</option>
-                            <option value="Draft">Draft / Pending</option>
-                            <option value="Paid">Paid / Completed</option>
+                            <option value="Draft">Draft</option>
                             <option value="Final">Final</option>
-                            <option value="Partial">Partial</option>
                             <option value="Cancelled">Cancelled</option>
                         </select>
                         {revFilter && (
@@ -161,11 +159,10 @@ export default function InvoicesPage() {
                                         {Number(inv.balance_due).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                     </td>
                                     <td className="px-3 py-4 text-center">
-                                        <span className={`px-2.5 py-1 text-[10px] uppercase tracking-wider font-extrabold rounded-full ${inv.status === 'Paid' ? 'bg-emerald-100 text-emerald-700 shadow-sm border border-emerald-200' :
-                                                inv.status === 'Partial' ? 'bg-amber-100 text-amber-700 shadow-sm border border-amber-200' :
+                                        <span className={`px-2.5 py-1 text-[10px] uppercase tracking-wider font-extrabold rounded-full ${inv.status === 'Final' ? 'bg-emerald-100 text-emerald-700 shadow-sm border border-emerald-200' :
                                                     inv.status === 'Draft' ? 'bg-gray-100 text-gray-700 shadow-sm border border-gray-200' :
                                                         inv.status === 'Cancelled' ? 'bg-rose-100 text-rose-700 shadow-sm border border-rose-200' :
-                                                            'bg-indigo-100 text-indigo-700 shadow-sm border border-indigo-200'
+                                                            'bg-gray-100 text-gray-600 shadow-sm border border-gray-200'
                                             }`}>
                                             {inv.status}
                                         </span>

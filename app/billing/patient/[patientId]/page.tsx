@@ -672,7 +672,7 @@ function InvoicesTab({
                 </span>
                 <span
                   className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                    inv.status === "Paid"
+                    inv.status === "Final"
                       ? "bg-emerald-100 text-emerald-700"
                       : inv.status === "Cancelled"
                       ? "bg-gray-100 text-gray-500"

@@ -361,6 +361,38 @@ export default function FinanceDashboard() {
                                     </div>
                                 ) : null}
 
+                                {/* Outstanding by Category — IPD Cash / IPD TPA / OPD, each drillable */}
+                                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                                    <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+                                        <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
+                                            <AlertTriangle className="h-4 w-4 text-amber-400" /> Outstanding by Category
+                                        </h3>
+                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                            Total {INR}{(stats?.pendingBalance || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                                        </span>
+                                    </div>
+                                    <div className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        {[
+                                            { key: 'outstanding-ipd-cash' as DrillDownType, label: 'IPD Cash Outstanding', data: stats?.outstandingBreakdown?.ipdCash, accent: 'blue', icon: <Wallet className="h-3.5 w-3.5" /> },
+                                            { key: 'outstanding-ipd-tpa' as DrillDownType, label: 'IPD TPA Outstanding', data: stats?.outstandingBreakdown?.ipdTpa, accent: 'violet', icon: <FileText className="h-3.5 w-3.5" /> },
+                                            { key: 'outstanding-opd' as DrillDownType, label: 'OPD Outstanding', data: stats?.outstandingBreakdown?.opd, accent: 'teal', icon: <Stethoscope className="h-3.5 w-3.5" /> },
+                                        ].map((c) => (
+                                            <button key={c.key} type="button"
+                                                onClick={() => setDrillDown({ type: c.key, filters: {} })}
+                                                className={`group text-left flex flex-col gap-2 p-4 rounded-xl border bg-${c.accent}-500/5 border-${c.accent}-500/10 hover:border-${c.accent}-500/40 hover:shadow-md transition-all cursor-pointer`}>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-bold text-gray-600 flex items-center gap-1.5">
+                                                        <span className={`text-${c.accent}-500`}>{c.icon}</span> {c.label}
+                                                    </span>
+                                                    <ArrowUpRight className={`h-3.5 w-3.5 text-${c.accent}-400 opacity-0 group-hover:opacity-100 transition-opacity`} />
+                                                </div>
+                                                <span className={`text-2xl font-black text-${c.accent}-600`}>{INR}{(c.data?.total || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                                                <span className="text-[10px] font-bold text-gray-400">{c.data?.count || 0} pending · click for details</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
                                 {/* Outstanding Aging — full width below */}
                                 <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
                                     <div className="p-5 border-b border-gray-200">
@@ -398,7 +430,7 @@ export default function FinanceDashboard() {
                                     </div>
                                     <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-xs font-bold text-gray-500 focus:outline-none">
                                         <option value="">All Status</option>
-                                        {['Draft', 'Final', 'Paid', 'Partial', 'Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
+                                        {['Draft', 'Final', 'Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
                                     <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-xs font-bold text-gray-500 focus:outline-none">
                                         <option value="">All Types</option>
@@ -431,7 +463,7 @@ export default function FinanceDashboard() {
                                                             <div className="flex items-center justify-center gap-1.5">
                                                                 <button onClick={() => setDetailModal(inv)} className="p-1.5 hover:bg-gray-100 rounded-lg" title="View"><Eye className="h-3.5 w-3.5 text-gray-500" /></button>
                                                                 <button onClick={() => window.open(`/api/invoice/${inv.id}/pdf`, '_blank')} className="p-1.5 hover:bg-blue-500/10 rounded-lg" title="PDF"><Download className="h-3.5 w-3.5 text-blue-400/60" /></button>
-                                                                {inv.status !== 'Paid' && inv.status !== 'Cancelled' && (
+                                                                {Number(inv.balance_due) > 0 && inv.status !== 'Cancelled' && (
                                                                     <button onClick={() => { setPaymentModal(inv); setPaymentForm({ ...paymentForm, amount: String(Number(inv.balance_due)) }); }} className="p-1.5 hover:bg-emerald-500/10 rounded-lg" title="Pay"><CreditCard className="h-3.5 w-3.5 text-emerald-400/60" /></button>
                                                                 )}
                                                                 {inv.status === 'Draft' && (<>

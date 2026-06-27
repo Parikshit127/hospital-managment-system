@@ -13,9 +13,7 @@ const fmt = (n: number) => Number(n || 0).toLocaleString('en-IN', { style: 'curr
 
 const STATUS_COLOR: Record<string, string> = {
     Draft: 'bg-gray-100 text-gray-700',
-    Final: 'bg-blue-100 text-blue-700',
-    Paid: 'bg-emerald-100 text-emerald-700',
-    Partial: 'bg-amber-100 text-amber-700',
+    Final: 'bg-emerald-100 text-emerald-700',
     Cancelled: 'bg-red-100 text-red-700',
 };
 
@@ -411,8 +409,6 @@ export default function PharmacyInvoicesPage() {
                             <option value="">All Statuses</option>
                             <option value="Draft">Draft</option>
                             <option value="Final">Final</option>
-                            <option value="Paid">Paid</option>
-                            <option value="Partial">Partial</option>
                             <option value="Cancelled">Cancelled</option>
                         </select>
                     </div>

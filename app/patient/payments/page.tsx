@@ -15,13 +15,15 @@ export default async function PatientPaymentsPage() {
         orderBy: { created_at: 'desc' },
     });
 
-    const totalDue = invoices
-        .filter((i: any) => i.status === 'Pending' || i.status === 'Partially Paid')
-        .reduce((sum: any, i: any) => sum + (i.total_amount - i.paid_amount), 0);
+    // Payment state is read from amounts, not status (status is now a pure
+    // lifecycle field: Draft/Final/Cancelled). Cancelled bills are excluded.
+    const activeInvoices = invoices.filter((i: any) => i.status !== 'Cancelled');
 
-    const totalPaid = invoices
-        .filter((i: any) => i.status === 'Paid')
-        .reduce((sum: any, i: any) => sum + i.total_amount, 0);
+    const totalDue = activeInvoices
+        .reduce((sum: any, i: any) => sum + Math.max(0, i.total_amount - i.paid_amount), 0);
+
+    const totalPaid = activeInvoices
+        .reduce((sum: any, i: any) => sum + i.paid_amount, 0);
 
     return (
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
@@ -76,7 +78,7 @@ export default async function PatientPaymentsPage() {
                     <div className="space-y-4">
                         {invoices.map((inv: any) => {
                             const remaining = inv.total_amount - inv.paid_amount;
-                            const isPaid = inv.status === 'Paid';
+                            const isPaid = remaining <= 0;
                             return (
                                 <div key={inv.id} className="border border-gray-100 rounded-2xl p-5 hover:bg-gray-50/50 transition">
                                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -85,9 +87,9 @@ export default async function PatientPaymentsPage() {
                                                 <p className="font-bold text-gray-900">{inv.invoice_number}</p>
                                                 <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wide ${
                                                     isPaid ? 'bg-green-100 text-green-700' :
-                                                    inv.status === 'Partially Paid' ? 'bg-blue-100 text-blue-700' :
+                                                    inv.paid_amount > 0 ? 'bg-blue-100 text-blue-700' :
                                                     'bg-amber-100 text-amber-700'
-                                                }`}>{inv.status}</span>
+                                                }`}>{isPaid ? 'Paid' : inv.paid_amount > 0 ? 'Partially Paid' : 'Due'}</span>
                                             </div>
                                             <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
                                                 <span className="flex items-center gap-1">

@@ -186,7 +186,7 @@ function presetRange(key: string): { from: string; to: string } {
   return { from: toYMD(start), to: toYMD(end) };
 }
 
-const STATUS_FILTERS = ["", "Draft", "Finalized", "Partial", "Paid", "Overdue", "Cancelled"];
+const STATUS_FILTERS = ["", "Draft", "Final", "Cancelled"];
 const PAYMENT_FILTERS = ["", "Paid", "Partial", "Overdue", "Draft", "Refunded"];
 const PATIENT_TYPES = ["", "cash", "corporate", "tpa_insurance"];
 const INVOICE_TYPES = ["", "OPD", "IPD", "LAB", "PHARMACY"];

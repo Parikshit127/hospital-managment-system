@@ -289,9 +289,8 @@ export default function MISReportPage() {
                                                         }`}>{row.admission_category}</span>
                                                     ) : col.key === 'status' ? (
                                                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                                            row.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' :
-                                                            row.status === 'Unpaid' ? 'bg-red-100 text-red-700' :
-                                                            row.status === 'Partially Paid' ? 'bg-amber-100 text-amber-700' :
+                                                            row.status === 'Final' ? 'bg-emerald-100 text-emerald-700' :
+                                                            row.status === 'Cancelled' ? 'bg-rose-100 text-rose-700' :
                                                             'bg-gray-100 text-gray-600'
                                                         }`}>{row.status}</span>
                                                     ) : col.type === 'date' ? (
