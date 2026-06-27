@@ -108,7 +108,7 @@ export async function createDaycareInvoice(data: {
         data: {
           paid_amount: net_price,
           balance_due: 0,
-          status: 'Paid',
+          status: 'Final',
           finalized_at: new Date(),
         },
       });

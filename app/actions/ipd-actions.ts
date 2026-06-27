@@ -925,7 +925,7 @@ export async function dischargePatientIPD(admissionId: string, notes?: string, d
       await db.invoices.update({
         where: { id: invoice.id },
         data: {
-          status: Number(invoice.balance_due) <= 0 ? "Paid" : "Final",
+          status: "Final",
           finalized_at: new Date(),
         },
       });
@@ -1023,7 +1023,7 @@ export async function undischargeAdmission(admissionId: string, reason?: string)
 
     // Reopen any finalized invoice so billing can continue (payments are preserved).
     await db.invoices.updateMany({
-      where: { admission_id: admissionId, status: { in: ["Final", "Paid"] } },
+      where: { admission_id: admissionId, status: "Final" },
       data: { status: "Draft", finalized_at: null },
     });
 
@@ -2015,7 +2015,7 @@ export async function cancelAdmission(admissionId: string, reason: string) {
 
       // 3. Cancel any active invoices
       await tx.invoices.updateMany({
-        where: { admission_id: admissionId, status: { not: 'Paid' } },
+        where: { admission_id: admissionId, status: { not: 'Cancelled' }, balance_due: { gt: 0 } },
         data: { status: 'Cancelled' },
       });
 

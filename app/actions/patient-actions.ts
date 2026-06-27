@@ -41,7 +41,7 @@ export async function getPatientDashboardData() {
             where: { patient_id: pid, status: { not: 'Completed' } }
         });
         const unpaidInvoiceCount = await db.invoices.count({
-            where: { patient_id: pid, status: { not: 'Paid' } }
+            where: { patient_id: pid, status: { not: 'Cancelled' }, balance_due: { gt: 0 } }
         });
         const latestVitals = latestVitalsArr;
 

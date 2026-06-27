@@ -531,7 +531,6 @@ export async function updateClaimStatus(claimId: number, data: {
                 data: {
                     paid_amount: totalPaid,
                     balance_due: balance > 0 ? balance : 0,
-                    status: balance <= 0 ? 'Paid' : 'Partial',
                 },
             });
         }
@@ -652,7 +651,7 @@ export async function getRevenueLeakage() {
         const leakedInvoices = await db.invoices.findMany({
             where: {
                 patient_id: { in: insuredPatientIds },
-                status: { in: ['Final', 'Paid', 'Partial'] },
+                status: 'Final',
                 id: claimedInvoiceIds.length > 0 ? { notIn: claimedInvoiceIds } : undefined,
             },
             include: {
@@ -681,7 +680,7 @@ export async function getClaimableInvoices(patientId: string) {
         const invoices = await db.invoices.findMany({
             where: {
                 patient_id: patientId,
-                status: { in: ['Final', 'Paid', 'Partial'] },
+                status: 'Final',
                 id: claimedInvoiceIds.length > 0 ? { notIn: claimedInvoiceIds } : undefined,
             },
             orderBy: { created_at: 'desc' },

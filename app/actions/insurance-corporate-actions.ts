@@ -310,7 +310,6 @@ export async function recordTpaPaymentReceived(input: {
             const newTpaPayable = Math.max(0, approved - newSettled);
             const fullySettled = newSettled >= approved - 0.01;
             const newClaimStatus = fullySettled ? 'settled' : 'partially_settled';
-            const newInvoiceStatus = newBalanceDue <= 0.01 ? 'Paid' : 'Partially Paid';
 
             const updateData: any = {
                 tpa_settled_amount: newSettled,
@@ -318,7 +317,6 @@ export async function recordTpaPaymentReceived(input: {
                 tpa_claim_status: newClaimStatus,
                 paid_amount: newPaidAmount,
                 balance_due: newBalanceDue,
-                status: newInvoiceStatus,
                 version: { increment: 1 },
             };
             if (fullySettled && !invoice.tpa_settled_at) {
@@ -366,7 +364,7 @@ export async function recordTpaPaymentReceived(input: {
                             tpa_payable: newTpaPayable,
                             paid_amount: newPaidAmount,
                             balance_due: newBalanceDue,
-                            status: newInvoiceStatus,
+                            status: invoice.status,
                             version: invoice.version + 1,
                         },
                     }),

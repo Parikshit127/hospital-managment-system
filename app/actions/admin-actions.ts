@@ -64,7 +64,7 @@ export async function getDashboardStats(timeRange?: string) {
       }),
       db.invoices.aggregate({
         _sum: { total_amount: true },
-        where: { status: "Paid", created_at: { gte: rangeStart } },
+        where: { status: "Final", created_at: { gte: rangeStart } },
       }),
       db.appointments.count({
         where: { appointment_date: { gte: rangeStart } },
@@ -165,18 +165,18 @@ export async function getRevenueBreakdown(timeRange?: string) {
         SELECT "department", SUM("total_price")::float as total
         FROM "invoice_items"
         JOIN "invoices" ON "invoice_items"."invoice_id" = "invoices"."id"
-        WHERE "invoices"."status" = 'Paid' AND "invoices"."created_at" >= ${rangeStart}
+        WHERE "invoices"."status" = 'Final' AND "invoices"."created_at" >= ${rangeStart}
         GROUP BY "department"
       `,
       db.invoices.aggregate({
         _sum: { total_amount: true },
-        where: { status: "Paid", created_at: { gte: rangeStart } },
+        where: { status: "Final", created_at: { gte: rangeStart } },
       }),
       // Aggregate daily revenue in DB instead of fetching all rows
       db.$queryRaw<{ day: Date; total: number }[]>`
         SELECT DATE("created_at") as day, SUM("total_amount")::float as total
         FROM "invoices"
-        WHERE "status" = 'Paid' AND "created_at" >= ${rangeStart}
+        WHERE "status" = 'Final' AND "created_at" >= ${rangeStart}
         GROUP BY DATE("created_at")
         ORDER BY day ASC
       `,
@@ -1252,7 +1252,7 @@ export async function generateAdminReport(
 
     if (type === "revenue") {
       const invoices = await db.invoices.findMany({
-        where: { created_at: { gte: startDate, lte: endDate }, status: "Paid" },
+        where: { created_at: { gte: startDate, lte: endDate }, status: "Final" },
         select: { net_amount: true, invoice_type: true, created_at: true },
       });
       // Basic aggregation logic here to pass back chart-ready data.

@@ -244,7 +244,7 @@ export async function saveFeeReceipt(payload: SaveFeeReceiptInput) {
                 net_amount: netAmount,
                 paid_amount: netAmount,
                 balance_due: 0,
-                status: "Paid",
+                status: "Final",
                 notes: payload.notes?.trim() || null,
                 organizationId,
                 doctor_id: resolvedDoctorId || null,

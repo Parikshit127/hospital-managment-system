@@ -460,7 +460,7 @@ export async function getMasterBillingKPIs() {
           organizationId,
           balance_due: { gt: 0 },
           created_at: { lt: overdueCutoff },
-          status: { notIn: ["Cancelled", "Voided", "Paid"] },
+          status: { notIn: ["Cancelled", "Voided"] },
         },
         _count: { id: true },
         _sum: { balance_due: true },

@@ -228,7 +228,6 @@ export async function allocateReceipt(input: {
           const fullyAccounted = accountedTotal >= approved - TOL;
           const newTpaPayable = Math.max(0, round2(approved - accountedTotal));
           const newClaimStatus = fullyAccounted ? 'settled' : 'partially_settled';
-          const newInvoiceStatus = newBalance <= TOL ? 'Paid' : 'Partially Paid';
 
           const upd: any = {
             tpa_settled_amount: newSettled,
@@ -238,7 +237,6 @@ export async function allocateReceipt(input: {
             tpa_claim_status: newClaimStatus,
             paid_amount: newPaid,
             balance_due: newBalance,
-            status: newInvoiceStatus,
             version: { increment: 1 },
           };
           if (fullyAccounted && !invoice.tpa_settled_at) upd.tpa_settled_at = new Date();
@@ -267,7 +265,6 @@ export async function allocateReceipt(input: {
             data: {
               paid_amount: newPaid,
               balance_due: newBalance,
-              status: newBalance <= TOL ? 'Paid' : 'Partially Paid',
               version: { increment: 1 },
             },
           });
@@ -503,7 +500,6 @@ export async function reverseInsuranceReceipt(receiptId: number, reason: string)
               tpa_claim_status: 'approved',
               paid_amount: newPaid,
               balance_due: Math.max(0, round2(netAmount - newPaid)),
-              status: newPaid <= TOL ? 'Finalized' : 'Partially Paid',
               tpa_settled_at: null,
               version: { increment: 1 },
             },

@@ -897,18 +897,11 @@ export async function settleAndDischarge(data: {
         const finalNet = Number(finalInvoice?.net_amount || 0);
         const finalBalance = Number(finalInvoice?.balance_due || 0);
 
-        let finalStatus: string;
-        if (finalBalance <= 0.01) {
-            finalStatus = 'Paid';
-        } else if (finalPaid > 0.01) {
-            finalStatus = 'Partially Paid';
-        } else {
-            finalStatus = 'Unpaid';
-        }
-
+        // Discharge always finalises the bill. Payment state lives in
+        // paid_amount / balance_due, not status.
         await db.invoices.update({
             where: { id: invoice.id },
-            data: { status: finalStatus, finalized_at: new Date() },
+            data: { status: 'Final', finalized_at: new Date() },
         });
 
         // Referral + doctor commission accrue on the collected IPD bill (best-effort)

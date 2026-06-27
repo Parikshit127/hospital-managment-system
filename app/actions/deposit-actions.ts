@@ -239,7 +239,6 @@ export async function applyDepositToInvoice(depositId: number, invoiceId: number
             data: {
                 paid_amount: totalPaid,
                 balance_due: balance > 0 ? balance : 0,
-                status: balance <= 0 ? 'Paid' : totalPaid > 0 ? 'Partial' : invoice?.status,
             },
         });
 
@@ -441,7 +440,6 @@ export async function approveCreditNote(id: number) {
                 where: { id: cn.original_invoice_id },
                 data: {
                     balance_due: newBalance,
-                    status: isFullyPaid ? 'Paid' : invoice.status,
                 },
             });
 
