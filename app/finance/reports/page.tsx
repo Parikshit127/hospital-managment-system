@@ -33,8 +33,10 @@ const REPORT_TABS: { key: ReportType; label: string; icon: React.ReactNode }[] =
 
 
 export default function FinancialReportsPage() {
-    const today = new Date().toISOString().slice(0, 10);
-    const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+    const _now = new Date();
+    const _ld = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const today = _ld(_now);
+    const firstOfMonth = _ld(new Date(_now.getFullYear(), _now.getMonth(), 1));
 
     const [activeReport, setActiveReport] = useState<ReportType>('collections');
     const [from, setFrom] = useState(firstOfMonth);

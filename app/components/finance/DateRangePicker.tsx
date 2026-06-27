@@ -9,24 +9,32 @@ interface DateRangePickerProps {
     onChange: (from: string, to: string) => void;
 }
 
+// Use local date getters to avoid UTC shift (toISOString gives UTC, wrong for IST users)
+const toLocalDate = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+};
+
 const presets = [
-    { label: 'Today', getRange: () => { const d = new Date().toISOString().slice(0, 10); return [d, d]; } },
+    { label: 'Today', getRange: () => { const d = toLocalDate(new Date()); return [d, d]; } },
     { label: 'This Week', getRange: () => {
         const now = new Date(); const day = now.getDay();
         const start = new Date(now); start.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-        return [start.toISOString().slice(0, 10), now.toISOString().slice(0, 10)];
+        return [toLocalDate(start), toLocalDate(now)];
     }},
     { label: 'This Month', getRange: () => {
         const now = new Date();
-        return [new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10), now.toISOString().slice(0, 10)];
+        return [toLocalDate(new Date(now.getFullYear(), now.getMonth(), 1)), toLocalDate(now)];
     }},
     { label: 'This Quarter', getRange: () => {
         const now = new Date(); const q = Math.floor(now.getMonth() / 3);
-        return [new Date(now.getFullYear(), q * 3, 1).toISOString().slice(0, 10), now.toISOString().slice(0, 10)];
+        return [toLocalDate(new Date(now.getFullYear(), q * 3, 1)), toLocalDate(now)];
     }},
     { label: 'This Year', getRange: () => {
         const now = new Date();
-        return [new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10), now.toISOString().slice(0, 10)];
+        return [toLocalDate(new Date(now.getFullYear(), 0, 1)), toLocalDate(now)];
     }},
 ];
 

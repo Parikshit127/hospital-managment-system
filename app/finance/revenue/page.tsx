@@ -9,8 +9,10 @@ import { TrendingUp, BarChart3, PieChart, Loader2, IndianRupee, ArrowUpRight, Ar
 import { AppShell } from '@/app/components/layout/AppShell';
 
 export default function RevenuePage() {
-    const today = new Date().toISOString().slice(0, 10);
-    const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+    const _now = new Date();
+    const _ld = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const today = _ld(_now);
+    const firstOfMonth = _ld(new Date(_now.getFullYear(), _now.getMonth(), 1));
 
     const [from, setFrom] = useState(firstOfMonth);
     const [to, setTo] = useState(today);

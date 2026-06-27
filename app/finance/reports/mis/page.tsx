@@ -48,6 +48,7 @@ const MIS_COLUMNS: { key: string; label: string; type: 'text' | 'currency' | 'da
     { key: 'gross_amount', label: 'Gross Amount', type: 'currency', width: '110px' },
     { key: 'discount', label: 'Discount', type: 'currency', width: '100px' },
     { key: 'net_amount', label: 'Net Amount', type: 'currency', width: '110px' },
+    { key: 'approved_amount', label: 'Approved Amount', type: 'currency', width: '120px' },
     { key: 'received_amount', label: 'Received', type: 'currency', width: '110px' },
     { key: 'outstanding_amount', label: 'Outstanding', type: 'currency', width: '110px' },
     { key: 'patient_receipt', label: 'Patient Receipt', type: 'currency', width: '110px' },
@@ -57,8 +58,10 @@ const MIS_COLUMNS: { key: string; label: string; type: 'text' | 'currency' | 'da
 ];
 
 export default function MISReportPage() {
-    const today = new Date().toISOString().slice(0, 10);
-    const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+    const _now = new Date();
+    const _ld = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const today = _ld(_now);
+    const firstOfMonth = _ld(new Date(_now.getFullYear(), _now.getMonth(), 1));
 
     const [from, setFrom] = useState(firstOfMonth);
     const [to, setTo] = useState(today);
