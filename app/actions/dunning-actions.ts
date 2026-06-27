@@ -65,7 +65,7 @@ export async function getOverdueInvoices() {
 
         const invoices = await db.invoices.findMany({
             where: {
-                status: { in: ['Final', 'Partial'] },
+                status: 'Final',
                 balance_due: { gt: 0 },
             },
             include: {
@@ -104,7 +104,7 @@ export async function executeDunning() {
         // Get overdue invoices
         const invoices = await db.invoices.findMany({
             where: {
-                status: { in: ['Final', 'Partial'] },
+                status: 'Final',
                 balance_due: { gt: 0 },
             },
             include: {

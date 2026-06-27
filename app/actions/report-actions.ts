@@ -221,7 +221,7 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
 export async function getARAgingReport(filters?: { invoiceType?: string; admissionStatus?: string }) {
     try {
         const { db } = await requireTenantContext();
-        const where: any = { status: { in: ['Final', 'Partial'] }, balance_due: { gt: 0 } };
+        const where: any = { status: 'Final', balance_due: { gt: 0 } };
         if (filters?.invoiceType) where.invoice_type = filters.invoiceType;
         if (filters?.admissionStatus) where.admission = { status: filters.admissionStatus };
         const invoices = await db.invoices.findMany({

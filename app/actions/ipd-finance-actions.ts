@@ -616,7 +616,7 @@ export async function getIpdOutstanding() {
         const invoices = await db.invoices.findMany({
             where: {
                 invoice_type: 'IPD',
-                status: { in: ['Draft', 'Final', 'Partial'] },
+                status: { in: ['Draft', 'Final'] },
                 balance_due: { gt: 0 },
             },
             include: {
