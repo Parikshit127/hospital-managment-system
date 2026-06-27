@@ -124,9 +124,9 @@ export default function FinanceDashboard() {
     const handleCancel = async (id: number) => { await cancelInvoice(id, 'Cancelled by finance admin'); loadData(); };
 
     const getStatusColor = (s: string) => ({
-        Draft: 'text-slate-400 bg-slate-500/10', Proforma: 'text-blue-400 bg-blue-500/10',
-        Final: 'text-amber-400 bg-amber-500/10', Paid: 'text-emerald-400 bg-emerald-500/10',
-        Partial: 'text-orange-400 bg-orange-500/10', Cancelled: 'text-rose-400 bg-rose-500/10',
+        Draft: 'text-slate-400 bg-slate-500/10',
+        Final: 'text-emerald-400 bg-emerald-500/10',
+        Cancelled: 'text-rose-400 bg-rose-500/10',
     }[s] || 'text-gray-500 bg-gray-100');
 
     const filteredInvoices = invoices.filter(inv => {
