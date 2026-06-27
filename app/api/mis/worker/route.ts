@@ -60,6 +60,16 @@ import { uploadToS3 } from '@/lib/mis/s3-uploader';
  */
 
 export const dynamic = 'force-dynamic';
+// Allow the drain loop room to clear a backlog in one invocation. 60s is the
+// max a Vercel function may run on Hobby/Pro; the TIME_BUDGET_MS below stops
+// claiming new jobs before we hit it so the response always returns cleanly.
+export const maxDuration = 60;
+
+// Drain-loop bounds. On Vercel Hobby cron is daily-only, so a single run must
+// process the whole backlog rather than one job at a time. We stop on either
+// limit, whichever comes first; any jobs left 'Queued' are picked up next run.
+const MAX_JOBS_PER_RUN = 100;
+const TIME_BUDGET_MS   = 50_000;
 
 // ─── Secret header guard ──────────────────────────────────────────────────────
 
@@ -71,42 +81,20 @@ function isAuthorized(req: NextRequest): boolean {
   return req.headers.get('x-worker-secret') === WORKER_SECRET;
 }
 
-// ─── POST — process one queued job ───────────────────────────────────────────
+type JobResult = {
+  jobId: string;
+  report_id: string;
+  status: 'Completed' | 'Failed';
+  row_count?: number;
+  file_key?: string;
+  error?: string;
+};
 
-export async function POST(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  // ── Step 1: Claim the oldest Queued job ─────────────────────────────────
-  // findFirst with orderBy createdAt ensures FIFO processing.
-  // We only claim jobs that are still 'Queued' — never 'Running' or terminal.
-  const job = await prisma.report_jobs.findFirst({
-    where:   { status: 'Queued' },
-    orderBy: { createdAt: 'asc' },
-  });
-
-  if (!job) {
-    return NextResponse.json(
-      { message: 'Queue is empty. No jobs to process.', processed: 0 },
-      { status: 200 }
-    );
-  }
-
-  // ── Step 2: Atomically claim the job → 'Running' ─────────────────────────
-  // This must happen before any async work so a concurrent worker invocation
-  // cannot claim the same job.
-  await prisma.report_jobs.update({
-    where: { id: job.id },
-    data: {
-      status:     'Running',
-      started_at: new Date(),
-      progress:   0,
-    },
-  });
-
-  // ── Step 3: Execute — wrapped in try/catch so every failure path sets ────
-  // status='Failed' and records the error message in the DB.
+// ─── Process a single already-claimed ('Running') job ────────────────────────
+// Wrapped so every failure path sets status='Failed' and records the error in
+// the DB, and returns a result rather than throwing — so one bad job never
+// aborts the rest of the drain loop.
+async function processClaimedJob(job: { id: string; report_id: string; filters_json: unknown; organizationId: string }): Promise<JobResult> {
   try {
     // ── 3a: Resolve report definition ──────────────────────────────────────
     const reportDef = REGISTRY[job.report_id];
@@ -193,14 +181,7 @@ export async function POST(req: NextRequest) {
       `Rows: ${rows.length}. File: ${fileKey}`
     );
 
-    return NextResponse.json({
-      message:   'Job processed successfully.',
-      jobId:     job.id,
-      report_id: job.report_id,
-      status:    'Completed',
-      row_count: rows.length,
-      file_key:  fileKey,
-    });
+    return { jobId: job.id, report_id: job.report_id, status: 'Completed', row_count: rows.length, file_key: fileKey };
 
   } catch (err: unknown) {
     // ── Error path: mark Failed, record error message ─────────────────────
@@ -221,17 +202,58 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    return { jobId: job.id, report_id: job.report_id, status: 'Failed', error: errorMessage };
+  }
+}
+
+// ─── POST — drain the queued jobs ────────────────────────────────────────────
+// Processes jobs FIFO until the queue is empty or a bound (MAX_JOBS_PER_RUN /
+// TIME_BUDGET_MS) is hit. A single daily invocation therefore clears the whole
+// backlog — required because Vercel Hobby only allows once-per-day cron.
+
+export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const startedAt = Date.now();
+  const results: JobResult[] = [];
+
+  while (results.length < MAX_JOBS_PER_RUN && (Date.now() - startedAt) < TIME_BUDGET_MS) {
+    // ── Step 1: Claim the oldest Queued job (FIFO) ──────────────────────────
+    const job = await prisma.report_jobs.findFirst({
+      where:   { status: 'Queued' },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (!job) break; // queue drained
+
+    // ── Step 2: Atomically claim the job → 'Running' before any async work ──
+    // so a concurrent worker invocation cannot claim the same job.
+    await prisma.report_jobs.update({
+      where: { id: job.id },
+      data:  { status: 'Running', started_at: new Date(), progress: 0 },
+    });
+
+    // ── Step 3: Process (never throws — returns a per-job result) ───────────
+    results.push(await processClaimedJob(job));
+  }
+
+  if (results.length === 0) {
     return NextResponse.json(
-      {
-        message:   'Job processing failed.',
-        jobId:     job.id,
-        report_id: job.report_id,
-        status:    'Failed',
-        error:     errorMessage,
-      },
-      { status: 500 }
+      { message: 'Queue is empty. No jobs to process.', processed: 0, results: [] },
+      { status: 200 }
     );
   }
+
+  const failed = results.filter(r => r.status === 'Failed').length;
+  return NextResponse.json({
+    message:   `Processed ${results.length} job(s). ${results.length - failed} completed, ${failed} failed.`,
+    processed: results.length,
+    completed: results.length - failed,
+    failed,
+    results,
+  });
 }
 
 // ─── GET — queue health snapshot ─────────────────────────────────────────────
