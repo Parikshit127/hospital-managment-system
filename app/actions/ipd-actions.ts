@@ -1743,7 +1743,7 @@ export async function updateAdmissionBasicDetails(data: {
 }) {
   try {
     const { db, session } = await requireTenantContext();
-    const allowedRoles = ['reception', 'admin', 'finance'];
+    const allowedRoles = ['receptionist', 'reception', 'admin', 'finance', 'superadmin'];
     const role = String(session.role || '').toLowerCase();
     if (!allowedRoles.includes(role)) {
       return { success: false, error: 'Only Reception, Admin, or Finance can update admission details.' };
