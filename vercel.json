@@ -19,6 +19,14 @@
         {
             "path": "/api/cron/mis-rollup",
             "schedule": "30 18 * * *"
+        },
+        {
+            "path": "/api/cron/inventory-reorder",
+            "schedule": "0 1 * * *"
+        },
+        {
+            "path": "/api/cron/inventory-expiry-alerts",
+            "schedule": "0 6 * * *"
         }
     ]
 }

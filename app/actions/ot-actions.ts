@@ -653,9 +653,32 @@ export async function addSurgeryConsumable(input: {
   is_implant?: boolean;
   batch_no?: string | null;
   serial_no?: string | null;
+  itemMasterId?: number | null;
+  storeId?: number | null;
 }) {
   try {
-    const { db } = await requireTenantContext();
+    const { db, organizationId } = await requireTenantContext();
+    let movementId: number | null = null;
+
+    if (input.itemMasterId && input.storeId) {
+      const { recordConsumption } = await import('@/app/actions/inventory-operations-actions');
+      const surgery = await db.surgeryRequest.findUnique({
+        where: { id: input.surgery_request_id },
+        select: { admission_id: true },
+      });
+      const consumRes = await recordConsumption({
+        store_id: input.storeId,
+        item_id: input.itemMasterId,
+        quantity: input.quantity ?? 1,
+        admission_id: surgery?.admission_id || undefined,
+        chargeable: true,
+      });
+      if (!consumRes.success) {
+        return { success: false, error: consumRes.error || 'Failed to decrement OT stock' };
+      }
+      movementId = consumRes.data?.movementIds?.[0] ?? null;
+    }
+
     const item = await db.surgeryConsumable.create({
       data: {
         surgery_request_id: input.surgery_request_id,
@@ -666,6 +689,9 @@ export async function addSurgeryConsumable(input: {
         is_implant: input.is_implant ?? false,
         batch_no: input.batch_no ?? null,
         serial_no: input.serial_no ?? null,
+        itemMasterId: input.itemMasterId ?? null,
+        storeId: input.storeId ?? null,
+        movement_id: movementId,
       },
     });
     return { success: true, data: serialize(item) };

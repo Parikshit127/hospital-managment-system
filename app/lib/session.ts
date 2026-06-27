@@ -222,15 +222,18 @@ const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     ],
     lab_technician: [
         'lab.view', 'lab.create', 'lab.edit',
+        'inventory.view',
         'reports.view',
     ],
     pharmacist: [
         'pharmacy.view', 'pharmacy.create', 'pharmacy.edit',
+        'inventory.view',
         'reports.view',
     ],
     finance: [
         'finance.view', 'finance.create', 'finance.edit', 'finance.approve', 'finance.export',
         'insurance.view', 'insurance.create', 'insurance.edit',
+        'inventory.view', 'inventory.finance',
         'reports.view', 'reports.export',
     ],
     ipd_manager: [
@@ -239,6 +242,7 @@ const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         'lab.view',
         'pharmacy.view',
         'finance.view',
+        'inventory.view',
         'reports.view', 'reports.export',
     ],
     nurse: [
@@ -246,6 +250,7 @@ const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         'opd.view',
         'lab.view',
         'pharmacy.view',
+        'inventory.view',
         'reports.view',
     ],
     opd_manager: [
@@ -253,11 +258,19 @@ const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
         'lab.view',
         'pharmacy.view',
         'finance.view',
+        'inventory.view',
         'reports.view', 'reports.export',
     ],
     hr: [
         'hr.view', 'hr.create', 'hr.edit', 'hr.approve', 'hr.export',
         'reports.view', 'reports.export',
+    ],
+    store_manager: [
+        'inventory.view', 'inventory.manage', 'inventory.create', 'inventory.edit', 'inventory.approve',
+        'reports.view', 'reports.export',
+    ],
+    procurement_officer: [
+        'inventory.view', 'inventory.procure', 'inventory.create', 'reports.view',
     ],
 };
 

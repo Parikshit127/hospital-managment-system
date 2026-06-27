@@ -3,7 +3,7 @@
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
-const MODULE_KEYS = ['opd', 'ipd', 'lab', 'pharmacy', 'finance', 'hr', 'insurance', 'patient_portal'] as const;
+const MODULE_KEYS = ['opd', 'ipd', 'lab', 'pharmacy', 'finance', 'hr', 'insurance', 'patient_portal', 'inventory'] as const;
 type ModuleKey = typeof MODULE_KEYS[number];
 
 // Default configurations per module
@@ -109,6 +109,19 @@ const DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
         billing_visible: true,
         feedback_enabled: true,
         health_assessment_enabled: true,
+    },
+    inventory: {
+        fifo_enforcement: true,
+        fefo_enforcement: true,
+        expiry_alert_days: [90, 60, 30],
+        po_auto_approve_below: 50000,
+        po_require_approval_above: 500000,
+        adjustment_tolerance_pct: 2,
+        emergency_issue_cap: 10000,
+        cycle_count_abc: { A: 'monthly', B: 'quarterly', C: 'half_yearly' },
+        auto_indent_enabled: true,
+        auto_pr_enabled: true,
+        inter_branch_two_step: true,
     },
 };
 

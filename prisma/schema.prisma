@@ -225,6 +225,8 @@ model Organization {
   surgery_masters                SurgeryMaster[]
   surgery_requests               SurgeryRequest[]
   writeoffs                      Writeoff[]
+  item_kits                      item_kits[]
+  cssd_instruments               cssd_instruments[]
 
   // Referral & Commission
   referrers                  Referrer[]
@@ -1793,27 +1795,29 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderItem {
-  id                Int                      @id @default(autoincrement())
+  id                Int                       @id @default(autoincrement())
   po_id             Int
-  medicine_id       Int
+  medicine_id       Int?
   quantity_ordered  Int
-  quantity_received Int                      @default(0)
+  quantity_received Int                       @default(0)
   unit_price        Float
-  gst_rate          Float                    @default(0)
+  gst_rate          Float                     @default(0)
   hsn_code          String?
   notes             String?
-  amount            Float                    @default(0)
+  amount            Float                     @default(0)
   batch_no          String?
-  cgst_rate         Float                    @default(0)
-  discount_pct      Float                    @default(0)
+  cgst_rate         Float                     @default(0)
+  discount_pct      Float                     @default(0)
   expiry            String?
-  mrp               Float                    @default(0)
+  mrp               Float                     @default(0)
   pack              String?
-  sgst_rate         Float                    @default(0)
+  sgst_rate         Float                     @default(0)
+  uom               String?
+  conversion_to_base Float                    @default(1.0)
   itemMasterId      Int?
-  item_master       item_master?             @relation(fields: [itemMasterId], references: [id])
-  medicine          pharmacy_medicine_master @relation(fields: [medicine_id], references: [id])
-  purchase_order    PurchaseOrder            @relation(fields: [po_id], references: [id])
+  item_master       item_master?              @relation(fields: [itemMasterId], references: [id])
+  medicine          pharmacy_medicine_master? @relation(fields: [medicine_id], references: [id])
+  purchase_order    PurchaseOrder             @relation(fields: [po_id], references: [id])
 
   @@index([po_id])
   @@index([medicine_id])
@@ -1852,9 +1856,9 @@ model GoodsReceiptNote {
 }
 
 model PharmacyReturn {
-  id                  Int          @id @default(autoincrement())
+  id                  Int                       @id @default(autoincrement())
   return_type         String
-  medicine_id         Int
+  medicine_id         Int?
   batch_id            String?
   batch_record_id     Int?
   quantity            Int
@@ -1864,17 +1868,17 @@ model PharmacyReturn {
   po_id               Int?
   invoice_id          Int?
   original_invoice_id Int?
-  status              String       @default("Pending")
+  status              String                    @default("Pending")
   approved_by         String?
   processed_by        String?
-  gl_posted           Boolean      @default(false)
+  gl_posted           Boolean                   @default(false)
   organizationId      String
-  created_at          DateTime     @default(now())
+  created_at          DateTime                  @default(now())
   itemMasterId        Int?
   storeId             Int?
-  item_master         item_master? @relation(fields: [itemMasterId], references: [id])
-  organization        Organization @relation(fields: [organizationId], references: [id])
-  stores              stores?      @relation(fields: [storeId], references: [id])
+  item_master         item_master?              @relation(fields: [itemMasterId], references: [id])
+  organization        Organization              @relation(fields: [organizationId], references: [id])
+  stores              stores?                   @relation(fields: [storeId], references: [id])
 
   @@index([organizationId])
   @@index([return_type])
@@ -3775,6 +3779,7 @@ model SurgeryConsumable {
   serial_no          String?
   itemMasterId       Int?
   storeId            Int?
+  movement_id        Int?
   item_master        item_master?   @relation(fields: [itemMasterId], references: [id])
   stores             stores?        @relation(fields: [storeId], references: [id])
   surgery            SurgeryRequest @relation(fields: [surgery_request_id], references: [id], onDelete: Cascade)
@@ -4347,7 +4352,10 @@ model PharmacyPurchaseInvoice {
   tds_amount        Float                         @default(0)
   status            String                        @default("Draft")
   variance_approved Boolean                       @default(false)
+  variance_approved_by String?
   matching_notes    String?
+  matched_at        DateTime?
+  posted_at         DateTime?
   gl_posted         Boolean                       @default(false)
   vendor_gstin      String?
   created_at        DateTime                      @default(now())
@@ -4367,7 +4375,7 @@ model PharmacyPurchaseInvoice {
 model PharmacyPurchaseInvoiceLine {
   id              Int     @id @default(autoincrement())
   invoice_id      Int
-  medicine_id     Int
+  medicine_id     Int?
   grn_id          Int?
   po_item_id      Int?
   quantity        Int
@@ -4388,10 +4396,10 @@ model PharmacyPurchaseInvoiceLine {
   pack            String?
   mrp             Float?
 
-  invoice      PharmacyPurchaseInvoice  @relation(fields: [invoice_id], references: [id])
-  medicine     pharmacy_medicine_master @relation(fields: [medicine_id], references: [id])
+  invoice      PharmacyPurchaseInvoice   @relation(fields: [invoice_id], references: [id])
+  medicine     pharmacy_medicine_master? @relation(fields: [medicine_id], references: [id])
   itemMasterId Int?
-  item_master  item_master?             @relation(fields: [itemMasterId], references: [id])
+  item_master  item_master?              @relation(fields: [itemMasterId], references: [id])
 
   @@index([invoice_id])
   @@map("pharmacy_purchase_invoice_lines")
@@ -4912,6 +4920,7 @@ model inventory_movements {
   user_id            String?
   reason             String?
   gl_journal_id      String?
+  gl_posted          Boolean          @default(false)
   created_at         DateTime         @default(now())
   admissions         admissions?      @relation(fields: [admission_id], references: [admission_id])
   item_batches       item_batches?    @relation(fields: [batch_id], references: [id])
@@ -4939,6 +4948,7 @@ model item_batches {
   grn_id               Int?
   vendor_id            Int?
   is_quarantined       Boolean                @default(false)
+  is_consignment       Boolean                @default(false)
   organizationId       String
   created_at           DateTime               @default(now())
   updated_at           DateTime
@@ -5034,6 +5044,8 @@ model item_master {
   store_item_settings             store_item_settings[]
   store_stocks                    store_stocks[]
   surgery_consumables             SurgeryConsumable[]
+  item_kits                       item_kits[]
+  kit_components                  item_kit_components[] @relation("kit_component_items")
 
   @@unique([item_code, organizationId])
   @@index([category_id])
@@ -5489,7 +5501,50 @@ model stores {
   stores                                                stores?                 @relation("storesTostores", fields: [parent_store_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   other_stores                                          stores[]                @relation("storesTostores")
   surgery_consumables                                   SurgeryConsumable[]
+  cssd_instruments                                      cssd_instruments[]
 
   @@unique([store_code, organizationId])
+  @@index([organizationId])
+}
+
+model item_kits {
+  id                  Int                   @id @default(autoincrement())
+  kit_item_id         Int
+  organizationId      String
+  created_at          DateTime              @default(now())
+  updated_at          DateTime
+  item_kit_components item_kit_components[]
+  item_master         item_master           @relation(fields: [kit_item_id], references: [id], onDelete: Cascade)
+  organizations       Organization          @relation(fields: [organizationId], references: [id])
+
+  @@unique([kit_item_id, organizationId])
+  @@index([organizationId])
+}
+
+model item_kit_components {
+  id                Int         @id @default(autoincrement())
+  kit_id            Int
+  component_item_id Int
+  quantity          Int         @default(1)
+  item_kits         item_kits   @relation(fields: [kit_id], references: [id], onDelete: Cascade)
+  item_master       item_master @relation("kit_component_items", fields: [component_item_id], references: [id])
+
+  @@index([kit_id])
+}
+
+model cssd_instruments {
+  id                 Int          @id @default(autoincrement())
+  instrument_code    String
+  name               String
+  store_id           Int?
+  status             String       @default("Available")
+  last_sterilized_at DateTime?
+  organizationId     String
+  created_at         DateTime     @default(now())
+  updated_at         DateTime
+  stores             stores?      @relation(fields: [store_id], references: [id])
+  organizations      Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([instrument_code, organizationId])
   @@index([organizationId])
 }

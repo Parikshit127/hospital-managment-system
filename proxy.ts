@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 import { validateServerEnv } from "@/app/lib/env";
+import { canAccessInventoryRoute } from "@/app/lib/inventory-rbac";
+import { getLoginRedirectForRole } from "@/app/lib/role-login-redirects";
 
 validateServerEnv();
 
@@ -36,6 +38,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
   "/er": ["admin", "er_staff", "doctor", "nurse"],
   // Master Billing — orchestrates across reception, ipd, finance, admin
   "/billing": ["admin", "finance", "ipd_manager", "receptionist", "opd_manager"],
+  "/inventory": ["admin", "store_manager", "procurement_officer", "finance", "nurse", "ipd_manager", "lab_technician", "opd_manager", "pharmacist"],
 };
 
 // Route -> required module permission (granular permission check)
@@ -57,6 +60,7 @@ const PERMISSION_ROUTES: Record<string, string> = {
   "/ot": "ot.view",
   "/er": "er.view",
   "/billing": "billing.view",
+  "/inventory": "inventory.view",
 };
 
 // System role -> permission map (mirrors session.ts SYSTEM_ROLE_PERMISSIONS)
@@ -65,15 +69,17 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   admin: ["opd.view", "ipd.view", "lab.view", "pharmacy.view", "finance.view", "insurance.view", "hr.view", "admin.view", "reports.view", "ot.view", "er.view", "billing.view"],
   doctor: ["opd.view", "ipd.view", "lab.view", "pharmacy.view", "finance.view", "insurance.view", "reports.view", "ot.view", "er.view"],
   receptionist: ["opd.view", "ipd.view", "finance.view", "insurance.view", "reports.view", "billing.view"],
-  lab_technician: ["lab.view", "reports.view"],
-  pharmacist: ["pharmacy.view", "reports.view"],
-  finance: ["finance.view", "insurance.view", "reports.view", "billing.view"],
-  ipd_manager: ["ipd.view", "opd.view", "lab.view", "pharmacy.view", "finance.view", "reports.view", "ot.view", "billing.view", "insurance.view"],
-  nurse: ["ipd.view", "opd.view", "lab.view", "pharmacy.view", "reports.view", "ot.view", "er.view"],
-  opd_manager: ["opd.view", "lab.view", "pharmacy.view", "finance.view", "reports.view", "billing.view"],
+  lab_technician: ["lab.view", "reports.view", "inventory.view"],
+  pharmacist: ["pharmacy.view", "reports.view", "inventory.view"],
+  finance: ["finance.view", "insurance.view", "reports.view", "billing.view", "inventory.view", "inventory.finance"],
+  ipd_manager: ["ipd.view", "opd.view", "lab.view", "pharmacy.view", "finance.view", "reports.view", "ot.view", "billing.view", "insurance.view", "inventory.view"],
+  nurse: ["ipd.view", "opd.view", "lab.view", "pharmacy.view", "reports.view", "ot.view", "er.view", "inventory.view"],
+  opd_manager: ["opd.view", "lab.view", "pharmacy.view", "finance.view", "reports.view", "billing.view", "inventory.view"],
   hr: ["hr.view", "reports.view"],
   ot_manager: ["ot.view", "ipd.view", "pharmacy.view", "reports.view"],
   er_staff: ["er.view", "ipd.view", "lab.view", "pharmacy.view", "reports.view"],
+  store_manager: ["inventory.view", "inventory.manage", "reports.view"],
+  procurement_officer: ["inventory.view", "inventory.procure", "reports.view"],
 };
 
 export async function proxy(request: NextRequest) {
@@ -249,27 +255,21 @@ export async function proxy(request: NextRequest) {
     // If logged in and trying to access login page, redirect to dashboard
     if (isAuthPage) {
       const role = payload.role as string;
-      const redirectMap: Record<string, string> = {
-        receptionist: "/reception",
-        doctor: "/doctor/dashboard",
-        lab_technician: "/lab/technician",
-        pharmacist: "/pharmacy/billing",
-        admin: "/admin/dashboard",
-        finance: "/finance/dashboard",
-        ipd_manager: "/ipd",
-        nurse: "/nurse/dashboard",
-        opd_manager: "/opd-manager/dashboard",
-        hr: "/hr/dashboard",
-        ot_manager: "/ot/dashboard",
-        er_staff: "/er/dashboard",
-      };
       return NextResponse.redirect(
-        new URL(redirectMap[role] || "/", request.url),
+        new URL(getLoginRedirectForRole(role), request.url),
       );
     }
 
     // 6. Role + permission-based route protection
     const userRole = payload.role as string;
+
+    // Inventory sub-route RBAC (finer than flat /inventory role list)
+    if (pathname.startsWith("/inventory") && !canAccessInventoryRoute(userRole, pathname)) {
+      return NextResponse.redirect(
+        new URL("/login?reason=unauthorized", request.url),
+      );
+    }
+
     for (const [routePrefix, allowedRoles] of Object.entries(ROLE_ROUTES)) {
       if (pathname.startsWith(routePrefix)) {
         // First check flat role list (backward compatible)

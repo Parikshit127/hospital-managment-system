@@ -38,6 +38,7 @@ import {
   BarChart3,
   FileSpreadsheet,
   Package,
+  PackageOpen,
   ShoppingCart,
   Truck,
   RotateCcw,
@@ -84,7 +85,11 @@ import {
   BookOpen,
   Landmark,
   TrendingUp,
+  Warehouse,
+  Boxes,
+  ScanLine,
 } from "lucide-react";
+import { inventoryNavSection } from "@/app/inventory/inventory-nav";
 
 interface NavItem {
   label: string;
@@ -118,6 +123,8 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Approval Center", href: "/billing/approvals", icon: ShieldAlert },
         { label: "Write-offs", href: "/billing/writeoffs", icon: Scale },
         { label: "HR", href: "/admin/hr", icon: Briefcase },
+        { label: "Pharmacy", href: "/admin/pharmacy", icon: Pill },
+        { label: "Inventory", href: "/inventory/dashboard", icon: Warehouse },
       ],
     },
     {
@@ -249,6 +256,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Worklist", href: "/lab/worklist", icon: ClipboardCheck },
         { label: "Lab Orders", href: "/lab/technician", icon: FlaskConical },
         { label: "Inventory", href: "/lab/inventory", icon: Package },
+        { label: "Materials Store", href: "/inventory/indents", icon: Warehouse },
         { label: "Reports", href: "/lab/reports", icon: BarChart3 },
         { label: "MIS Reports", href: "/lab/mis-reports", icon: FileSpreadsheet },
       ],
@@ -276,6 +284,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Returns", href: "/pharmacy/returns", icon: RotateCcw },
       ],
     },
+    inventoryNavSection("pharmacist", "Materials Store"),
     {
       title: "Reports",
       items: [
@@ -284,6 +293,8 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       ],
     },
   ],
+  store_manager: [inventoryNavSection("store_manager")],
+  procurement_officer: [inventoryNavSection("procurement_officer", "Procurement")],
   finance: [
     {
       title: "Finance",
@@ -323,6 +334,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Print Center", href: "/print-center", icon: Printer },
       ],
     },
+    inventoryNavSection("finance"),
     {
       title: "Analytics",
       items: [
@@ -396,6 +408,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Audit Trail", href: "/ipd/audit-trail", icon: Activity },
       ],
     },
+    inventoryNavSection("ipd_manager", "Materials"),
   ],
   patient: [
     {
@@ -428,6 +441,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Handover", href: "/nurse/handover", icon: ArrowLeftRight },
       ],
     },
+    inventoryNavSection("nurse"),
     {
       title: "Procedural",
       items: [
@@ -448,6 +462,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Reports", href: "/opd-manager/reports", icon: BarChart3 },
       ],
     },
+    inventoryNavSection("opd_manager", "Materials"),
   ],
   hr: [
     {
@@ -584,6 +599,8 @@ const roleLabelMap: Record<string, string> = {
   ot_manager: "OT Manager",
   er_staff: "ER Staff",
   crm_manager: "CRM Manager",
+  store_manager: "Store Manager",
+  procurement_officer: "Procurement Officer",
 };
 
 // Map a URL path to the portal role whose nav it belongs to. Used so an admin
@@ -597,6 +614,7 @@ const PATH_ROLE: { prefix: string; role: string }[] = [
   { prefix: "/ipd", role: "ipd_manager" },
   { prefix: "/lab", role: "lab_technician" },
   { prefix: "/pharmacy", role: "pharmacist" },
+  { prefix: "/inventory", role: "store_manager" },
   { prefix: "/finance", role: "finance" },
   { prefix: "/billing", role: "finance" },
   { prefix: "/hr", role: "hr" },
@@ -623,6 +641,7 @@ const ADMIN_SWITCH_PORTALS: { label: string; path: string }[] = [
   { label: "OPD Manager", path: "/opd-manager/dashboard" },
   { label: "Lab", path: "/lab/technician" },
   { label: "Pharmacy", path: "/pharmacy/billing" },
+  { label: "Inventory", path: "/inventory/dashboard" },
   { label: "Finance", path: "/finance/dashboard" },
   { label: "HR", path: "/hr/dashboard" },
   { label: "Coordinator", path: "/coordinator/dashboard" },
@@ -670,7 +689,20 @@ export function Sidebar({ session }: SidebarProps) {
   const effectiveRole = session
     ? (isAdmin ? (roleForPath(pathname) ?? "admin") : session.role)
     : "";
-  const sections = effectiveRole ? NAV_BY_ROLE[effectiveRole] || [] : [];
+  let sections = effectiveRole ? NAV_BY_ROLE[effectiveRole] || [] : [];
+  if (isAdmin && effectiveRole === "store_manager") {
+    sections = sections.map((s) =>
+      s.title === "Inventory"
+        ? {
+            ...s,
+            items: [
+              ...s.items,
+              { label: "Module Settings", href: "/admin/inventory", icon: Settings },
+            ],
+          }
+        : s,
+    );
+  }
   const orgName = session?.organization_name || "Hospital OS";
 
   const allHrefs = sections.flatMap((s) => s.items.map((i) => i.href));

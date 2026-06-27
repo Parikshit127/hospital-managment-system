@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Shield, Loader2, ArrowLeft, KeyRound } from 'lucide-react';
 import { completeMfaLogin } from '@/app/login/actions';
+import { getLoginRedirectForRole } from '@/app/lib/role-login-redirects';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -22,16 +23,7 @@ export default function MFAVerifyPage() {
         const result = await completeMfaLogin(token.trim());
 
         if (result.success && result.role) {
-            const routes: Record<string, string> = {
-                receptionist: '/reception/triage',
-                doctor: '/doctor/dashboard',
-                lab_technician: '/lab/technician',
-                pharmacist: '/pharmacy/billing',
-                admin: '/admin/dashboard',
-                finance: '/finance/dashboard',
-                ipd_manager: '/ipd',
-            };
-            router.push(routes[result.role] || '/');
+            router.push(getLoginRedirectForRole(result.role));
         } else {
             setError(result.error || 'Verification failed');
             setLoading(false);

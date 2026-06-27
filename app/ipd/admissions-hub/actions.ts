@@ -1,6 +1,7 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
+import { serializePrisma } from '@/app/lib/serialize-prisma';
 
 export async function getAdmissionsHubData(filters?: {
     status?: string; // 'All', 'Admitted', 'Discharged', 'Cancelled'
@@ -86,5 +87,5 @@ export async function getAdmissionsHubData(filters?: {
         cancellation_reason: cancellationReasons.get(admission.admission_id) || null,
     }));
 
-    return JSON.parse(JSON.stringify({ admissions: admissionsWithCancellationReason, wards }));
+    return serializePrisma({ admissions: admissionsWithCancellationReason, wards });
 }
