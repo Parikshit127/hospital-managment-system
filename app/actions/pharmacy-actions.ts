@@ -499,7 +499,7 @@ export async function generateInvoice(
                 invoice_number: await generateSequentialNumber(organizationId, 'PHM', db),
                 patient_id: patientId,
                 invoice_type: 'Pharmacy',
-                status: 'Paid',
+                status: 'Final',
                 total_amount: totalAmount,
                 total_discount: appliedDiscount,
                 bill_discount: appliedDiscount,
@@ -776,7 +776,6 @@ export async function markOrderAsPaid(orderId: number, paymentMethod: string = '
                     data: {
                         paid_amount: Number(invoice.paid_amount) + payAmount,
                         balance_due: 0,
-                        status: 'Paid',
                     }
                 });
 
