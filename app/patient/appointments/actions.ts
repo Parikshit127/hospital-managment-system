@@ -200,7 +200,7 @@ export async function bookAppointment(
                         net_amount: doctorFee,
                         paid_amount: 0,
                         balance_due: doctorFee,
-                        status: 'Unpaid',
+                        status: 'Draft',
                         organizationId: session.organization_id,
                         items: {
                             create: [{

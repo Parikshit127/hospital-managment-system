@@ -486,7 +486,7 @@ export async function voidFeeReceipt(invoiceId: number, reason: string) {
             db.invoices.update({
                 where: { id: inv.id },
                 data: {
-                    status: "Voided",
+                    status: "Cancelled",
                     notes: [inv.notes?.trim(), `VOID: ${trimmed}`].filter(Boolean).join("\n"),
                 }
             }),
