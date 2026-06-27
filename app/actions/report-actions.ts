@@ -1105,6 +1105,10 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 received_amount: receivedAmount,
                 outstanding_amount: Math.max(0, netAmount - receivedAmount),
                 patient_receipt: patientPayments,
+                // TPA sanctioned/approved amount — only meaningful for TPA/Insurance
+                // bills; left at 0 (renders as "-") for Cash/Corporate so the column
+                // reads cleanly for the TPA patients it's intended for.
+                approved_amount: effectiveType === 'tpa_insurance' ? Number(inv.tpa_approved_amount || 0) : 0,
                 tpa_corporate_name: tpaCorporateName,
                 referral_source: inv.admission?.admission_source || '',
                 package_vs_nonpackage: hasPackage ? 'Package' : 'Non-Package',
@@ -1120,6 +1124,7 @@ export async function getMISReport(filters: { from: string; to: string; billType
             total_net: rows.reduce((s: number, r: any) => s + r.net_amount, 0),
             total_received: rows.reduce((s: number, r: any) => s + r.received_amount, 0),
             total_outstanding: rows.reduce((s: number, r: any) => s + r.outstanding_amount, 0),
+            total_approved: rows.reduce((s: number, r: any) => s + r.approved_amount, 0),
             total_discount: rows.reduce((s: number, r: any) => s + r.discount, 0),
             total_pharma: rows.reduce((s: number, r: any) => s + r.pharma_income, 0),
             total_lab: rows.reduce((s: number, r: any) => s + r.lab_income, 0),
