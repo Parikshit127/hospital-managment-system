@@ -1379,6 +1379,8 @@ async function getHospitalOutstandingSnapshot(db: any, options?: { takeRows?: nu
             invoice_number: true,
             patient_id: true,
             invoice_type: true,
+            billing_patient_type: true,
+            tpa_payable: true,
             status: true,
             created_at: true,
             admission_id: true,
@@ -1444,14 +1446,34 @@ async function getHospitalOutstandingSnapshot(db: any, options?: { takeRows?: nu
             const netAmount = Number(inv.total_amount || 0) - Number(inv.total_discount || 0) + Number(inv.total_tax || 0);
             const outstandingAmount = Math.max(0, netAmount - receivedAmount);
 
+            // Segregate each outstanding bill into exactly one bucket so the three
+            // categories always reconcile to the grand total. IPD bills owed (even
+            // partly) by a TPA/insurance payer are "IPD TPA"; the rest of IPD is
+            // "IPD Cash"; everything non-IPD is "OPD".
+            const isIpd = String(inv.invoice_type || '').toUpperCase() === 'IPD';
+            const isTpaPayer = String(inv.billing_patient_type || '').toLowerCase() === 'tpa_insurance'
+                || Number(inv.tpa_payable || 0) > 0;
+            const category: 'ipdCash' | 'ipdTpa' | 'opd' = isIpd ? (isTpaPayer ? 'ipdTpa' : 'ipdCash') : 'opd';
+
             return {
                 ...inv,
                 netAmount,
                 receivedAmount,
                 outstandingAmount,
+                category,
             };
         })
         .filter((inv: any) => inv.outstandingAmount > 0.01);
+
+    const breakdown = outstandingRows.reduce((acc: any, inv: any) => {
+        acc[inv.category].total += inv.outstandingAmount;
+        acc[inv.category].count += 1;
+        return acc;
+    }, {
+        ipdCash: { total: 0, count: 0 },
+        ipdTpa: { total: 0, count: 0 },
+        opd: { total: 0, count: 0 },
+    });
 
     const aging = outstandingRows.reduce((acc: any, inv: any) => {
         const created = new Date(inv.created_at);
@@ -1465,6 +1487,7 @@ async function getHospitalOutstandingSnapshot(db: any, options?: { takeRows?: nu
         total: outstandingRows.reduce((s: number, inv: any) => s + inv.outstandingAmount, 0),
         count: outstandingRows.length,
         aging,
+        breakdown,
         rows: typeof options?.takeRows === 'number' ? outstandingRows.slice(0, options.takeRows) : outstandingRows,
     };
 }
@@ -1607,6 +1630,7 @@ export async function getFinanceDashboardStats(params?: {
                 totalInvoices,
                 draftInvoices,
                 pendingBalance: outstandingSnapshot.total,
+                outstandingBreakdown: outstandingSnapshot.breakdown,
                 todayRevenue: Number(todayRevenueInv._sum.net_amount || 0),
                 totalRevenue: Number(totalRevenueInv._sum.net_amount || 0),
                 periodRevenue: Number(periodRevenueInv._sum.net_amount || 0),
@@ -3115,6 +3139,7 @@ export async function createAddendumInvoice(parentInvoiceId: string, reason: str
 
 export type DrillDownType =
     | 'today-revenue' | 'total-revenue' | 'expenses' | 'outstanding' | 'drafts' | 'deposits'
+    | 'outstanding-ipd-cash' | 'outstanding-ipd-tpa' | 'outstanding-opd'
     | 'department' | 'doctor' | 'ipd' | 'opd';
 
 export async function getDrillDownData(type: DrillDownType, filters: Record<string, any>) {
@@ -3193,16 +3218,36 @@ export async function getDrillDownData(type: DrillDownType, filters: Record<stri
             };
         }
 
-        if (type === 'outstanding') {
+        if (type === 'outstanding' || type === 'outstanding-ipd-cash' || type === 'outstanding-ipd-tpa' || type === 'outstanding-opd') {
             const now = new Date();
-            const outstanding = await getHospitalOutstandingSnapshot(db, { takeRows: 200 });
+            const categoryByType: Record<string, 'ipdCash' | 'ipdTpa' | 'opd' | null> = {
+                'outstanding': null,
+                'outstanding-ipd-cash': 'ipdCash',
+                'outstanding-ipd-tpa': 'ipdTpa',
+                'outstanding-opd': 'opd',
+            };
+            const titleByType: Record<string, string> = {
+                'outstanding': 'Pending / Outstanding Invoices',
+                'outstanding-ipd-cash': 'IPD Cash — Outstanding Invoices',
+                'outstanding-ipd-tpa': 'IPD TPA — Outstanding Invoices',
+                'outstanding-opd': 'OPD — Outstanding Invoices',
+            };
+            const wantCategory = categoryByType[type];
+            // Fetch the full set, then filter to the requested category before
+            // capping the rows (slicing first would drop matching invoices).
+            const outstanding = await getHospitalOutstandingSnapshot(db);
+            const filtered = (wantCategory
+                ? outstanding.rows.filter((inv: any) => inv.category === wantCategory)
+                : outstanding.rows
+            ).slice(0, 200);
             return {
                 success: true, data: {
-                    title: 'Pending / Outstanding Invoices',
-                    columns: ['Invoice #', 'Patient', 'Net Amount', 'Received', 'Outstanding', 'Age (days)'],
-                    rows: serialize(outstanding.rows).map((inv: any) => ({
+                    title: titleByType[type],
+                    columns: ['Invoice #', 'Patient', 'Type', 'Net Amount', 'Received', 'Outstanding', 'Age (days)'],
+                    rows: serialize(filtered).map((inv: any) => ({
                         invoice: inv.invoice_number,
                         patient: inv.patient?.full_name || inv.patient_id,
+                        type: inv.invoice_type,
                         amount: fmt(Number(inv.netAmount)),
                         received: fmt(Number(inv.receivedAmount)),
                         balance: fmt(Number(inv.outstandingAmount)),

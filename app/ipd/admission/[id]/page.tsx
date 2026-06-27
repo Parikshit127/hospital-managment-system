@@ -735,6 +735,13 @@ export default function AdmissionDetailPage() {
                             >
                                 <Printer className="h-3.5 w-3.5" /> Print Stickers
                             </button>
+                            <button
+                                onClick={() => window.open(`/api/pharmacy/patient-breakup/${data.admission_id}`, '_blank')}
+                                className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 bg-white text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition-colors"
+                                title="Detailed pharmacy breakup of all dispensed medicines"
+                            >
+                                <Receipt className="h-3.5 w-3.5" /> Pharmacy Breakup
+                            </button>
                             {['Admitted', 'Discharged'].includes(data.status) && (
                                 <button
                                     onClick={openTransfer}

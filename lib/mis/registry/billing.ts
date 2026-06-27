@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/backend/db';
 import { ReportDefinition, ReportCategory, ValidatedFilters } from '../types';
+import { canonicalTender } from '@/app/lib/payment-tender';
 
 // ── Timezone-safe date boundary helpers ─────────────────────────────────
 const toStartOfDay = (d: string | Date): Date =>
@@ -454,36 +455,63 @@ export const billingPaymentModeReport: ReportDefinition = {
   requiredPermission: 'mis_reports.billing.view',
   queryFn: async (filters: ValidatedFilters, orgId: string) => {
     const { date_start, date_end } = filters;
+    // Collections come from two sources that must both appear in the mode breakup:
+    //   1. Invoice payments (payments table) — excluding the synthetic 'Deposit'
+    //      method, which is an internal transfer of an already-collected advance
+    //      onto a bill (the cash was counted when the deposit was taken).
+    //   2. Deposits collected (patient_deposits) — recorded under their real
+    //      tender, so a cash deposit lands in the Cash bucket, a UPI deposit in UPI.
     const rows = await prisma.$queryRaw<any[]>`
-      SELECT 
-        p.payment_method as "payment_mode",
-        COUNT(p.id) as "transaction_count",
-        SUM(p.amount) as "collected_amount"
-      FROM payments p
-      JOIN invoices i ON p.invoice_id = i.id
-      WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
-        AND i.created_at >= ${toStartOfDay(date_start)}
-        AND i.created_at <= ${toEndOfDay(date_end)}
-        AND p.status = 'Completed'
-      GROUP BY p.payment_method
-      ORDER BY SUM(p.amount) DESC
+      SELECT payment_mode, SUM(transaction_count) as "transaction_count", SUM(collected_amount) as "collected_amount"
+      FROM (
+        SELECT
+          p.payment_method as payment_mode,
+          COUNT(p.id) as transaction_count,
+          SUM(p.amount) as collected_amount
+        FROM payments p
+        JOIN invoices i ON p.invoice_id = i.id
+        WHERE i."organizationId" = ${orgId}
+          AND i.status != 'cancelled'
+          AND i.created_at >= ${toStartOfDay(date_start)}
+          AND i.created_at <= ${toEndOfDay(date_end)}
+          AND p.status = 'Completed'
+          AND p.payment_method != 'Deposit'
+        GROUP BY p.payment_method
+        UNION ALL
+        SELECT
+          pd.payment_method as payment_mode,
+          COUNT(pd.id) as transaction_count,
+          SUM(pd.amount) as collected_amount
+        FROM patient_deposits pd
+        WHERE pd."organizationId" = ${orgId}
+          AND pd.created_at >= ${toStartOfDay(date_start)}
+          AND pd.created_at <= ${toEndOfDay(date_end)}
+        GROUP BY pd.payment_method
+      ) combined
+      GROUP BY payment_mode
     `;
 
-    const totals = rows.reduce(
+    // Normalize tender spellings (e.g. "cash"/"Cash") so a deposit and a payment
+    // of the same tender merge into one row instead of splitting the bucket.
+    const byMode = new Map<string, { payment_mode: string; transaction_count: number; collected_amount: number }>();
+    for (const row of rows) {
+      const mode = canonicalTender(row.payment_mode);
+      const cur = byMode.get(mode) || { payment_mode: mode, transaction_count: 0, collected_amount: 0 };
+      cur.transaction_count += Number(row.transaction_count || 0);
+      cur.collected_amount += Number(row.collected_amount || 0);
+      byMode.set(mode, cur);
+    }
+
+    const serializedRows = [...byMode.values()].sort((a, b) => b.collected_amount - a.collected_amount);
+
+    const totals = serializedRows.reduce(
       (acc, row) => {
-        acc.transaction_count += Number(row.transaction_count || 0);
-        acc.collected_amount += Number(row.collected_amount || 0);
+        acc.transaction_count += row.transaction_count;
+        acc.collected_amount += row.collected_amount;
         return acc;
       },
       { transaction_count: 0, collected_amount: 0 }
     );
-
-    const serializedRows = rows.map(row => ({
-      ...row,
-      transaction_count: Number(row.transaction_count),
-      collected_amount: Number(row.collected_amount),
-    }));
 
     return { rows: serializedRows, totals };
   },
@@ -879,18 +907,34 @@ export const billingDateWiseCashReport: ReportDefinition = {
     const { date_start, date_end, cashier_id } = filters;
     const rows = await prisma.$queryRaw<any[]>`
       WITH cash_payments AS (
-        SELECT 
-          DATE(ps.payment_date) as cdate,
-          COALESCE(ps.received_by, 'System') as cashier_id,
-          SUM(ps.amount) as collected
-        FROM payment_splits ps
-        JOIN invoices i ON ps.invoice_id = i.id
-        WHERE i."organizationId" = ${orgId}
-          AND ps.status = 'received'
-          AND ps.payment_method ILIKE '%cash%'
-          AND ps.payment_date >= ${toStartOfDay(date_start)}
-          AND ps.payment_date <= ${toEndOfDay(date_end)}
-        GROUP BY DATE(ps.payment_date), ps.received_by
+        -- Physical cash in the drawer comes from invoice payments AND from cash
+        -- deposits collected (patient_deposits). Both are unioned then aggregated
+        -- per (date, cashier) so the refund join below matches a single row.
+        SELECT cdate, cashier_id, SUM(amt) as collected
+        FROM (
+          SELECT
+            DATE(ps.payment_date) as cdate,
+            COALESCE(ps.received_by, 'System') as cashier_id,
+            ps.amount as amt
+          FROM payment_splits ps
+          JOIN invoices i ON ps.invoice_id = i.id
+          WHERE i."organizationId" = ${orgId}
+            AND ps.status = 'received'
+            AND ps.payment_method ILIKE '%cash%'
+            AND ps.payment_date >= ${toStartOfDay(date_start)}
+            AND ps.payment_date <= ${toEndOfDay(date_end)}
+          UNION ALL
+          SELECT
+            DATE(pd.created_at) as cdate,
+            COALESCE(pd.collected_by, 'System') as cashier_id,
+            pd.amount as amt
+          FROM patient_deposits pd
+          WHERE pd."organizationId" = ${orgId}
+            AND pd.payment_method ILIKE '%cash%'
+            AND pd.created_at >= ${toStartOfDay(date_start)}
+            AND pd.created_at <= ${toEndOfDay(date_end)}
+        ) cash_sources
+        GROUP BY cdate, cashier_id
       ),
       cash_refunds AS (
         SELECT 
@@ -1442,21 +1486,34 @@ export const billingPaymentSummaryReport: ReportDefinition = {
   requiredPermission: 'mis_reports.billing.view',
   queryFn: async (filters: ValidatedFilters, orgId: string) => {
     const { date_start, date_end } = filters;
+    // Daily collection = invoice payment splits (excluding the 'Deposit' transfer
+    // method) UNION the deposits collected that day, each under its real tender so
+    // a cash deposit adds to total_cash, a UPI deposit to total_upi, etc.
     const rows = await prisma.$queryRaw<any[]>`
-      SELECT 
-        DATE(ps.payment_date) as "date",
-        SUM(CASE WHEN ps.payment_method ILIKE '%cash%' THEN ps.amount ELSE 0 END) as "total_cash",
-        SUM(CASE WHEN ps.payment_method ILIKE '%card%' THEN ps.amount ELSE 0 END) as "total_card",
-        SUM(CASE WHEN ps.payment_method ILIKE '%upi%' THEN ps.amount ELSE 0 END) as "total_upi",
-        SUM(ps.amount) as "total_collected"
-      FROM payment_splits ps
-      JOIN invoices i ON ps.invoice_id = i.id
-      WHERE i."organizationId" = ${orgId}
-        AND ps.status = 'received'
-        AND ps.payment_date >= ${toStartOfDay(date_start)}
-        AND ps.payment_date <= ${toEndOfDay(date_end)}
-      GROUP BY DATE(ps.payment_date)
-      ORDER BY DATE(ps.payment_date) DESC
+      SELECT
+        DATE(txn_date) as "date",
+        SUM(CASE WHEN method ILIKE '%cash%' THEN amt ELSE 0 END) as "total_cash",
+        SUM(CASE WHEN method ILIKE '%card%' THEN amt ELSE 0 END) as "total_card",
+        SUM(CASE WHEN method ILIKE '%upi%' THEN amt ELSE 0 END) as "total_upi",
+        SUM(amt) as "total_collected"
+      FROM (
+        SELECT ps.payment_date as txn_date, ps.payment_method as method, ps.amount as amt
+        FROM payment_splits ps
+        JOIN invoices i ON ps.invoice_id = i.id
+        WHERE i."organizationId" = ${orgId}
+          AND ps.status = 'received'
+          AND ps.payment_method NOT ILIKE '%deposit%'
+          AND ps.payment_date >= ${toStartOfDay(date_start)}
+          AND ps.payment_date <= ${toEndOfDay(date_end)}
+        UNION ALL
+        SELECT pd.created_at as txn_date, pd.payment_method as method, pd.amount as amt
+        FROM patient_deposits pd
+        WHERE pd."organizationId" = ${orgId}
+          AND pd.created_at >= ${toStartOfDay(date_start)}
+          AND pd.created_at <= ${toEndOfDay(date_end)}
+      ) combined
+      GROUP BY DATE(txn_date)
+      ORDER BY DATE(txn_date) DESC
     `;
     const totals = rows.reduce((acc, row) => {
       acc.total_cash += Number(row.total_cash || 0);
