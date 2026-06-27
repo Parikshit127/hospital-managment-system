@@ -12,6 +12,7 @@ import { validateBackdate } from '@/app/lib/backdate';
 import { recomputeInvoiceCommission } from '@/app/lib/referral-commission';
 import { recomputeInvoiceDoctorCommission } from '@/app/lib/doctor-commission';
 import { dispensingKey } from '@/app/lib/pharmacy-bill-group';
+import { isPrivilegedBillingRole } from '@/app/lib/bill-status';
 
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
@@ -289,14 +290,6 @@ async function recalculateInvoice(invoiceId: number) {
             sgst_amount: isInterState ? 0 : total_tax / 2,
             igst_amount: isInterState ? total_tax : 0,
             balance_due: balance_due > 0 ? balance_due : 0,
-            // Re-derive payment status from the new totals. If an edit re-opens a
-            // previously-paid bill (e.g. items added), it drops back to Partial.
-            status:
-                balance_due <= 0 && net_amount > 0
-                    ? 'Paid'
-                    : balance_due > 0 && paid_amount > 0
-                        ? 'Partial'
-                        : invoice?.status,
             version: { increment: 1 },
         },
     });
@@ -362,7 +355,7 @@ export async function getInvoices(filters?: {
             if (filters?.status) {
                 // Map status if needed, but Lab uses Pendning/Completed
                 if (filters.status === 'Draft') where.status = 'Pending';
-                else if (filters.status === 'Paid') where.status = 'Completed';
+                else if (filters.status === 'Final') where.status = 'Completed';
                 else where.status = filters.status;
             }
             if (filters?.patient_id) where.patient_id = filters.patient_id;
@@ -538,7 +531,7 @@ export async function getInvoices(filters?: {
                     invoice_type: 'LAB',
                     net_amount: price,
                     balance_due: lab.status === 'Completed' ? 0 : price,
-                    status: lab.status === 'Pending' ? 'Draft' : lab.status === 'Completed' ? 'Paid' : lab.status,
+                    status: lab.status === 'Pending' ? 'Draft' : lab.status === 'Completed' ? 'Final' : lab.status,
                     created_at: lab.created_at,
                     source: 'LAB'
                 };
@@ -866,12 +859,11 @@ export async function revertInvoice(invoiceId: number, reason?: string) {
         if (existing.status !== 'Cancelled') return { success: false, error: 'Only cancelled invoices can be reverted' };
 
         const balanceDue = Number(existing.net_amount) - Number(existing.paid_amount);
-        const newStatus = balanceDue <= 0 ? 'Paid' : Number(existing.paid_amount) > 0 ? 'Partial' : 'Final';
 
         const invoice = await db.invoices.update({
             where: { id: invoiceId },
             data: {
-                status: newStatus,
+                status: 'Final',
                 balance_due: balanceDue > 0 ? balanceDue : 0,
                 notes: reason ? `Reverted: ${reason}` : 'Reverted by admin',
                 // Clear cancellation audit fields so the cancelled banner stops showing
@@ -896,7 +888,7 @@ export async function revertInvoice(invoiceId: number, reason?: string) {
                 module: 'finance',
                 entity_type: 'invoice',
                 entity_id: invoice.invoice_number,
-                details: JSON.stringify({ reason, newStatus }),
+                details: JSON.stringify({ reason, newStatus: 'Final' }),
                 organizationId,
             },
         });
@@ -1020,16 +1012,11 @@ export async function recordPayment(data: {
         const netAmount = Number(invoice?.net_amount || 0);
         const balance = netAmount - totalPaid;
 
-        let newStatus = invoice?.status || 'Draft';
-        if (balance <= 0) newStatus = 'Paid';
-        else if (totalPaid > 0) newStatus = 'Partial';
-
         await db.invoices.update({
             where: { id: data.invoice_id },
             data: {
                 paid_amount: totalPaid,
                 balance_due: balance > 0 ? balance : 0,
-                status: newStatus,
                 version: { increment: 1 },
             },
         });
@@ -1188,16 +1175,11 @@ export async function recordSplitPayment(data: {
         const netAmount = Number(invoice?.net_amount || 0);
         const balance = netAmount - totalPaid;
 
-        let newStatus = invoice?.status || 'Draft';
-        if (balance <= 0) newStatus = 'Paid';
-        else if (totalPaid > 0) newStatus = 'Partial';
-
         await db.invoices.update({
             where: { id: data.invoice_id },
             data: {
                 paid_amount: totalPaid,
                 balance_due: balance > 0 ? balance : 0,
-                status: newStatus,
                 version: { increment: 1 },
             },
         });
@@ -1278,7 +1260,6 @@ export async function reversePayment(paymentId: number, reason: string) {
             data: {
                 paid_amount: totalPaid,
                 balance_due: balance > 0 ? balance : 0,
-                status: totalPaid >= netAmount ? 'Paid' : totalPaid > 0 ? 'Partial' : 'Final',
                 version: { increment: 1 },
             },
         });
@@ -1891,18 +1872,11 @@ export async function updatePayment(paymentId: number, updates: { amount?: numbe
                 const netAmount = Number(payment.invoice.net_amount);
                 const balance = Math.max(0, netAmount - netPaid);
 
-                let invoiceStatus: string = payment.invoice.status;
-                if (netPaid <= 0 && totalRefunded > 0) invoiceStatus = 'Refunded';
-                else if (netPaid >= netAmount - 0.01) invoiceStatus = 'Paid';
-                else if (netPaid > 0) invoiceStatus = 'Partial';
-                else invoiceStatus = 'Final';
-
                 await tx.invoices.update({
                     where: { id: payment.invoice_id },
                     data: {
                         paid_amount: netPaid,
                         balance_due: balance,
-                        status: invoiceStatus,
                         version: { increment: 1 },
                     },
                 });
@@ -2104,18 +2078,11 @@ export async function processRefund(input: {
             const netAmount = Number(payment.invoice.net_amount);
             const balance = Math.max(0, netAmount - netPaid);
 
-            let invoiceStatus: string = payment.invoice.status;
-            if (netPaid <= 0 && totalRefunded > 0) invoiceStatus = 'Refunded';
-            else if (netPaid >= netAmount - 0.01) invoiceStatus = 'Paid';
-            else if (netPaid > 0) invoiceStatus = 'Partial';
-            else invoiceStatus = 'Final';
-
             await tx.invoices.update({
                 where: { id: payment.invoice_id },
                 data: {
                     paid_amount: netPaid,
                     balance_due: balance,
-                    status: invoiceStatus,
                     version: { increment: 1 },
                 },
             });
@@ -2195,7 +2162,7 @@ export async function approveInvoice(id: string | number, source: string) {
                 await db.invoices.update({
                     where: { id: Number(id) },
                     data: {
-                        status: balanceDue <= 0 ? 'Paid' : 'Final',
+                        status: 'Final',
                         balance_due: balanceDue > 0 ? balanceDue : 0,
                         finalized_at: new Date(),
                     }
@@ -2524,17 +2491,15 @@ type InvoiceEditableCheck = {
     reason?: string;
 };
 
-// Roles allowed to edit a bill AFTER a payment has been collected (Partial/Paid).
-// Reception / OPD may only edit while nothing has been paid (Draft / unpaid bills).
-const PRIVILEGED_BILLING_ROLES = ['admin', 'finance', 'superadmin'];
+// Admin/Finance may edit a FINAL bill (override). Normal staff edit Draft bills only.
 function isPrivilegedBilling(session: any): boolean {
-    return PRIVILEGED_BILLING_ROLES.includes(String(session?.role ?? '').toLowerCase());
+    return isPrivilegedBillingRole(session?.role);
 }
 
 function evaluateInvoiceEditable(
     invoice: any,
     expectedVersion?: number,
-    opts?: { allowPaid?: boolean },
+    opts?: { allowPrivileged?: boolean },
 ): InvoiceEditableCheck {
     if (!invoice) return { editable: false, reason: 'Invoice not found.' };
     if (invoice.is_locked) {
@@ -2543,14 +2508,13 @@ function evaluateInvoiceEditable(
     if (invoice.status === 'Cancelled') {
         return { editable: false, reason: 'Cancelled invoices cannot be edited. Revert first if needed.' };
     }
-    // Payment gate: once ANY money has been collected (Partial or fully Paid), the bill is locked
-    // to Admin/Finance — UNLESS the caller is privileged. Reception/OPD edit unpaid bills only.
-    // For privileged editors, reducing a paid bill creates an overpayment that must be refunded
-    // separately.
-    if (!opts?.allowPaid && Number(invoice.paid_amount ?? 0) > 0) {
+    // Lifecycle gate: a finalised bill is immutable for normal staff. Admin/Finance
+    // may still edit it (override). Draft bills are freely editable regardless of how
+    // much has been collected (e.g. running IPD bills with advances).
+    if (invoice.status === 'Final' && !opts?.allowPrivileged) {
         return {
             editable: false,
-            reason: 'Only Admin or Finance can edit a bill once a payment has been collected.',
+            reason: 'This bill is finalised. Only Admin or Finance can edit it.',
         };
     }
     if (expectedVersion !== undefined && Number(invoice.version) !== Number(expectedVersion)) {
@@ -2570,7 +2534,7 @@ export async function checkInvoiceEditable(invoiceId: number) {
             where: { id: invoiceId },
             select: { id: true, status: true, paid_amount: true, balance_due: true, version: true, created_at: true, is_locked: true },
         });
-        const check = evaluateInvoiceEditable(invoice, undefined, { allowPaid: isPrivilegedBilling(session) });
+        const check = evaluateInvoiceEditable(invoice, undefined, { allowPrivileged: isPrivilegedBilling(session) });
         if (!check.editable) return { success: true, editable: false, reason: check.reason };
         // Period lock check (read-only — we throw the same error message the mutation would)
         try {
@@ -2614,7 +2578,7 @@ export async function updateInvoiceItem(itemId: number, patch: {
             }
         }
 
-        const check = evaluateInvoiceEditable(item.invoice, undefined, { allowPaid: isPrivilegedBilling(session) });
+        const check = evaluateInvoiceEditable(item.invoice, undefined, { allowPrivileged: isPrivilegedBilling(session) });
         if (!check.editable) return { success: false, error: check.reason };
 
         await checkPeriodLock(db, item.invoice.created_at as any);
@@ -2689,7 +2653,7 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
         const invoice = await db.invoices.findUnique({ where: { id: invoiceId } });
         if (!invoice) return { success: false, error: 'Invoice not found' };
 
-        const check = evaluateInvoiceEditable(invoice, undefined, { allowPaid: isPrivilegedBilling(session) });
+        const check = evaluateInvoiceEditable(invoice, undefined, { allowPrivileged: isPrivilegedBilling(session) });
         if (!check.editable) return { success: false, error: check.reason };
 
         await checkPeriodLock(db, invoice.created_at as any);
@@ -2863,7 +2827,7 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
         // Admin/Finance/Superadmin may edit bills that already have payments (overpayment, if any,
         // is refunded separately). Reception/OPD are blocked once any payment is collected.
         const check = evaluateInvoiceEditable(invoice, payload.expected_version, {
-            allowPaid: isPrivilegedBilling(session),
+            allowPrivileged: isPrivilegedBilling(session),
         });
         if (!check.editable) return { success: false, error: check.reason };
 
