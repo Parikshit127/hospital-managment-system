@@ -43,58 +43,88 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
             : Promise.resolve(null),
     ]);
 
-    // 2) All pharmacy dispenses (sales) for this admission, with batch/expiry
-    const orders = await prisma.pharmacy_orders.findMany({
-        where: { organizationId: orgId, admission_id: admissionId },
-        include: {
+    // 2) Pharmacy items are posted as invoice_items (department/service_category
+    //    "Pharmacy") on the admission's invoice(s) — that is the real source of
+    //    "all meds added to the patient". We group them by their shared dispensing
+    //    timestamp (created_at) so each cluster prints as one "Sale", like MEDNET.
+    const invoices = await prisma.invoices.findMany({
+        where: { organizationId: orgId, admission_id: admissionId, status: { not: 'Cancelled' } },
+        select: {
+            id: true, billing_patient_type: true,
             items: {
-                include: {
-                    medicine: { select: { brand_name: true } },
-                    dispense_allocations: { include: { batch: { select: { batch_no: true, expiry_date: true } } } },
+                where: {
+                    OR: [
+                        { service_category: { equals: 'Pharmacy', mode: 'insensitive' } },
+                        { department: { equals: 'Pharmacy', mode: 'insensitive' } },
+                        { description: { startsWith: 'Pharmacy:' } },
+                    ],
                 },
+                orderBy: { created_at: 'asc' },
             },
-            invoice: { select: { billing_patient_type: true } },
         },
-        orderBy: { created_at: 'asc' },
     });
 
+    const invoiceIds = new Set<number>();
+    const pharmItems: any[] = [];
+    let coveredFlag = 'N';
+    for (const inv of invoices as any[]) {
+        invoiceIds.add(inv.id);
+        if (inv.billing_patient_type && inv.billing_patient_type !== 'cash') coveredFlag = 'Y';
+        for (const it of inv.items || []) pharmItems.push(it);
+    }
+
+    // Parse "Pharmacy: <name> (Batch <batch>) × <qty> — Dr. <doctor>" → name + batch.
+    const parseDesc = (d: string): { name: string; batch: string | null } => {
+        const s = String(d || '');
+        const nameM = s.match(/^Pharmacy:\s*(.+?)\s*(?:\(Batch\b|×|x\s|—|$)/i);
+        const batchM = s.match(/\(Batch\s*([^)]*)\)/i);
+        let name = nameM ? nameM[1].trim() : s.replace(/^Pharmacy:\s*/i, '').trim();
+        name = name.replace(/\s*\(Batch[^)]*\)\s*$/i, '').trim();
+        const batch = batchM ? (batchM[1].trim() || null) : null;
+        return { name: name || s, batch: batch && !/^n\/?a$/i.test(batch) ? batch : (batchM ? batch : null) };
+    };
+
+    // Enrich expiry from batch inventory for the parsed batch numbers.
     const sales: BreakupSale[] = [];
     let purchased = 0;
-    const invoiceIds = new Set<number>();
+    if (pharmItems.length > 0) {
+        const batchNos = Array.from(new Set(
+            pharmItems.map((it) => parseDesc(it.description).batch).filter((b) => b && !/^n\/?a$/i.test(b)) as string[]
+        ));
+        const batches = batchNos.length
+            ? await prisma.pharmacy_batch_inventory.findMany({ where: { batch_no: { in: batchNos } }, select: { batch_no: true, expiry_date: true } })
+            : [];
+        const expiryMap = new Map<string, any>(batches.map((b: any) => [b.batch_no, b.expiry_date]));
 
-    for (const o of orders as any[]) {
-        if (o.invoice_id) invoiceIds.add(o.invoice_id);
-        const covered = (o.invoice?.billing_patient_type && o.invoice.billing_patient_type !== 'cash') ? 'Y' : 'N';
-        const lines: BreakupLine[] = [];
-
-        for (const it of o.items || []) {
-            const rate = Number(it.unit_price) || 0;
-            const allocs = it.dispense_allocations || [];
-            if (allocs.length > 0) {
-                for (const a of allocs) {
-                    const qty = Number(a.quantity) || 0;
-                    lines.push({
-                        name: it.medicine?.brand_name || it.medicine_name || `#${it.medicine_id}`,
-                        covered,
-                        expiry: expiryMMYYYY(a.batch?.expiry_date),
-                        batch: a.batch?.batch_no || it.batch_id || null,
-                        qty, unit: '', selling: rate, amount: r2(qty * rate), discount: 0,
-                    });
-                }
-            } else {
-                const qty = Number(it.quantity_dispensed ?? it.quantity_requested) || 0;
-                const amt = it.total_price != null ? Number(it.total_price) : r2(qty * rate);
-                lines.push({
-                    name: it.medicine?.brand_name || it.medicine_name || `#${it.medicine_id}`,
-                    covered, expiry: null, batch: it.batch_id || null,
-                    qty, unit: '', selling: rate, amount: r2(amt), discount: 0,
-                });
-            }
+        // Group by dispensing timestamp (minute precision).
+        const groups = new Map<string, any[]>();
+        for (const it of pharmItems) {
+            if (/^Return:/i.test(String(it.description || ''))) continue; // ₹0 reversal lines — returns shown separately
+            const key = new Date(it.created_at).toISOString().slice(0, 16);
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key)!.push(it);
         }
-        if (lines.length === 0) continue;
-        const total = r2(lines.reduce((s, l) => s + l.amount, 0));
-        purchased = r2(purchased + total);
-        sales.push({ saleNo: `S.${o.id}`, isReturn: false, dateTime: o.created_at, lines, total, totalDiscount: 0 });
+        const orderedKeys = Array.from(groups.keys()).sort();
+        orderedKeys.forEach((key, idx) => {
+            const items = groups.get(key)!;
+            const lines: BreakupLine[] = items.map((it) => {
+                const { name, batch } = parseDesc(it.description);
+                const qty = Number(it.quantity) || 0;
+                const rate = Number(it.unit_price) || 0;
+                const amount = it.net_price != null ? Number(it.net_price) : (it.total_price != null ? Number(it.total_price) : r2(qty * rate));
+                return {
+                    name,
+                    covered: coveredFlag,
+                    expiry: batch && expiryMap.has(batch) ? expiryMMYYYY(expiryMap.get(batch)) : null,
+                    batch: batch || null,
+                    qty, unit: '', selling: rate, amount: r2(amount), discount: Number(it.discount) || 0,
+                };
+            });
+            const total = r2(lines.reduce((s, l) => s + l.amount, 0));
+            const totalDiscount = r2(lines.reduce((s, l) => s + l.discount, 0));
+            purchased = r2(purchased + total);
+            sales.push({ saleNo: `S.${idx + 1}`, isReturn: false, dateTime: items[0].created_at, lines, total, totalDiscount });
+        });
     }
 
     // 3) Patient returns (best-effort: linked through this patient's pharmacy invoices)
