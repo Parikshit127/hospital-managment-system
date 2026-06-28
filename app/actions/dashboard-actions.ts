@@ -13,12 +13,12 @@ export async function getReceptionDashboardStats() {
 
         // 2. Total Invoices Generated
         const totalInvoices = await db.invoices.count({
-            where: { organizationId, invoice_type: "OPD_FEE" }
+            where: { organizationId, OR: [{ is_fee_receipt: true }, { invoice_type: "OPD_FEE" }] }
         });
 
         // 3. Total Revenue
         const allInvoices = await db.invoices.findMany({
-            where: { organizationId, invoice_type: "OPD_FEE" },
+            where: { organizationId, OR: [{ is_fee_receipt: true }, { invoice_type: "OPD_FEE" }] },
             select: { total_amount: true, created_at: true, items: true }
         });
 

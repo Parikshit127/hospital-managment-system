@@ -446,11 +446,11 @@ export default function MasterBillingPage() {
                         >
                           Open
                         </Link>
-                        {canCancelInvoice(r) && (Number(r.paid_amount ?? 0) === 0 || canEditPaid) && (
+                        {(r.invoice_status === "Draft" || (r.invoice_status === "Final" && canEditPaid)) && (
                           <button
                             onClick={() => setEditingInvoiceId(Number(r.invoice_id))}
                             className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-bold rounded transition-colors flex items-center gap-0.5"
-                            title={Number(r.paid_amount ?? 0) > 0 ? 'Edit this bill (Admin/Finance — payment collected)' : 'Edit this invoice'}
+                            title={r.invoice_status === "Final" ? 'Edit finalized bill (Admin/Finance)' : 'Edit draft invoice'}
                           >
                             <Pencil className="h-3 w-3" /> Edit
                           </button>
@@ -464,11 +464,11 @@ export default function MasterBillingPage() {
                             <Shield className="h-3 w-3" /> Mark TPA Received
                           </button>
                         )}
-                        {canCancelInvoice(r) && (
+                        {canCancelInvoice(r) && canEditPaid && (
                           <button
                             onClick={() => setCancelTarget(r)}
                             className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[10px] font-bold rounded transition-colors"
-                            title="Cancel this invoice"
+                            title="Cancel this invoice (Admin/Finance only)"
                           >
                             Cancel
                           </button>

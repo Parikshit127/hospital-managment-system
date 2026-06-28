@@ -256,7 +256,11 @@ export async function addPatientPolicy(data: {
     policy_number?: string;
     policy_holder?: string;
     plan_name?: string;
+    member_id?: string;
+    policy_type?: string;
     coverage_limit?: number | null;
+    copay_percent?: number | null;
+    copay_fixed?: number | null;
     valid_from?: string;
     valid_until?: string;
 }) {
@@ -264,6 +268,12 @@ export async function addPatientPolicy(data: {
         const { db, organizationId } = await requireTenantContext();
         const coverage = data.coverage_limit != null && data.coverage_limit !== ('' as any)
             ? Number(data.coverage_limit)
+            : null;
+        const copayPct = data.copay_percent != null && data.copay_percent !== ('' as any)
+            ? Number(data.copay_percent)
+            : null;
+        const copayFixed = data.copay_fixed != null && data.copay_fixed !== ('' as any)
+            ? Number(data.copay_fixed)
             : null;
         const policyNumber = data.policy_number?.trim() || null;
         const policy = await db.insurance_policies.create({
@@ -273,8 +283,12 @@ export async function addPatientPolicy(data: {
                 policy_number: policyNumber,
                 policy_holder: data.policy_holder || null,
                 plan_name: data.plan_name || null,
+                member_id: data.member_id?.trim() || null,
+                policy_type: data.policy_type || null,
                 coverage_limit: coverage,
                 remaining_limit: coverage,
+                copay_percent: copayPct,
+                copay_fixed: copayFixed,
                 valid_from: data.valid_from ? new Date(data.valid_from) : null,
                 valid_until: data.valid_until ? new Date(data.valid_until) : null,
                 status: 'Active',
@@ -305,7 +319,11 @@ export async function updatePatientPolicy(id: number, data: {
     policy_number?: string;
     policy_holder?: string | null;
     plan_name?: string | null;
-    coverage_limit?: number;
+    member_id?: string | null;
+    policy_type?: string | null;
+    coverage_limit?: number | null;
+    copay_percent?: number | null;
+    copay_fixed?: number | null;
     valid_from?: string;
     valid_until?: string;
     status?: string;
@@ -318,10 +336,14 @@ export async function updatePatientPolicy(id: number, data: {
 
         const updateData: any = {};
         if (data.provider_id !== undefined) updateData.provider_id = data.provider_id;
-        if (data.policy_number !== undefined) updateData.policy_number = data.policy_number;
+        if (data.policy_number !== undefined) updateData.policy_number = data.policy_number?.trim() || null;
         if (data.policy_holder !== undefined) updateData.policy_holder = data.policy_holder || null;
         if (data.plan_name !== undefined) updateData.plan_name = data.plan_name || null;
+        if (data.member_id !== undefined) updateData.member_id = data.member_id?.trim() || null;
+        if (data.policy_type !== undefined) updateData.policy_type = data.policy_type || null;
         if (data.coverage_limit !== undefined) updateData.coverage_limit = data.coverage_limit;
+        if (data.copay_percent !== undefined) updateData.copay_percent = data.copay_percent;
+        if (data.copay_fixed !== undefined) updateData.copay_fixed = data.copay_fixed;
         if (data.valid_from !== undefined) updateData.valid_from = new Date(data.valid_from);
         if (data.valid_until !== undefined) updateData.valid_until = new Date(data.valid_until);
         if (data.status !== undefined) updateData.status = data.status;

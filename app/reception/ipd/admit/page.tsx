@@ -196,10 +196,8 @@ export default function AdmitPatientPage() {
       setErrorMessage('Select a corporate company for corporate patients.');
       return;
     }
-    if (patientType === 'tpa_insurance' && (!tpaProviderId || !policyNumber.trim())) {
-      setErrorMessage('TPA provider and policy number are required for TPA / insurance patients.');
-      return;
-    }
+    // TPA provider & policy number are optional at admission — they can be added
+    // later from the patient profile (insurance details are often pending on arrival).
 
     setIsSubmitting(true);
     setErrorMessage(null);

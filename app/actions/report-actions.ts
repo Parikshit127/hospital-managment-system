@@ -714,7 +714,7 @@ export async function getDailyActivityReport(filters: { from: string; to: string
         const [opdInvoices, admits, discharges, payments] = await Promise.all([
             // OPD visits are recorded as OPD invoices (OPD is walk-in; the appointments
             // table is effectively unused, so there is no separate walk-in category).
-            db.invoices.findMany({ where: { invoice_type: { in: ['OPD', 'OPD_FEE'] }, created_at: { gte: start, lte: end } }, select: { created_at: true, invoice_number: true, patient: { select: { full_name: true, patient_id: true } } } }),
+            db.invoices.findMany({ where: { invoice_type: { in: ['OPD', 'OPD_FEE'] }, status: { not: 'Cancelled' }, created_at: { gte: start, lte: end } }, select: { created_at: true, invoice_number: true, patient: { select: { full_name: true, patient_id: true } } } }),
             db.admissions.findMany({ where: { admission_date: { gte: start, lte: end } }, select: { admission_date: true, admission_id: true, patient: { select: { full_name: true, patient_id: true } } } }),
             db.admissions.findMany({ where: { discharge_date: { gte: start, lte: end } }, select: { discharge_date: true, admission_id: true, patient: { select: { full_name: true, patient_id: true } } } }),
             db.payments.findMany({ where: { status: 'Completed', created_at: { gte: start, lte: end } }, select: { amount: true, created_at: true } }),
@@ -865,7 +865,17 @@ export async function getMISReport(filters: { from: string; to: string; billType
         }
 
         const patientIds = [...new Set(invoices.map((i: any) => i.patient_id).filter(Boolean))] as string[];
-        const isGenericDoc = (n?: string) => !n || /\brmo\b|resident/i.test(String(n).trim());
+        const isGenericDoc = (n?: string) => {
+            if (!n) return true;
+            // Strip parenthetical annotations like "(RMO)" and the "Dr." prefix
+            // so that "Dr. Yogesh (RMO)" → "Yogesh" → NOT generic,
+            // while bare "RMO" or "Dr. RMO" → "" or "RMO" → generic.
+            const core = String(n).trim()
+                .replace(/\s*\([^)]*\)\s*/g, '')   // remove (RMO), (Resident) etc.
+                .replace(/^\s*(dr\.?|doctor)\s+/i, '')  // remove Dr. prefix
+                .trim();
+            return !core || /^(rmo|resident(\s+(doctor|medical\s+officer))?|duty\s*doctor)$/i.test(core);
+        };
         // Normalize varied payer-type strings (e.g. "Insurance", "tpa", "TPA/Insurance").
         const normType = (t: any) => {
             const s = String(t || '').toLowerCase();
@@ -1013,10 +1023,14 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 );
                 if (consultItem) {
                     let parsed = consultItem.description
-                        .replace(/^(Dr\.?\s*|Consultation\s*[-–—]\s*|Follow-up\s*[-–—]\s*)/i, '')
+                        // Strip chained prefixes: "Dr. Consultation - Basic" → "Basic"
+                        .replace(/^(dr\.?\s*)?(consultation|follow-?up)\s*[-–—]\s*/i, '')
+                        .replace(/^dr\.?\s*/i, '') // standalone "Dr. Name" without consultation prefix
                         .replace(/\s*\([^)]*\)\s*$/, '')
                         .trim();
-                    if (parsed && !isGenericDoc(parsed)) {
+                    // Reject service-item-like names (e.g. "Basic", "General", "OPD")
+                    const isServiceLabel = /^(basic|general|opd|ipd|emergency|standard|premium|special|package|charges?)$/i.test(parsed);
+                    if (parsed && !isGenericDoc(parsed) && !isServiceLabel) {
                         doctorName = formatDoctorName(parsed);
                     }
                 }

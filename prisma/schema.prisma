@@ -1106,6 +1106,11 @@ model invoices {
   patient_id               String
   admission_id             String?
   invoice_type             String    @default("OPD")
+  // Marks OPD "fee receipt" bills (quick OPD counter receipts / inline OPD bills).
+  // Replaces the old invoice_type == 'OPD_FEE' discriminator so those bills display
+  // under the plain "OPD" type while staying identifiable for the Fee Receipts
+  // screens, OPD dashboard and patient history.
+  is_fee_receipt           Boolean   @default(false)
   total_amount             Decimal   @default(0)
   total_discount           Decimal   @default(0)
   net_amount               Decimal   @default(0)

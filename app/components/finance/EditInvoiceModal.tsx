@@ -440,13 +440,16 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
             String(invoiceMeta.tpa_claim_status ?? '').toLowerCase(),
         ) &&
         Number(invoiceMeta.tpa_settled_amount ?? 0) > 0;
-    // Once any payment is collected, only Admin/Finance/Superadmin may edit. Others get a block.
+    // Edit access follows the invoice lifecycle, not payment state:
+    //   Draft  → any staff may edit (reception can still add services etc.)
+    //   Final  → only Admin/Finance/Superadmin
+    //   Cancelled → no edits (handled via `error` above)
     const canEditPaid = ['admin', 'finance', 'superadmin'].includes(myRole || '');
-    const paidBlocked = hasPayment && !canEditPaid;
+    const statusBlocked = invoiceMeta?.status === 'Final' && !canEditPaid;
     const effectiveError =
         error ||
-        (paidBlocked
-            ? 'Only Admin or Finance can edit a bill once a payment has been collected.'
+        (statusBlocked
+            ? 'Only Admin or Finance can edit a finalized bill.'
             : null);
     const readOnly = !!effectiveError || tpaLocked;
 

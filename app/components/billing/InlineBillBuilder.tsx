@@ -1,18 +1,14 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Stethoscope, Trash2, X, Receipt, ShieldAlert, Building2, AlertCircle, Printer } from 'lucide-react';
+import { Loader2, Stethoscope, Trash2, X, Receipt, ShieldAlert, Wallet } from 'lucide-react';
 import { ServicePicker, type CatalogService } from './ServicePicker';
 import {
   createInvoice,
   addInvoiceItem,
   getSuggestedOpdDoctor,
-  recordPayment,
-  recordSplitPayment,
 } from '@/app/actions/finance-actions';
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
-import { getCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
-import { CASH_COMPLIANCE_DEFAULTS, isValidPan } from '@/app/lib/cash-compliance';
 import { useToast } from '@/app/components/ui/Toast';
 
 type Patient = {
@@ -37,22 +33,17 @@ type LineItem = {
   source?: CatalogService['source'];
 };
 
-type PaymentSplit = { amount: string; method: string; reference: string };
-
 type Props = {
   patient: Patient;
   onCreated?: (invoiceId: number) => void;
   onCancel?: () => void;
-  autoPrint?: boolean;
 };
-
-const PAYMENT_METHODS = ['Cash', 'UPI', 'Card', 'BankTransfer', 'NEFT_RTGS', 'Cheque'];
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-export function InlineBillBuilder({ patient, onCreated, onCancel, autoPrint = true }: Props) {
+export function InlineBillBuilder({ patient, onCreated, onCancel }: Props) {
   const toast = useToast();
 
   // ── Doctor ──
@@ -64,32 +55,22 @@ export function InlineBillBuilder({ patient, onCreated, onCancel, autoPrint = tr
   const [lines, setLines] = useState<LineItem[]>([]);
   const [billDiscountPct, setBillDiscountPct] = useState(0);
 
-  // ── Cash compliance thresholds ──
-  const [cashThresholds, setCashThresholds] = useState<{ pan_threshold: number; cash_limit: number }>(CASH_COMPLIANCE_DEFAULTS);
-
-  // ── Payment (Cash patients only) ──
-  const [splits, setSplits] = useState<PaymentSplit[]>([{ amount: '', method: 'Cash', reference: '' }]);
-  const [panNumber, setPanNumber] = useState('');
-  const [panName, setPanName] = useState('');
-
   // ── Submit ──
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const patientType = (patient.patient_type || 'cash').toLowerCase();
-  const isCash = patientType === 'cash';
   const isCorporate = patientType === 'corporate';
   const isTpa = patientType === 'tpa_insurance' || patientType === 'tpa';
   const tpaBlocked = isTpa && !patient.pre_auth_approved;
 
-  // ── Bootstrap: load doctors + suggested doctor + thresholds ──
+  // ── Bootstrap: load doctors + suggested doctor ──
   useEffect(() => {
     let cancelled = false;
     Promise.all([
       getDoctorsForDropdown(),
       getSuggestedOpdDoctor(patient.patient_id),
-      getCashComplianceConfig(),
-    ]).then(([docsRes, suggested, thresholdsRes]) => {
+    ]).then(([docsRes, suggested]) => {
       if (cancelled) return;
       if (docsRes.success && Array.isArray(docsRes.data)) {
         setDoctors(docsRes.data as any);
@@ -104,12 +85,6 @@ export function InlineBillBuilder({ patient, onCreated, onCancel, autoPrint = tr
             else setDoctorName(doctor_name);
           }
         }
-      }
-      if (thresholdsRes.success && thresholdsRes.data) {
-        setCashThresholds({
-          pan_threshold: thresholdsRes.data.pan_threshold,
-          cash_limit: thresholdsRes.data.cash_limit,
-        });
       }
     });
     return () => { cancelled = true; };
@@ -140,18 +115,6 @@ export function InlineBillBuilder({ patient, onCreated, onCancel, autoPrint = tr
       net,
     };
   }, [lines, billDiscountPct]);
-
-  // ── Cash compliance derived ──
-  const cashTotal = splits
-    .filter((s) => s.method === 'Cash')
-    .reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
-  const cashBlocked = cashTotal > cashThresholds.cash_limit;
-  const panRequired = cashTotal >= cashThresholds.pan_threshold && !cashBlocked;
-  const panValid = isValidPan(panNumber) && panName.trim().length > 0;
-  const cashGuardBlocked = isCash && (cashBlocked || (panRequired && !panValid));
-
-  const splitTotal = splits.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-  const splitsBalanced = Math.abs(splitTotal - totals.net) < 0.01;
 
   // ── Picker handlers ──
   const handlePickService = useCallback((s: CatalogService) => {
@@ -192,19 +155,7 @@ export function InlineBillBuilder({ patient, onCreated, onCancel, autoPrint = tr
   };
   const removeLine = (key: string) => setLines((prev) => prev.filter((l) => l.key !== key));
 
-  // ── Auto-balance single split row with net ──
-  useEffect(() => {
-    if (!isCash) return;
-    setSplits((prev) => {
-      if (prev.length > 1) return prev;
-      if (totals.net <= 0) return prev.length === 0 ? prev : [{ amount: '', method: prev[0]?.method || 'Cash', reference: '' }];
-      const target = String(Number(totals.net.toFixed(2)));
-      if (prev.length === 1 && prev[0].amount === target) return prev;
-      return [{ amount: target, method: prev[0]?.method || 'Cash', reference: prev[0]?.reference || '' }];
-    });
-  }, [totals.net, isCash]);
-
-  // ── Submit ──
+  // ── Submit — creates the bill only; payment is collected from Master Billing ──
   const handleSubmit = async () => {
     setError(null);
     if (tpaBlocked) {
@@ -230,27 +181,13 @@ export function InlineBillBuilder({ patient, onCreated, onCancel, autoPrint = tr
       }
     }
 
-    if (isCash) {
-      if (cashGuardBlocked) {
-        setError(
-          cashBlocked
-            ? `Cash receipts above ₹${cashThresholds.cash_limit.toLocaleString('en-IN')} are not permitted. Use UPI/Card/Bank.`
-            : 'PAN Number and PAN Holder Name are required for this cash amount.',
-        );
-        return;
-      }
-      if (!splitsBalanced && totals.net > 0) {
-        setError('Payment splits must match the net bill amount.');
-        return;
-      }
-    }
-
     setSubmitting(true);
 
     // 1. Create invoice
     const inv = await createInvoice({
       patient_id: patient.patient_id,
-      invoice_type: 'OPD_FEE',
+      invoice_type: 'OPD',
+      is_fee_receipt: true,
       doctor_id: doctorId || undefined,
       doctor_name: doctorName || doctors.find((d) => d.id === doctorId)?.name || undefined,
       require_doctor: true,
@@ -266,7 +203,6 @@ export function InlineBillBuilder({ patient, onCreated, onCancel, autoPrint = tr
     const invoiceId = (inv.data as any).id;
 
     // 2. Apply bill-level percentage discount proportionally to line discounts
-    const billDiscFactor = Math.max(0, Math.min(100, billDiscountPct)) / 100;
     for (const l of lines) {
       const lineAfter = l.unit_price * l.quantity - l.line_discount;
       const share = totals.gross > 0 ? lineAfter / totals.gross : 0;
@@ -291,49 +227,8 @@ export function InlineBillBuilder({ patient, onCreated, onCancel, autoPrint = tr
       }
     }
 
-    // 3. Payment (Cash only — Corporate posts to balance, TPA already blocked)
-    if (isCash && totals.net > 0) {
-      const validSplits = splits.filter((s) => parseFloat(s.amount) > 0);
-      const panArgs = {
-        payer_pan_number: panNumber.trim().toUpperCase() || undefined,
-        payer_pan_name: panName.trim() || undefined,
-      };
-      let payRes: { success: boolean; error?: string };
-      if (validSplits.length === 1) {
-        payRes = await recordPayment({
-          invoice_id: invoiceId,
-          amount: parseFloat(validSplits[0].amount),
-          payment_method: validSplits[0].method,
-          payment_type: 'Settlement',
-          ...panArgs,
-        });
-      } else {
-        payRes = await recordSplitPayment({
-          invoice_id: invoiceId,
-          splits: validSplits.map((s) => ({
-            amount: parseFloat(s.amount),
-            payment_method: s.method,
-            reference: s.reference || undefined,
-          })),
-          ...panArgs,
-        });
-      }
-      if (!payRes.success) {
-        setSubmitting(false);
-        setError(payRes.error || 'Payment failed. Invoice was created — collect from Master Billing.');
-        return;
-      }
-    }
-
     setSubmitting(false);
-    toast.success('Bill generated' + (isCash && totals.net > 0 ? ' & payment recorded' : ''));
-
-    // Auto-print receipt
-    if (autoPrint) {
-      try {
-        window.open(`/api/invoice/${invoiceId}/summary-bill`, '_blank');
-      } catch { /* popup blocked — user can print manually */ }
-    }
+    toast.success('Bill generated — collect payment from Master Billing');
 
     onCreated?.(invoiceId);
   };
@@ -348,7 +243,7 @@ export function InlineBillBuilder({ patient, onCreated, onCancel, autoPrint = tr
           <Receipt className="h-4 w-4 text-orange-600" />
           <h3 className="text-sm font-black text-gray-900">New Bill</h3>
           <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-white border border-orange-200 text-orange-700">
-            {isCash ? 'Cash' : isCorporate ? 'Corporate' : 'TPA / Insurance'}
+            {isCorporate ? 'Corporate' : isTpa ? 'TPA / Insurance' : 'Cash'}
           </span>
         </div>
         {onCancel && (
@@ -510,113 +405,20 @@ export function InlineBillBuilder({ patient, onCreated, onCancel, autoPrint = tr
             </div>
           )}
 
-          {/* Payment block — only for Cash patients */}
-          {isCash && lines.length > 0 && (
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block">Payment</label>
-              {splits.map((split, idx) => (
-                <div key={idx} className="flex gap-2 items-center">
-                  <input
-                    type="number"
-                    min={0}
-                    value={split.amount}
-                    onChange={(e) => {
-                      const updated = [...splits];
-                      updated[idx].amount = e.target.value;
-                      setSplits(updated);
-                    }}
-                    placeholder="Amount"
-                    className="w-32 px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
-                  />
-                  <select
-                    value={split.method}
-                    onChange={(e) => {
-                      const updated = [...splits];
-                      updated[idx].method = e.target.value;
-                      setSplits(updated);
-                    }}
-                    className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
-                  >
-                    {PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}
-                  </select>
-                  <input
-                    value={split.reference}
-                    onChange={(e) => {
-                      const updated = [...splits];
-                      updated[idx].reference = e.target.value;
-                      setSplits(updated);
-                    }}
-                    placeholder="Ref / Txn ID"
-                    className="w-36 px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
-                  />
-                  {splits.length > 1 && (
-                    <button onClick={() => setSplits(splits.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button
-                onClick={() => setSplits([...splits, { amount: '', method: 'Cash', reference: '' }])}
-                className="text-xs text-orange-600 hover:underline font-bold"
-              >
-                + Add another payment method
-              </button>
-
-              {/* PAN compliance */}
-              {(panRequired || cashBlocked) && (
-                <div className={`mt-2 p-3 rounded-xl border ${cashBlocked ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className={`h-4 w-4 shrink-0 mt-0.5 ${cashBlocked ? 'text-red-600' : 'text-amber-600'}`} />
-                    <div className="flex-1 space-y-2">
-                      <p className="text-xs font-bold">
-                        {cashBlocked
-                          ? `Cash > ₹${cashThresholds.cash_limit.toLocaleString('en-IN')} not permitted. Use UPI/Card/Bank.`
-                          : `Cash ≥ ₹${cashThresholds.pan_threshold.toLocaleString('en-IN')} — PAN required.`}
-                      </p>
-                      {!cashBlocked && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <input
-                            value={panNumber}
-                            onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
-                            placeholder="PAN Number (ABCDE1234F)"
-                            maxLength={10}
-                            className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm uppercase"
-                          />
-                          <input
-                            value={panName}
-                            onChange={(e) => setPanName(e.target.value)}
-                            placeholder="PAN Holder Name"
-                            className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {!splitsBalanced && totals.net > 0 && (
-                <p className="text-[11px] text-amber-600 font-bold">
-                  Payment splits total ₹{splitTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })} — net is ₹{totals.net.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Corporate banner */}
-          {isCorporate && lines.length > 0 && (
+          {/* Payment handled in Master Billing — bill is created on the patient's account */}
+          {lines.length > 0 && (
             <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
-              <Building2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+              <Wallet className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
               <p className="text-xs text-blue-800">
-                Corporate billing. No payment collected at counter — net amount will be posted to the corporate account balance.
+                No payment is collected here. The bill will be created on this patient&apos;s account — collect
+                payment and manage all bills from Master Billing.
               </p>
             </div>
           )}
 
           {error && (
             <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl">
-              <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+              <ShieldAlert className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
               <p className="text-xs text-red-700 font-bold">{error}</p>
             </div>
           )}
@@ -633,11 +435,11 @@ export function InlineBillBuilder({ patient, onCreated, onCancel, autoPrint = tr
             ) : <span />}
             <button
               onClick={handleSubmit}
-              disabled={submitting || lines.length === 0 || cashGuardBlocked}
+              disabled={submitting || lines.length === 0}
               className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-400 hover:to-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl shadow-lg shadow-orange-500/20 active:scale-[0.98]"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
-              {isCorporate ? 'Generate Bill (Post to Balance)' : isCash && totals.net > 0 ? 'Generate & Collect' : 'Generate Bill'}
+              Generate Bill
             </button>
           </div>
         </div>

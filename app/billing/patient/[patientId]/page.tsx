@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { PatientNotes } from "@/app/components/patient/PatientNotes";
 import {
@@ -23,6 +24,7 @@ import {
   Loader2,
   Mail,
   Phone,
+  Plus,
   Printer,
   ReceiptText,
   RotateCcw,
@@ -42,14 +44,19 @@ import {
   getPatientLedger,
   getPatientTimeline,
 } from "@/app/actions/master-billing-actions";
-import { recordPayment, getMyRole, updatePayment, reversePayment, getInvoiceHistory } from "@/app/actions/finance-actions";
+import { recordPayment, getMyRole, updatePayment, reversePayment, getInvoiceHistory, finalizeAndLockInvoice } from "@/app/actions/finance-actions";
 import { collectDeposit } from "@/app/actions/deposit-actions";
 import { getCashComplianceConfig } from "@/app/actions/cash-compliance-actions";
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan, resolveRegisteredPan } from "@/app/lib/cash-compliance";
 import { EditInvoiceModal } from "@/app/components/finance/EditInvoiceModal";
 import { RefundModal } from "@/app/components/finance/RefundModal";
-import { Pencil } from "lucide-react";
+import { Pencil, Lock } from "lucide-react";
 import toast from "react-hot-toast";
+
+const InlineBillBuilder = dynamic(
+  () => import("@/app/components/billing/InlineBillBuilder").then((m) => m.InlineBillBuilder),
+  { ssr: false },
+);
 
 // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -106,6 +113,9 @@ export default function PatientFinancialProfilePage() {
   const [editingPayment, setEditingPayment] = useState<any | null>(null);
   const [reversingPayment, setReversingPayment] = useState<any | null>(null);
   const [refundOpen, setRefundOpen] = useState(false);
+  const [showNewBill, setShowNewBill] = useState(false);
+  const [finalizingInvoice, setFinalizingInvoice] = useState<any | null>(null);
+  const [finalizeSubmitting, setFinalizeSubmitting] = useState(false);
 
   // Memoize initialPatient so its object reference is stable across parent re-renders.
   // Without this, every render creates a new object literal, causing RefundModal's
@@ -172,6 +182,20 @@ export default function PatientFinancialProfilePage() {
     load();
   }, [load]);
 
+  const handleConfirmFinalize = useCallback(async () => {
+    if (!finalizingInvoice) return;
+    setFinalizeSubmitting(true);
+    const res = await finalizeAndLockInvoice(Number(finalizingInvoice.id));
+    setFinalizeSubmitting(false);
+    if (res.success) {
+      toast.success(`Bill ${res.data?.invoice_number ?? ''} finalised and locked.`);
+      setFinalizingInvoice(null);
+      await load();
+    } else {
+      toast.error(res.error || 'Failed to finalise bill.');
+    }
+  }, [finalizingInvoice, load]);
+
   return (
     <AppShell
       pageTitle="Patient Financial Profile"
@@ -180,6 +204,13 @@ export default function PatientFinancialProfilePage() {
       refreshing={loading}
       headerActions={
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowNewBill(true)}
+            disabled={!profile}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-400 hover:to-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg shadow-sm"
+          >
+            <Plus className="h-3.5 w-3.5" /> New Bill
+          </button>
           <button
             onClick={() => window.open(`/api/patient/${patientId}/stickers`, '_blank')}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-lg"
@@ -242,6 +273,7 @@ export default function PatientFinancialProfilePage() {
                   setExpandedInvoice={setExpandedInvoice}
                   onCollectPayment={(inv: any) => setPayingInvoice(inv)}
                   onEdit={(inv: any) => setEditingInvoiceId(Number(inv.id))}
+                  onFinalize={(inv: any) => setFinalizingInvoice(inv)}
                   onRefund={() => setRefundOpen(true)}
                   canEditPaid={canEditPaid}
                   setEditingPayment={setEditingPayment}
@@ -268,6 +300,73 @@ export default function PatientFinancialProfilePage() {
           </div>
 
           <PatientNotes patientId={patientId} title="Patient Notes" />
+        </div>
+      )}
+
+      {/* New Bill Modal */}
+      {showNewBill && profile?.patient && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8">
+          <div className="w-full max-w-3xl my-auto">
+            <InlineBillBuilder
+              patient={{
+                patient_id: profile.patient.patient_id,
+                full_name: profile.patient.full_name,
+                patient_type: profile.patient.patient_type,
+                corporate_id: profile.patient.corporate_id,
+                tpa_provider_id: profile.patient.tpa_provider_id,
+                pre_auth_approved: profile.patient.pre_auth_approved,
+              }}
+              onCreated={() => {
+                setShowNewBill(false);
+                load();
+              }}
+              onCancel={() => setShowNewBill(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Finalize confirmation */}
+      {finalizingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+              <Lock className="h-4 w-4 text-emerald-600" />
+              <h3 className="text-sm font-bold text-gray-900">
+                Finalize bill {finalizingInvoice.invoice_number}
+              </h3>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-3">
+                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  This bill is about to be <span className="font-bold">finalised and locked</span>.
+                  Once finalised you will <span className="font-bold">not be able to make any changes</span> to it.
+                  Only Admin or Finance can unlock it later to amend.
+                </p>
+              </div>
+              <div className="text-xs text-gray-600">
+                Net amount: <span className="font-bold text-gray-900">₹{fmtMoney(Number(finalizingInvoice.net_amount))}</span>
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setFinalizingInvoice(null)}
+                disabled={finalizeSubmitting}
+                className="px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-xs font-bold text-gray-700 rounded-lg disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmFinalize}
+                disabled={finalizeSubmitting}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {finalizeSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />}
+                {finalizeSubmitting ? "Finalising…" : "Finalize & Lock"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -620,6 +719,7 @@ function InvoicesTab({
   setExpandedInvoice,
   onCollectPayment,
   onEdit,
+  onFinalize,
   onRefund,
   canEditPaid,
   setEditingPayment,
@@ -630,6 +730,7 @@ function InvoicesTab({
   setExpandedInvoice: (id: number | null) => void;
   onCollectPayment: (inv: any) => void;
   onEdit: (inv: any) => void;
+  onFinalize: (inv: any) => void;
   onRefund: () => void;
   canEditPaid: boolean;
   setEditingPayment: (p: any) => void;
@@ -682,7 +783,7 @@ function InvoicesTab({
                   {inv.status}
                 </span>
                 <span className="text-[10px] text-gray-400">
-                  {inv.invoice_type} · {fmtDate(inv.created_at)}
+                  {inv.invoice_type === "OPD_FEE" ? "OPD" : inv.invoice_type} · {fmtDate(inv.created_at)}
                 </span>
                 {Number(inv.tpa_settled_amount) > 0 && (
                   <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px] font-bold">
@@ -879,18 +980,28 @@ function InvoicesTab({
                 {/* Actions */}
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   <ActionLink href={`/finance/invoices/${inv.id}`}>View Detail</ActionLink>
-                  {inv.status === "Draft" && (
-                    <ActionLink href="/billing">Finalize</ActionLink>
+                  {inv.status === "Draft" && !inv.is_locked && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onFinalize(inv);
+                      }}
+                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded flex items-center gap-1"
+                    >
+                      <Lock className="h-3 w-3" /> Finalize
+                    </button>
                   )}
-                  {!["Cancelled", "Voided", "Refunded"].includes(inv.status) &&
-                    (Number(inv.paid_amount ?? 0) === 0 || canEditPaid) && (
+                  {/* Edit access follows the invoice lifecycle, not payment state:
+                      Draft → any staff may edit; Final → only Admin/Finance;
+                      Cancelled/Voided/Refunded → no edits. */}
+                  {(inv.status === "Draft" || (inv.status === "Final" && canEditPaid)) && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         onEdit(inv);
                       }}
                       className="px-2.5 py-1 bg-white border border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 text-xs font-bold text-gray-700 rounded flex items-center gap-1"
-                      title={Number(inv.paid_amount ?? 0) > 0 ? "Edit bill (payment collected — Admin/Finance)" : "Edit invoice"}
+                      title={inv.status === "Final" ? "Edit finalized bill (Admin/Finance)" : "Edit draft invoice"}
                     >
                       <Pencil className="h-3 w-3" /> Edit
                     </button>
@@ -939,18 +1050,19 @@ function InvoicesTab({
                   </button>
                   {/* TPA claim bill — addressed to the insurer/TPA, showing the
                       actual treatment amount being claimed (separate from the
-                      patient's own bill). Always available so it can be raised
-                      for any invoice; the bill names the insurer when one is on
-                      file, else shows "Not specified". */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      window.open(`/api/invoice/${inv.id}/tpa-bill`, "_blank");
-                    }}
-                    className="px-2.5 py-1 bg-white border border-violet-200 hover:border-violet-400 hover:bg-violet-50 text-xs font-bold text-violet-700 rounded"
-                  >
-                    Bill for TPA
-                  </button>
+                      patient's own bill). Only relevant for TPA/insurance
+                      invoices; hidden for normal cash patients. */}
+                  {inv.billing_patient_type === "tpa_insurance" && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(`/api/invoice/${inv.id}/tpa-bill`, "_blank");
+                      }}
+                      className="px-2.5 py-1 bg-white border border-violet-200 hover:border-violet-400 hover:bg-violet-50 text-xs font-bold text-violet-700 rounded"
+                    >
+                      Bill for TPA
+                    </button>
+                  )}
                   {inv.admission_id && (
                     <button
                       onClick={(e) => {

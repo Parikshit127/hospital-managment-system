@@ -163,7 +163,7 @@ export async function saveFeeReceipt(payload: SaveFeeReceiptInput) {
             pid = walkin.patient_id;
         }
 
-        const invoiceNo = await genInvNum(organizationId, 'OPD_FEE', false, db);
+        const invoiceNo = await genInvNum(organizationId, 'OPD', false, db);
         const receiptNo = await genRcpNum(organizationId, db);
         const createdAt = payload.receipt_date ? new Date(payload.receipt_date) : undefined;
 
@@ -238,7 +238,8 @@ export async function saveFeeReceipt(payload: SaveFeeReceiptInput) {
             data: {
                 invoice_number: invoiceNo,
                 patient_id: pid,
-                invoice_type: "OPD_FEE",
+                invoice_type: "OPD",
+                is_fee_receipt: true,
                 total_amount: grossAmount,
                 total_discount: totalDiscount,
                 net_amount: netAmount,
@@ -301,7 +302,9 @@ export async function listFeeReceipts(filter: ListFeeReceiptsFilter = {}) {
 
         const where: any = {
             organizationId,
-            invoice_type: "OPD_FEE",
+            // Fee receipts: new rows carry is_fee_receipt; legacy rows (pre-migration)
+            // still carry invoice_type 'OPD_FEE'. Match either during rollout.
+            OR: [{ is_fee_receipt: true }, { invoice_type: "OPD_FEE" }],
             is_archived: false,
         };
 
@@ -419,7 +422,7 @@ export async function getFeeReceiptDetail(invoiceId: number) {
     try {
         const { db, organizationId } = await requireTenantContext();
         const inv = await db.invoices.findFirst({
-            where: { id: invoiceId, organizationId, invoice_type: "OPD_FEE" },
+            where: { id: invoiceId, organizationId, OR: [{ is_fee_receipt: true }, { invoice_type: "OPD_FEE" }] },
             include: {
                 items: true,
                 payments: { orderBy: { created_at: "asc" } },
@@ -475,7 +478,7 @@ export async function voidFeeReceipt(invoiceId: number, reason: string) {
 
         const { db, organizationId } = await requireRoleAndTenant(['admin', 'finance']);
         const inv = await db.invoices.findFirst({
-            where: { id: invoiceId, organizationId, invoice_type: "OPD_FEE" }
+            where: { id: invoiceId, organizationId, OR: [{ is_fee_receipt: true }, { invoice_type: "OPD_FEE" }] }
         });
         if (!inv) return { success: false, error: "Receipt not found." };
         if (inv.status === "Voided" || inv.status === "Cancelled") {
@@ -487,6 +490,8 @@ export async function voidFeeReceipt(invoiceId: number, reason: string) {
                 where: { id: inv.id },
                 data: {
                     status: "Cancelled",
+                    // Voided receipt owes nothing — clear the outstanding balance.
+                    balance_due: 0,
                     notes: [inv.notes?.trim(), `VOID: ${trimmed}`].filter(Boolean).join("\n"),
                 }
             }),
@@ -519,7 +524,7 @@ export async function updateFeeReceipt(invoiceId: number, payload: UpdateFeeRece
         const { db, organizationId } = await requireRoleAndTenant(['admin', 'finance']);
 
         const existing = await db.invoices.findFirst({
-            where: { id: invoiceId, organizationId, invoice_type: 'OPD_FEE' },
+            where: { id: invoiceId, organizationId, OR: [{ is_fee_receipt: true }, { invoice_type: 'OPD_FEE' }] },
             include: {
                 payments: { orderBy: { created_at: 'asc' } },
                 items: true,

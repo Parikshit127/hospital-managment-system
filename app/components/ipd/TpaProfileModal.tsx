@@ -1,9 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { X, ShieldCheck, Loader2, Building2, CalendarDays, FileText, Banknote, Receipt } from 'lucide-react';
-import { getPatientPolicies, getPatientTpaInvoices } from '@/app/actions/insurance-actions';
+import { X, ShieldCheck, Loader2, Building2, CalendarDays, FileText, Banknote, Receipt, Plus, Pencil, Save } from 'lucide-react';
+import {
+    getPatientPolicies,
+    getPatientTpaInvoices,
+    getInsuranceProviders,
+    addPatientPolicy,
+    updatePatientPolicy,
+} from '@/app/actions/insurance-actions';
 import { RecordTpaPaymentModal } from '@/app/components/billing/RecordTpaPaymentModal';
+
+type Provider = { id: number; provider_name: string; provider_code?: string | null };
+
+const POLICY_TYPES = ['Individual', 'Family Floater', 'Group / Corporate', 'Government Scheme', 'Senior Citizen', 'Other'];
 
 type Claim = {
     id: number;
@@ -129,6 +139,14 @@ export function TpaProfilePanel({ patientId, patientName, patientType }: PanelPr
     const [error, setError] = useState<string | null>(null);
     // Tracks the specific bill whose payment is being recorded.
     const [tpaTarget, setTpaTarget] = useState<TpaInvoiceTarget | null>(null);
+    // Provider dropdown options + policy add/edit form state.
+    const [providers, setProviders] = useState<Provider[]>([]);
+    // null = form closed; 'new' = adding; a Policy = editing that policy.
+    const [editing, setEditing] = useState<'new' | Policy | null>(null);
+
+    useEffect(() => {
+        getInsuranceProviders().then(r => { if (r.success) setProviders((r.data as Provider[]) || []); });
+    }, []);
 
     // Single fetch routine, reused on mount/patient-change and after recording a payment.
     const load = useCallback(async (signal?: { cancelled: boolean }) => {
@@ -171,6 +189,32 @@ export function TpaProfilePanel({ patientId, patientName, patientType }: PanelPr
                 <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-4 py-3">{error}</div>
             ) : (
                 <>
+                    {/* ── Header + Add Policy ── */}
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-black text-gray-900 flex items-center gap-1.5">
+                            <ShieldCheck className="h-4 w-4 text-purple-500" /> Insurance / TPA Policies
+                        </h3>
+                        {editing === null && (
+                            <button
+                                onClick={() => setEditing('new')}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg"
+                            >
+                                <Plus className="h-3.5 w-3.5" /> Add Policy
+                            </button>
+                        )}
+                    </div>
+
+                    {/* ── Add / Edit Policy form ── */}
+                    {editing !== null && (
+                        <PolicyFormCard
+                            patientId={patientId}
+                            providers={providers}
+                            policy={editing === 'new' ? null : editing}
+                            onCancel={() => setEditing(null)}
+                            onSaved={() => { setEditing(null); void load(); }}
+                        />
+                    )}
+
                     {/* ── TPA Claims & Payments (driven by invoices) ── */}
                     {tpaInvoices.length > 0 && (
                         <div className="border border-amber-200 rounded-xl overflow-hidden">
@@ -276,9 +320,19 @@ export function TpaProfilePanel({ patientId, patientName, patientType }: PanelPr
                                         {p.provider?.provider_code && (
                                             <span className="text-[11px] text-gray-400">[{p.provider.provider_code}]</span>
                                         )}
-                                        <span className={`ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${statusCls(p.status)}`}>
-                                            {p.status}
-                                        </span>
+                                        <div className="ml-auto flex items-center gap-2">
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${statusCls(p.status)}`}>
+                                                {p.status}
+                                            </span>
+                                            {editing === null && (
+                                                <button
+                                                    onClick={() => setEditing(p)}
+                                                    className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-gray-200 hover:border-purple-400 hover:bg-purple-50 text-[10px] font-bold text-gray-700 rounded-md"
+                                                >
+                                                    <Pencil className="h-3 w-3" /> Edit
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Policy details grid */}
@@ -409,5 +463,161 @@ function Detail({ label, value }: { label: string; value: React.ReactNode }) {
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{label}</p>
             <p className="text-gray-800 font-medium truncate">{value}</p>
         </div>
+    );
+}
+
+const dateInputValue = (s: string | null | undefined) => (s ? new Date(s).toISOString().slice(0, 10) : '');
+const numOrNull = (s: string) => (s.trim() === '' ? null : Number(s));
+
+/**
+ * Add / edit a patient's insurance / TPA policy. Renders inline inside the TPA
+ * Profile panel. `policy === null` → add mode; otherwise edit that policy.
+ */
+function PolicyFormCard({
+    patientId,
+    providers,
+    policy,
+    onCancel,
+    onSaved,
+}: {
+    patientId: string;
+    providers: Provider[];
+    policy: Policy | null;
+    onCancel: () => void;
+    onSaved: () => void;
+}) {
+    const isEdit = policy !== null;
+    // Resolved from the provider name in the effect below (Policy carries the
+    // provider object, not its numeric id).
+    const [providerId, setProviderId] = useState<string>('');
+    const [policyNumber, setPolicyNumber] = useState(policy?.policy_number ?? '');
+    const [memberId, setMemberId] = useState(policy?.member_id ?? '');
+    const [policyHolder, setPolicyHolder] = useState(policy?.policy_holder ?? '');
+    const [planName, setPlanName] = useState(policy?.plan_name ?? '');
+    const [policyType, setPolicyType] = useState(policy?.policy_type ?? '');
+    const [coverageLimit, setCoverageLimit] = useState(policy?.coverage_limit != null ? String(policy.coverage_limit) : '');
+    const [copayPercent, setCopayPercent] = useState(policy?.copay_percent != null ? String(policy.copay_percent) : '');
+    const [copayFixed, setCopayFixed] = useState(policy?.copay_fixed != null ? String(policy.copay_fixed) : '');
+    const [validFrom, setValidFrom] = useState(dateInputValue(policy?.valid_from));
+    const [validUntil, setValidUntil] = useState(dateInputValue(policy?.valid_until));
+    const [status, setStatus] = useState(policy?.status ?? 'Active');
+    const [saving, setSaving] = useState(false);
+    const [formError, setFormError] = useState<string | null>(null);
+
+    // When editing, resolve the provider id by matching the provider name (the
+    // Policy shape carries the provider object, not its numeric id).
+    useEffect(() => {
+        if (policy?.provider?.provider_name) {
+            const match = providers.find(p => p.provider_name === policy.provider?.provider_name);
+            if (match) setProviderId(String(match.id));
+        }
+    }, [policy, providers]);
+
+    async function handleSave() {
+        if (!providerId) { setFormError('Select an insurance / TPA provider.'); return; }
+        setSaving(true);
+        setFormError(null);
+        const common = {
+            provider_id: Number(providerId),
+            policy_number: policyNumber.trim() || undefined,
+            policy_holder: policyHolder.trim() || undefined,
+            plan_name: planName.trim() || undefined,
+            member_id: memberId.trim() || undefined,
+            policy_type: policyType || undefined,
+            coverage_limit: numOrNull(coverageLimit),
+            copay_percent: numOrNull(copayPercent),
+            copay_fixed: numOrNull(copayFixed),
+            valid_from: validFrom || undefined,
+            valid_until: validUntil || undefined,
+        };
+        const res = isEdit
+            ? await updatePatientPolicy(policy!.id, { ...common, status })
+            : await addPatientPolicy({ patient_id: patientId, ...common });
+        setSaving(false);
+        if (res.success) onSaved();
+        else setFormError(res.error || 'Failed to save policy.');
+    }
+
+    return (
+        <div className="border border-purple-200 bg-purple-50/30 rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-purple-600" />
+                <h4 className="text-sm font-black text-gray-900">{isEdit ? 'Edit Policy' : 'Add Insurance / TPA Policy'}</h4>
+            </div>
+
+            {formError && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg px-3 py-2">{formError}</div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Provider *">
+                    <select value={providerId} onChange={e => setProviderId(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-400">
+                        <option value="">Select provider…</option>
+                        {providers.map(p => (
+                            <option key={p.id} value={p.id}>{p.provider_name}{p.provider_code ? ` (${p.provider_code})` : ''}</option>
+                        ))}
+                    </select>
+                </Field>
+                <Field label="Policy Number">
+                    <input value={policyNumber} onChange={e => setPolicyNumber(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-400" placeholder="e.g. POL-12345" />
+                </Field>
+                <Field label="Member ID">
+                    <input value={memberId} onChange={e => setMemberId(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-400" placeholder="e.g. MEM-001" />
+                </Field>
+                <Field label="Policy Holder">
+                    <input value={policyHolder} onChange={e => setPolicyHolder(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-400" placeholder="Name on policy" />
+                </Field>
+                <Field label="Plan Name">
+                    <input value={planName} onChange={e => setPlanName(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-400" placeholder="e.g. Gold Health Plan" />
+                </Field>
+                <Field label="Policy Type">
+                    <select value={policyType} onChange={e => setPolicyType(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-400">
+                        <option value="">Select type…</option>
+                        {POLICY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                </Field>
+                <Field label="Coverage Limit (₹)">
+                    <input type="number" min="0" value={coverageLimit} onChange={e => setCoverageLimit(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-400" placeholder="e.g. 500000" />
+                </Field>
+                <Field label="Co-pay %">
+                    <input type="number" min="0" max="100" value={copayPercent} onChange={e => setCopayPercent(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-400" placeholder="e.g. 10" />
+                </Field>
+                <Field label="Co-pay Fixed (₹)">
+                    <input type="number" min="0" value={copayFixed} onChange={e => setCopayFixed(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-400" placeholder="e.g. 2000" />
+                </Field>
+                <Field label="Valid From">
+                    <input type="date" value={validFrom} onChange={e => setValidFrom(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-400" />
+                </Field>
+                <Field label="Valid Until">
+                    <input type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-400" />
+                </Field>
+                {isEdit && (
+                    <Field label="Status">
+                        <select value={status} onChange={e => setStatus(e.target.value)} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-400">
+                            {['Active', 'Inactive', 'Expired'].map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                    </Field>
+                )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+                <button onClick={onCancel} disabled={saving} className="px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-xs font-bold text-gray-700 rounded-lg disabled:opacity-50">
+                    Cancel
+                </button>
+                <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg disabled:opacity-50">
+                    {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    {saving ? 'Saving…' : isEdit ? 'Update Policy' : 'Save Policy'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+    return (
+        <label className="block">
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">{label}</span>
+            {children}
+        </label>
     );
 }

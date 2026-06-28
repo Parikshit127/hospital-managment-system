@@ -61,6 +61,9 @@ export async function createInvoice(data: {
     patient_id: string;
     admission_id?: string;
     invoice_type: string;
+    // OPD fee-receipt bill (quick OPD counter / inline OPD bill). Stored alongside
+    // invoice_type 'OPD' so it shows as plain OPD but stays identifiable.
+    is_fee_receipt?: boolean;
     notes?: string;
     // Phase 2 — billing engine fields
     billing_patient_type?: string;
@@ -122,6 +125,7 @@ export async function createInvoice(data: {
                 patient_id: data.patient_id,
                 admission_id: data.admission_id || null,
                 invoice_type: data.invoice_type,
+                is_fee_receipt: data.is_fee_receipt ?? false,
                 status: 'Draft',
                 notes: data.notes || null,
                 organizationId,
@@ -679,6 +683,42 @@ export async function finalizePatientLatestDraft(patientId: string) {
     }
 }
 
+/**
+ * Finalise a specific Draft invoice and hard-lock it in one step. Use this for
+ * the "Finalize" action on a bill: Draft -> Final + locked, so it can no longer
+ * be edited (Admin/Finance must explicitly Unlock to amend). Unlike
+ * finalizeInvoice() (which only flips the status), this freezes the bill.
+ */
+export async function finalizeAndLockInvoice(invoiceId: number) {
+    try {
+        const { db, session } = await requireTenantContext();
+        const existing = await db.invoices.findUnique({
+            where: { id: invoiceId },
+            select: { status: true, is_locked: true, invoice_number: true },
+        });
+        if (!existing) return { success: false, error: 'Invoice not found.' };
+        if (existing.is_locked) {
+            return { success: false, error: `Bill ${existing.invoice_number} is already locked.` };
+        }
+        if (existing.status === 'Cancelled') {
+            return { success: false, error: 'Cancelled invoices cannot be finalised.' };
+        }
+        if (existing.status !== 'Draft') {
+            return { success: false, error: `Only draft bills can be finalised (current status: ${existing.status}).` };
+        }
+        const res = await finalizeInvoice(invoiceId);
+        if (!res.success) return { success: false, error: res.error || 'Failed to finalise bill.' };
+        await db.invoices.update({
+            where: { id: invoiceId },
+            data: { is_locked: true, locked_at: new Date(), locked_by: session.username },
+        });
+        return { success: true, data: { invoice_number: existing.invoice_number } };
+    } catch (error: any) {
+        console.error('finalizeAndLockInvoice error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 /** Unlock a hard-locked bill — Admin/Finance only (enforced server-side). */
 export async function unlockInvoice(invoiceId: number) {
     try {
@@ -780,6 +820,11 @@ export async function cancelInvoice(invoiceId: number, reason: string) {
 
         const { db, session, organizationId } = await requireTenantContext();
 
+        // Only Admin / Finance may cancel an invoice — reception cannot.
+        if (!isPrivilegedBilling(session)) {
+            return { success: false, error: 'Only Admin or Finance can cancel an invoice.' };
+        }
+
         // Don't allow double-cancellation
         const existing = await db.invoices.findUnique({
             where: { id: invoiceId },
@@ -810,6 +855,11 @@ export async function cancelInvoice(invoiceId: number, reason: string) {
             where: { id: invoiceId },
             data: {
                 status: 'Cancelled',
+                // A cancelled bill carries no receivable — clear the outstanding so it
+                // never contributes to patient balances, dashboards, or reports. (paid_amount
+                // is already guaranteed 0 above; revertInvoice recomputes balance_due from
+                // net_amount − paid_amount, so this is safely reversible.)
+                balance_due: 0,
                 notes: formattedNote,
                 cancelled_at: now,
                 cancelled_by: actor,

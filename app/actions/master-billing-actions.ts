@@ -45,6 +45,13 @@ function decToNum(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+// User-facing label for an invoice_type. OPD_FEE is an internal discriminator for
+// fee-receipt / quick OPD bills — to staff it's just an OPD bill, so display "OPD".
+function normalizeInvoiceTypeLabel(invoiceType?: string | null): string {
+  if (!invoiceType) return "—";
+  return invoiceType === "OPD_FEE" ? "OPD" : invoiceType;
+}
+
 function serialize<T>(data: T): T {
   return JSON.parse(
     JSON.stringify(data, (_, value) => {
@@ -310,9 +317,11 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
         patient_name: inv.patient?.full_name ?? "—",
         patient_phone: inv.patient?.phone ?? null,
         patient_type: inv.billing_patient_type,
-        admission_type: inv.invoice_type, // OPD | IPD | LAB | PHARMACY
+        // OPD_FEE is an internal sub-type of OPD (fee receipts / quick OPD bills);
+        // surface it to users as plain "OPD".
+        admission_type: normalizeInvoiceTypeLabel(inv.invoice_type), // OPD | IPD | LAB | PHARMACY
         admission_id: inv.admission_id,
-        billing_category: inv.admission?.patient_class ?? inv.invoice_type,
+        billing_category: inv.admission?.patient_class ?? normalizeInvoiceTypeLabel(inv.invoice_type),
         corporate_name: inv.patient?.corporate?.company_name ?? null,
         invoice_status: inv.status,
         payment_status: paymentStatus,
@@ -812,15 +821,20 @@ export async function getPatientFinancialProfile(patientId: string) {
 
     if (!patient) return { success: false, error: "Patient not found" };
 
+    // Cancelled invoices are kept in the `invoices` list for history/audit, but they
+    // carry no financial weight — exclude them from every money total so a cancelled
+    // bill never inflates billed/outstanding/tax/discount figures.
+    const activeInvoices = invoices.filter((i: any) => i.status !== "Cancelled");
+
     const totals = {
-      total_billed: invoices.reduce((s: number, i: any) => s + decToNum(i.net_amount), 0),
-      total_paid: invoices.reduce((s: number, i: any) => s + decToNum(i.paid_amount), 0),
-      total_outstanding: invoices.reduce(
+      total_billed: activeInvoices.reduce((s: number, i: any) => s + decToNum(i.net_amount), 0),
+      total_paid: activeInvoices.reduce((s: number, i: any) => s + decToNum(i.paid_amount), 0),
+      total_outstanding: activeInvoices.reduce(
         (s: number, i: any) => s + decToNum(i.balance_due),
         0,
       ),
-      total_tax: invoices.reduce((s: number, i: any) => s + decToNum(i.total_tax), 0),
-      total_discount: invoices.reduce(
+      total_tax: activeInvoices.reduce((s: number, i: any) => s + decToNum(i.total_tax), 0),
+      total_discount: activeInvoices.reduce(
         (s: number, i: any) => s + decToNum(i.total_discount),
         0,
       ),
@@ -834,12 +848,12 @@ export async function getPatientFinancialProfile(patientId: string) {
         (s: number, c: any) => s + decToNum(c.approved_amount),
         0,
       ),
-      insurance_settled: invoices.reduce(
+      insurance_settled: activeInvoices.reduce(
         (s: number, i: any) => s + decToNum(i.tpa_settled_amount),
         0,
       ),
       refunds_issued: refunds.reduce((s: number, r: any) => s + decToNum(r.amount), 0),
-      credit_notes_total: invoices.reduce(
+      credit_notes_total: activeInvoices.reduce(
         (s: number, i: any) =>
           s + i.credit_notes.reduce((cs: number, c: any) => cs + decToNum(c.total_amount), 0),
         0,

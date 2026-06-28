@@ -851,8 +851,9 @@ export default function PatientProfilePage() {
                                 onCreated={() => {
                                     setShowBillBuilder(false);
                                     setAutoOpenBillBuilder(false);
-                                    loadData();
-                                    loadFinancialProfile();
+                                    // Bill is created on the patient's account — hand off to Master
+                                    // Billing to collect payment and manage all bills.
+                                    router.push(`/billing/patient/${patientId}`);
                                 }}
                                 onCancel={() => {
                                     setShowBillBuilder(false);
