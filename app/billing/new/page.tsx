@@ -79,6 +79,9 @@ export default function ReceptionGenerateBillPage() {
     const [concessionAmount, setConcessionAmount] = useState(0);
     const [concessionReason, setConcessionReason] = useState('');
     const [serviceDate, setServiceDate] = useState('');
+    // Allow overriding the billing category (Cash / TPA / Corporate) so that e.g.
+    // a TPA-registered patient can be billed as Cash for an OPD visit.
+    const [billingCategory, setBillingCategory] = useState<string>('');
 
     useEffect(() => {
         getAllBillableServices().then(res => {
@@ -114,6 +117,7 @@ export default function ReceptionGenerateBillPage() {
         setSelectedPatient(p);
         setSelectedDoctorId('');
         setPatientBalance(null);
+        setBillingCategory(p.patient_type || 'cash');
         getPatientBalances([p.patient_id]).then(b => setPatientBalance(b[p.patient_id]?.totalBalance ?? 0));
         const res = await getSuggestedOpdDoctor(p.patient_id);
         if (res.success && res.data) {
@@ -143,7 +147,7 @@ export default function ReceptionGenerateBillPage() {
 
     // Recalculate bill split whenever patient or items change
     useEffect(() => {
-        if (!selectedPatient || items.length === 0) {
+        if (!selectedPatient || items.length === 0 || billingCategory === 'cash') {
             setBillSplit(null);
             setPreAuthBlocked(false);
             return;
@@ -164,7 +168,7 @@ export default function ReceptionGenerateBillPage() {
             setPreAuthBlocked(split.warnings.some(w => w.startsWith('PRE_AUTH_REQUIRED')));
             setIsCalculating(false);
         });
-    }, [selectedPatient, items, billDiscountPct]);
+    }, [selectedPatient, items, billDiscountPct, billingCategory]);
 
     const handleAddService = () => {
         if (!selectedServiceId) return;
@@ -206,9 +210,13 @@ export default function ReceptionGenerateBillPage() {
         if (items.length === 0) return toast.error('Please add at least one item');
         if (preAuthBlocked) return toast.error('Pre-authorization required. Obtain TPA approval before billing.');
 
-        // TPA/Insurance patients MUST have a complete policy before billing — the
-        // policy fields are optional at the patient level but mandatory here.
-        if ((selectedPatient.patient_type || 'cash') === 'tpa_insurance') {
+        // Use the billing category override (defaults to patient's registered type,
+        // but can be switched — e.g. TPA patient paying Cash for an OPD visit).
+        const effectiveBillingType = billingCategory || selectedPatient.patient_type || 'cash';
+
+        // TPA/Insurance patients MUST have a complete policy before billing — but
+        // only when actually billing as TPA (not when overridden to Cash).
+        if (effectiveBillingType === 'tpa_insurance') {
             const pol = selectedPatient.insurance_policies?.[0];
             const missing = !pol || !pol.provider?.id || !pol.policy_number
                 || pol.coverage_limit == null || !pol.valid_from || !pol.valid_until;
@@ -219,7 +227,6 @@ export default function ReceptionGenerateBillPage() {
 
         setIsSaving(true);
         try {
-            const patientType = selectedPatient.patient_type || 'cash';
             const activePolicy = selectedPatient.insurance_policies?.[0];
             const split = billSplit;
 
@@ -232,9 +239,9 @@ export default function ReceptionGenerateBillPage() {
                 doctor_id: selectedDoctorId || undefined,
                 doctor_name: selectedDoctor?.name || undefined,
                 require_doctor: true,
-                billing_patient_type: patientType,
-                corporate_id: patientType === 'corporate' ? selectedPatient.corporate_id : undefined,
-                tpa_provider_id: patientType === 'tpa_insurance' ? activePolicy?.provider?.id : undefined,
+                billing_patient_type: effectiveBillingType,
+                corporate_id: effectiveBillingType === 'corporate' ? selectedPatient.corporate_id : undefined,
+                tpa_provider_id: effectiveBillingType === 'tpa_insurance' ? activePolicy?.provider?.id : undefined,
                 patient_payable: split?.patientPayable ?? totals.net,
                 corporate_payable: split?.corporatePayable ?? 0,
                 tpa_payable: split?.tpaPayable ?? 0,
@@ -403,7 +410,7 @@ export default function ReceptionGenerateBillPage() {
                                         </div>
                                         <div className="flex flex-col items-end gap-1.5">
                                             <button
-                                                onClick={() => { setSelectedPatient(null); setSelectedDoctorId(''); setSearchQuery(''); setBillSplit(null); setPreAuthBlocked(false); setPatientBalance(null); }}
+                                                onClick={() => { setSelectedPatient(null); setSelectedDoctorId(''); setSearchQuery(''); setBillSplit(null); setPreAuthBlocked(false); setPatientBalance(null); setBillingCategory(''); }}
                                                 className="text-xs font-bold text-orange-600 hover:text-teal-800 underline"
                                             >Change Patient</button>
                                             {patientBalance != null && (
@@ -413,6 +420,27 @@ export default function ReceptionGenerateBillPage() {
                                             )}
                                         </div>
                                     </div>
+
+                                    {/* Billing category — defaults to patient's registered type but can be overridden
+                                        (e.g. TPA patient paying Cash for an OPD consultation) */}
+                                    {selectedPatient.patient_type && selectedPatient.patient_type !== 'cash' && (
+                                        <div className="mt-3">
+                                            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Billing Category</label>
+                                            <select
+                                                value={billingCategory || selectedPatient.patient_type || 'cash'}
+                                                onChange={e => { setBillingCategory(e.target.value); setBillSplit(null); }}
+                                                className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500"
+                                            >
+                                                <option value="cash">Cash</option>
+                                                {selectedPatient.patient_type === 'tpa_insurance' && (
+                                                    <option value="tpa_insurance">TPA / Insurance</option>
+                                                )}
+                                                {selectedPatient.patient_type === 'corporate' && (
+                                                    <option value="corporate">Corporate</option>
+                                                )}
+                                            </select>
+                                        </div>
+                                    )}
 
                                     {/* Consulting doctor — required, saved on the bill so the printed bill header + MIS show it */}
                                     <div className="mt-3">
@@ -715,7 +743,7 @@ export default function ReceptionGenerateBillPage() {
                                 </div>
 
                                 {/* Split breakdown for corporate/TPA */}
-                                {billSplit && selectedPatient?.patient_type !== 'cash' && (
+                                {billSplit && (billingCategory || selectedPatient?.patient_type) !== 'cash' && (
                                     <>
                                         <div className="h-px bg-slate-700 my-2" />
                                         <p className="font-sans text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Payment Split</p>
@@ -741,7 +769,7 @@ export default function ReceptionGenerateBillPage() {
                                 )}
 
                                 {/* Cash concession field */}
-                                {selectedPatient?.patient_type === 'cash' && (
+                                {(billingCategory || selectedPatient?.patient_type || 'cash') === 'cash' && (
                                     <>
                                         <div className="h-px bg-slate-700 my-2" />
                                         <div className="space-y-2">
