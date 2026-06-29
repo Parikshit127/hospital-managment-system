@@ -5,9 +5,6 @@ import { getPharmacyBranding } from '@/app/lib/pharmacy-branding';
 import { parseWalkinNote } from '@/app/lib/walkin-note';
 import { dispensingKey } from '@/app/lib/pharmacy-bill-group';
 
-// IPD pharmacy line descriptions carry a trailing " — Dr. X" (prescribing
-// doctor). Split it out so the doctor can be shown once in the header rather
-// than repeated on every medicine row.
 function splitLineDoctor(desc: any): { text: string; doctor: string } {
     const parts = String(desc || '').split(' — ');
     if (parts.length > 1) {
@@ -16,7 +13,33 @@ function splitLineDoctor(desc: any): { text: string; doctor: string } {
     return { text: String(desc || ''), doctor: '' };
 }
 
-export default async function PharmacyInvoiceViewPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ bill?: string }> }) {
+function numberToWords(n: number): string {
+    if (n === 0) return 'Zero';
+    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+        'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    function belowThousand(num: number): string {
+        if (num === 0) return '';
+        if (num < 20) return ones[num] + ' ';
+        if (num < 100) return tens[Math.floor(num / 10)] + (num % 10 ? ' ' + ones[num % 10] : '') + ' ';
+        return ones[Math.floor(num / 100)] + ' Hundred ' + belowThousand(num % 100);
+    }
+    const rupees = Math.floor(n);
+    const paise = Math.round((n - rupees) * 100);
+    let words = '';
+    if (rupees >= 10000000) words += belowThousand(Math.floor(rupees / 10000000)) + 'Crore ';
+    if (rupees >= 100000)   words += belowThousand(Math.floor((rupees % 10000000) / 100000)) + 'Lakh ';
+    if (rupees >= 1000)     words += belowThousand(Math.floor((rupees % 100000) / 1000)) + 'Thousand ';
+    words += belowThousand(rupees % 1000);
+    words = words.trim() + ' Rupees';
+    if (paise > 0) words += ' and ' + belowThousand(paise).trim() + ' Paise';
+    return words + ' Only';
+}
+
+export default async function PharmacyInvoiceViewPage({ params, searchParams }: {
+    params: Promise<{ id: string }>;
+    searchParams: Promise<{ bill?: string }>;
+}) {
     const { id } = await params;
     const { bill: billKey } = await searchParams;
     const invoiceId = parseInt(id);
@@ -33,210 +56,169 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
         where: { id: invoiceId, organizationId: session.organization_id },
         include: {
             items: { orderBy: { created_at: 'asc' } },
-            patient: { select: { full_name: true, patient_id: true, phone: true } },
+            patient: { select: { full_name: true, patient_id: true, phone: true, address: true } },
         },
     });
 
     if (!invoice) notFound();
 
-    // Walk-in / OTC bills store the customer name + optional contact on `notes`.
     const isWalkIn = invoice.patient_id === 'WALKIN';
     const walkin = parseWalkinNote(invoice.notes);
-    const patientName = isWalkIn ? (walkin.name || 'Walk-in Patient') : (invoice.patient?.full_name || 'Walk-in Patient');
-    const patientContact = (isWalkIn ? walkin.contact : invoice.patient?.phone) || invoice.patient?.phone || '-';
+    const patientName = isWalkIn ? (walkin.name || 'WALK-IN / OTC') : (invoice.patient?.full_name || 'Walk-in Patient');
+    const patientAddress = isWalkIn ? '' : ((invoice.patient as any)?.address || '');
+    const patientContact = (isWalkIn ? walkin.contact : invoice.patient?.phone) || '';
 
     const isIpd = invoice.invoice_type === 'IPD';
-    // For IPD invoices, only show pharmacy items; for pharmacy invoices, show all
     const allItems = invoice.items as any[];
     let items = isIpd ? allItems.filter((i: any) => i.service_category === 'Pharmacy') : allItems;
-    // When opened for a specific dispensing bill (?bill=<key>), narrow to just that
-    // bill so each Customer-Invoices row opens its own bill, not the whole IPD
-    // pharmacy. Fall back to all pharmacy items if nothing matches (stale link).
     if (isIpd && billKey) {
         const scoped = items.filter((i: any) => dispensingKey(i.created_at) === billKey);
         if (scoped.length > 0) items = scoped;
     }
-
     if (isIpd && items.length === 0) {
         return <div style={{ padding: 40, fontFamily: 'Arial', color: '#6b7280' }}>No pharmacy items found on this IPD invoice.</div>;
     }
 
-    // Prescribing doctor(s) — shown once in the header. Prefer the invoice's own
-    // doctor; otherwise derive the unique doctor(s) from the line descriptions.
     const headerDoctor = (invoice as any).doctor_name
         || Array.from(new Set(items.map((i: any) => splitLineDoctor(i.description).doctor).filter(Boolean))).join(', ');
 
-    const subtotal = items.reduce((s, i) => s + Number(i.net_price || 0), 0);
-    const lineDiscount = items.reduce((s, i) => s + Number(i.discount || 0), 0);
-    // Bill-level (final) discount lives on the invoice header (bill_discount /
-    // total_discount), NOT on the line items. It must be subtracted too — else a
-    // walk-in/OTC discount wrongly shows up as a Balance. (IPD sub-view shows a
-    // pharmacy-only total, so the invoice-level bill discount doesn't apply there.)
+    // Per-line CGST/SGST — derive from tax_rate on each item
+    const lineData = items.map((item: any) => {
+        const qty       = Number(item.quantity || 0);
+        const rate      = Number(item.unit_price || 0);
+        const taxRate   = Number(item.tax_rate || 0);
+        const mrp       = Number(item.mrp || rate);
+        const netPrice  = Number(item.net_price || qty * rate);
+        const taxAmt    = Number(item.tax_amount || 0);
+        const cgstRate  = taxRate / 2;
+        const sgstRate  = taxRate / 2;
+        const cgstAmt   = taxAmt / 2;
+        const sgstAmt   = taxAmt / 2;
+        const amount    = netPrice; // pre-tax net (rate*qty - discount)
+
+        // Parse batch / expiry from description or ref fields
+        const desc      = splitLineDoctor(item.description).text;
+        const batchMatch = desc.match(/\(Batch[:\s]+([^)]+)\)/i);
+        const batchNo   = item.batch_no || (batchMatch ? batchMatch[1] : '');
+        const expiry    = item.expiry_date
+            ? new Date(item.expiry_date).toLocaleDateString('en-GB', { month: '2-digit', year: '2-digit' })
+            : '';
+        const pack      = item.pack_size || item.pack || '—';
+        const hsn       = item.hsn_sac_code || '3004';
+        // Product name: strip batch info from description
+        const productName = desc.replace(/\s*\(Batch[^)]*\)/i, '').replace(/\s*×\s*\d+$/, '').trim()
+            || item.description?.replace(/\s*\(Batch[^)]*\)/i, '').trim() || '-';
+
+        return { productName, pack, hsn, batchNo, expiry, qty, mrp, rate, sgstRate, cgstRate, sgstAmt, cgstAmt, taxRate, amount, taxAmt };
+    });
+
+    const subtotal   = lineData.reduce((s, l) => s + l.amount, 0);
+    const totalTax   = lineData.reduce((s, l) => s + l.taxAmt, 0);
+    const totalCgst  = totalTax / 2;
+    const totalSgst  = totalTax / 2;
+    const grandTotal = subtotal + totalTax;
+    const roundOff   = 0; // no rounding applied
+
+    const lineDiscount = items.reduce((s: number, i: any) => s + Number(i.discount || 0), 0);
     const billDiscount = isIpd ? 0 : Math.max(0, Math.max(
         Number((invoice as any).bill_discount || 0),
         Number((invoice as any).total_discount || 0) - lineDiscount,
     ));
-    const totalDiscount = lineDiscount + billDiscount;
-    const tax     = items.reduce((s, i) => s + Number(i.tax_amount || 0), 0);
-    const cgst    = tax / 2;
-    const sgst    = tax / 2;
-    const total   = subtotal + tax - billDiscount;
-    // For IPD invoices, paid/balance are for the whole bill — show pharmacy total as the amount
+
     const paid    = isIpd ? 0 : Number((invoice as any).paid_amount || 0);
-    const balance = isIpd ? total : (total - paid);
-    // For IPD bills, the "Bill Date" shown is the pharmacy dispense date (line items'
-    // created_at), not the admission date on invoice.created_at.
+    const balance = isIpd ? grandTotal : Math.max(0, grandTotal - paid);
+
     const dateSource: Date = (isIpd && items.length > 0)
         ? new Date((items[items.length - 1] as any).created_at || invoice.created_at)
         : new Date(invoice.created_at);
-    const date    = dateSource.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const time    = dateSource.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    const dateStr = dateSource.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-    // ─── words helper ───────────────────────────────────────────────────────────
-    function numberToWords(n: number): string {
-        if (n === 0) return 'Zero';
-        const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
-            'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-        const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-        function belowThousand(num: number): string {
-            if (num === 0) return '';
-            if (num < 20) return ones[num] + ' ';
-            if (num < 100) return tens[Math.floor(num / 10)] + (num % 10 ? ' ' + ones[num % 10] : '') + ' ';
-            return ones[Math.floor(num / 100)] + ' Hundred ' + belowThousand(num % 100);
-        }
-        const rupees = Math.floor(n);
-        const paise = Math.round((n - rupees) * 100);
-        let words = '';
-        if (rupees >= 10000000) { words += belowThousand(Math.floor(rupees / 10000000)) + 'Crore '; }
-        if (rupees >= 100000)   { words += belowThousand(Math.floor((rupees % 10000000) / 100000)) + 'Lakh '; }
-        if (rupees >= 1000)     { words += belowThousand(Math.floor((rupees % 100000) / 1000)) + 'Thousand '; }
-        words += belowThousand(rupees % 1000);
-        words = words.trim() + ' Rupees';
-        if (paise > 0) words += ' and ' + belowThousand(paise).trim() + ' Paise';
-        return words + ' Only';
-    }
+    // GST summary line at bottom (e.g. "GST 100.00*2.5+2.5%=2.50SGST+2.50CGST")
+    const gstSummaryLines = lineData.map(l =>
+        `GST ${l.amount.toFixed(2)}*${l.sgstRate}+${l.cgstRate}%=${l.sgstAmt.toFixed(2)}SGST+${l.cgstAmt.toFixed(2)}CGST`
+    ).join(',  ');
 
     const css = `
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #1a1a1a; background: #f0f2f5; }
+        body { font-family: Arial, sans-serif; font-size: 11px; color: #000; background: #f0f2f5; }
 
-        /* ── Toolbar ── */
         .toolbar { display: flex; align-items: center; justify-content: center; gap: 12px;
             padding: 10px 20px; background: #1e3a6e; }
         .toolbar button { padding: 7px 24px; background: white; color: #1e3a6e; font-weight: 700;
-            border: none; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.15s; }
-        .toolbar button:hover { background: #e8edf4; }
+            border: none; border-radius: 6px; cursor: pointer; font-size: 12px; }
         .toolbar .inv-ref { font-size: 11px; color: #94a3b8; }
 
-        /* ── Page ── */
-        .page { max-width: 800px; margin: 24px auto; background: #fff; border-radius: 4px;
-            box-shadow: 0 1px 6px rgba(0,0,0,0.08); overflow: hidden; }
+        .page { max-width: 860px; margin: 24px auto; background: #fff;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.10); padding: 28px 32px; }
 
-        /* ── Accent bar ── */
-        .accent-bar { height: 4px; background: linear-gradient(90deg, #1e3a6e 0%, #2d5aa0 100%); }
+        /* Hospital header */
+        .hosp-header { display: flex; justify-content: space-between; margin-bottom: 10px; }
+        .hosp-left h1 { font-size: 18px; font-weight: 900; }
+        .hosp-left p  { font-size: 10px; line-height: 1.6; }
+        .hosp-right   { text-align: right; font-size: 10px; line-height: 1.7; }
+        .hosp-right strong { font-weight: 700; }
+        .gstin-bar { font-size: 10px; font-weight: 700; margin-bottom: 6px; }
 
-        /* ── Inner wrap ── */
-        .inner { padding: 36px 44px 32px; }
+        /* GST Invoice title */
+        .inv-title { text-align: center; font-size: 14px; font-weight: 900;
+            border-top: 2px solid #000; border-bottom: 2px solid #000;
+            padding: 5px 0; margin: 6px 0; letter-spacing: 1px; }
 
-        /* ── Header ── */
-        .ph-header { display: flex; justify-content: space-between; align-items: flex-start;
-            padding-bottom: 16px; margin-bottom: 0; }
-        .ph-name { font-size: 22px; font-weight: 900; color: #1e3a6e; letter-spacing: 0.5px; }
-        .ph-division { font-size: 9.5px; color: #6b7280; margin-top: 1px; font-style: italic; }
-        .ph-addr { font-size: 10px; color: #6b7280; margin-top: 4px; line-height: 1.5; }
-        .ph-gst  { font-size: 10px; color: #6b7280; }
-        .inv-badge { display: inline-block; padding: 3px 12px; background: #1e3a6e; color: #fff;
-            font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em;
-            border-radius: 3px; }
-        .inv-meta { font-size: 10px; color: #6b7280; margin-top: 6px; text-align: right; line-height: 1.6; }
-        .inv-meta strong { color: #1a1a1a; font-weight: 700; }
+        /* Invoice meta line */
+        .inv-meta-bar { display: flex; justify-content: flex-end; font-size: 10px;
+            margin-bottom: 6px; gap: 16px; }
 
-        /* ── Divider ── */
-        .divider { border: none; border-top: 1.5px solid #e5e7eb; margin: 0 0 14px 0; }
+        /* Items table */
+        table.items { width: 100%; border-collapse: collapse; border: 1px solid #000; }
+        table.items th, table.items td { border: 1px solid #000; padding: 4px 5px; font-size: 10px; }
+        table.items thead th { background: #f5f5f5; font-weight: 700; text-align: center; font-size: 10px; }
+        table.items tbody td { text-align: center; }
+        table.items tbody td.left { text-align: left; }
+        /* Empty filler rows */
+        table.items tr.empty td { height: 18px; }
 
-        /* ── Patient info ── */
-        .pt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-            margin-bottom: 16px; padding: 12px 16px; background: #f8f9fb; border-radius: 6px; border: 1px solid #eef0f4; }
-        .pt-field { display: flex; gap: 6px; font-size: 11px; }
-        .pt-label { color: #6b7280; white-space: nowrap; }
-        .pt-value { font-weight: 700; color: #111; }
+        /* GST summary */
+        .gst-summary { font-size: 9px; margin-top: 4px; margin-bottom: 2px; }
 
-        /* ── Items table ── */
-        table.items { width: 100%; border-collapse: collapse; }
-        table.items thead th { padding: 8px 10px; font-size: 9px; font-weight: 800;
-            text-transform: uppercase; letter-spacing: 0.08em; color: #fff; background: #1e3a6e; }
-        table.items thead th:first-child { border-radius: 4px 0 0 0; }
-        table.items thead th:last-child  { border-radius: 0 4px 0 0; }
-        table.items tbody td { padding: 7px 10px; font-size: 11px; border-bottom: 1px solid #f0f0f0; }
-        table.items tbody tr:nth-child(even) { background: #fafbfc; }
-        table.items tbody tr:hover { background: #f0f4ff; }
-        .med-name { font-weight: 600; }
-        .batch-tag { font-size: 8.5px; color: #9ca3af; margin-left: 4px; }
-        .hsn-tag  { font-size: 9px; color: #6b7280; }
+        /* Bottom section */
+        .bottom-section { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 8px; }
+        .terms-col { max-width: 380px; font-size: 9.5px; }
+        .terms-col h4 { font-size: 10px; font-weight: 700; margin-bottom: 3px; }
+        .terms-col p  { line-height: 1.6; }
+        .terms-col .remark { margin-top: 8px; font-size: 10px; }
 
-        /* ── Totals strip ── */
-        .totals-strip { display: flex; justify-content: flex-end; margin-top: 0; }
-        .totals-box { width: 280px; }
-        .totals-box .row { display: flex; justify-content: space-between; padding: 5px 10px; font-size: 11px; }
-        .totals-box .row.sub { color: #6b7280; }
-        .totals-box .row.tax { color: #9ca3af; font-size: 10px; }
-        .totals-box .row.grand { background: #1e3a6e; color: #fff; font-weight: 900; font-size: 14px;
-            border-radius: 0 0 4px 4px; padding: 8px 10px; margin-top: 2px; }
+        /* Totals box */
+        .totals-col { width: 260px; border: 1px solid #000; }
+        .totals-col .row { display: flex; justify-content: space-between;
+            padding: 4px 8px; border-bottom: 1px solid #ccc; font-size: 10.5px; }
+        .totals-col .row:last-child { border-bottom: none; font-weight: 900; font-size: 12px; background: #f5f5f5; }
+        .totals-col .row span:last-child { font-weight: 700; }
 
-        /* ── Amount in words ── */
-        .words-bar { margin-top: 14px; padding: 8px 14px; background: #f0f4ff; border-left: 3px solid #1e3a6e;
-            border-radius: 0 4px 4px 0; font-size: 10.5px; color: #374151; }
-        .words-bar strong { color: #111; }
+        /* Words + signature */
+        .words-bar { font-size: 10px; font-weight: 700; margin-top: 10px; }
+        .sig-row { display: flex; justify-content: flex-end; margin-top: 36px; }
+        .sig-box { text-align: center; font-size: 10px; }
+        .sig-line { border-top: 1px solid #000; width: 160px; margin: 0 auto 4px auto; }
 
-        /* ── Payment summary ── */
-        .pay-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 16px; }
-        .pay-card { padding: 10px 14px; border-radius: 6px; border: 1px solid #e5e7eb; text-align: center; }
-        .pay-card .lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em;
-            color: #6b7280; font-weight: 700; }
-        .pay-card .val { font-size: 16px; font-weight: 900; margin-top: 2px; }
-        .pay-card.bill  .val { color: #1e3a6e; }
-        .pay-card.paid  .val { color: #059669; }
-        .pay-card.bal   .val { color: #dc2626; }
-        .pay-card.bal.zero .val { color: #059669; }
-
-        /* ── Footer ── */
-        .inv-footer { display: flex; justify-content: space-between; align-items: flex-end;
-            margin-top: 28px; padding-top: 16px; border-top: 1px solid #e5e7eb; }
-        .terms { max-width: 300px; }
-        .terms-title { font-size: 9px; font-weight: 800; text-transform: uppercase;
-            letter-spacing: 0.08em; color: #6b7280; margin-bottom: 4px; }
-        .terms-list { font-size: 9px; color: #9ca3af; line-height: 1.5; }
-        .sig { text-align: right; }
-        .sig-line { border-top: 1px solid #9ca3af; width: 150px; margin: 36px 0 5px auto; }
-        .sig-name { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
-        .sig-for  { font-size: 9px; color: #6b7280; margin-top: 2px; font-style: italic; }
-
-        .gen-note { font-size: 8px; color: #d1d5db; text-align: center; margin-top: 20px;
-            padding-top: 10px; border-top: 1px dashed #e5e7eb; }
+        .gen-note { font-size: 8px; color: #aaa; text-align: center; margin-top: 14px; }
 
         @media print {
-            @page { margin: 10mm 8mm; size: A4; }
+            @page { margin: 8mm; size: A4; }
             body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .toolbar { display: none !important; }
-            .page { margin: 0; box-shadow: none; border-radius: 0; }
-            .inner { padding: 20px 30px; }
-            table.items thead th { background: #1e3a6e !important; color: #fff !important; }
-            table.items tbody tr:nth-child(even) { background: #fafbfc !important; }
-            .totals-box .row.grand { background: #1e3a6e !important; color: #fff !important; }
-            .words-bar { background: #f0f4ff !important; }
-            .pt-grid { background: #f8f9fb !important; }
-            .pay-card.bill .val { color: #1e3a6e !important; }
-            .pay-card.paid .val { color: #059669 !important; }
-            .pay-card.bal  .val { color: #dc2626 !important; }
-            .pay-card.bal.zero .val { color: #059669 !important; }
+            .page { margin: 0; box-shadow: none; padding: 16px 20px; }
         }
     `;
+
+    // Fill empty rows to always show at least 8 rows in the table
+    const MIN_ROWS = 8;
+    const emptyRows = Math.max(0, MIN_ROWS - lineData.length);
 
     return (
         <>
             <style dangerouslySetInnerHTML={{ __html: css }} />
 
-            {/* ── Toolbar (hidden on print) ── */}
+            {/* Toolbar */}
             <div className="toolbar">
                 <script dangerouslySetInnerHTML={{ __html: `
                     document.addEventListener('DOMContentLoaded', function() {
@@ -246,178 +228,142 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
                         if (back) back.onclick = function(){ window.history.back(); };
                     });
                 ` }} />
-                <button id="backBtn" style={{ background: 'transparent', color: '#94a3b8', border: '1px solid #475569' }}>
-                    Back
-                </button>
-                <button id="printBtn">Print / Download PDF</button>
-                <span className="inv-ref">
-                    {invoice.invoice_number}
-                </span>
+                <button id="backBtn" style={{ background: 'transparent', color: '#94a3b8', border: '1px solid #475569' }}>Back</button>
+                <button id="printBtn">Print / Save PDF</button>
+                <span className="inv-ref">{invoice.invoice_number}</span>
             </div>
 
             <div className="page">
-                <div className="accent-bar" />
-                <div className="inner">
 
-                    {/* ── Header ── */}
-                    <div className="ph-header">
-                        <div>
-                            <div className="ph-name">{pharmacy.name}</div>
-                            <div className="ph-division">{pharmacy.division}</div>
-                            <div className="ph-addr">
-                                {pharmacy.address}{pharmacy.gstin ? <><br />GST No.: {pharmacy.gstin}</> : null}
-                            </div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                            <span className="inv-badge">{isIpd ? 'IPD Pharmacy Bill' : 'Tax Invoice'}</span>
-                            <div className="inv-meta">
-                                Invoice: <strong>{invoice.invoice_number}</strong><br />
-                                Date: <strong>{date}</strong><br />
-                                Time: <strong>{time}</strong>
-                            </div>
-                        </div>
+                {/* Hospital Header */}
+                <div className="hosp-header">
+                    <div className="hosp-left">
+                        <h1>{pharmacy.name}</h1>
+                        <p>
+                            {pharmacy.address || '123 Health Avenue, Medical District'}<br />
+                            Phone : {(pharmacy as any).phone || '+91 80000 00000'}<br />
+                            E-Mail : {(pharmacy as any).email || `admin@avanihospital.com`}
+                        </p>
                     </div>
-
-                    <hr className="divider" />
-
-                    {/* ── Patient Info ── */}
-                    <div className="pt-grid">
-                        <div className="pt-field">
-                            <span className="pt-label">Patient:</span>
-                            <span className="pt-value">{patientName}</span>
-                        </div>
-                        <div className="pt-field" style={{ justifyContent: 'flex-end' }}>
-                            <span className="pt-label">Patient ID:</span>
-                            <span className="pt-value">{invoice.patient?.patient_id || 'WALKIN'}</span>
-                        </div>
-                        <div className="pt-field">
-                            <span className="pt-label">Contact:</span>
-                            <span className="pt-value">{patientContact}</span>
-                        </div>
-                        <div className="pt-field" style={{ justifyContent: 'flex-end' }}>
-                            <span className="pt-label">Payment:</span>
-                            <span className="pt-value">{(invoice as any).payment_method || 'Cash'}</span>
-                        </div>
-                        {headerDoctor ? (
-                            <div className="pt-field">
-                                <span className="pt-label">Doctor:</span>
-                                <span className="pt-value">{headerDoctor}</span>
-                            </div>
-                        ) : null}
+                    <div className="hosp-right">
+                        <strong>Patient Name :</strong> {patientName}<br />
+                        Patient Address : {patientAddress}<br />
+                        <strong>Dr Name :</strong> {headerDoctor || ''}<br />
+                        Dr Reg No.
                     </div>
-
-                    {/* ── Items Table ── */}
-                    <table className="items">
-                        <thead>
-                            <tr>
-                                <th style={{ textAlign: 'center', width: '36px' }}>S.No</th>
-                                <th style={{ textAlign: 'left' }}>Medicine</th>
-                                <th style={{ textAlign: 'center', width: '60px' }}>HSN</th>
-                                <th style={{ textAlign: 'center', width: '50px' }}>Qty</th>
-                                <th style={{ textAlign: 'right', width: '72px' }}>Rate</th>
-                                <th style={{ textAlign: 'right', width: '60px' }}>Disc</th>
-                                <th style={{ textAlign: 'right', width: '82px' }}>Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {items.map((item: any, idx: number) => (
-                                <tr key={idx}>
-                                    <td style={{ textAlign: 'center', color: '#9ca3af' }}>{idx + 1}</td>
-                                    <td>
-                                        <span className="med-name">{splitLineDoctor(item.description).text || item.medicine_name || '-'}</span>
-                                        {item.batch_no && item.batch_no !== 'N/A' ? (
-                                            <span className="batch-tag">(Batch: {item.batch_no})</span>
-                                        ) : null}
-                                    </td>
-                                    <td style={{ textAlign: 'center' }}>
-                                        <span className="hsn-tag">{item.hsn_sac_code || '3004'}</span>
-                                    </td>
-                                    <td style={{ textAlign: 'center', fontWeight: 600 }}>{item.quantity}</td>
-                                    <td style={{ textAlign: 'right' }}>{Number(item.unit_price || 0).toFixed(2)}</td>
-                                    <td style={{ textAlign: 'right', color: '#9ca3af' }}>
-                                        {Number(item.discount || 0) > 0 ? Number(item.discount || 0).toFixed(2) : '-'}
-                                    </td>
-                                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{Number(item.net_price || 0).toFixed(2)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-
-                    {/* ── Totals ── */}
-                    <div className="totals-strip">
-                        <div className="totals-box">
-                            <div className="row sub">
-                                <span>Subtotal</span>
-                                <span>{subtotal.toFixed(2)}</span>
-                            </div>
-                            {totalDiscount > 0 && (
-                                <div className="row sub">
-                                    <span>Discount</span>
-                                    <span>-{totalDiscount.toFixed(2)}</span>
-                                </div>
-                            )}
-                            {tax > 0 && (
-                                <>
-                                    <div className="row tax">
-                                        <span>CGST</span>
-                                        <span>{cgst.toFixed(2)}</span>
-                                    </div>
-                                    <div className="row tax">
-                                        <span>SGST</span>
-                                        <span>{sgst.toFixed(2)}</span>
-                                    </div>
-                                </>
-                            )}
-                            <div className="row grand">
-                                <span>Grand Total</span>
-                                <span>{total.toFixed(2)}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ── Amount in words ── */}
-                    <div className="words-bar">
-                        <strong>Amount in words:</strong> {numberToWords(total)}
-                    </div>
-
-                    {/* ── Payment cards ── */}
-                    <div className="pay-grid">
-                        <div className="pay-card bill">
-                            <div className="lbl">Bill Amount</div>
-                            <div className="val">{total.toFixed(2)}</div>
-                        </div>
-                        <div className="pay-card paid">
-                            <div className="lbl">Paid</div>
-                            <div className="val">{paid.toFixed(2)}</div>
-                        </div>
-                        <div className={`pay-card bal ${balance <= 0 ? 'zero' : ''}`}>
-                            <div className="lbl">Balance</div>
-                            <div className="val">{balance.toFixed(2)}</div>
-                        </div>
-                    </div>
-
-                    {/* ── Footer ── */}
-                    <div className="inv-footer">
-                        <div className="terms">
-                            <div className="terms-title">Terms &amp; Conditions</div>
-                            <div className="terms-list">
-                                1. Goods once sold will not be taken back.<br />
-                                2. Payment is due on receipt of invoice.<br />
-                                3. Subject to Delhi jurisdiction only.
-                            </div>
-                        </div>
-                        <div className="sig">
-                            <div className="sig-line" />
-                            <div className="sig-name">Authorized Signatory</div>
-                            <div className="sig-for">For {pharmacy.name}</div>
-                        </div>
-                    </div>
-
-                    <div className="gen-note">
-                        This is a computer-generated document and does not require a physical signature. &mdash; {pharmacy.name} {pharmacy.division}
-                    </div>
-
                 </div>
+
+                <div className="gstin-bar">GSTIN : {pharmacy.gstin || 'N/A'}</div>
+
+                {/* GST Invoice Title */}
+                <div className="inv-title">GST INVOICE</div>
+
+                {/* Invoice Number + Date */}
+                <div className="inv-meta-bar">
+                    <span><strong>Invoice No. :</strong> {invoice.invoice_number}</span>
+                    <span><strong>Date :</strong> {dateStr}</span>
+                </div>
+
+                {/* Items Table */}
+                <table className="items">
+                    <thead>
+                        <tr>
+                            <th style={{ width: 28 }}>SN.</th>
+                            <th style={{ textAlign: 'left' }}>PRODUCT NAME</th>
+                            <th style={{ width: 44 }}>PACK</th>
+                            <th style={{ width: 44 }}>HSN</th>
+                            <th style={{ width: 60 }}>BATCH</th>
+                            <th style={{ width: 44 }}>EXP.</th>
+                            <th style={{ width: 36 }}>QTY</th>
+                            <th style={{ width: 56 }}>MRP</th>
+                            <th style={{ width: 60 }}>RATE</th>
+                            <th style={{ width: 44 }}>SGST</th>
+                            <th style={{ width: 44 }}>CGST</th>
+                            <th style={{ width: 68 }}>AMOUNT</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {lineData.map((l, idx) => (
+                            <tr key={idx}>
+                                <td>{idx + 1}.</td>
+                                <td className="left">{l.productName}</td>
+                                <td>{l.pack}</td>
+                                <td>{l.hsn}</td>
+                                <td>{l.batchNo}</td>
+                                <td>{l.expiry}</td>
+                                <td>{l.qty}</td>
+                                <td>{l.mrp.toFixed(2)}</td>
+                                <td>{l.rate.toFixed(2)}</td>
+                                <td>{l.sgstRate.toFixed(2)}</td>
+                                <td>{l.cgstRate.toFixed(2)}</td>
+                                <td>{l.amount.toFixed(2)}</td>
+                            </tr>
+                        ))}
+                        {/* Empty filler rows */}
+                        {Array.from({ length: emptyRows }).map((_, i) => (
+                            <tr className="empty" key={`empty-${i}`}>
+                                {Array.from({ length: 12 }).map((_, j) => <td key={j}>&nbsp;</td>)}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+
+                {/* GST Summary line */}
+                <div className="gst-summary">
+                    {gstSummaryLines}&nbsp;&nbsp;&nbsp;<strong>*** GET WELL SOON **</strong>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    <span style={{ float: 'right' }}>For {pharmacy.name} PHARMACY</span>
+                </div>
+
+                {/* Bottom: Terms + Totals */}
+                <div className="bottom-section">
+                    <div className="terms-col">
+                        <h4>Terms &amp; Conditions</h4>
+                        <p>
+                            Goods once sold will not be taken back or exchanged.<br />
+                            Bills not paid due date will attract 24% interest.<br />
+                            All disputes subject to Jurisdication only.<br />
+                            Prescribed Sales Tax declaration will be given.
+                        </p>
+                        <div className="remark"><em>Remark :</em></div>
+                    </div>
+
+                    <div className="totals-col">
+                        <div className="row"><span>SUB TOTAL</span><span>{subtotal.toFixed(2)}</span></div>
+                        <div className="row"><span>ROUND OFF</span><span>{roundOff.toFixed(2)}</span></div>
+                        {lineData.map((l, i) => (
+                            l.sgstAmt > 0 ? (
+                                <div className="row" key={`sgst-${i}`}>
+                                    <span>SGST {l.sgstRate.toFixed(1)} %</span>
+                                    <span>{l.sgstAmt.toFixed(2)}</span>
+                                </div>
+                            ) : null
+                        ))}
+                        {lineData.map((l, i) => (
+                            l.cgstAmt > 0 ? (
+                                <div className="row" key={`cgst-${i}`}>
+                                    <span>CGST {l.cgstRate.toFixed(1)} %</span>
+                                    <span>{l.cgstAmt.toFixed(2)}</span>
+                                </div>
+                            ) : null
+                        ))}
+                        <div className="row"><span>GRAND TOTAL</span><span>{grandTotal.toFixed(2)}</span></div>
+                    </div>
+                </div>
+
+                {/* Amount in words */}
+                <div className="words-bar">Rs. {numberToWords(grandTotal)}</div>
+
+                {/* Signature */}
+                <div className="sig-row">
+                    <div className="sig-box">
+                        <div className="sig-line" />
+                        <div>Authorised Signatory</div>
+                    </div>
+                </div>
+
+                <div className="gen-note">Computer generated invoice — {pharmacy.name}</div>
             </div>
         </>
     );
