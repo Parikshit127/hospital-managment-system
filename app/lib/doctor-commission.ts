@@ -19,10 +19,25 @@ function toNum(v: unknown): number {
 
 type AnyDb = any;
 
+/**
+ * Org-wide fallback flat % applied to doctors with no DoctorCommissionConfig.
+ * Returns 0 when unset/disabled. Cached value can be passed into
+ * recomputeInvoiceDoctorCommission to avoid a per-invoice lookup during backfill.
+ */
+export async function getOrgDefaultDoctorCommission(db: AnyDb, organizationId: string): Promise<number> {
+    const cfg = await db.organizationConfig.findUnique({
+        where: { organizationId },
+        select: { default_doctor_commission_percent: true },
+    });
+    const pct = Number(cfg?.default_doctor_commission_percent ?? 0);
+    return Number.isFinite(pct) && pct > 0 ? pct : 0;
+}
+
 export async function recomputeInvoiceDoctorCommission(
     db: AnyDb,
     organizationId: string,
     invoiceId: number,
+    opts?: { defaultPercent?: number },
 ): Promise<void> {
     const invoice = await db.invoices.findFirst({
         where: { id: invoiceId, organizationId },
@@ -52,7 +67,6 @@ export async function recomputeInvoiceDoctorCommission(
         where: { organizationId, doctor_id: invoice.doctor_id, is_active: true },
         include: { service_rates: true },
     });
-    if (!config) return removeIfPresent();
 
     const cancelled = invoice.status === 'Cancelled';
     const collected = cancelled ? 0 : toNum(invoice.paid_amount);
@@ -60,16 +74,27 @@ export async function recomputeInvoiceDoctorCommission(
     let rate = 0;
     let amount = 0;
 
-    if (config.commission_type === 'flat_percent') {
-        rate = toNum(config.flat_percent);
+    if (config) {
+        if (config.commission_type === 'flat_percent') {
+            rate = toNum(config.flat_percent);
+            amount = (collected * rate) / 100;
+        } else if (config.commission_type === 'per_service') {
+            const match = config.service_rates.find((r: any) => r.service_type === invoice.invoice_type);
+            rate = match ? toNum(match.percent) : 0;
+            amount = (collected * rate) / 100;
+        } else if (config.commission_type === 'fixed_per_bill') {
+            rate = 0;
+            amount = collected > 0 ? toNum(config.fixed_amount_per_bill) : 0;
+        }
+    } else {
+        // No per-doctor config → fall back to the org-wide default flat %. This makes
+        // unconfigured doctors accrue a real, settle-able payout. 0 = disabled.
+        const defaultPercent =
+            opts?.defaultPercent !== undefined
+                ? opts.defaultPercent
+                : await getOrgDefaultDoctorCommission(db, organizationId);
+        rate = defaultPercent;
         amount = (collected * rate) / 100;
-    } else if (config.commission_type === 'per_service') {
-        const match = config.service_rates.find((r: any) => r.service_type === invoice.invoice_type);
-        rate = match ? toNum(match.percent) : 0;
-        amount = (collected * rate) / 100;
-    } else if (config.commission_type === 'fixed_per_bill') {
-        rate = 0;
-        amount = collected > 0 ? toNum(config.fixed_amount_per_bill) : 0;
     }
 
     if (amount <= 0) return removeIfPresent();
@@ -111,10 +136,12 @@ export async function backfillDoctorCommissions(
         where: { organizationId, paid_amount: { gt: 0 }, doctor_id: { not: null } },
         select: { id: true },
     });
+    // Resolve the org default once so unconfigured doctors accrue without N lookups.
+    const defaultPercent = await getOrgDefaultDoctorCommission(db, organizationId);
     let processed = 0;
     for (const inv of invoices) {
         try {
-            await recomputeInvoiceDoctorCommission(db, organizationId, inv.id);
+            await recomputeInvoiceDoctorCommission(db, organizationId, inv.id, { defaultPercent });
             processed++;
         } catch (e) {
             console.error('backfill doctor commission failed for invoice', inv.id, e);

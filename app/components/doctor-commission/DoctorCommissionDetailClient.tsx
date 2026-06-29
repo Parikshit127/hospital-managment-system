@@ -9,6 +9,7 @@ import {
     markDoctorStatementPaid,
     discardDoctorStatement,
 } from '@/app/actions/doctor-commission-actions';
+import { useBranding } from '@/app/admin/components/ThemeProvider';
 
 const inr = (n: number) => '₹' + (n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 const fmtDate = (d: string | Date) => new Date(d).toLocaleDateString('en-IN');
@@ -94,7 +95,15 @@ export default function DoctorCommissionDetailClient({ doctorId, basePath }: { d
 
             {tab === 'bills' && <BillsTab bills={data.bills} />}
             {tab === 'ledger' && <LedgerTab commissions={data.commissions} />}
-            {tab === 'statements' && <StatementsTab doctorId={doctorId} statements={data.statements} onChange={load} />}
+            {tab === 'statements' && (
+                <StatementsTab
+                    doctorId={doctorId}
+                    statements={data.statements}
+                    commissions={data.commissions}
+                    doctor={data.doctor}
+                    onChange={load}
+                />
+            )}
         </div>
     );
 }
@@ -140,13 +149,59 @@ function LedgerTab({ commissions }: { commissions: any[] }) {
     );
 }
 
-function StatementsTab({ doctorId, statements, onChange }: { doctorId: string; statements: any[]; onChange: () => void }) {
+function StatementsTab({
+    doctorId,
+    statements,
+    commissions,
+    doctor,
+    onChange,
+}: {
+    doctorId: string;
+    statements: any[];
+    commissions: any[];
+    doctor: any;
+    onChange: () => void;
+}) {
+    const branding = useBranding();
     const [showCreate, setShowCreate] = useState(false);
     const [start, setStart] = useState('');
     const [end, setEnd] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [payFor, setPayFor] = useState<any | null>(null);
+    const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
+
+    // Download a PDF for ONE statement (replaces the old window.print() of the
+    // whole screen). The statement's lines are the doctor commissions tagged
+    // with this statement_id — already loaded, no extra fetch.
+    const downloadStatement = async (s: any) => {
+        setPdfBusyId(s.id);
+        try {
+            const [{ pdf }, { default: DoctorStatementPDF }] = await Promise.all([
+                import('@react-pdf/renderer'),
+                import('@/app/components/doctor-commission/DoctorStatementPDF'),
+            ]);
+            const lines = (commissions || []).filter((c: any) => c.statement_id === s.id);
+            const blob = await pdf(
+                <DoctorStatementPDF hospitalName={branding.portal_title} doctor={doctor} statement={s} lines={lines} />,
+            ).toBlob();
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const safeName = String(doctor?.name || 'doctor').replace(/[^a-zA-Z0-9]/g, '-');
+            a.download = `Payout-Statement-${safeName}-${fmtDate(s.period_start)}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Statement PDF generation failed:', err);
+            alert('Could not generate the statement PDF. Please try again.');
+        } finally {
+            setPdfBusyId(null);
+        }
+    };
 
     const create = async () => {
         if (!start || !end) {
@@ -235,8 +290,17 @@ function StatementsTab({ doctorId, statements, onChange }: { doctorId: string; s
                                             </button>
                                         </>
                                     )}
-                                    <button onClick={() => window.print()} className="text-gray-400 hover:text-gray-600" title="Print / export">
-                                        <FileText className="h-4 w-4" />
+                                    <button
+                                        onClick={() => downloadStatement(s)}
+                                        disabled={pdfBusyId === s.id}
+                                        className="text-gray-400 hover:text-indigo-600 disabled:opacity-50"
+                                        title="Download statement PDF"
+                                    >
+                                        {pdfBusyId === s.id ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <FileText className="h-4 w-4" />
+                                        )}
                                     </button>
                                 </div>
                             </td>

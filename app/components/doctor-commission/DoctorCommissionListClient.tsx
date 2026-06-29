@@ -7,6 +7,7 @@ import {
     getDoctorCommissionOverview,
     saveDoctorConfig,
     setDoctorConfigActive,
+    setDefaultDoctorCommission,
 } from '@/app/actions/doctor-commission-actions';
 import { DOCTOR_COMMISSION_TYPES, DOCTOR_SERVICE_TYPES } from '@/app/lib/doctor-commission-constants';
 
@@ -22,6 +23,7 @@ type Row = {
     fixed_amount_per_bill?: number | null;
     config_active: boolean;
     service_rates: ServiceRate[];
+    uses_default?: boolean;
     bill_count: number;
     total_business: number;
     commission_accrued: number;
@@ -52,11 +54,15 @@ export default function DoctorCommissionListClient({ basePath }: { basePath: str
     const [search, setSearch] = useState('');
     const [onlyConfigured, setOnlyConfigured] = useState(false);
     const [editing, setEditing] = useState<Row | null>(null);
+    const [defaultPercent, setDefaultPercent] = useState(0);
 
     const load = async () => {
         setLoading(true);
         const res = await getDoctorCommissionOverview();
-        if (res.success) setRows(res.data as Row[]);
+        if (res.success) {
+            setRows(res.data as Row[]);
+            setDefaultPercent(Number((res as any).default_percent ?? 0));
+        }
         setLoading(false);
     };
     useEffect(() => {
@@ -125,6 +131,7 @@ export default function DoctorCommissionListClient({ basePath }: { basePath: str
                     <input type="checkbox" checked={onlyConfigured} onChange={(e) => setOnlyConfigured(e.target.checked)} />
                     Only configured
                 </label>
+                <DefaultRateControl current={defaultPercent} onSaved={load} />
             </div>
 
             <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
@@ -174,6 +181,11 @@ export default function DoctorCommissionListClient({ basePath }: { basePath: str
                                                 </span>
                                                 <div className="text-[11px]">{commissionSummary(r)}</div>
                                             </>
+                                        ) : r.uses_default ? (
+                                            <>
+                                                <span className="text-[11px] font-bold text-gray-400">Default</span>
+                                                <div className="text-[11px]">{defaultPercent}% (org default)</div>
+                                            </>
                                         ) : (
                                             <span className="text-[11px] italic text-gray-300">not configured</span>
                                         )}
@@ -222,6 +234,48 @@ export default function DoctorCommissionListClient({ basePath }: { basePath: str
                     }}
                 />
             )}
+        </div>
+    );
+}
+
+function DefaultRateControl({ current, onSaved }: { current: number; onSaved: () => Promise<void> }) {
+    const [value, setValue] = useState(String(current ?? 0));
+    const [saving, setSaving] = useState(false);
+    useEffect(() => {
+        setValue(String(current ?? 0));
+    }, [current]);
+
+    const dirty = Number(value) !== Number(current);
+
+    const save = async () => {
+        setSaving(true);
+        const res = await setDefaultDoctorCommission(value);
+        setSaving(false);
+        if (res.success) await onSaved();
+        else alert(res.error || 'Failed to update default commission');
+    };
+
+    return (
+        <div
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-gray-200 bg-white"
+            title="Flat % applied to doctors with no commission config. 0 = disabled. Saving re-accrues their collected bills."
+        >
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Default %</span>
+            <input
+                type="number"
+                value={value}
+                min={0}
+                max={100}
+                onChange={(e) => setValue(e.target.value)}
+                className="w-16 px-2 py-1 border border-gray-200 rounded-lg text-sm"
+            />
+            <button
+                onClick={save}
+                disabled={saving || !dirty}
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-indigo-500 text-white font-bold text-xs hover:bg-indigo-600 disabled:opacity-40"
+            >
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Apply'}
+            </button>
         </div>
     );
 }

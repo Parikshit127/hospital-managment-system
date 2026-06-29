@@ -325,6 +325,12 @@ model OrganizationConfig {
   tally_auto_sync               Boolean      @default(false)
   tally_last_sync_at            DateTime?
   tally_voucher_type_map        String?
+
+  // Fallback flat commission % applied to doctors who have NO DoctorCommissionConfig.
+  // 0 = disabled (unconfigured doctors accrue nothing). Drives the default-rate
+  // accrual in app/lib/doctor-commission.ts.
+  default_doctor_commission_percent Float @default(0)
+
   organization                  Organization @relation(fields: [organizationId], references: [id])
 
   @@map("organization_configs")

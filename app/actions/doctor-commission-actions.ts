@@ -31,28 +31,57 @@ export async function getDoctorCommissionOverview() {
         });
         const configMap = new Map<string, any>(configs.map((c: any) => [c.doctor_id, c]));
 
+        // Org-wide fallback rate applied to doctors with no per-doctor config.
+        const orgConfig = await (db as any).organizationConfig.findUnique({
+            where: { organizationId },
+            select: { default_doctor_commission_percent: true },
+        });
+        const defaultPercent = num(orgConfig?.default_doctor_commission_percent);
+
+        // Commission ledger drives the Accrued / Paid columns only.
         const commissionRows = await (db as any).doctorCommission.groupBy({
             by: ['doctor_id', 'status'],
             where: { organizationId, status: { not: 'void' } },
             _count: { _all: true },
-            _sum: { commission_amount: true, eligible_base: true },
+            _sum: { commission_amount: true },
         });
 
-        type Agg = { bills: number; business: number; accrued: number; paid: number };
+        type Agg = { accrued: number; paid: number };
         const aggMap = new Map<string, Agg>();
         for (const row of commissionRows) {
-            const a = aggMap.get(row.doctor_id) || { bills: 0, business: 0, accrued: 0, paid: 0 };
-            a.bills += row._count._all;
-            a.business += num(row._sum.eligible_base);
+            const a = aggMap.get(row.doctor_id) || { accrued: 0, paid: 0 };
             const amt = num(row._sum.commission_amount);
             if (row.status === 'paid') a.paid += amt;
             else a.accrued += amt;
             aggMap.set(row.doctor_id, a);
         }
 
+        // Bills & collected business come from the invoices themselves — independent
+        // of whether a commission config exists — so doctors with no commission
+        // setup still show their real bill volume instead of 0. Cancelled bills are
+        // excluded; org-scope and is_archived=false are applied by the tenant client.
+        const invoiceRows = await db.invoices.groupBy({
+            by: ['doctor_id'],
+            where: {
+                doctor_id: { not: null },
+                NOT: { status: { equals: 'cancelled', mode: 'insensitive' } },
+            },
+            _count: { _all: true },
+            _sum: { paid_amount: true },
+        });
+        const invoiceAggMap = new Map<string, { bills: number; business: number }>();
+        for (const row of invoiceRows as any[]) {
+            if (!row.doctor_id) continue;
+            invoiceAggMap.set(row.doctor_id, {
+                bills: row._count._all,
+                business: num(row._sum.paid_amount),
+            });
+        }
+
         const data = doctors.map((d: any) => {
             const cfg = configMap.get(d.id);
-            const a = aggMap.get(d.id) || { bills: 0, business: 0, accrued: 0, paid: 0 };
+            const a = aggMap.get(d.id) || { accrued: 0, paid: 0 };
+            const inv = invoiceAggMap.get(d.id) || { bills: 0, business: 0 };
             return {
                 id: d.id,
                 name: d.name || d.username,
@@ -64,15 +93,17 @@ export async function getDoctorCommissionOverview() {
                 fixed_amount_per_bill: cfg?.fixed_amount_per_bill ?? null,
                 config_active: cfg?.is_active ?? false,
                 service_rates: cfg?.service_rates ?? [],
-                bill_count: a.bills,
-                total_business: a.business,
+                // Unconfigured doctors fall back to the org default rate (0 = none).
+                uses_default: !cfg && defaultPercent > 0,
+                bill_count: inv.bills,
+                total_business: inv.business,
                 commission_accrued: a.accrued,
                 commission_paid: a.paid,
                 outstanding: a.accrued,
             };
         });
 
-        return { success: true, data };
+        return { success: true, data, default_percent: defaultPercent };
     } catch (error) {
         console.error('getDoctorCommissionOverview error:', error);
         return { success: false, data: [], error: 'Failed to load doctor commissions' };
@@ -159,6 +190,36 @@ export async function setDoctorConfigActive(doctorId: string, is_active: boolean
     } catch (error) {
         console.error('setDoctorConfigActive error:', error);
         return { success: false, error: 'Failed to update config' };
+    }
+}
+
+/**
+ * Set the org-wide default commission % for doctors with no per-doctor config,
+ * then re-accrue so every unconfigured doctor's collected bills earn at the new
+ * rate immediately. Setting it to 0 disables the fallback and the backfill drops
+ * those doctors' (still-accrued) projections.
+ */
+export async function setDefaultDoctorCommission(percent: number | string) {
+    try {
+        const { db, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
+        const pct = num(percent);
+        if (pct < 0 || pct > 100) return { success: false, error: 'Percent must be between 0 and 100' };
+
+        await (db as any).organizationConfig.upsert({
+            where: { organizationId },
+            create: { organizationId, default_doctor_commission_percent: pct },
+            update: { default_doctor_commission_percent: pct },
+        });
+
+        // Re-accrue every doctor-attributed paid bill at the new fallback rate.
+        const result = await backfillDoctorCommissions(db, organizationId);
+
+        revalidatePath('/admin/doctor-invoicing');
+        revalidatePath('/finance/doctor-invoicing');
+        return { success: true, data: { default_percent: pct, processed: result.processed } };
+    } catch (error) {
+        console.error('setDefaultDoctorCommission error:', error);
+        return { success: false, error: 'Failed to update default commission' };
     }
 }
 
@@ -410,9 +471,13 @@ export async function getDoctorPayoutPending(doctorId: string) {
             select: { commission_type: true, flat_percent: true, is_active: true },
         });
 
-        // "Unpaid invoices" = accrued (not yet in a statement, not paid, not void) lines.
+        // "Unpaid invoices" = any commission line not yet paid (and not void). This
+        // deliberately includes `included_in_statement` lines: those are parked in a
+        // DRAFT statement (via the date-range flow) but are still genuinely unpaid, so
+        // they must appear here too — otherwise the page would claim "everything is
+        // settled" while the list still shows them as outstanding.
         const pending = await (db as any).doctorCommission.findMany({
-            where: { organizationId, doctor_id: doctorId, status: 'accrued' },
+            where: { organizationId, doctor_id: doctorId, status: { in: ['accrued', 'included_in_statement'] } },
             orderBy: { accrued_at: 'desc' },
         });
 
@@ -444,6 +509,7 @@ export async function getDoctorPayoutPending(doctorId: string) {
                 rate_applied: c.rate_applied,
                 commission_amount: num(c.commission_amount),
                 accrued_at: c.accrued_at,
+                in_draft: !!c.statement_id, // already parked in a draft statement
             };
         });
 
@@ -490,13 +556,14 @@ export async function settleDoctorCommissions(input: SettleInput) {
         const { db, session, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
 
         const result = await (db as any).$transaction(async (tx: any) => {
-            // Re-fetch under the tenant + doctor scope so a tampered/foreign id can never settle.
+            // Re-fetch under the tenant + doctor scope so a tampered/foreign id can never
+            // settle. Eligible = any unpaid line (accrued OR already parked in a draft).
             const lines = await tx.doctorCommission.findMany({
                 where: {
                     id: { in: commissionIds },
                     organizationId,
                     doctor_id: doctorId,
-                    status: 'accrued',
+                    status: { in: ['accrued', 'included_in_statement'] },
                 },
             });
             if (!lines.length) {
@@ -507,6 +574,13 @@ export async function settleDoctorCommissions(input: SettleInput) {
             const dates = lines.map((l: any) => new Date(l.accrued_at).getTime());
             const periodStart = new Date(Math.min(...dates));
             const periodEnd = new Date(Math.max(...dates));
+
+            // Draft statements these lines are being pulled OUT of — they must be
+            // recomputed (or deleted if emptied) so no stale draft keeps claiming
+            // money that has now been paid via this settlement.
+            const releasedStatementIds = [
+                ...new Set(lines.map((l: any) => l.statement_id).filter((id: string | null): id is string => !!id)),
+            ];
 
             const statement = await tx.doctorPayoutStatement.create({
                 data: {
@@ -529,6 +603,23 @@ export async function settleDoctorCommissions(input: SettleInput) {
                 where: { id: { in: lines.map((l: any) => l.id) } },
                 data: { status: 'paid', statement_id: statement.id },
             });
+
+            // Reconcile the drafts we just emptied/shrunk (never touch a paid statement).
+            for (const sid of releasedStatementIds) {
+                const remaining = await tx.doctorCommission.findMany({
+                    where: { statement_id: sid },
+                    select: { commission_amount: true },
+                });
+                if (remaining.length === 0) {
+                    await tx.doctorPayoutStatement.deleteMany({ where: { id: sid, status: { not: 'paid' } } });
+                } else {
+                    const remTotal = remaining.reduce((s: number, l: any) => s + num(l.commission_amount), 0);
+                    await tx.doctorPayoutStatement.updateMany({
+                        where: { id: sid, status: { not: 'paid' } },
+                        data: { total_commission: remTotal.toFixed(2) },
+                    });
+                }
+            }
 
             return { statementId: statement.id, settledCount: lines.length, total };
         });

@@ -18,14 +18,19 @@ import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import type { ColumnSpec } from '@/lib/mis/types';
 
 // ─── Palette (matches the legacy document) ───────────────────────────────────
-const NAVY = '#16243f';
-const NAVY_SUB = '#274472';
-const GREEN = '#15803d';
-const BLUE = '#2563eb'; // currency figures
+// Exact palette lifted from the legacy "Doctor Wise Revenue Summary" document.
+const NAVY = '#1e3a5f';        // top header band, group header, navy summary cards
+const NAVY_SUB = '#2c4a72';    // column sub-header row (one step lighter)
+const NAVY_BORDER = '#15294a'; // crisp card / cell borders on navy
+const GREEN = '#15803d';       // highlighted summary cards (Grand Total, IPD Cash)
+const GREEN_ACCENT = '#10b981';// thin accent rules under headers
+const GREEN_BORDER = '#0f5f30';
+const BLUE = '#1d4ed8';        // currency figures
 const INK = '#1c1917';
 const MUTED = '#6b7280';
-const ZEBRA = '#f6f8fc';
-const LINE = '#d8dee9';
+const ZEBRA = '#f1f6fc';       // alternating row tint
+const LINE = '#cdd6e3';
+const GRID = '#e7ecf3';        // inner cell grid lines
 
 // ─── Column model (S.No + 11 data columns) ───────────────────────────────────
 type Kind = 'idx' | 'text' | 'money' | 'count' | 'pct' | 'pctDash';
@@ -34,13 +39,13 @@ interface Col { key: string; w: number; align: 'left' | 'center' | 'right'; kind
 const COLS: Col[] = [
     { key: 'sno', w: 3.5, align: 'center', kind: 'idx', sub: 'S.No' },
     { key: 'doctor_name', w: 16, align: 'left', kind: 'text', sub: 'Doctor / Consultant' },
-    { key: 'ipd_cash_bills', w: 6, align: 'center', kind: 'count', sub: 'Cash Bills' },
+    { key: 'ipd_cash_bills', w: 6, align: 'right', kind: 'count', sub: 'Cash Bills' },
     { key: 'ipd_cash_revenue', w: 10, align: 'right', kind: 'money', sub: 'Cash Revenue' },
-    { key: 'ipd_tpa_bills', w: 6, align: 'center', kind: 'count', sub: 'TPA Bills' },
+    { key: 'ipd_tpa_bills', w: 6, align: 'right', kind: 'count', sub: 'TPA Bills' },
     { key: 'ipd_tpa_net_revenue', w: 10, align: 'right', kind: 'money', sub: 'IPD TPA (Net Rev)' },
     { key: 'total_ipd_revenue', w: 10, align: 'right', kind: 'money', sub: 'Total IPD Revenue' },
     { key: 'ipd_pct', w: 6.5, align: 'right', kind: 'pctDash', sub: '% of Total IPD' },
-    { key: 'opd_bills', w: 6, align: 'center', kind: 'count', sub: 'OPD Bills' },
+    { key: 'opd_bills', w: 6, align: 'right', kind: 'count', sub: 'OPD Bills' },
     { key: 'opd_cash_revenue', w: 9, align: 'right', kind: 'money', sub: 'OPD Cash Revenue' },
     { key: 'grand_total', w: 10.5, align: 'right', kind: 'money', sub: 'Grand Total' },
     { key: 'gt_pct', w: 6.5, align: 'right', kind: 'pct', sub: '% of Grand Total' },
@@ -50,9 +55,9 @@ const COLS: Col[] = [
 const GROUPS = [
     { label: '', w: 19.5, bg: NAVY },
     { label: 'IPD', w: 48.5, bg: NAVY },
-    { label: 'OPD (Cash Only)', w: 15, bg: NAVY_SUB },
+    { label: 'OPD (Cash Only)', w: 15, bg: NAVY },
     { label: 'Grand Total (IPD + OPD)', w: 10.5, bg: NAVY },
-    { label: 'GT %', w: 6.5, bg: NAVY_SUB },
+    { label: 'GT %', w: 6.5, bg: NAVY },
 ];
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
@@ -77,31 +82,31 @@ function render(kind: Kind, value: unknown, sno: number): string {
 const styles = StyleSheet.create({
     page: { paddingTop: 22, paddingBottom: 34, paddingHorizontal: 22, fontSize: 7.5, fontFamily: 'Helvetica', color: INK },
 
-    // Document header
-    headerBand: { backgroundColor: NAVY, paddingVertical: 10, paddingHorizontal: 14, borderTopLeftRadius: 2, borderTopRightRadius: 2 },
-    headerTitle: { color: '#ffffff', fontFamily: 'Helvetica-Bold', fontSize: 14, textAlign: 'center', letterSpacing: 0.5 },
-    headerSubBand: { backgroundColor: '#e8edf5', paddingVertical: 4, paddingHorizontal: 14, marginBottom: 10 },
-    headerSub: { color: '#475569', fontSize: 7.5, textAlign: 'center' },
+    // Document header — navy band capped with a crisp green accent rule.
+    headerBand: { backgroundColor: NAVY, paddingVertical: 12, paddingHorizontal: 16, borderTopLeftRadius: 2, borderTopRightRadius: 2, borderBottomWidth: 3, borderBottomColor: GREEN_ACCENT },
+    headerTitle: { color: '#ffffff', fontFamily: 'Helvetica-Bold', fontSize: 15, textAlign: 'center', letterSpacing: 0.6 },
+    headerSubBand: { backgroundColor: '#eef2f8', paddingVertical: 5, paddingHorizontal: 14, marginBottom: 12, borderLeftWidth: 0.5, borderRightWidth: 0.5, borderBottomWidth: 0.5, borderColor: LINE },
+    headerSub: { color: '#475569', fontSize: 7.5, textAlign: 'center', fontFamily: 'Helvetica-Bold' },
 
-    // Summary strip
-    cardsRow: { flexDirection: 'row', gap: 6, marginBottom: 12 },
-    card: { flex: 1, borderRadius: 3, paddingVertical: 8, paddingHorizontal: 8 },
-    cardLabel: { color: '#cbd5e1', fontSize: 6.5, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 3 },
-    cardValue: { color: '#ffffff', fontSize: 11, fontFamily: 'Helvetica-Bold' },
+    // Summary strip — bordered, well-padded cards.
+    cardsRow: { flexDirection: 'row', gap: 7, marginBottom: 14 },
+    card: { flex: 1, borderRadius: 3, paddingVertical: 12, paddingHorizontal: 11, borderWidth: 0.8 },
+    cardLabel: { color: '#dbe4f0', fontSize: 6.5, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 },
+    cardValue: { color: '#ffffff', fontSize: 12.5, fontFamily: 'Helvetica-Bold' },
 
     // Table
-    table: { borderWidth: 0.5, borderColor: LINE },
-    groupRow: { flexDirection: 'row' },
-    groupCell: { paddingVertical: 4, alignItems: 'center', justifyContent: 'center', borderRightWidth: 0.5, borderRightColor: '#3a557e' },
-    groupText: { color: '#ffffff', fontFamily: 'Helvetica-Bold', fontSize: 7.5, textTransform: 'uppercase', letterSpacing: 0.3 },
+    table: { borderWidth: 0.8, borderColor: NAVY },
+    groupRow: { flexDirection: 'row', borderBottomWidth: 1.5, borderBottomColor: GREEN_ACCENT },
+    groupCell: { paddingVertical: 5, alignItems: 'center', justifyContent: 'center', borderRightWidth: 0.5, borderRightColor: '#3a557e' },
+    groupText: { color: '#ffffff', fontFamily: 'Helvetica-Bold', fontSize: 8, textTransform: 'uppercase', letterSpacing: 0.4 },
 
     subRow: { flexDirection: 'row', backgroundColor: NAVY_SUB },
-    subCell: { paddingVertical: 4, paddingHorizontal: 3, justifyContent: 'center', borderRightWidth: 0.5, borderRightColor: '#3a557e' },
+    subCell: { paddingVertical: 5, paddingHorizontal: 4, justifyContent: 'center', borderRightWidth: 0.5, borderRightColor: '#3a557e' },
     subText: { color: '#ffffff', fontFamily: 'Helvetica-Bold', fontSize: 6.8 },
 
-    grandRow: { flexDirection: 'row', backgroundColor: '#dde6f3', borderBottomWidth: 1, borderBottomColor: '#b8c6de' },
-    dataRow: { flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: '#eceff4' },
-    cell: { paddingVertical: 3.5, paddingHorizontal: 3, justifyContent: 'center' },
+    grandRow: { flexDirection: 'row', backgroundColor: '#d4e0f1', borderBottomWidth: 1.2, borderBottomColor: '#a9bcd8' },
+    dataRow: { flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: GRID },
+    cell: { paddingVertical: 4.5, paddingHorizontal: 4, justifyContent: 'center', borderRightWidth: 0.5, borderRightColor: GRID },
     cellText: { fontSize: 7 },
 
     notes: { marginTop: 10, fontSize: 6.5, color: MUTED, lineHeight: 1.4 },
@@ -124,11 +129,11 @@ export default function DoctorRevenueSummaryPDF({ reportName, rows, totals, hosp
     const subtitle = `${period ? period + ' | ' : ''}Based on Net Revenue (All) | Sorted by Grand Total Revenue`;
 
     const cards = [
-        { label: 'Total IPD Revenue', value: totals.total_ipd_revenue, bg: NAVY },
-        { label: 'Total OPD Revenue', value: totals.opd_cash_revenue, bg: NAVY },
-        { label: 'Grand Total Revenue', value: totals.grand_total, bg: GREEN },
-        { label: 'IPD Cash Revenue', value: totals.ipd_cash_revenue, bg: GREEN },
-        { label: 'IPD TPA Net Revenue', value: totals.ipd_tpa_net_revenue, bg: NAVY },
+        { label: 'Total IPD Revenue', value: totals.total_ipd_revenue, bg: NAVY, border: NAVY_BORDER },
+        { label: 'Total OPD Revenue', value: totals.opd_cash_revenue, bg: NAVY, border: NAVY_BORDER },
+        { label: 'Grand Total Revenue', value: totals.grand_total, bg: GREEN, border: GREEN_BORDER },
+        { label: 'IPD Cash Revenue', value: totals.ipd_cash_revenue, bg: GREEN, border: GREEN_BORDER },
+        { label: 'IPD TPA Net Revenue', value: totals.ipd_tpa_net_revenue, bg: NAVY, border: NAVY_BORDER },
     ];
 
     return (
@@ -145,7 +150,7 @@ export default function DoctorRevenueSummaryPDF({ reportName, rows, totals, hosp
                 {/* ── Top summary strip ───────────────────────────────────── */}
                 <View style={styles.cardsRow}>
                     {cards.map((c) => (
-                        <View key={c.label} style={[styles.card, { backgroundColor: c.bg }]}>
+                        <View key={c.label} style={[styles.card, { backgroundColor: c.bg, borderColor: c.border }]}>
                             <Text style={styles.cardLabel}>{c.label}</Text>
                             <Text style={styles.cardValue}>{moneyCard(c.value)}</Text>
                         </View>
