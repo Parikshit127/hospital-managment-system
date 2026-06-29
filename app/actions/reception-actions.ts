@@ -68,6 +68,7 @@ export async function getRegisteredPatients(options?: {
     paymentType?: string; // cash | corporate | tpa_insurance
     fromDate?: string;     // YYYY-MM-DD (registration date, inclusive)
     toDate?: string;       // YYYY-MM-DD (registration date, inclusive)
+    doctorId?: string;
 }) {
     try {
         const { db } = await requireTenantContext();
@@ -145,6 +146,51 @@ export async function getRegisteredPatients(options?: {
             where.created_at = { gte: from };
         }
 
+        // Doctor filter — match patients who have an appointment or invoice with this doctor
+        if (options?.doctorId) {
+            const doctorFilter = {
+                OR: [
+                    { appointments: { some: { doctor_id: options.doctorId } } },
+                    { invoices: { some: { doctor_id: options.doctorId } } },
+                ],
+            };
+            if (where.AND) {
+                if (Array.isArray(where.AND)) {
+                    (where.AND as any[]).push(doctorFilter);
+                } else {
+                    where.AND = [where.AND as any, doctorFilter];
+                }
+            } else {
+                where.AND = [doctorFilter];
+            }
+        }
+
+        // OPD-list visibility. OPD_REG is the shared patient master, so IPD patients
+        // (current or discharged) would otherwise leak into the OPD list. Show a
+        // patient here only when EITHER they have never been admitted (a pure OPD /
+        // registered patient), OR they have real OPD activity (an appointment or an
+        // OPD bill). So an OPD patient who is later admitted stays visible (OPD bill),
+        // but an IPD patient with no OPD activity stays out of OPD — even after
+        // discharge they belong to the IPD list only (until/unless they have an OPD
+        // follow-up visit).
+        const opdVisibility = {
+            OR: [
+                { admissions: { none: {} } },
+                { appointments: { some: {} } },
+                // 'OPD_FEE' kept for pre-migration legacy OPD bills (see opd-fee-to-opd).
+                { invoices: { some: { invoice_type: { in: ['OPD', 'OPD_FEE'] } } } },
+            ],
+        };
+        if (where.AND) {
+            if (Array.isArray(where.AND)) {
+                (where.AND as any[]).push(opdVisibility);
+            } else {
+                where.AND = [where.AND as any, opdVisibility];
+            }
+        } else {
+            where.AND = [opdVisibility];
+        }
+
         const [data, total] = await Promise.all([
             db.oPD_REG.findMany({
                 where,
@@ -155,6 +201,12 @@ export async function getRegisteredPatients(options?: {
                     appointments: {
                         orderBy: { appointment_date: 'desc' },
                         take: 1,
+                        select: { status: true, appointment_date: true, doctor_name: true, doctor_id: true },
+                    },
+                    invoices: {
+                        orderBy: { created_at: 'desc' },
+                        take: 1,
+                        select: { doctor_name: true, doctor_id: true },
                     },
                 },
             }),
@@ -178,6 +230,8 @@ export async function getRegisteredPatients(options?: {
                 ...p,
                 lastAppointmentStatus: p.appointments[0]?.status || null,
                 lastAppointmentDate: p.appointments[0]?.appointment_date || null,
+                doctorName: p.appointments[0]?.doctor_name || p.invoices?.[0]?.doctor_name || null,
+                doctorId: p.appointments[0]?.doctor_id || p.invoices?.[0]?.doctor_id || null,
                 totalBalance: balances[p.patient_id]?.totalBalance || 0,
                 hasDraftBill: draftSet.has(p.patient_id),
             })),

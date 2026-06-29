@@ -5,7 +5,8 @@ import {
     Users, UserPlus, Search, Filter, Calendar, Phone,
     ChevronLeft, ChevronRight, Eye, Zap, Loader2, Activity,
     CheckCircle2, Bell, Stethoscope, Bed, IndianRupee, Receipt, Lock,
-    ReceiptText, Wallet, Download, FileText, Printer,
+    ReceiptText, Wallet, Download, FileText, Printer, ChevronDown, X,
+    ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -18,7 +19,8 @@ import {
     getExpectedArrivals, checkInPatient,
 } from '@/app/actions/reception-actions';
 import { finalizePatientLatestDraft } from '@/app/actions/finance-actions';
-import { getIPDAdmissions, getWardsWithBeds } from '@/app/actions/ipd-actions';
+import { getIPDAdmissions } from '@/app/actions/ipd-actions';
+import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 
@@ -77,6 +79,8 @@ export default function ReceptionDashboard() {
     const [paymentType, setPaymentType] = useState('');
     const [fromDate, setFromDate] = useState('');
     const [toDate, setToDate] = useState('');
+    const [doctorFilter, setDoctorFilter] = useState('');
+    const [doctorsList, setDoctorsList] = useState<any[]>([]);
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(0);
     const [total, setTotal] = useState(0);
@@ -88,15 +92,40 @@ export default function ReceptionDashboard() {
 
     // ── IPD state ──
     const [ipdAdmissions, setIpdAdmissions] = useState<any[]>([]);
-    const [ipdWards, setIpdWards] = useState<any[]>([]);
     const [ipdLoading, setIpdLoading] = useState(false);
     const [ipdStatusFilter, setIpdStatusFilter] = useState<IPDStatusFilter>('All');
-    const [ipdWardFilter, setIpdWardFilter] = useState('');
     const [ipdSearch, setIpdSearch] = useState('');
-    const [ipdPaymentType, setIpdPaymentType] = useState('');
-    const [ipdFromDate, setIpdFromDate] = useState('');
-    const [ipdToDate, setIpdToDate] = useState('');
     const ipdLoaded = useRef(false);
+
+    // ── IPD inline column filters ──
+    const [ipdColFilters, setIpdColFilters] = useState<Record<string, string>>({});
+    const [openColFilter, setOpenColFilter] = useState<string | null>(null);
+    const colFilterRef = useRef<HTMLDivElement | null>(null);
+
+    // Close column-filter dropdown on outside click
+    useEffect(() => {
+        if (!openColFilter) return;
+        const handler = (e: MouseEvent) => {
+            if (colFilterRef.current && !colFilterRef.current.contains(e.target as Node)) {
+                setOpenColFilter(null);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [openColFilter]);
+
+    // ── IPD balance sort ──
+    const [ipdBalanceSort, setIpdBalanceSort] = useState<'none' | 'high' | 'low'>('none');
+
+    const setColFilter = (col: string, value: string) => {
+        setIpdColFilters(prev => {
+            const next = { ...prev };
+            if (value) next[col] = value; else delete next[col];
+            return next;
+        });
+    };
+    const clearAllColFilters = () => { setIpdColFilters({}); setOpenColFilter(null); };
+    const activeColFilterCount = Object.keys(ipdColFilters).length;
 
     // ── Tab ── (honours ?tab=ipd|arrivals from redirects)
     const [activeTab, setActiveTab] = useState<'opd' | 'ipd' | 'arrivals'>(() => {
@@ -110,7 +139,7 @@ export default function ReceptionDashboard() {
         setLoading(true);
         try {
             const [patientsRes, statsRes, revRes] = await Promise.all([
-                getRegisteredPatients({ search, department, page, limit: 25, dateRange, paymentType, fromDate, toDate }),
+                getRegisteredPatients({ search, department, page, limit: 25, dateRange, paymentType, fromDate, toDate, doctorId: doctorFilter || undefined }),
                 getReceptionStats(),
                 getReceptionRevenueToday(),
             ]);
@@ -125,7 +154,7 @@ export default function ReceptionDashboard() {
             console.error('Reception load error:', err);
         }
         setLoading(false);
-    }, [search, department, page, dateRange, paymentType, fromDate, toDate]);
+    }, [search, department, page, dateRange, paymentType, fromDate, toDate, doctorFilter]);
 
     // ── Expected arrivals loading ──
     const loadArrivals = useCallback(async () => {
@@ -143,12 +172,8 @@ export default function ReceptionDashboard() {
     const loadIPDData = useCallback(async () => {
         setIpdLoading(true);
         try {
-            const [admRes, wardRes] = await Promise.all([
-                getIPDAdmissions(ipdStatusFilter === 'All' ? undefined : ipdStatusFilter),
-                getWardsWithBeds(),
-            ]);
+            const admRes = await getIPDAdmissions(ipdStatusFilter === 'All' ? undefined : ipdStatusFilter);
             if (admRes.success) setIpdAdmissions(admRes.data || []);
-            if (wardRes.success) setIpdWards(wardRes.data || []);
         } catch (err) {
             console.error('IPD load error:', err);
         }
@@ -158,6 +183,11 @@ export default function ReceptionDashboard() {
 
     useEffect(() => { loadData(); }, [loadData]);
     useEffect(() => { loadArrivals(); }, [loadArrivals]);
+    useEffect(() => {
+        getDoctorsForDropdown().then(res => {
+            if (res.success && res.data) setDoctorsList(res.data);
+        });
+    }, []);
 
     // Lazy-load IPD data when IPD tab is first activated or status filter changes
     useEffect(() => {
@@ -273,23 +303,62 @@ export default function ReceptionDashboard() {
         return map[status] || 'bg-gray-100 text-gray-500';
     };
 
-    // IPD client-side filtering
-    const ipdFromTime = ipdFromDate ? new Date(ipdFromDate).setHours(0, 0, 0, 0) : null;
-    const ipdToTime = ipdToDate ? new Date(ipdToDate).setHours(23, 59, 59, 999) : null;
+    // IPD client-side filtering (top bar search + inline column filters)
+    // Helper to extract column value for a given admission row
+    const getColValue = (a: any, col: string): string => {
+        switch (col) {
+            case 'admission_id': return a.admission_id || '';
+            case 'patient_name': return a.patient?.full_name || '';
+            case 'uhid': return a.patient?.patient_id || '';
+            case 'doctor': return a.doctor_name || '';
+            case 'ward': return (a.wardName || a.ward?.ward_name || a.bed?.wards?.ward_name || '');
+            case 'diagnosis': return a.diagnosis || '';
+            case 'days': return String(a.daysAdmitted ?? '');
+            case 'balance': return String(a.totalBalance ?? 0);
+            case 'status': return a.status || '';
+            default: return '';
+        }
+    };
+
     const ipdFiltered = ipdAdmissions.filter(a => {
+        // Top-bar search
         const q = ipdSearch.toLowerCase();
         const matchesSearch = !q
             || a.patient?.full_name?.toLowerCase().includes(q)
             || a.patient?.patient_id?.toLowerCase().includes(q)
-            || a.patient?.phone?.toLowerCase().includes(q);
-        const matchesWard = !ipdWardFilter
-            || (a.wardName || a.ward?.ward_name || a.bed?.wards?.ward_name || '') === ipdWardFilter;
-        const matchesPaymentType = !ipdPaymentType || a.patient?.patient_type === ipdPaymentType;
-        const admittedTime = a.admission_date ? new Date(a.admission_date).getTime() : null;
-        const matchesFrom = ipdFromTime == null || (admittedTime != null && admittedTime >= ipdFromTime);
-        const matchesTo = ipdToTime == null || (admittedTime != null && admittedTime <= ipdToTime);
-        return matchesSearch && matchesWard && matchesPaymentType && matchesFrom && matchesTo;
+            || a.patient?.phone?.toLowerCase().includes(q)
+            || a.admission_id?.toLowerCase().includes(q)
+            || a.doctor_name?.toLowerCase().includes(q);
+
+        if (!matchesSearch) return false;
+
+        // Per-column inline filters
+        for (const [col, filterVal] of Object.entries(ipdColFilters)) {
+            if (!filterVal) continue;
+            const cellVal = getColValue(a, col).toLowerCase();
+            if (!cellVal.includes(filterVal.toLowerCase())) return false;
+        }
+        return true;
     });
+
+    // Apply balance sort after filtering
+    if (ipdBalanceSort !== 'none') {
+        ipdFiltered.sort((a, b) => {
+            const ba = Number(a.totalBalance ?? 0);
+            const bb = Number(b.totalBalance ?? 0);
+            return ipdBalanceSort === 'high' ? bb - ba : ba - bb;
+        });
+    }
+
+    // Unique values for column filter dropdowns (computed from unfiltered data)
+    const getUniqueColValues = (col: string): string[] => {
+        const seen = new Set<string>();
+        for (const a of ipdAdmissions) {
+            const v = getColValue(a, col).trim();
+            if (v && v !== '—') seen.add(v);
+        }
+        return Array.from(seen).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+    };
 
     // IPD KPI calculations
     const totalAdmitted = ipdAdmissions.filter(a => a.status === 'Admitted').length;
@@ -469,6 +538,17 @@ export default function ReceptionDashboard() {
                         >
                             {PAYMENT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
+                        <select
+                            value={doctorFilter}
+                            onChange={e => { setDoctorFilter(e.target.value); setPage(1); }}
+                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
+                            title="Filter by doctor"
+                        >
+                            <option value="">All Doctors</option>
+                            {doctorsList.map((d: any) => (
+                                <option key={d.id} value={d.id}>{d.name}</option>
+                            ))}
+                        </select>
                         <input
                             type="date"
                             value={fromDate}
@@ -485,9 +565,9 @@ export default function ReceptionDashboard() {
                             className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
                             title="Registered to"
                         />
-                        {(fromDate || toDate || paymentType) && (
+                        {(fromDate || toDate || paymentType || doctorFilter) && (
                             <button
-                                onClick={() => { setFromDate(''); setToDate(''); setPaymentType(''); setPage(1); }}
+                                onClick={() => { setFromDate(''); setToDate(''); setPaymentType(''); setDoctorFilter(''); setPage(1); }}
                                 className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-50 transition-colors"
                                 title="Clear date & payment filters"
                             >
@@ -510,7 +590,7 @@ export default function ReceptionDashboard() {
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-gray-200">
-                                    {['Patient ID', 'Name', 'Age / Gender', 'Phone', 'Department', 'Registered', 'Status', 'Balance', 'Actions'].map(h => (
+                                    {['Patient ID', 'Name', 'Age / Gender', 'Phone', 'Category', 'Doctor', 'Registered', 'Balance', 'Actions'].map(h => (
                                         <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                                     ))}
                                 </tr>
@@ -562,18 +642,22 @@ export default function ReceptionDashboard() {
                                                 </span>
                                             ) : '-'}
                                         </td>
-                                        <td className="px-4 py-3 text-gray-500">{patient.department || '-'}</td>
-                                        <td className="px-4 py-3 text-gray-400 text-xs">
-                                            {new Date(patient.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
-                                        </td>
                                         <td className="px-4 py-3">
-                                            {patient.lastAppointmentStatus ? (
-                                                <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full ${getStatusColor(patient.lastAppointmentStatus)}`}>
-                                                    {patient.lastAppointmentStatus}
+                                            {patient.patient_type && patient.patient_type !== 'cash' ? (
+                                                <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full ${
+                                                    patient.patient_type === 'tpa_insurance' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                                    patient.patient_type === 'corporate' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                                                    'bg-gray-100 text-gray-600'
+                                                }`}>
+                                                    {patient.patient_type === 'tpa_insurance' ? 'TPA' : patient.patient_type === 'corporate' ? 'Corporate' : patient.patient_type}
                                                 </span>
                                             ) : (
-                                                <span className="text-gray-300 text-xs">-</span>
+                                                <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Cash</span>
                                             )}
+                                        </td>
+                                        <td className="px-4 py-3 text-gray-600 text-xs">{patient.doctorName || '-'}</td>
+                                        <td className="px-4 py-3 text-gray-400 text-xs">
+                                            {new Date(patient.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
                                         </td>
                                         <td className="px-4 py-3">
                                             {patient.totalBalance > 0 ? (
@@ -662,7 +746,7 @@ export default function ReceptionDashboard() {
                     TAB: IPD PATIENTS
                    ═══════════════════════════════════════════════════════════ */}
                 {activeTab === 'ipd' && <>
-                {/* IPD Filter Bar */}
+                {/* IPD Filter Bar — minimal: status tabs + search + clear + export */}
                 <div className="flex flex-wrap items-center gap-3">
                     <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
                         {IPD_STATUS_FILTERS.map(s => (
@@ -686,54 +770,18 @@ export default function ReceptionDashboard() {
                             type="text"
                             value={ipdSearch}
                             onChange={e => setIpdSearch(e.target.value)}
-                            placeholder="Search name, UHID, phone..."
+                            placeholder="Search name, UHID, phone, admission ID..."
                             className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-emerald-400 placeholder-gray-400"
                         />
                     </div>
 
-                    <select
-                        value={ipdWardFilter}
-                        onChange={e => setIpdWardFilter(e.target.value)}
-                        className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-emerald-400"
-                    >
-                        <option value="">All Wards</option>
-                        {ipdWards.map((w: any) => (
-                            <option key={w.id} value={w.ward_name}>{w.ward_name}</option>
-                        ))}
-                    </select>
-
-                    <select
-                        value={ipdPaymentType}
-                        onChange={e => setIpdPaymentType(e.target.value)}
-                        className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-emerald-400"
-                        title="Filter by payment type"
-                    >
-                        {PAYMENT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-
-                    <input
-                        type="date"
-                        value={ipdFromDate}
-                        max={ipdToDate || undefined}
-                        onChange={e => setIpdFromDate(e.target.value)}
-                        className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-emerald-400"
-                        title="Admitted from"
-                    />
-                    <input
-                        type="date"
-                        value={ipdToDate}
-                        min={ipdFromDate || undefined}
-                        onChange={e => setIpdToDate(e.target.value)}
-                        className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-emerald-400"
-                        title="Admitted to"
-                    />
-                    {(ipdFromDate || ipdToDate || ipdPaymentType) && (
+                    {activeColFilterCount > 0 && (
                         <button
-                            onClick={() => { setIpdFromDate(''); setIpdToDate(''); setIpdPaymentType(''); }}
-                            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-50 transition-colors"
-                            title="Clear date & payment filters"
+                            onClick={clearAllColFilters}
+                            className="flex items-center gap-1 px-3 py-2 bg-orange-50 border border-orange-200 rounded-xl text-xs font-bold text-orange-700 hover:bg-orange-100 transition-colors"
+                            title="Clear all column filters"
                         >
-                            Clear
+                            <X className="h-3 w-3" /> Clear {activeColFilterCount} filter{activeColFilterCount !== 1 ? 's' : ''}
                         </button>
                     )}
 
@@ -772,12 +820,140 @@ export default function ReceptionDashboard() {
                             </colgroup>
                             <thead>
                                 <tr className="border-b border-gray-100 bg-gray-50">
-                                    {['Admission ID', 'Patient Name', 'UHID', 'Doctor', 'Ward / Bed', 'Diagnosis', 'Days', 'Balance', 'Status', 'Actions'].map(h => (
+                                    {([
+                                        { label: 'Admission ID', key: 'admission_id', type: 'filter' },
+                                        { label: 'Patient Name', key: 'patient_name', type: 'filter' },
+                                        { label: 'UHID', key: 'uhid', type: 'filter' },
+                                        { label: 'Doctor', key: 'doctor', type: 'filter' },
+                                        { label: 'Ward / Bed', key: 'ward', type: 'filter' },
+                                        { label: 'Diagnosis', key: '', type: 'plain' },
+                                        { label: 'Days', key: '', type: 'plain' },
+                                        { label: 'Balance', key: 'balance', type: 'sort' },
+                                        { label: 'Status', key: 'status', type: 'filter' },
+                                        { label: 'Actions', key: '', type: 'plain' },
+                                    ] as { label: string; key: string; type: string }[]).map(col => (
                                         <th
-                                            key={h}
-                                            className="px-2.5 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider"
+                                            key={col.label}
+                                            className="px-2.5 py-2 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider relative"
                                         >
-                                            {h}
+                                            {/* ── Filterable column header ── */}
+                                            {col.type === 'filter' && col.key ? (
+                                                <div className="relative" ref={openColFilter === col.key ? colFilterRef : undefined}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setOpenColFilter(openColFilter === col.key ? null : col.key)}
+                                                        className={`flex items-center gap-1 w-full group py-1 rounded transition-colors ${
+                                                            ipdColFilters[col.key]
+                                                                ? 'text-orange-700'
+                                                                : 'text-gray-500 hover:text-gray-800'
+                                                        }`}
+                                                        title={`Filter by ${col.label}`}
+                                                    >
+                                                        <span className="truncate">{col.label}</span>
+                                                        <ChevronDown className={`h-3 w-3 flex-shrink-0 transition-transform ${
+                                                            openColFilter === col.key ? 'rotate-180' : ''
+                                                        } ${ipdColFilters[col.key] ? 'text-orange-500' : 'text-gray-400 group-hover:text-gray-600'}`} />
+                                                        {ipdColFilters[col.key] && (
+                                                            <span className="flex-shrink-0 h-1.5 w-1.5 rounded-full bg-orange-500" />
+                                                        )}
+                                                    </button>
+
+                                                    {openColFilter === col.key && (
+                                                        <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg min-w-[200px] max-w-[260px]"
+                                                             onClick={e => e.stopPropagation()}>
+                                                            <div className="p-2 border-b border-gray-100">
+                                                                <div className="relative">
+                                                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+                                                                    <input
+                                                                        type="text"
+                                                                        autoFocus
+                                                                        value={ipdColFilters[col.key] || ''}
+                                                                        onChange={e => setColFilter(col.key, e.target.value)}
+                                                                        placeholder={`Filter ${col.label.toLowerCase()}...`}
+                                                                        className="w-full pl-7 pr-7 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-orange-400 focus:bg-white"
+                                                                    />
+                                                                    {ipdColFilters[col.key] && (
+                                                                        <button
+                                                                            onClick={() => setColFilter(col.key, '')}
+                                                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                                                        >
+                                                                            <X className="h-3 w-3" />
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="max-h-[200px] overflow-y-auto p-1">
+                                                                {getUniqueColValues(col.key).length === 0 ? (
+                                                                    <p className="text-[10px] text-gray-400 text-center py-3">No values</p>
+                                                                ) : (
+                                                                    getUniqueColValues(col.key)
+                                                                        .filter(v => !ipdColFilters[col.key] || v.toLowerCase().includes((ipdColFilters[col.key] || '').toLowerCase()))
+                                                                        .slice(0, 50)
+                                                                        .map(val => (
+                                                                            <button
+                                                                                key={val}
+                                                                                type="button"
+                                                                                onClick={() => { setColFilter(col.key, val); setOpenColFilter(null); }}
+                                                                                className={`w-full text-left px-2.5 py-1.5 text-xs rounded-lg transition-colors truncate ${
+                                                                                    ipdColFilters[col.key] === val
+                                                                                        ? 'bg-orange-50 text-orange-700 font-semibold'
+                                                                                        : 'text-gray-700 hover:bg-gray-50'
+                                                                                }`}
+                                                                            >
+                                                                                {val}
+                                                                            </button>
+                                                                        ))
+                                                                )}
+                                                            </div>
+                                                            {ipdColFilters[col.key] && (
+                                                                <div className="p-1.5 border-t border-gray-100">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => { setColFilter(col.key, ''); setOpenColFilter(null); }}
+                                                                        className="w-full px-2.5 py-1.5 text-[10px] font-bold text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                                    >
+                                                                        Clear filter
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                            /* ── Sortable column header (Balance) ── */
+                                            ) : col.type === 'sort' ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIpdBalanceSort(prev =>
+                                                        prev === 'none' ? 'high' : prev === 'high' ? 'low' : 'none'
+                                                    )}
+                                                    className={`flex items-center gap-1 w-full group py-1 rounded transition-colors ${
+                                                        ipdBalanceSort !== 'none'
+                                                            ? 'text-orange-700'
+                                                            : 'text-gray-500 hover:text-gray-800'
+                                                    }`}
+                                                    title={
+                                                        ipdBalanceSort === 'none' ? 'Sort by highest balance'
+                                                        : ipdBalanceSort === 'high' ? 'Sort by lowest balance'
+                                                        : 'Remove sort'
+                                                    }
+                                                >
+                                                    <span className="truncate">{col.label}</span>
+                                                    {ipdBalanceSort === 'none' && (
+                                                        <ArrowUpDown className="h-3 w-3 flex-shrink-0 text-gray-400 group-hover:text-gray-600" />
+                                                    )}
+                                                    {ipdBalanceSort === 'high' && (
+                                                        <ArrowDown className="h-3 w-3 flex-shrink-0 text-orange-500" />
+                                                    )}
+                                                    {ipdBalanceSort === 'low' && (
+                                                        <ArrowUp className="h-3 w-3 flex-shrink-0 text-orange-500" />
+                                                    )}
+                                                </button>
+
+                                            /* ── Plain column header (no interaction) ── */
+                                            ) : (
+                                                <span>{col.label}</span>
+                                            )}
                                         </th>
                                     ))}
                                 </tr>
@@ -797,7 +973,7 @@ export default function ReceptionDashboard() {
                                                 <Bed className="h-8 w-8 text-gray-200" />
                                                 <p className="text-sm font-medium text-gray-400">No admissions found</p>
                                                 <p className="text-xs text-gray-300">
-                                                    {ipdSearch || ipdWardFilter || ipdPaymentType || ipdFromDate || ipdToDate || ipdStatusFilter !== 'All'
+                                                    {ipdSearch || activeColFilterCount > 0 || ipdStatusFilter !== 'All'
                                                         ? 'Try adjusting your filters'
                                                         : 'No patients have been admitted yet'}
                                                 </p>
