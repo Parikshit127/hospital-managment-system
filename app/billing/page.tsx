@@ -357,7 +357,7 @@ export default function MasterBillingPage() {
               <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500 font-bold sticky top-0">
                 <tr>
                   <Th>Patient</Th>
-                  <Th>UHID</Th>
+                  <Th>Bill Date</Th>
                   <Th>Type</Th>
                   <Th>Adm. Type</Th>
                   <Th>Invoice #</Th>
@@ -390,7 +390,11 @@ export default function MasterBillingPage() {
                         <div className="text-[10px] text-gray-400">{r.patient_phone}</div>
                       )}
                     </Td>
-                    <Td><span className="font-mono">{r.patient_id}</span></Td>
+                    <Td>
+                      <span className="whitespace-nowrap text-gray-700">
+                        {r.created_at ? new Date(r.created_at).toLocaleDateString("en-IN") : "—"}
+                      </span>
+                    </Td>
                     <Td>
                       <span
                         className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
