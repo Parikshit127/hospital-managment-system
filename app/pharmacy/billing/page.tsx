@@ -1774,9 +1774,9 @@ export default function PharmacyPage() {
 
                 const billDate = billDateTime ? new Date(billDateTime) : new Date();
                 const hospitalName = branding?.hospitalName || pharmacyBranding?.name || 'Hospital';
-                const hospitalAddress = [branding?.address1, branding?.address2, branding?.city].filter(Boolean).join(', ') || pharmacyBranding?.address || '';
-                const hospitalPhone = branding?.phone || '';
-                const hospitalEmail = branding?.email || '';
+                const hospitalAddress = branding?.hospitalAddress || pharmacyBranding?.address || '';
+                const hospitalPhone = branding?.hospitalPhone || '';
+                const hospitalEmail = branding?.hospitalEmail || '';
                 const hospitalGstin = branding?.gstin || pharmacyBranding?.gstin || '';
                 const patientName = isHospitalUse ? 'Hospital Internal Use' : (isWalkIn ? (walkInName || 'Walk-in / OTC') : (selectedPatient?.full_name || patientId));
                 const patientAddress = isWalkIn ? '' : (selectedPatient?.address || '');
