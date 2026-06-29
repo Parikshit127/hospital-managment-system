@@ -2294,6 +2294,7 @@ export async function searchPatientsForBilling(query: string) {
                 phone: true,
                 age: true,
                 gender: true,
+                address: true,
                 patient_type: true,
                 corporate_id: true,
                 employee_id: true,

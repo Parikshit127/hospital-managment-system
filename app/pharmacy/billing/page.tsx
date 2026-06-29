@@ -109,7 +109,8 @@ export default function PharmacyPage() {
     const [billDateTime, setBillDateTime] = useState('');
     const [doctorId, setDoctorId] = useState('');
     const [doctorName, setDoctorName] = useState('');
-    const [doctorOptions, setDoctorOptions] = useState<{ id: string; name: string }[]>([]);
+    const [doctorOptions, setDoctorOptions] = useState<{ id: string; name: string; reg_no?: string }[]>([]);
+    const [doctorRegNo, setDoctorRegNo] = useState('');
 
     const [showInvoiceModal, setShowInvoiceModal] = useState(false);
     const [invoiceResult, setInvoiceResult] = useState<any>(null);
@@ -169,7 +170,7 @@ export default function PharmacyPage() {
         fetchPharmacyBranding().then(r => r.success && r.data && setPharmacyBranding(r.data));
         getDoctorsForDropdown().then(r => {
             if (r.success && Array.isArray(r.data)) {
-                setDoctorOptions(r.data.map((d: any) => ({ id: d.id, name: d.name })));
+                setDoctorOptions(r.data.map((d: any) => ({ id: d.id, name: d.name, reg_no: d.doctor_registration_no || '' })));
             }
         });
         const interval = setInterval(loadQueue, 15000);
@@ -450,6 +451,7 @@ export default function PharmacyPage() {
         setBillDateTime('');
         setDoctorId('');
         setDoctorName('');
+        setDoctorRegNo('');
         setIsHospitalUse(false);
     };
 
@@ -1462,6 +1464,7 @@ export default function PharmacyPage() {
                                                             const picked = doctorOptions.find(d => d.id === e.target.value);
                                                             setDoctorId(picked?.id || '');
                                                             setDoctorName(picked?.name || '');
+                                                            setDoctorRegNo(picked?.reg_no || '');
                                                         }}
                                                         className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
                                                     >
@@ -1730,85 +1733,196 @@ export default function PharmacyPage() {
                 </div>
             )}
 
-            {/* PRINT-ONLY FULL PAGE — shown only when printing pharmacy invoice */}
-            {invoiceResult && (
-                <div className="pharmacy-print-view" style={{ display: 'none' }}>
-                    {/* No hospital letterhead — pharmacy bills show only the dispensing pharmacy header */}
-                    <div style={{ padding: '40px 60px 60px 60px' }}>
-                    <div className="max-w-2xl mx-auto space-y-4">
+            {/* PRINT-ONLY FULL PAGE — GST Invoice matching Avise Hospital format */}
+            {invoiceResult && (() => {
+                // ── helpers ──────────────────────────────────────────────────
+                const fmtExp = (iso: string | null) => {
+                    if (!iso) return '';
+                    const d = new Date(iso);
+                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                    const y = String(d.getFullYear()).slice(2);
+                    return `${m}/${y}`;
+                };
+                const fmtDate = (d: Date) =>
+                    `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`;
 
-                        {/* Third Party Pharmacy Header — bill is issued by the dispensing pharmacy, not the hospital */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #111', paddingBottom: '14px', marginBottom: '10px' }}>
-                            <div>
-                                <p style={{ fontSize: '20px', fontWeight: 900, color: '#111', margin: 0, letterSpacing: '0.5px' }}>{pharmacyBranding?.name || 'Garnet Medicare'}</p>
-                                <p style={{ fontSize: '9px', color: '#666', marginTop: '2px', fontStyle: 'italic' }}>{pharmacyBranding?.division || '(Division of Garnet Pharmaceutical)'}</p>
-                                {pharmacyBranding?.address && <p style={{ fontSize: '10px', color: '#555', marginTop: '3px' }}>{pharmacyBranding.address}</p>}
-                                {pharmacyBranding?.gstin && <p style={{ fontSize: '10px', color: '#555' }}>GST No.: {pharmacyBranding.gstin}</p>}
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <p className="text-xs font-black uppercase tracking-widest" style={{ color: '#111' }}>Pharmacy Invoice</p>
-                                <p className="text-xs font-mono text-gray-600 mt-0.5">{invoiceResult.invoice_number}</p>
-                                <p className="text-xs text-gray-500">{billDisplayDateStr}</p>
-                            </div>
+                const items: any[] = invoiceResult.items || [];
+                const subtotal = invoiceResult.subtotal ?? 0;
+                const discountAmt = invoiceResult.discount ?? 0;
+                const discountPctVal = invoiceResult.discount_pct ?? 0;
+                const cgstAmt = invoiceResult.cgst ?? 0;
+                const sgstAmt = invoiceResult.sgst ?? 0;
+                const grandTotal = invoiceResult.total ?? 0;
+                const roundOff = Math.round(grandTotal) - grandTotal;
+                const grandTotalRounded = Math.round(grandTotal);
+
+                // amount in words
+                const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+                const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+                const numToWords = (n: number): string => {
+                    if (n === 0) return 'Zero';
+                    if (n < 0) return 'Minus ' + numToWords(-n);
+                    let words = '';
+                    if (Math.floor(n / 10000000) > 0) { words += numToWords(Math.floor(n / 10000000)) + ' Crore '; n %= 10000000; }
+                    if (Math.floor(n / 100000) > 0) { words += numToWords(Math.floor(n / 100000)) + ' Lakh '; n %= 100000; }
+                    if (Math.floor(n / 1000) > 0) { words += numToWords(Math.floor(n / 1000)) + ' Thousand '; n %= 1000; }
+                    if (Math.floor(n / 100) > 0) { words += ones[Math.floor(n / 100)] + ' Hundred '; n %= 100; }
+                    if (n > 0) { words += n < 20 ? ones[n] + ' ' : tens[Math.floor(n / 10)] + ' ' + (n % 10 !== 0 ? ones[n % 10] + ' ' : ''); }
+                    return words.trim();
+                };
+                const amountInWords = `Rs. ${numToWords(grandTotalRounded)} only`;
+
+                const billDate = billDateTime ? new Date(billDateTime) : new Date();
+                const hospitalName = branding?.hospitalName || pharmacyBranding?.name || 'Hospital';
+                const hospitalAddress = [branding?.address1, branding?.address2, branding?.city].filter(Boolean).join(', ') || pharmacyBranding?.address || '';
+                const hospitalPhone = branding?.phone || '';
+                const hospitalEmail = branding?.email || '';
+                const hospitalGstin = branding?.gstin || pharmacyBranding?.gstin || '';
+                const patientName = isHospitalUse ? 'Hospital Internal Use' : (isWalkIn ? (walkInName || 'Walk-in / OTC') : (selectedPatient?.full_name || patientId));
+                const patientAddress = isWalkIn ? '' : (selectedPatient?.address || '');
+
+                // avg tax rate for GST note
+                const avgTaxRate = items.length > 0 ? (items.reduce((s: number, it: any) => s + (it.tax_rate || 0), 0) / items.length) : 0;
+                const halfTax = (avgTaxRate / 2).toFixed(1);
+
+                const TD: React.CSSProperties = { border: '1px solid #000', padding: '2px 4px', fontSize: '9px', verticalAlign: 'middle' };
+                const TH: React.CSSProperties = { border: '1px solid #000', padding: '2px 4px', fontSize: '9px', fontWeight: 700, background: '#f5f5f5', textAlign: 'center', verticalAlign: 'middle' };
+
+                return (
+                <div className="pharmacy-print-view" style={{ display: 'none' }}>
+                    <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '10px', color: '#000', padding: '8px 14px', maxWidth: '800px', margin: '0 auto' }}>
+
+                        {/* ── HEADER ── */}
+                        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '4px' }}>
+                            <tbody>
+                                <tr>
+                                    <td style={{ width: '55%', verticalAlign: 'top', padding: '0 0 4px 0' }}>
+                                        <div style={{ fontWeight: 900, fontSize: '15px', letterSpacing: '0.5px' }}>{hospitalName}</div>
+                                        {hospitalAddress && <div style={{ fontSize: '9px', marginTop: '1px' }}>{hospitalAddress}</div>}
+                                        {hospitalPhone && <div style={{ fontSize: '9px' }}>Phone : {hospitalPhone}</div>}
+                                        {hospitalEmail && <div style={{ fontSize: '9px' }}>E-Mail : {hospitalEmail}</div>}
+                                    </td>
+                                    <td style={{ width: '45%', verticalAlign: 'top', padding: '0 0 4px 8px' }}>
+                                        <div style={{ fontSize: '9px' }}><strong>Patient Name :</strong> {patientName.toUpperCase()}</div>
+                                        <div style={{ fontSize: '9px' }}>Patient Address : {patientAddress}</div>
+                                        <div style={{ fontSize: '9px' }}><strong>Dr Name :</strong> {billDoctorLabel !== 'Dr. Self' ? billDoctorLabel.toUpperCase() : ''}</div>
+                                        <div style={{ fontSize: '9px' }}>Dr Reg No. {doctorRegNo}</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        {hospitalGstin && <div style={{ fontSize: '9px', marginBottom: '3px' }}><strong>GSTIN : {hospitalGstin}</strong></div>}
+
+                        {/* ── TITLE ── */}
+                        <div style={{ textAlign: 'center', fontSize: '14px', fontWeight: 900, borderTop: '1px solid #000', borderBottom: '1px solid #000', padding: '3px 0', marginBottom: '3px' }}>GST INVOICE</div>
+
+                        {/* Invoice no + date */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '9px', marginBottom: '3px' }}>
+                            <span><strong>Invoice No. :</strong> {invoiceResult.invoice_number} &nbsp; <strong>Date:</strong> {fmtDate(billDate)}</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div><span className="text-gray-500">Patient:</span> <span className="font-bold">{patientId}</span></div>
-                            <div className="text-right"><span className="text-gray-500">Date:</span> <span className="font-bold">{billDisplayDateStr}</span></div>
-                            {billDoctorLabel && (
-                                <div><span className="text-gray-500">Doctor:</span> <span className="font-bold">{billDoctorLabel}</span></div>
-                            )}
-                        </div>
-                        <table className="w-full text-sm border-collapse mt-2">
+
+                        {/* ── ITEMS TABLE ── */}
+                        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '4px' }}>
                             <thead>
-                                <tr className="border-y-2 border-black">
-                                    <th className="py-2 text-left font-black uppercase tracking-wider text-xs">Medicine</th>
-                                    <th className="py-2 text-center font-black uppercase tracking-wider text-xs">Qty</th>
-                                    <th className="py-2 text-right font-black uppercase tracking-wider text-xs">Amount</th>
+                                <tr>
+                                    <th style={{ ...TH, width: '26px' }}>SN.</th>
+                                    <th style={{ ...TH, textAlign: 'left' }}>PRODUCT NAME</th>
+                                    <th style={{ ...TH, width: '52px' }}>PACK</th>
+                                    <th style={{ ...TH, width: '58px' }}>HSN</th>
+                                    <th style={{ ...TH, width: '62px' }}>BATCH</th>
+                                    <th style={{ ...TH, width: '34px' }}>EXP.</th>
+                                    <th style={{ ...TH, width: '32px' }}>QTY</th>
+                                    <th style={{ ...TH, width: '48px' }}>MRP</th>
+                                    <th style={{ ...TH, width: '48px' }}>RATE</th>
+                                    <th style={{ ...TH, width: '30px' }}>SGST</th>
+                                    <th style={{ ...TH, width: '30px' }}>CGST</th>
+                                    <th style={{ ...TH, width: '52px' }}>AMOUNT</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-200">
-                                {invoiceResult.items?.map((item: any, idx: number) => (
-                                    <tr key={idx}>
-                                        <td className="py-2 font-medium">{item.medicine_name}</td>
-                                        <td className="py-2 text-center">{item.qty}</td>
-                                        <td className="py-2 text-right font-bold">₹{item.net_price.toFixed(2)}</td>
+                            <tbody>
+                                {items.map((item: any, idx: number) => {
+                                    const halfTaxRate = (item.tax_rate || 0) / 2;
+                                    const rate = item.unit_price;
+                                    const amount = item.net_price;
+                                    return (
+                                        <tr key={idx}>
+                                            <td style={{ ...TD, textAlign: 'center' }}>{idx + 1}.</td>
+                                            <td style={{ ...TD, textAlign: 'left' }}>{item.medicine_name.toUpperCase()}</td>
+                                            <td style={{ ...TD, textAlign: 'center' }}>{item.pack || '—'}</td>
+                                            <td style={{ ...TD, textAlign: 'center' }}>{item.hsn_sac_code || '3004'}</td>
+                                            <td style={{ ...TD, textAlign: 'center' }}>{item.batch_no || '—'}</td>
+                                            <td style={{ ...TD, textAlign: 'center' }}>{fmtExp(item.expiry_date)}</td>
+                                            <td style={{ ...TD, textAlign: 'center' }}>{item.qty}</td>
+                                            <td style={{ ...TD, textAlign: 'right' }}>{Number(item.mrp || 0).toFixed(2)}</td>
+                                            <td style={{ ...TD, textAlign: 'right' }}>{rate.toFixed(2)}</td>
+                                            <td style={{ ...TD, textAlign: 'center' }}>{halfTaxRate.toFixed(2)}</td>
+                                            <td style={{ ...TD, textAlign: 'center' }}>{halfTaxRate.toFixed(2)}</td>
+                                            <td style={{ ...TD, textAlign: 'right' }}>{amount.toFixed(2)}</td>
+                                        </tr>
+                                    );
+                                })}
+                                {/* empty rows to fill to at least 8 lines */}
+                                {Array.from({ length: Math.max(0, 8 - items.length) }).map((_, i) => (
+                                    <tr key={`empty-${i}`}>
+                                        {Array.from({ length: 12 }).map((_, j) => <td key={j} style={{ ...TD, height: '14px' }}>&nbsp;</td>)}
                                     </tr>
                                 ))}
                             </tbody>
-                            <tfoot>
-                                <tr className="border-t border-gray-300">
-                                    <td colSpan={2} className="py-2 text-right text-gray-500 text-xs">Subtotal</td>
-                                    <td className="py-2 text-right">₹{invoiceResult.subtotal?.toFixed(2)}</td>
-                                </tr>
-                                {invoiceResult.tax > 0 && (
-                                    <>
-                                        <tr>
-                                            <td colSpan={2} className="py-1 text-right text-gray-400 text-xs">CGST</td>
-                                            <td className="py-1 text-right text-xs">₹{invoiceResult.cgst?.toFixed(2)}</td>
-                                        </tr>
-                                        <tr>
-                                            <td colSpan={2} className="py-1 text-right text-gray-400 text-xs">SGST</td>
-                                            <td className="py-1 text-right text-xs">₹{invoiceResult.sgst?.toFixed(2)}</td>
-                                        </tr>
-                                    </>
-                                )}
-                                <tr className="border-t-2 border-black">
-                                    <td colSpan={2} className="py-3 text-right font-black uppercase tracking-wider">Total</td>
-                                    <td className="py-3 text-right font-black text-xl">₹{invoiceResult.total?.toFixed(2)}</td>
-                                </tr>
-                            </tfoot>
                         </table>
-                        <div className="pt-12 flex justify-end">
-                            <div className="text-center">
-                                <div className="border-t border-gray-400 w-40 mb-1" />
-                                <p className="text-xs font-bold uppercase tracking-wider">Authorized Signatory</p>
-                                <p className="text-[10px] text-gray-400">Computer Generated Digital Receipt</p>
-                            </div>
-                        </div>
-                    </div>
+
+                        {/* ── FOOTER AREA ── */}
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <tbody>
+                                <tr>
+                                    {/* LEFT: GST note + terms */}
+                                    <td style={{ width: '62%', verticalAlign: 'top', paddingRight: '8px' }}>
+                                        {avgTaxRate > 0 && (
+                                            <div style={{ fontSize: '8px', marginBottom: '4px' }}>
+                                                GST {subtotal.toFixed(2)}*{halfTax}+{halfTax}%={sgstAmt.toFixed(2)}SGST+{cgstAmt.toFixed(2)}CGST, &nbsp;&nbsp;<strong>*** GET WELL SOON **</strong>
+                                            </div>
+                                        )}
+                                        <div style={{ fontSize: '8px', marginBottom: '2px' }}><strong>Terms &amp; Conditions</strong></div>
+                                        <div style={{ fontSize: '8px' }}>Goods once sold will not be taken back or exchanged.</div>
+                                        <div style={{ fontSize: '8px' }}>Bills not paid due date will attract 24% interest.</div>
+                                        <div style={{ fontSize: '8px' }}>All disputes subject to Jurisdication only.</div>
+                                        <div style={{ fontSize: '8px', marginBottom: '10px' }}>Prescribed Sales Tax declaration will be given.</div>
+                                        <div style={{ fontSize: '8px' }}><em>Remark :</em></div>
+                                        <div style={{ marginTop: '14px', fontSize: '8px' }}><strong>{amountInWords}</strong></div>
+                                    </td>
+                                    {/* RIGHT: summary box */}
+                                    <td style={{ width: '38%', verticalAlign: 'top' }}>
+                                        <div style={{ fontSize: '9px', marginBottom: '6px', textAlign: 'right' }}>For {hospitalName.toUpperCase().includes('PHARMA') ? hospitalName.toUpperCase() : `${hospitalName.toUpperCase()} PHARMACY`}</div>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                            <tbody>
+                                                {[
+                                                    ['SUB TOTAL', subtotal.toFixed(2)],
+                                                    ['ROUND OFF', roundOff > 0 ? `-${Math.abs(roundOff).toFixed(2)}` : roundOff < 0 ? `+${Math.abs(roundOff).toFixed(2)}` : '0.00'],
+                                                    ...(discountAmt > 0 ? [[`Discount ${discountPctVal > 0 ? discountPctVal + ' %' : ''}`, discountAmt.toFixed(2)]] : []),
+                                                    ...(sgstAmt > 0 ? [[`SGST ${halfTax} %`, sgstAmt.toFixed(2)]] : []),
+                                                    ...(cgstAmt > 0 ? [[`CGST ${halfTax} %`, cgstAmt.toFixed(2)]] : []),
+                                                    ...(roundOff !== 0 ? [['Roundoff', Math.abs(roundOff).toFixed(2)]] : []),
+                                                ].map(([label, val], i) => (
+                                                    <tr key={i}>
+                                                        <td style={{ border: '1px solid #000', padding: '1px 4px', fontSize: '9px', fontWeight: 600 }}>{label}</td>
+                                                        <td style={{ border: '1px solid #000', padding: '1px 4px', fontSize: '9px', textAlign: 'right' }}>{val}</td>
+                                                    </tr>
+                                                ))}
+                                                <tr>
+                                                    <td style={{ border: '2px solid #000', padding: '3px 4px', fontSize: '10px', fontWeight: 900 }}>GRAND TOTAL</td>
+                                                    <td style={{ border: '2px solid #000', padding: '3px 4px', fontSize: '10px', fontWeight: 900, textAlign: 'right' }}>{grandTotalRounded.toFixed(2)}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                        <div style={{ marginTop: '24px', textAlign: 'center', fontSize: '9px' }}>Authorised Signatory</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-            )}
+                );
+            })()}
 
             {/* INVENTORY MODAL */}
             {showInventoryModal && (
