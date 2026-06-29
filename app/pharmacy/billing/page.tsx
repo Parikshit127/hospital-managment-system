@@ -99,6 +99,7 @@ export default function PharmacyPage() {
     const [patientSuggestions, setPatientSuggestions] = useState<any[]>([]);
     const [selectedPatient, setSelectedPatient] = useState<any>(null);
     const [isWalkIn, setIsWalkIn] = useState(false);
+    const [isHospitalUse, setIsHospitalUse] = useState(false);
     const [walkInName, setWalkInName] = useState('');
     const [walkInContact, setWalkInContact] = useState('');
     // Optional bill-level discount (₹) for walk-in / OTC sales.
@@ -393,15 +394,15 @@ export default function PharmacyPage() {
     const payableTotal = Math.max(0, grandTotal - discountAmt);
 
     const handleCheckout = () => {
-        if (!isWalkIn && !patientId) return alert('Please search and select a patient, or enable Walk-in / OTC mode.');
+        if (!isWalkIn && !isHospitalUse && !patientId) return alert('Please search and select a patient, or switch billing mode.');
         if (cart.length === 0) return alert('Cart is empty');
         setShowInvoiceModal(true);
     };
 
     const confirmPayment = async () => {
         if (isSubmitting) return;
-        if (!isWalkIn && !selectedPatient) {
-            alert('Please search and select a patient, or enable Walk-in / OTC mode.');
+        if (!isWalkIn && !isHospitalUse && !selectedPatient) {
+            alert('Please search and select a patient, or switch billing mode.');
             return;
         }
         if (billDateTime) {
@@ -411,15 +412,15 @@ export default function PharmacyPage() {
         }
         setIsSubmitting(true);
         try {
-            const resolvedPatientId = isWalkIn ? 'WALKIN' : patientId;
+            const resolvedPatientId = isHospitalUse ? 'HOSPITAL' : (isWalkIn ? 'WALKIN' : patientId);
             const payload = cart.map(item => ({ ...item, batch_no: item.batch_id }));
             const res = await generateInvoice(resolvedPatientId, payload, {
-                walkInName: isWalkIn ? walkInName : undefined,
+                walkInName: isHospitalUse ? 'Hospital Internal Use' : (isWalkIn ? walkInName : undefined),
                 walkInContact: isWalkIn ? walkInContact : undefined,
                 billDateTime: billDateTime || undefined,
                 doctorId: doctorId || undefined,
                 doctorName: doctorName || undefined,
-                paymentMethod: paymentMethod,
+                paymentMethod: isHospitalUse ? 'Credit' : paymentMethod,
                 discountPct: discountPct || undefined,
             });
             if (res.success) {
@@ -449,10 +450,11 @@ export default function PharmacyPage() {
         setBillDateTime('');
         setDoctorId('');
         setDoctorName('');
+        setIsHospitalUse(false);
     };
 
     // Name shown on the bill / receipt for the current sale.
-    const billPatientLabel = isWalkIn ? (walkInName.trim() || 'Walk-in / OTC') : patientId;
+    const billPatientLabel = isHospitalUse ? 'Hospital Internal Use' : (isWalkIn ? (walkInName.trim() || 'Walk-in / OTC') : patientId);
     const billDisplayDate = billDateTime ? new Date(billDateTime) : new Date();
     const billDisplayDateStr = billDisplayDate.toLocaleDateString('en-GB');
     const billDoctorLabel = formatDoctorName(doctorName) || 'Dr. Self';
@@ -1023,21 +1025,72 @@ export default function PharmacyPage() {
                             <div className="space-y-4 min-w-0">
                                 {/* STEP 1 — Patient FIRST */}
                                 <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Step 1 · Patient</span>
-                                            <button
-                                                type="button"
-                                                onClick={() => { setIsWalkIn(!isWalkIn); clearPatient(); setWalkInName(''); setWalkInContact(''); setDiscount(''); }}
-                                                className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors ${
-                                                    isWalkIn ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                                }`}
-                                            >
-                                                {isWalkIn ? '⚡ Walk-in / OTC' : 'Walk-in / OTC'}
-                                            </button>
+                                    <div className="space-y-3">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Step 1 · Billing Mode</span>
+                                            <div className="flex gap-1 bg-gray-100 p-0.5 rounded-lg border border-gray-200 self-start">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setIsWalkIn(false);
+                                                        setIsHospitalUse(false);
+                                                        clearPatient();
+                                                        setDiscount('');
+                                                    }}
+                                                    className={`text-[10px] font-bold px-3 py-1.5 rounded-md transition-all ${
+                                                        !isWalkIn && !isHospitalUse
+                                                            ? 'bg-white text-orange-600 shadow-sm'
+                                                            : 'text-gray-500 hover:text-gray-700'
+                                                    }`}
+                                                >
+                                                    👤 Patient
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setIsWalkIn(true);
+                                                        setIsHospitalUse(false);
+                                                        clearPatient();
+                                                        setWalkInName('');
+                                                        setWalkInContact('');
+                                                        setDiscount('');
+                                                    }}
+                                                    className={`text-[10px] font-bold px-3 py-1.5 rounded-md transition-all ${
+                                                        isWalkIn
+                                                            ? 'bg-amber-500 text-white shadow-sm'
+                                                            : 'text-gray-500 hover:text-gray-700'
+                                                    }`}
+                                                >
+                                                    ⚡ Walk-in / OTC
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setIsWalkIn(false);
+                                                        setIsHospitalUse(true);
+                                                        clearPatient();
+                                                        setDiscount('');
+                                                        setPaymentMethod('Credit');
+                                                    }}
+                                                    className={`text-[10px] font-bold px-3 py-1.5 rounded-md transition-all ${
+                                                        isHospitalUse
+                                                            ? 'bg-blue-600 text-white shadow-sm'
+                                                            : 'text-gray-500 hover:text-gray-700'
+                                                    }`}
+                                                >
+                                                    🏥 Hospital Use
+                                                </button>
+                                            </div>
                                         </div>
 
-                                        {isWalkIn ? (
+                                        {isHospitalUse ? (
+                                            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-1">
+                                                <p className="text-xs font-bold text-blue-900">Hospital Internal Use Mode</p>
+                                                <p className="text-[10px] text-blue-600 font-medium leading-relaxed">
+                                                    Medicines/consumables will be billed to the hospital account under patient ID <code className="font-mono bg-blue-100 px-1 py-0.5 rounded font-bold">HOSPITAL</code>. The invoice will be saved as a credit transaction.
+                                                </p>
+                                            </div>
+                                        ) : isWalkIn ? (
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                                                 <div className="relative">
                                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-400" />
@@ -1099,7 +1152,7 @@ export default function PharmacyPage() {
                                     </div>
                                 </div>
 
-                                {!(isWalkIn || selectedPatient) ? (
+                                {!(isWalkIn || isHospitalUse || selectedPatient) ? (
                                     <div className="bg-white border border-dashed border-gray-300 rounded-2xl p-12 text-center text-gray-400 font-medium text-sm">
                                         Select a patient (or switch to Walk-in / OTC) to start billing.
                                     </div>
@@ -1205,7 +1258,7 @@ export default function PharmacyPage() {
 
                             {/* RIGHT COLUMN — Sticky bill panel (cart + summary + payment + checkout) */}
                             <aside className="space-y-3 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pr-1">
-                                {!(isWalkIn || selectedPatient) ? (
+                                {!(isWalkIn || isHospitalUse || selectedPatient) ? (
                                     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-8 text-center">
                                         <div className="h-14 w-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
                                             <ShoppingCart className="h-7 w-7 text-gray-300" />
@@ -1216,7 +1269,16 @@ export default function PharmacyPage() {
                                 ) : (
                                     <>
                                         {/* Patient banner */}
-                                        {isWalkIn ? (
+                                        {isHospitalUse ? (
+                                            <div className="bg-blue-50 border border-blue-200 rounded-2xl px-4 py-3 flex items-center justify-between">
+                                                <div className="min-w-0">
+                                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-wider">Hospital Use</p>
+                                                    <p className="text-sm font-bold text-blue-900 mt-0.5 truncate">Hospital Internal Use</p>
+                                                    <p className="text-[10px] font-mono text-blue-700">Patient ID: HOSPITAL</p>
+                                                </div>
+                                                <CheckCircle className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                                            </div>
+                                        ) : isWalkIn ? (
                                             <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-center justify-between">
                                                 <div className="min-w-0">
                                                     <p className="text-[10px] font-black text-amber-600 uppercase tracking-wider">Walk-in / OTC</p>
@@ -1412,7 +1474,13 @@ export default function PharmacyPage() {
                                             </div>
 
                                             {/* Payment Method */}
-                                            {selectedPatient?.is_admitted ? (
+                                            {isHospitalUse ? (
+                                                <div className="mb-3 space-y-2">
+                                                    <div className="py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-[11px] text-blue-800 font-bold text-center flex items-center justify-center gap-1.5">
+                                                        <Clock className="h-4 w-4 text-blue-500" /> Billed as Credit to Hospital Account
+                                                    </div>
+                                                </div>
+                                            ) : selectedPatient?.is_admitted ? (
                                                 <div className="mb-3 space-y-2">
                                                     <div className="grid grid-cols-2 gap-1.5">
                                                         {IPD_PAYMENT_METHODS.map(m => (
@@ -1457,13 +1525,15 @@ export default function PharmacyPage() {
 
                                             <button
                                                 onClick={handleCheckout}
-                                                disabled={cart.length === 0 || (!isWalkIn && !patientId)}
-                                                className={`w-full font-bold py-3 rounded-xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98] text-sm ${selectedPatient?.is_admitted ? (paymentMethod === 'Credit' ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white shadow-amber-500/20' : 'bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white shadow-blue-500/20') : 'bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white shadow-teal-500/20'}`}
+                                                disabled={cart.length === 0 || (!isWalkIn && !isHospitalUse && !patientId)}
+                                                className={`w-full font-bold py-3 rounded-xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98] text-sm ${selectedPatient?.is_admitted || isHospitalUse ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white shadow-amber-500/20' : 'bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white shadow-teal-500/20'}`}
                                             >
                                                 <Receipt className="h-4 w-4" />
-                                                {selectedPatient?.is_admitted
-                                                    ? (paymentMethod === 'Credit' ? 'Add to IPD Bill (Credit)' : 'Post to IPD Bill')
-                                                    : 'Generate Invoice'}
+                                                {isHospitalUse
+                                                    ? 'Generate Hospital Invoice (Credit)'
+                                                    : selectedPatient?.is_admitted
+                                                        ? (paymentMethod === 'Credit' ? 'Add to IPD Bill (Credit)' : 'Post to IPD Bill')
+                                                        : 'Generate Invoice'}
                                             </button>
                                         </div>
                                     </>
@@ -1625,18 +1695,24 @@ export default function PharmacyPage() {
                                         </div>
                                     </div>
                                     <div className="flex gap-2 pt-1">
-                                        {(selectedPatient?.is_admitted ? IPD_PAYMENT_METHODS : PAYMENT_METHODS).map(m => (
-                                            <button key={m.id} onClick={() => setPaymentMethod(m.id)}
-                                                className={`flex-1 py-2 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 border transition-all ${
-                                                    paymentMethod === m.id
-                                                        ? m.id === 'Credit' ? 'bg-amber-50 border-amber-400 text-amber-700' : 'bg-orange-50 border-teal-300 text-orange-700'
-                                                        : 'bg-white border-gray-200 text-gray-500'
-                                                }`}>
-                                                <m.icon className="h-3 w-3" /> {m.id === 'Credit' ? 'Credit' : m.label}
-                                            </button>
-                                        ))}
+                                        {isHospitalUse ? (
+                                            <div className="flex-1 py-2 bg-blue-50 border border-blue-200 rounded-lg text-[10px] font-bold text-blue-700 flex items-center justify-center gap-1.5">
+                                                <Clock className="h-3 w-3 text-blue-500" /> Billed as Credit to Hospital Account
+                                            </div>
+                                        ) : (
+                                            (selectedPatient?.is_admitted ? IPD_PAYMENT_METHODS : PAYMENT_METHODS).map(m => (
+                                                <button key={m.id} onClick={() => setPaymentMethod(m.id)}
+                                                    className={`flex-1 py-2 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 border transition-all ${
+                                                        paymentMethod === m.id
+                                                            ? m.id === 'Credit' ? 'bg-amber-50 border-amber-400 text-amber-700' : 'bg-orange-50 border-teal-300 text-orange-700'
+                                                            : 'bg-white border-gray-200 text-gray-500'
+                                                    }`}>
+                                                    <m.icon className="h-3 w-3" /> {m.id === 'Credit' ? 'Credit' : m.label}
+                                                </button>
+                                            ))
+                                        )}
                                     </div>
-                                    {paymentMethod === 'Credit' && (
+                                    {paymentMethod === 'Credit' && !isHospitalUse && (
                                         <div className="px-2 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] text-amber-800">
                                             Payment will be tracked as pending under the patient&apos;s IPD admission. Collect at discharge.
                                         </div>

@@ -354,7 +354,7 @@ export async function generateInvoice(
                             medicine_id: batch.medicine.id,
                             batch_no: batch.batch_no,
                             batch_id: batch.id,
-                            patient_id: patientId !== 'WALKIN' ? patientId : null,
+                            patient_id: !['WALKIN', 'HOSPITAL'].includes(patientId) ? patientId : null,
                             quantity_in: 0,
                             quantity_out: item.quantity,
                             balance: (lastEntry?.balance || 0) - item.quantity,
@@ -403,13 +403,23 @@ export async function generateInvoice(
             return { success: false, error: 'No items could be dispensed — check stock levels and batch numbers' };
         }
 
-        // 2. Ensure walk-in patient record exists (for OTC/counter sales without registered patient)
+        // 2. Ensure special patient records exist
         if (patientId === 'WALKIN') {
             await db.oPD_REG.upsert({
                 where: { patient_id: 'WALKIN' },
                 create: {
                     patient_id: 'WALKIN',
                     full_name: 'Walk-in Patient (OTC)',
+                    organizationId,
+                },
+                update: {}
+            });
+        } else if (patientId === 'HOSPITAL') {
+            await db.oPD_REG.upsert({
+                where: { patient_id: 'HOSPITAL' },
+                create: {
+                    patient_id: 'HOSPITAL',
+                    full_name: 'Hospital Internal Use',
                     organizationId,
                 },
                 update: {}
@@ -494,6 +504,8 @@ export async function generateInvoice(
         const cgst = totalTax / 2;
         const sgst = totalTax / 2;
 
+        const isCreditSale = paymentMethod === 'Credit';
+
         const invoice = await db.invoices.create({
             data: {
                 invoice_number: await generateSequentialNumber(organizationId, 'PHM', db),
@@ -504,8 +516,8 @@ export async function generateInvoice(
                 total_discount: appliedDiscount,
                 bill_discount: appliedDiscount,
                 net_amount: netAmount,
-                paid_amount: netAmount,
-                balance_due: 0,
+                paid_amount: isCreditSale ? 0 : netAmount,
+                balance_due: isCreditSale ? netAmount : 0,
                 total_tax: totalTax,
                 cgst_amount: cgst,
                 sgst_amount: sgst,
@@ -540,19 +552,22 @@ export async function generateInvoice(
             });
         }
 
-        // Record a Payment record immediately since OPD pharmacy collects payment on generate
-        const payment = await db.payments.create({
-            data: {
-                receipt_number: await genRcpNum(organizationId, db),
-                invoice_id: invoice.id,
-                amount: netAmount,
-                payment_method: paymentMethod,
-                payment_type: 'Full',
-                status: 'Completed',
-                organizationId,
-                ...(backdatedAt ? { created_at: backdatedAt } : {}),
-            }
-        });
+        let payment = null;
+        if (!isCreditSale) {
+            // Record a Payment record immediately since OPD pharmacy collects payment on generate
+            payment = await db.payments.create({
+                data: {
+                    receipt_number: await genRcpNum(organizationId, db),
+                    invoice_id: invoice.id,
+                    amount: netAmount,
+                    payment_method: paymentMethod,
+                    payment_type: 'Full',
+                    status: 'Completed',
+                    organizationId,
+                    ...(backdatedAt ? { created_at: backdatedAt } : {}),
+                }
+            });
+        }
 
         // Referral + doctor commission accrue on the collected pharmacy bill (best-effort)
         try {
@@ -571,10 +586,12 @@ export async function generateInvoice(
         await syncInvoiceToGSTRegister(invoice.id).catch(err =>
             console.error('GST sync failed for pharmacy invoice:', invoice.id, err)
         );
-        const { postPaymentToGL } = await import('@/app/actions/gl-actions');
-        postPaymentToGL(payment.id).catch(err =>
-            console.error('GL payment posting failed for pharmacy invoice:', payment.id, err)
-        );
+        if (payment) {
+            const { postPaymentToGL } = await import('@/app/actions/gl-actions');
+            postPaymentToGL(payment.id).catch(err =>
+                console.error('GL payment posting failed for pharmacy invoice:', payment.id, err)
+            );
+        }
 
         // 5. Audit log
         await logAudit({
