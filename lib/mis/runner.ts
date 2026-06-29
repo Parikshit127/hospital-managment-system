@@ -36,7 +36,8 @@ import {
   revenuePayerNameWiseReport,
   revenueServiceTypeWiseReport,
   revenueBillingCategoryWiseReport,
-  revenueWardWiseReport
+  revenueWardWiseReport,
+  revenueDoctorWiseSummaryReport
 } from './registry/revenue';
 import {
   preRegistrationReport,
@@ -172,6 +173,7 @@ export const REGISTRY: Record<string, ReportDefinition> = {
   [revenueServiceTypeWiseReport.id]: revenueServiceTypeWiseReport,
   [revenueBillingCategoryWiseReport.id]: revenueBillingCategoryWiseReport,
   [revenueWardWiseReport.id]: revenueWardWiseReport,
+  [revenueDoctorWiseSummaryReport.id]: revenueDoctorWiseSummaryReport,
   [preRegistrationReport.id]: preRegistrationReport,
   [registrationConvertReport.id]: registrationConvertReport,
   [registrationReport.id]: registrationReport,

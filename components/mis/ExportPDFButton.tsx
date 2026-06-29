@@ -32,14 +32,29 @@ export interface ExportPDFButtonProps {
     rows: Record<string, unknown>[];
     /** Server-computed totals. */
     totals: Record<string, number>;
+    /** Report id — selects a bespoke PDF template when one is registered. */
+    reportId?: string;
+    /** Optional "Period: …" line for bespoke templates. */
+    period?: string;
+    /** Optional hospital/brand name for bespoke document headers. */
+    hospitalName?: string;
 }
+
+/**
+ * Per-report PDF template overrides. A report listed here renders with its own
+ * @react-pdf/renderer Document instead of the generic MISReportPDF; every other
+ * report is untouched and keeps the default layout.
+ */
+const CUSTOM_PDF_TEMPLATES: Record<string, () => Promise<{ default: React.ComponentType<any> }>> = {
+    'revenue-doctor-wise-summary': () => import('@/components/mis/DoctorRevenueSummaryPDF'),
+};
 
 /**
  * We lazy-load both @react-pdf/renderer and MISReportPDF to avoid
  * bundling the entire PDF engine in the main chunk. The button renders
  * as a plain button that triggers generation on click.
  */
-export function ExportPDFButton({ reportName, columns, rows, totals }: ExportPDFButtonProps) {
+export function ExportPDFButton({ reportName, columns, rows, totals, reportId, period, hospitalName }: ExportPDFButtonProps) {
     const [generating, setGenerating] = useState(false);
     const [mounted, setMounted] = useState(false);
 
@@ -51,21 +66,34 @@ export function ExportPDFButton({ reportName, columns, rows, totals }: ExportPDF
         setGenerating(true);
 
         try {
-            // Dynamic import to keep main bundle small
-            const [{ pdf }, { MISReportPDF }] = await Promise.all([
-                import('@react-pdf/renderer'),
-                import('@/components/mis/MISReportPDF'),
-            ]);
+            const { pdf } = await import('@react-pdf/renderer');
 
-            // Generate PDF blob
-            const doc = <MISReportPDF
-                reportName={reportName}
-                columns={columns}
-                rows={rows}
-                totals={totals}
-            />;
+            // Choose a bespoke template if this report registers one, else the
+            // generic MISReportPDF. Both accept the same core data shape.
+            const customLoader = reportId ? CUSTOM_PDF_TEMPLATES[reportId] : undefined;
+            // react-pdf's pdf() expects a Document element; both templates return one.
+            let doc: React.ReactElement<any>;
+            if (customLoader) {
+                const { default: CustomPDF } = await customLoader();
+                doc = <CustomPDF
+                    reportName={reportName}
+                    columns={columns}
+                    rows={rows}
+                    totals={totals}
+                    period={period}
+                    hospitalName={hospitalName}
+                />;
+            } else {
+                const { MISReportPDF } = await import('@/components/mis/MISReportPDF');
+                doc = <MISReportPDF
+                    reportName={reportName}
+                    columns={columns}
+                    rows={rows}
+                    totals={totals}
+                />;
+            }
 
-            const blob = await pdf(doc).toBlob();
+            const blob = await pdf(doc as React.ReactElement<any>).toBlob();
 
             // Trigger download
             const url = URL.createObjectURL(blob);

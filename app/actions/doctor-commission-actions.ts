@@ -1,5 +1,6 @@
 'use server';
 
+import { z } from 'zod';
 import { requireRoleAndTenant } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { backfillDoctorCommissions } from '@/app/lib/doctor-commission';
@@ -368,6 +369,175 @@ export async function markDoctorStatementPaid(input: {
     } catch (error) {
         console.error('markDoctorStatementPaid error:', error);
         return { success: false, error: 'Failed to mark statement paid' };
+    }
+}
+
+// ── Payout statement (per-invoice batch settle) ───────────────────────────────
+// Lighter-weight flow than createDoctorPayoutStatement: the admin picks individual
+// pending (accrued) commission lines via checkboxes and clears them in one batch,
+// rather than sweeping an entire date range. Settled lines are folded into a single
+// paid DoctorPayoutStatement for audit/traceability.
+
+function revalidateStatement(doctorId: string) {
+    for (const base of ['/admin/doctor-invoicing', '/finance/doctor-invoicing']) {
+        revalidatePath(base);
+        revalidatePath(`${base}/${doctorId}`);
+        revalidatePath(`${base}/${doctorId}/statement`);
+    }
+}
+
+/** Pending (unpaid) commission lines for a doctor, enriched with invoice + patient info. */
+export async function getDoctorPayoutPending(doctorId: string) {
+    try {
+        const { db, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
+        if (!doctorId) return { success: false, error: 'Doctor is required' };
+
+        const doctor = await db.user.findFirst({
+            where: { id: doctorId, organizationId, role: 'doctor' },
+            select: { id: true, name: true, username: true, specialty: true },
+        });
+        if (!doctor) return { success: false, error: 'Doctor not found' };
+
+        // Organization header details for the printed statement (Organization is not
+        // tenant-scoped by the db extension, so query by id directly).
+        const org = await db.organization.findUnique({
+            where: { id: organizationId },
+            select: { name: true, address: true, phone: true, license_no: true },
+        });
+
+        const config = await (db as any).doctorCommissionConfig.findFirst({
+            where: { organizationId, doctor_id: doctorId },
+            select: { commission_type: true, flat_percent: true, is_active: true },
+        });
+
+        // "Unpaid invoices" = accrued (not yet in a statement, not paid, not void) lines.
+        const pending = await (db as any).doctorCommission.findMany({
+            where: { organizationId, doctor_id: doctorId, status: 'accrued' },
+            orderBy: { accrued_at: 'desc' },
+        });
+
+        const invoiceIds = pending.map((c: any) => c.invoice_id);
+        const invoices = invoiceIds.length
+            ? await db.invoices.findMany({
+                  where: { organizationId, id: { in: invoiceIds } },
+                  select: {
+                      id: true,
+                      invoice_number: true,
+                      net_amount: true,
+                      paid_amount: true,
+                      status: true,
+                      patient: { select: { full_name: true } },
+                  },
+              })
+            : [];
+        const invoiceById = new Map<number, any>(invoices.map((i: any) => [i.id, i]));
+
+        const lines = pending.map((c: any) => {
+            const inv = invoiceById.get(c.invoice_id);
+            return {
+                id: c.id,
+                invoice_id: c.invoice_id,
+                invoice_number: inv?.invoice_number ?? `#${c.invoice_id}`,
+                invoice_type: c.invoice_type,
+                patient_name: inv?.patient?.full_name ?? '',
+                eligible_base: num(c.eligible_base),
+                rate_applied: c.rate_applied,
+                commission_amount: num(c.commission_amount),
+                accrued_at: c.accrued_at,
+            };
+        });
+
+        return {
+            success: true,
+            data: {
+                doctor: { id: doctor.id, name: doctor.name || doctor.username, specialty: doctor.specialty },
+                org: {
+                    name: org?.name ?? 'Hospital OS',
+                    address: org?.address ?? null,
+                    phone: org?.phone ?? null,
+                    license_no: org?.license_no ?? null,
+                },
+                config,
+                lines,
+                pending_total: lines.reduce((s: number, l: any) => s + l.commission_amount, 0),
+            },
+        };
+    } catch (error) {
+        console.error('getDoctorPayoutPending error:', error);
+        return { success: false, error: 'Failed to load pending payouts' };
+    }
+}
+
+const settleSchema = z.object({
+    doctorId: z.string().min(1, 'Doctor is required'),
+    commissionIds: z.array(z.string().min(1)).min(1, 'Select at least one invoice').max(1000),
+    payment_mode: z.string().trim().max(40).optional(),
+    payment_reference: z.string().trim().max(120).optional(),
+    notes: z.string().trim().max(500).optional(),
+});
+
+export type SettleInput = z.input<typeof settleSchema>;
+
+/** Batch-settle selected accrued commission lines into one paid statement. */
+export async function settleDoctorCommissions(input: SettleInput) {
+    try {
+        const parsed = settleSchema.safeParse(input);
+        if (!parsed.success) {
+            return { success: false, error: parsed.error.issues[0]?.message || 'Invalid request' };
+        }
+        const { doctorId, commissionIds, payment_mode, payment_reference, notes } = parsed.data;
+
+        const { db, session, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
+
+        const result = await (db as any).$transaction(async (tx: any) => {
+            // Re-fetch under the tenant + doctor scope so a tampered/foreign id can never settle.
+            const lines = await tx.doctorCommission.findMany({
+                where: {
+                    id: { in: commissionIds },
+                    organizationId,
+                    doctor_id: doctorId,
+                    status: 'accrued',
+                },
+            });
+            if (!lines.length) {
+                throw new Error('No eligible invoices to settle (they may already be paid)');
+            }
+
+            const total = lines.reduce((s: number, l: any) => s + num(l.commission_amount), 0);
+            const dates = lines.map((l: any) => new Date(l.accrued_at).getTime());
+            const periodStart = new Date(Math.min(...dates));
+            const periodEnd = new Date(Math.max(...dates));
+
+            const statement = await tx.doctorPayoutStatement.create({
+                data: {
+                    organizationId,
+                    doctor_id: doctorId,
+                    period_start: periodStart,
+                    period_end: periodEnd,
+                    total_commission: total.toFixed(2),
+                    status: 'paid',
+                    paid_at: new Date(),
+                    paid_amount: total.toFixed(2),
+                    payment_mode: payment_mode || null,
+                    payment_reference: payment_reference || null,
+                    notes: notes || null,
+                    created_by: session?.username ?? null,
+                },
+            });
+
+            await tx.doctorCommission.updateMany({
+                where: { id: { in: lines.map((l: any) => l.id) } },
+                data: { status: 'paid', statement_id: statement.id },
+            });
+
+            return { statementId: statement.id, settledCount: lines.length, total };
+        });
+
+        revalidateStatement(doctorId);
+        return { success: true, data: result };
+    } catch (error) {
+        console.error('settleDoctorCommissions error:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Failed to settle invoices' };
     }
 }
 

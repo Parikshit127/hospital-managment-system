@@ -61,7 +61,8 @@ import {
   revenuePayerNameWiseReport,
   revenueServiceTypeWiseReport,
   revenueBillingCategoryWiseReport,
-  revenueWardWiseReport
+  revenueWardWiseReport,
+  revenueDoctorWiseSummaryReport
 } from '@/lib/mis/registry/revenue';
 import {
   preRegistrationReport,
@@ -233,6 +234,7 @@ export async function listCatalogue() {
     revenueServiceTypeWiseReport,
     revenueBillingCategoryWiseReport,
     revenueWardWiseReport,
+    revenueDoctorWiseSummaryReport,
     preRegistrationReport,
     registrationConvertReport,
     registrationReport,

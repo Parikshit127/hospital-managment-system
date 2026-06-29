@@ -280,6 +280,132 @@ export const revenueBillingCategoryWiseReport: ReportDefinition = {
   },
 };
 
+/**
+ * Doctor Wise Revenue Summary — mirrors the "TAH GLOBAL HEALTHCARE — Doctor Wise
+ * Revenue Summary" finance document.
+ *
+ * Business math (all on NET amount, per the source document's notes):
+ *   IPD Cash      = invoice_type='IPD' AND billing_patient_type='cash'
+ *   IPD TPA       = invoice_type='IPD' AND billing_patient_type<>'cash'   (TPA/Insurance + Corporate)
+ *   Total IPD     = IPD Cash + IPD TPA  (== SUM net of all IPD bills)
+ *   OPD           = invoice_type='OPD'  (treated as cash collection)
+ *   Grand Total   = Total IPD + OPD
+ *   % of Total IPD = doctor's Total IPD ÷ Σ Total IPD  (all doctors)
+ *   GT %           = doctor's Grand Total ÷ Σ Grand Total (all doctors)
+ *
+ * Cancelled bills are excluded. Pharmacy/Lab/Procedure invoice types are out of
+ * scope (the document covers only IPD + OPD). Bills with no doctor collapse into
+ * an "Unknown" row, so the per-doctor percentages always sum to 100%.
+ */
+export const revenueDoctorWiseSummaryReport: ReportDefinition = {
+  id: 'revenue-doctor-wise-summary',
+  category: ReportCategory.Revenue,
+  name: 'Revenue - Doctor Wise Summary',
+  description:
+    'Doctor/consultant-wise net revenue: IPD split by Cash vs TPA, OPD cash, grand totals and contribution %. Based on Net Amount.',
+  filters: z.object({
+    date_start: z.string().or(z.date()),
+    date_end: z.string().or(z.date()),
+  }),
+  columns: [
+    { key: 'doctor_name', label: 'Doctor / Consultant', type: 'string' },
+    { key: 'ipd_cash_bills', label: 'IPD Cash Bills', type: 'number', align: 'right', total: 'sum' },
+    { key: 'ipd_cash_revenue', label: 'IPD Cash Revenue', type: 'currency', total: 'sum' },
+    { key: 'ipd_tpa_bills', label: 'IPD TPA Bills', type: 'number', align: 'right', total: 'sum' },
+    { key: 'ipd_tpa_net_revenue', label: 'IPD TPA (Net Rev)', type: 'currency', total: 'sum' },
+    { key: 'total_ipd_revenue', label: 'Total IPD Revenue', type: 'currency', total: 'sum' },
+    { key: 'ipd_pct', label: '% of Total IPD', type: 'percent', align: 'right', total: 'sum' },
+    { key: 'opd_bills', label: 'OPD Bills', type: 'number', align: 'right', total: 'sum' },
+    { key: 'opd_cash_revenue', label: 'OPD Cash Revenue', type: 'currency', total: 'sum' },
+    { key: 'grand_total', label: 'Grand Total (IPD+OPD)', type: 'currency', total: 'sum' },
+    { key: 'gt_pct', label: '% of Grand Total', type: 'percent', align: 'right', total: 'sum' },
+  ],
+  defaultSort: { column: 'grand_total', direction: 'desc' },
+  rowLimitSync: 5000,
+  filterSpec: {},
+  requiredPermission: 'mis_reports.revenue.view',
+  queryFn: async (filters: ValidatedFilters, orgId: string) => {
+    const { date_start, date_end } = filters;
+    // Per-doctor conditional aggregation. Postgres FILTER (WHERE ...) buckets
+    // each invoice into the IPD-Cash / IPD-TPA / OPD column in a single pass.
+    const raw = await prisma.$queryRaw<any[]>`
+      SELECT
+        COALESCE(u.name, NULLIF(TRIM(i.doctor_name), ''), 'Unknown') as "doctor_name",
+        COUNT(*) FILTER (
+          WHERE i.invoice_type = 'IPD' AND LOWER(i.billing_patient_type) = 'cash'
+        ) as "ipd_cash_bills",
+        COALESCE(SUM(i.net_amount) FILTER (
+          WHERE i.invoice_type = 'IPD' AND LOWER(i.billing_patient_type) = 'cash'
+        ), 0) as "ipd_cash_revenue",
+        COUNT(*) FILTER (
+          WHERE i.invoice_type = 'IPD' AND LOWER(i.billing_patient_type) <> 'cash'
+        ) as "ipd_tpa_bills",
+        COALESCE(SUM(i.net_amount) FILTER (
+          WHERE i.invoice_type = 'IPD' AND LOWER(i.billing_patient_type) <> 'cash'
+        ), 0) as "ipd_tpa_net_revenue",
+        COALESCE(SUM(i.net_amount) FILTER (WHERE i.invoice_type = 'IPD'), 0) as "total_ipd_revenue",
+        COUNT(*) FILTER (WHERE i.invoice_type = 'OPD') as "opd_bills",
+        COALESCE(SUM(i.net_amount) FILTER (WHERE i.invoice_type = 'OPD'), 0) as "opd_cash_revenue",
+        COALESCE(SUM(i.net_amount), 0) as "grand_total"
+      FROM invoices i
+      LEFT JOIN "users" u ON i.doctor_id = u.id
+      WHERE i."organizationId" = ${orgId}
+        AND LOWER(i.status) <> 'cancelled'
+        AND i.invoice_type IN ('IPD', 'OPD')
+        AND i.created_at >= ${toStartOfDay(date_start)}
+        AND i.created_at <= ${toEndOfDay(date_end)}
+      GROUP BY COALESCE(u.name, NULLIF(TRIM(i.doctor_name), ''), 'Unknown')
+      ORDER BY "grand_total" DESC
+    `;
+
+    // Grand denominators for the contribution percentages.
+    const sumIpd = raw.reduce((s, r) => s + Number(r.total_ipd_revenue || 0), 0);
+    const sumGrand = raw.reduce((s, r) => s + Number(r.grand_total || 0), 0);
+    const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
+
+    const rows = raw.map((r) => {
+      const totalIpd = Number(r.total_ipd_revenue || 0);
+      const grand = Number(r.grand_total || 0);
+      return {
+        doctor_name: r.doctor_name,
+        ipd_cash_bills: Number(r.ipd_cash_bills || 0),
+        ipd_cash_revenue: Number(r.ipd_cash_revenue || 0),
+        ipd_tpa_bills: Number(r.ipd_tpa_bills || 0),
+        ipd_tpa_net_revenue: Number(r.ipd_tpa_net_revenue || 0),
+        total_ipd_revenue: totalIpd,
+        ipd_pct: Number(pct(totalIpd, sumIpd).toFixed(1)),
+        opd_bills: Number(r.opd_bills || 0),
+        opd_cash_revenue: Number(r.opd_cash_revenue || 0),
+        grand_total: grand,
+        gt_pct: Number(pct(grand, sumGrand).toFixed(1)),
+      };
+    });
+
+    const totals = rows.reduce(
+      (acc, r) => {
+        acc.ipd_cash_bills += r.ipd_cash_bills;
+        acc.ipd_cash_revenue += r.ipd_cash_revenue;
+        acc.ipd_tpa_bills += r.ipd_tpa_bills;
+        acc.ipd_tpa_net_revenue += r.ipd_tpa_net_revenue;
+        acc.total_ipd_revenue += r.total_ipd_revenue;
+        acc.opd_bills += r.opd_bills;
+        acc.opd_cash_revenue += r.opd_cash_revenue;
+        acc.grand_total += r.grand_total;
+        return acc;
+      },
+      {
+        ipd_cash_bills: 0, ipd_cash_revenue: 0, ipd_tpa_bills: 0, ipd_tpa_net_revenue: 0,
+        total_ipd_revenue: 0, opd_bills: 0, opd_cash_revenue: 0, grand_total: 0,
+        // Totals row contribution always reflects the whole = 100% (0 when no data).
+        ipd_pct: sumIpd > 0 ? 100 : 0,
+        gt_pct: sumGrand > 0 ? 100 : 0,
+      },
+    );
+
+    return { rows, totals };
+  },
+};
+
 export const revenueWardWiseReport: ReportDefinition = {
   id: 'revenue-ward-wise',
   category: ReportCategory.Revenue,

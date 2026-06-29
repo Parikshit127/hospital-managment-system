@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Search, Loader2, Pencil, X, Stethoscope } from 'lucide-react';
+import { Search, Loader2, Pencil, X, Stethoscope, Wallet, BarChart3 } from 'lucide-react';
 import {
     getDoctorCommissionOverview,
     saveDoctorConfig,
@@ -96,6 +96,13 @@ export default function DoctorCommissionListClient({ basePath }: { basePath: str
                     </h1>
                     <p className="text-sm text-gray-400">Per-bill commission for the doctor assigned to each invoice.</p>
                 </div>
+                {/* Shortcut into the MIS "Doctor Wise Revenue Summary" report (admin/finance portal). */}
+                <Link
+                    href={`/${basePath.split('/')[1]}/mis/revenue-doctor-wise-summary`}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 hover:text-indigo-600"
+                >
+                    <BarChart3 className="h-4 w-4" /> Doctor Revenue Summary
+                </Link>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
@@ -177,13 +184,22 @@ export default function DoctorCommissionListClient({ basePath }: { basePath: str
                                     <td className="px-4 py-3 text-right text-emerald-600">{inr(r.commission_paid)}</td>
                                     <td className="px-4 py-3 text-right font-bold">{inr(r.outstanding)}</td>
                                     <td className="px-4 py-3 text-right">
-                                        <button
-                                            onClick={() => setEditing(r)}
-                                            className="text-gray-400 hover:text-indigo-600"
-                                            title={r.configured ? 'Edit commission' : 'Set commission'}
-                                        >
-                                            <Pencil className="h-4 w-4" />
-                                        </button>
+                                        <div className="flex items-center justify-end gap-3">
+                                            <Link
+                                                href={`${basePath}/${r.id}/statement`}
+                                                className="text-gray-400 hover:text-emerald-600"
+                                                title="View payout statement"
+                                            >
+                                                <Wallet className="h-4 w-4" />
+                                            </Link>
+                                            <button
+                                                onClick={() => setEditing(r)}
+                                                className="text-gray-400 hover:text-indigo-600"
+                                                title={r.configured ? 'Edit commission' : 'Set commission'}
+                                            >
+                                                <Pencil className="h-4 w-4" />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))

@@ -48,6 +48,7 @@ import toast from 'react-hot-toast';
 import { MISFilterEngine } from '@/components/mis/MISFilterEngine';
 import { ExportExcelButton } from '@/components/mis/ExportExcelButton';
 import { ExportPDFButton } from '@/components/mis/ExportPDFButton';
+import { useBranding } from '@/app/admin/components/ThemeProvider';
 import { MISScheduleModal } from '@/components/mis/MISScheduleModal';
 import {
     BarChart3, ChevronDown, ChevronLeft, ChevronRight,
@@ -377,6 +378,10 @@ function DrillDownWrapper({
     setIsScheduleOpen,
     isRefetching,
 }: DrillDownWrapperProps) {
+    // Brand name for bespoke PDF document headers (defaults to "Hospital OS"
+    // in portals that don't mount the admin BrandingContext).
+    const branding = useBranding();
+
     // ── Drill-Down state ─────────────────────────────────────────────────────
     const [drillRow, setDrillRow] = useState<Record<string, unknown> | null>(null);
     const [drillPayload, setDrillPayload] = useState<UniversalPayload | null>(null);
@@ -561,10 +566,21 @@ function DrillDownWrapper({
                             )}
                         </span>
                         <ExportPDFButton
+                            reportId={reportId}
                             reportName={reportName}
                             columns={columns}
                             rows={rows}
                             totals={totals}
+                            period={(() => {
+                                const fmt = (v?: string) =>
+                                    v ? new Date(v.slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB', {
+                                        day: '2-digit', month: 'short', year: 'numeric',
+                                    }) : '';
+                                const s = fmt(exportFilters.date_start);
+                                const e = fmt(exportFilters.date_end);
+                                return s && e ? `Period: ${s} to ${e}` : undefined;
+                            })()}
+                            hospitalName={branding.portal_title}
                         />
                         <button
                             suppressHydrationWarning

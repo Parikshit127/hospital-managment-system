@@ -61,6 +61,10 @@ export async function generateExcelBuffer(
       sheet.getColumn(colNumber).numFmt = '₹#,##0.00';
     } else if (col.type === 'number') {
       sheet.getColumn(colNumber).numFmt = '#,##0';
+    } else if (col.type === 'percent') {
+      // Values are already scaled to 0–100, so use a literal "%" (NOT Excel's
+      // `0.0%` which would multiply by 100 again).
+      sheet.getColumn(colNumber).numFmt = '0.0"%"';
     }
   });
 
