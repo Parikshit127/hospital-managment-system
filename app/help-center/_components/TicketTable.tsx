@@ -91,6 +91,9 @@ export function TicketTable({ userId }: { userId: string }) {
                 if (mapped.length >= 1) {
                     setSelectedBranch(mapped[0].id);
                 }
+            } else {
+                // No branches found or call failed — stop loading
+                setLoadState('loaded');
             }
         })();
         return () => { cancelled = true; };
