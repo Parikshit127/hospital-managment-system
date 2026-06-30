@@ -22,6 +22,7 @@ import { Input } from '@/app/components/ui/Input';
 interface TicketRow {
     id: string;
     title: string;
+    module: string | null;
     priority: string;
     status: string;
     created_at: string;
@@ -334,6 +335,7 @@ export function TicketTable({ userId }: { userId: string }) {
                     <TableHeader>
                         <TableCell header>Ticket ID</TableCell>
                         <TableCell header>Summary</TableCell>
+                        <TableCell header>Module</TableCell>
                         <TableCell header>Priority</TableCell>
                         <TableCell header>Status</TableCell>
                         <TableCell header>Date Created</TableCell>
@@ -354,6 +356,9 @@ export function TicketTable({ userId }: { userId: string }) {
                                         <span className="line-clamp-2 text-sm font-medium text-gray-900">
                                             {ticket.title}
                                         </span>
+                                    </TableCell>
+                                    <TableCell>
+                                        <span className="text-sm text-gray-600">{ticket.module || 'General'}</span>
                                     </TableCell>
                                     <TableCell>
                                         <Badge

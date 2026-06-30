@@ -3,14 +3,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { TicketPriority } from '@prisma/client';
-import { Send, ArrowLeft, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { createTicket } from '@/app/actions/help-center-actions';
+import { Send, ArrowLeft, CheckCircle2, AlertTriangle, UploadCloud, X, FileText, Loader2 } from 'lucide-react';
+import { createTicket, saveTicketAttachment } from '@/app/actions/help-center-actions';
 import { listBranches } from '@/app/actions/branch-actions';
 import { Button } from '@/app/components/ui/Button';
 import { Input, Textarea } from '@/app/components/ui/Input';
 import { Select } from '@/app/components/ui/Select';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/Card';
 import { Badge } from '@/app/components/ui/Badge';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+);
 
 // -------------------------------------------------
 // Types
@@ -26,12 +32,24 @@ interface FormErrors {
     description?: string;
     priority?: string;
     branchId?: string;
+    files?: string;
 }
 
 type SubmitState = 'idle' | 'submitting' | 'success' | 'error';
 
+interface UploadedFile {
+    id: string;
+    name: string;
+    size: number;
+    type: string;
+    path?: string;
+    signedUrl?: string;
+    status: 'uploading' | 'success' | 'error';
+    errorMessage?: string;
+}
+
 // -------------------------------------------------
-// Priority options derived from the Prisma enum
+// Options derived from requirements
 // -------------------------------------------------
 
 const PRIORITY_OPTIONS = [
@@ -48,6 +66,16 @@ const PRIORITY_BADGE_VARIANT: Record<string, 'neutral' | 'info' | 'warning' | 'd
     Critical: 'danger',
 };
 
+const MODULE_OPTIONS = [
+    { value: 'General', label: 'General' },
+    { value: 'OPD', label: 'OPD' },
+    { value: 'IPD', label: 'IPD' },
+    { value: 'Pharmacy', label: 'Pharmacy' },
+    { value: 'Lab', label: 'Laboratory' },
+    { value: 'Billing', label: 'Billing' },
+    { value: 'IT', label: 'IT Support' },
+];
+
 // -------------------------------------------------
 // Component
 // -------------------------------------------------
@@ -59,12 +87,15 @@ export function RaiseTicketForm() {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [priority, setPriority] = useState<string>(TicketPriority.Medium);
+    const [module, setModule] = useState<string>('General');
     const [branchId, setBranchId] = useState('');
+    const [files, setFiles] = useState<UploadedFile[]>([]);
     const [branches, setBranches] = useState<BranchOption[]>([]);
 
     // UI state
     const [errors, setErrors] = useState<FormErrors>({});
     const [submitState, setSubmitState] = useState<SubmitState>('idle');
+    const [isFetchingBranches, setIsFetchingBranches] = useState(true);
     const [createdTicketId, setCreatedTicketId] = useState<string | null>(null);
     const [errorMessage, setErrorMessage] = useState('');
 
@@ -75,12 +106,10 @@ export function RaiseTicketForm() {
             const result = await listBranches();
             if (cancelled) return;
             if (result.success && result.data.length > 0) {
-                setBranches(result.data.map((b: any) => ({ id: b.id, branch_name: b.branch_name })));
-                // Auto-select if only one branch
-                if (result.data.length === 1) {
-                    setBranchId(result.data[0].id);
-                }
+                setBranches(result.data);
+                setBranchId(result.data[0].id);
             }
+            setIsFetchingBranches(false);
         })();
         return () => { cancelled = true; };
     }, []);
@@ -96,12 +125,55 @@ export function RaiseTicketForm() {
         else if (description.trim().length < 10) errs.description = 'Please provide more detail (at least 10 characters)';
 
         if (!priority) errs.priority = 'Priority is required';
-
         if (!branchId) errs.branchId = 'Facility is required';
+
+        if (files.some(f => f.status === 'uploading')) errs.files = 'Please wait for files to finish uploading';
+        if (files.some(f => f.status === 'error')) errs.files = 'Please remove or retry failed file uploads';
 
         setErrors(errs);
         return Object.keys(errs).length === 0;
-    }, [title, description, priority, branchId]);
+    }, [title, description, priority, branchId, files]);
+
+    const handleFileUpload = async (selectedFiles: FileList) => {
+        const newFiles = Array.from(selectedFiles).slice(0, 5 - files.length);
+        if (newFiles.length === 0) return;
+        
+        const uploadPromises = newFiles.map(async (file) => {
+            const id = Math.random().toString(36).substring(7);
+            
+            if (file.size > 10 * 1024 * 1024) {
+                setFiles(prev => [...prev, { id, name: file.name, size: file.size, type: file.type, status: 'error', errorMessage: 'File exceeds 10MB limit' }]);
+                return;
+            }
+            if (!['image/jpeg', 'image/png', 'image/gif', 'application/pdf'].includes(file.type)) {
+                setFiles(prev => [...prev, { id, name: file.name, size: file.size, type: file.type, status: 'error', errorMessage: 'Only Images and PDFs are allowed' }]);
+                return;
+            }
+
+            setFiles(prev => [...prev, { id, name: file.name, size: file.size, type: file.type, status: 'uploading' }]);
+            
+            const fileExt = file.name.split('.').pop();
+            const filePath = `${Date.now()}-${id}.${fileExt}`;
+            
+            const { data: uploadData, error: uploadError } = await supabase.storage.from('ticket-attachments').upload(filePath, file);
+            
+            if (uploadError || !uploadData) {
+                setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error', errorMessage: uploadError?.message || 'Upload failed' } : f));
+                return;
+            }
+
+            const { data: signedData, error: signedError } = await supabase.storage.from('ticket-attachments').createSignedUrl(uploadData.path, 60 * 60);
+
+            if (signedError || !signedData) {
+                setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error', errorMessage: 'Failed to generate preview URL' } : f));
+                return;
+            }
+            
+            setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'success', path: uploadData.path, signedUrl: signedData.signedUrl } : f));
+        });
+        
+        await Promise.all(uploadPromises);
+    };
 
     // Submit handler
     const handleSubmit = async (e: React.FormEvent) => {
@@ -117,9 +189,24 @@ export function RaiseTicketForm() {
                 description: description.trim(),
                 priority: priority as TicketPriority,
                 branchId,
-            });
+                module,
+            } as any);
 
             if (result.success && result.data) {
+                const newTicketId = result.data.id;
+                
+                for (const f of files.filter(f => f.status === 'success')) {
+                    if (f.path) {
+                        await saveTicketAttachment({
+                            ticketId: newTicketId,
+                            fileUrl: f.path,
+                            fileName: f.name,
+                            fileSize: f.size,
+                            mimeType: f.type,
+                        });
+                    }
+                }
+
                 setSubmitState('success');
                 setCreatedTicketId(result.data.id);
             } else {
@@ -170,6 +257,8 @@ export function RaiseTicketForm() {
                                 setTitle('');
                                 setDescription('');
                                 setPriority(TicketPriority.Medium);
+                                setModule('General');
+                                setFiles([]);
                                 setCreatedTicketId(null);
                                 setErrors({});
                             }}
@@ -177,6 +266,20 @@ export function RaiseTicketForm() {
                             Raise Another
                         </Button>
                     </div>
+                </div>
+            </Card>
+        );
+    }
+
+    if (!isFetchingBranches && branches.length === 0) {
+        return (
+            <Card padding="md" className="max-w-2xl mx-auto mt-6">
+                <div className="flex flex-col items-center py-10 text-center">
+                    <div className="p-3 rounded-2xl bg-rose-50 text-rose-500 mb-3 ring-1 ring-rose-200/50">
+                        <AlertTriangle className="h-7 w-7" />
+                    </div>
+                    <p className="text-sm font-semibold text-gray-700 mb-1">No Facility Assigned</p>
+                    <p className="text-xs text-gray-500">You must be assigned to at least one facility to raise a ticket. Please contact your administrator.</p>
                 </div>
             </Card>
         );
@@ -204,22 +307,6 @@ export function RaiseTicketForm() {
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-5">
-                    {/* Facility selector — hidden if only one branch */}
-                    {branches.length > 1 && (
-                        <Select
-                            id="help-center-branch"
-                            label="Facility"
-                            placeholder="Select a facility"
-                            options={branches.map((b) => ({ value: b.id, label: b.branch_name }))}
-                            value={branchId}
-                            onChange={(e) => {
-                                setBranchId(e.target.value);
-                                if (errors.branchId) setErrors((prev) => ({ ...prev, branchId: undefined }));
-                            }}
-                            error={errors.branchId}
-                        />
-                    )}
-
                     {/* Summary */}
                     <Input
                         id="help-center-title"
@@ -232,6 +319,15 @@ export function RaiseTicketForm() {
                         }}
                         error={errors.title}
                         maxLength={200}
+                    />
+
+                    {/* Module */}
+                    <Select
+                        id="help-center-module"
+                        label="Module"
+                        options={MODULE_OPTIONS}
+                        value={module}
+                        onChange={(e) => setModule(e.target.value)}
                     />
 
                     {/* Priority */}
@@ -279,6 +375,54 @@ export function RaiseTicketForm() {
                                 Add a few more details to help us resolve this faster
                             </p>
                         )}
+                    </div>
+
+                    {/* Attachment Upload */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Attachments (Optional)</label>
+                        {files.length < 5 && (
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 transition-colors">
+                                <input
+                                    type="file"
+                                    id="ticket-attachment"
+                                    className="hidden"
+                                    multiple
+                                    onChange={(e) => { if (e.target.files) handleFileUpload(e.target.files); e.target.value = ''; }}
+                                    accept="image/*,.pdf"
+                                />
+                                <label htmlFor="ticket-attachment" className="cursor-pointer flex flex-col items-center">
+                                    <UploadCloud className="h-8 w-8 text-gray-400 mb-2" />
+                                    <span className="text-sm font-medium text-primary-600">Click to upload</span>
+                                    <span className="text-xs text-gray-500 mt-1">Images or PDFs up to 10MB (Max 5)</span>
+                                </label>
+                            </div>
+                        )}
+                        
+                        {files.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                                {files.map(f => (
+                                    <div key={f.id} className="flex items-center justify-between p-2 bg-gray-50 rounded border border-gray-200">
+                                        <div className="flex items-center gap-3 overflow-hidden">
+                                            {f.signedUrl && f.type.startsWith('image/') ? (
+                                                <img src={f.signedUrl} alt="Preview" className="h-8 w-8 object-cover rounded shadow-sm border border-gray-200" />
+                                            ) : (
+                                                <div className="h-8 w-8 bg-gray-100 flex items-center justify-center rounded border border-gray-200"><FileText className="h-4 w-4 text-gray-400" /></div>
+                                            )}
+                                            <div className="flex flex-col truncate">
+                                                <span className="text-sm font-medium text-gray-700 truncate">{f.name}</span>
+                                                {f.status === 'uploading' && <span className="text-xs text-primary-600 flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Uploading...</span>}
+                                                {f.status === 'error' && <span className="text-xs text-rose-600 font-medium">{f.errorMessage}</span>}
+                                                {f.status === 'success' && <span className="text-xs text-gray-500">{(f.size / 1024 / 1024).toFixed(2)} MB</span>}
+                                            </div>
+                                        </div>
+                                        <button type="button" onClick={() => setFiles(prev => prev.filter(file => file.id !== f.id))} className="text-gray-400 hover:text-red-500 p-1">
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {errors.files && <p className="text-xs text-rose-500 mt-1.5 font-medium">{errors.files}</p>}
                     </div>
 
                     {/* Actions */}
