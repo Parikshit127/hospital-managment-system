@@ -166,9 +166,16 @@ function generateStickerHTML(patient: any, admission: any, appointment: any, bra
             display: grid;
             grid-template-columns: repeat(3, 64mm);
             grid-template-rows: repeat(8, 34mm);
+            grid-auto-rows: 34mm;
+            align-content: start;
+            justify-content: center;
             gap: 0;
             width: 210mm;
-            height: 297mm;
+            /* Do NOT force a full 297mm height — when the block is exactly the page
+               height the browser tends to "fit to page" and scales everything down a
+               hair, so each row drifts upward as you go down (labels print above the
+               physical sticker). Letting the grid be its natural 8×34mm height keeps
+               every row at an exact 34mm pitch. */
             margin: 0 auto;
             padding: 4.5mm 7mm;
         }
