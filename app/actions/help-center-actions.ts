@@ -45,10 +45,10 @@ export async function createTicket(input: CreateTicketInput) {
 
 export async function getTicketsByFacility(branchId: string) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, session, organizationId } = await requireTenantContext();
 
         const data = await db.ticket.findMany({
-            where: { branch_id: branchId, organizationId },
+            where: { branch_id: branchId, organizationId, user_id: session.id },
             orderBy: { created_at: 'desc' },
             include: {
                 user: { select: { id: true, name: true, username: true } },
