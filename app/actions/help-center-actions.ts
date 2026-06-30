@@ -77,9 +77,35 @@ export async function updateTicketStatus(ticketId: string, status: TicketStatus)
         });
 
         revalidatePath('/help-center');
+        revalidatePath('/admin/support');
         return { success: true, data: ticket };
     } catch (error) {
         console.error('Update Ticket Status Error:', error);
         return { success: false, data: null };
     }
 }
+
+// ========================================
+// FETCH ALL TICKETS FOR ORGANIZATION
+// ========================================
+
+export async function getAllTickets() {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const data = await db.ticket.findMany({
+            where: { organizationId },
+            orderBy: { created_at: 'desc' },
+            include: {
+                user: { select: { id: true, name: true, username: true } },
+                branch: { select: { id: true, branch_name: true } },
+            },
+        });
+
+        return { success: true, data };
+    } catch (error) {
+        console.error('Get All Tickets Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
