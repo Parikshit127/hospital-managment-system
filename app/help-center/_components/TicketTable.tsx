@@ -34,7 +34,7 @@ interface BranchOption {
     branch_name: string;
 }
 
-type LoadState = 'loading' | 'loaded' | 'error';
+type LoadState = 'loading' | 'loaded' | 'error' | 'security-error';
 
 // -------------------------------------------------
 // Status display config
@@ -110,12 +110,14 @@ export function TicketTable({ userId }: { userId: string }) {
                 const result = await getTicketsByFacility(selectedBranch);
                 if (cancelled) return;
                 if (result.success) {
-                    // Filter to only the current user's tickets
-                    const userTickets = (result.data as TicketRow[]).filter(
-                        (t) => t.user_id === userId
-                    );
-                    setTickets(userTickets);
-                    setLoadState('loaded');
+                    const data = result.data as TicketRow[];
+                    const hasLeak = data.some((t) => t.user_id !== userId);
+                    if (hasLeak) {
+                        setLoadState('security-error');
+                    } else {
+                        setTickets(data);
+                        setLoadState('loaded');
+                    }
                 } else {
                     setLoadState('error');
                 }
@@ -134,10 +136,14 @@ export function TicketTable({ userId }: { userId: string }) {
         try {
             const result = await getTicketsByFacility(selectedBranch);
             if (result.success) {
-                const userTickets = (result.data as TicketRow[]).filter(
-                    (t) => t.user_id === userId
-                );
-                setTickets(userTickets);
+                const data = result.data as TicketRow[];
+                const hasLeak = data.some((t) => t.user_id !== userId);
+                if (hasLeak) {
+                    setLoadState('security-error');
+                } else {
+                    setTickets(data);
+                    setLoadState('loaded');
+                }
             }
         } finally {
             setRefreshing(false);
@@ -202,6 +208,21 @@ export function TicketTable({ userId }: { userId: string }) {
                         <Button variant="secondary" size="sm" onClick={handleRefresh}>
                             Try Again
                         </Button>
+                    </div>
+                </Card>
+            )}
+
+            {loadState === 'security-error' && (
+                <Card padding="md">
+                    <div className="flex flex-col items-center py-10 text-center">
+                        <div className="p-3 rounded-2xl bg-rose-50 text-rose-600 mb-3 ring-1 ring-rose-200/50">
+                            <TicketCheck className="h-7 w-7" />
+                        </div>
+                        <p className="text-sm font-bold text-rose-700 mb-1">Security Warning: Backend Gap Detected</p>
+                        <p className="text-sm text-rose-600 mb-4 max-w-lg">
+                            The server action <code>getTicketsByFacility</code> is returning tickets that belong to other users.
+                            To prevent data leakage, the UI has been blocked. Please fix the server action to scope queries securely by <code>user_id</code>.
+                        </p>
                     </div>
                 </Card>
             )}
