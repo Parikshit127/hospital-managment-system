@@ -261,18 +261,25 @@ export function RaiseTicketForm() {
                     </div>
 
                     {/* Description */}
-                    <Textarea
-                        id="help-center-description"
-                        label="Detailed Description"
-                        placeholder="Steps to reproduce, expected vs. actual behavior, any error messages…"
-                        value={description}
-                        onChange={(e) => {
-                            setDescription(e.target.value);
-                            if (errors.description) setErrors((prev) => ({ ...prev, description: undefined }));
-                        }}
-                        error={errors.description}
-                        rows={5}
-                    />
+                    <div>
+                        <Textarea
+                            id="help-center-description"
+                            label="Detailed Description"
+                            placeholder="Steps to reproduce, expected vs. actual behavior, any error messages…"
+                            value={description}
+                            onChange={(e) => {
+                                setDescription(e.target.value);
+                                if (errors.description) setErrors((prev) => ({ ...prev, description: undefined }));
+                            }}
+                            error={errors.description}
+                            rows={5}
+                        />
+                        {!errors.description && description.length > 0 && description.trim().length < 20 && (
+                            <p className="text-xs text-gray-500 font-medium mt-1.5">
+                                Add a few more details to help us resolve this faster
+                            </p>
+                        )}
+                    </div>
 
                     {/* Actions */}
                     <div className="flex items-center justify-between pt-2">

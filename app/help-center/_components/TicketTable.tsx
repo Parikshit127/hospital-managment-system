@@ -13,6 +13,7 @@ import { EmptyState } from '@/app/components/ui/EmptyState';
 import { LoadingState } from '@/app/components/ui/LoadingState';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/Card';
 import { Select } from '@/app/components/ui/Select';
+import { Input } from '@/app/components/ui/Input';
 
 // -------------------------------------------------
 // Types
@@ -77,6 +78,11 @@ export function TicketTable({ userId }: { userId: string }) {
     const [selectedBranch, setSelectedBranch] = useState('');
     const [loadState, setLoadState] = useState<LoadState>('loading');
     const [refreshing, setRefreshing] = useState(false);
+
+    // Filters
+    const [statusFilter, setStatusFilter] = useState<string>('All');
+    const [dateFrom, setDateFrom] = useState<string>('');
+    const [dateTo, setDateTo] = useState<string>('');
 
     // Load branches
     useEffect(() => {
@@ -150,6 +156,25 @@ export function TicketTable({ userId }: { userId: string }) {
         }
     };
 
+    const filteredTickets = tickets.filter((t) => {
+        if (statusFilter !== 'All' && t.status !== statusFilter) return false;
+        
+        const ticketDate = new Date(t.created_at);
+        ticketDate.setHours(0, 0, 0, 0);
+
+        if (dateFrom) {
+            const from = new Date(dateFrom);
+            from.setHours(0, 0, 0, 0);
+            if (ticketDate < from) return false;
+        }
+        if (dateTo) {
+            const to = new Date(dateTo);
+            to.setHours(0, 0, 0, 0);
+            if (ticketDate > to) return false;
+        }
+        return true;
+    });
+
     return (
         <div className="max-w-4xl mx-auto mt-6 space-y-5">
             {/* Header */}
@@ -181,18 +206,52 @@ export function TicketTable({ userId }: { userId: string }) {
                 </div>
             </Card>
 
-            {/* Branch filter — only show if multiple branches */}
-            {branches.length > 1 && (
-                <div className="max-w-xs">
+            {/* Filters */}
+            <div className="flex flex-col sm:flex-row gap-4">
+                {branches.length > 1 && (
+                    <div className="flex-1 min-w-[200px]">
+                        <Select
+                            id="help-center-branch-filter"
+                            label="Facility"
+                            options={branches.map((b) => ({ value: b.id, label: b.branch_name }))}
+                            value={selectedBranch}
+                            onChange={(e) => setSelectedBranch(e.target.value)}
+                        />
+                    </div>
+                )}
+                <div className="flex-1 min-w-[150px]">
                     <Select
-                        id="help-center-branch-filter"
-                        label="Facility"
-                        options={branches.map((b) => ({ value: b.id, label: b.branch_name }))}
-                        value={selectedBranch}
-                        onChange={(e) => setSelectedBranch(e.target.value)}
+                        id="help-center-status-filter"
+                        label="Status"
+                        options={[
+                            { value: 'All', label: 'All Statuses' },
+                            { value: TicketStatus.Open, label: 'Open' },
+                            { value: TicketStatus.InProgress, label: 'In Progress' },
+                            { value: TicketStatus.Resolved, label: 'Resolved' },
+                        ]}
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
                     />
                 </div>
-            )}
+                <div className="flex-1 min-w-[140px]">
+                    <Input
+                        type="date"
+                        id="help-center-date-from"
+                        label="From"
+                        value={dateFrom}
+                        onChange={(e) => setDateFrom(e.target.value)}
+                    />
+                </div>
+                <div className="flex-1 min-w-[140px]">
+                    <Input
+                        type="date"
+                        id="help-center-date-to"
+                        label="To"
+                        value={dateTo}
+                        onChange={(e) => setDateTo(e.target.value)}
+                    />
+                </div>
+            </div>
 
             {/* Content */}
             {loadState === 'loading' && <LoadingState message="Loading tickets…" />}
@@ -247,7 +306,30 @@ export function TicketTable({ userId }: { userId: string }) {
                 </Card>
             )}
 
-            {loadState === 'loaded' && tickets.length > 0 && (
+            {loadState === 'loaded' && tickets.length > 0 && filteredTickets.length === 0 && (
+                <Card padding="none">
+                    <EmptyState
+                        icon={<TicketCheck className="h-8 w-8" />}
+                        title="No matching tickets"
+                        description="No tickets match the selected filters. Try adjusting your criteria."
+                        action={
+                            <Button
+                                variant="secondary"
+                                size="md"
+                                onClick={() => {
+                                    setStatusFilter('All');
+                                    setDateFrom('');
+                                    setDateTo('');
+                                }}
+                            >
+                                Clear Filters
+                            </Button>
+                        }
+                    />
+                </Card>
+            )}
+
+            {loadState === 'loaded' && filteredTickets.length > 0 && (
                 <Table>
                     <TableHeader>
                         <TableCell header>Ticket ID</TableCell>
@@ -257,7 +339,7 @@ export function TicketTable({ userId }: { userId: string }) {
                         <TableCell header>Date Created</TableCell>
                     </TableHeader>
                     <TableBody>
-                        {tickets.map((ticket) => {
+                        {filteredTickets.map((ticket) => {
                             const statusCfg = STATUS_CONFIG[ticket.status] || {
                                 label: ticket.status,
                                 variant: 'neutral' as const,
@@ -298,9 +380,9 @@ export function TicketTable({ userId }: { userId: string }) {
             )}
 
             {/* Ticket count */}
-            {loadState === 'loaded' && tickets.length > 0 && (
+            {loadState === 'loaded' && filteredTickets.length > 0 && (
                 <p className="text-xs text-gray-400 text-right pr-1">
-                    {tickets.length} ticket{tickets.length !== 1 ? 's' : ''}
+                    {filteredTickets.length} ticket{filteredTickets.length !== 1 ? 's' : ''}
                 </p>
             )}
         </div>
