@@ -13,6 +13,7 @@ interface CreateTicketInput {
     description: string;
     priority: TicketPriority;
     branchId: string;
+    module?: string;
 }
 
 export async function createTicket(input: CreateTicketInput) {
@@ -23,6 +24,7 @@ export async function createTicket(input: CreateTicketInput) {
             data: {
                 title: input.title,
                 description: input.description,
+                module: input.module ?? null,
                 priority: input.priority,
                 status: TicketStatus.Open,
                 user_id: session.id,
@@ -35,6 +37,52 @@ export async function createTicket(input: CreateTicketInput) {
         return { success: true, data: ticket };
     } catch (error) {
         console.error('Create Ticket Error:', error);
+        return { success: false, data: null };
+    }
+}
+
+// ========================================
+// SAVE TICKET ATTACHMENT
+// (called after the client uploads the file to Supabase storage)
+// ========================================
+
+interface SaveTicketAttachmentInput {
+    ticketId: string;
+    fileUrl: string;
+    fileName: string;
+    fileSize: number;
+    mimeType: string;
+}
+
+export async function saveTicketAttachment(input: SaveTicketAttachmentInput) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        // Tenant safety: only allow attaching to a ticket in the caller's org.
+        const ticket = await db.ticket.findFirst({
+            where: { id: input.ticketId, organizationId },
+            select: { id: true },
+        });
+
+        if (!ticket) {
+            return { success: false, data: null };
+        }
+
+        const attachment = await db.ticketAttachment.create({
+            data: {
+                ticket_id: input.ticketId,
+                file_url: input.fileUrl,
+                file_name: input.fileName,
+                file_size: input.fileSize,
+                mime_type: input.mimeType,
+            },
+        });
+
+        revalidatePath('/help-center');
+        revalidatePath('/admin/support');
+        return { success: true, data: attachment };
+    } catch (error) {
+        console.error('Save Ticket Attachment Error:', error);
         return { success: false, data: null };
     }
 }
