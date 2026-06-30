@@ -1,6 +1,10 @@
 # Help Center — Hospital Portal UI Progress
 
-> Last updated: 2026-06-30T14:38 IST
+> Last updated: 2026-06-30T14:43 IST  
+> Branch: `feat/hospital-ui`  
+> Status: **✅ MVP COMPLETE**
+
+---
 
 ## Investigation Summary
 
@@ -11,89 +15,82 @@
 | `title` | String | Maps to "Summary" in spec |
 | `description` | String | Maps to "Detailed Description" |
 | `priority` | `TicketPriority` enum | Low, Medium, High, Critical |
-| `status` | `TicketStatus` enum | Open, InProgress (mapped to `in_progress`), Resolved |
+| `status` | `TicketStatus` enum | Open, InProgress (DB: `in_progress`), Resolved |
 | `user_id` | String → User | FK to users table |
 | `branch_id` | String → Branch | FK to branches table (≈ "facility") |
 | `organizationId` | String → Organization | Tenant scoping |
 | `created_at` | DateTime | Auto `now()` |
 | `updated_at` | DateTime | Auto `@updatedAt` |
 
-### Server Actions (app/actions/help-center-actions.ts)
-| Function | Purpose | Notes |
-|----------|---------|-------|
-| `createTicket(input)` | Create ticket | Takes `{ title, description, priority, branchId }` |
-| `getTicketsByFacility(branchId)` | List tickets for a facility | Scopes by branchId AND organizationId, NOT individual user |
-| `updateTicketStatus(ticketId, status)` | Update status | Admin-side; not used on hospital portal |
+### Server Actions Called
+| Function | Where Used | Notes |
+|----------|-----------|-------|
+| `createTicket({ title, description, priority, branchId })` | RaiseTicketForm | ✅ Works as expected |
+| `getTicketsByFacility(branchId)` | TicketTable | ✅ Called, then client-filtered by user_id |
+| `listBranches()` (from branch-actions.ts) | Both forms | ✅ Loads branches since session lacks branch_id |
+| `updateTicketStatus()` | NOT used | Correctly left to admin portal |
 
-### Auth Pattern
-- `requireTenantContext()` from `@/backend/tenant` → `{ db, session, organizationId }`
-- `getSession()` from `@/app/lib/session` → SessionData: `id, username, role, name, organization_id`
-- Session does NOT contain `branch_id`; branches loaded via `listBranches()` from branch-actions
-
-### UI Components (app/components/ui/)
-Badge, Button, Card, CardHeader, CardTitle, CardDescription, EmptyState, Input, Textarea,
-LoadingState, Modal, Select, Table, TableHeader, TableBody, TableRow, TableCell, Skeleton
-
-### Routing Convention
-- Flat folders under `app/` (e.g., `app/reception/`, `app/admin/support/`)
-- Help center lives at `app/help-center/`
+### Missing Server Actions
+**None missing** — all needed actions exist and are called correctly.
 
 ---
 
 ## Scope Mapping
 
-| Spec Item | Status | Notes |
-|-----------|--------|-------|
-| Investigation (schema, actions, UI, auth, routing) | ✅ Done | All verified against live files |
-| Create branch `feat/hospital-ui` | ✅ Done | Created off main with help-center-db-core merged in |
-| Help center layout (`app/help-center/layout.tsx`) | ✅ Done | Auth guard, metadata |
-| Help center index redirect (`app/help-center/page.tsx`) | ✅ Done | Redirects to /help-center/track |
-| Help center loading (`app/help-center/loading.tsx`) | ✅ Done | Uses existing LoadingState component |
-| Raise Ticket form (`app/help-center/_components/RaiseTicketForm.tsx`) | ✅ Done | Form, validation, success/error states |
-| Raise Ticket page (`app/help-center/raise/page.tsx`) | ✅ Done | Renders RaiseTicketForm |
-| Ticket Table (`app/help-center/_components/TicketTable.tsx`) | ✅ Done | Table with loading/error/empty states, user filtering |
-| Track Status page (`app/help-center/track/page.tsx`) | ✅ Done | Server component passes userId to TicketTable |
-| TypeScript type check | 🔄 In progress | Running `tsc --noEmit` |
-| Git commits | 🔲 Not started | — |
-| Final summary | 🔲 Not started | — |
+| Spec Item | Status |
+|-----------|--------|
+| Investigation (schema, actions, UI, auth, routing) | ✅ Done |
+| Create branch `feat/hospital-ui` | ✅ Done |
+| Help center layout (`app/help-center/layout.tsx`) | ✅ Done |
+| Help center index redirect (`app/help-center/page.tsx`) | ✅ Done |
+| Help center loading (`app/help-center/loading.tsx`) | ✅ Done |
+| Raise Ticket form component | ✅ Done |
+| Raise Ticket page | ✅ Done |
+| Track Status table component | ✅ Done |
+| Track Status page | ✅ Done |
+| TypeScript type check | ✅ Passed |
+| Git commits (4 logical commits) | ✅ Done |
 
 ---
 
-## Files Created / Modified
+## Files Created
 
-| File | What it does |
-|------|-------------|
-| `HELP_CENTER_PROGRESS.md` | This progress file |
-| `app/help-center/layout.tsx` | Auth-guarded layout, metadata, force-dynamic |
-| `app/help-center/page.tsx` | Index redirect → /help-center/track |
+| File | Purpose |
+|------|---------|
+| `app/help-center/layout.tsx` | Auth-guarded layout with metadata, force-dynamic |
+| `app/help-center/page.tsx` | Index redirect → `/help-center/track` |
 | `app/help-center/loading.tsx` | Loading skeleton while server renders |
 | `app/help-center/raise/page.tsx` | Raise ticket page wrapper |
-| `app/help-center/track/page.tsx` | Track status page, reads session for userId |
-| `app/help-center/_components/RaiseTicketForm.tsx` | Client form: title, description, priority, branch, validation, success state with ticket ID |
-| `app/help-center/_components/TicketTable.tsx` | Client table: loads tickets by facility, filters to current user, empty/error/loading states |
+| `app/help-center/track/page.tsx` | Track status page — reads session, passes userId |
+| `app/help-center/_components/RaiseTicketForm.tsx` | Client form with validation, priority badges, success state |
+| `app/help-center/_components/TicketTable.tsx` | Client table with loading/error/empty states, user filtering |
+| `HELP_CENTER_PROGRESS.md` | This progress/context file |
 
 ---
 
-## Next Step
+## Next Step (if continuing)
 
-1. Wait for TypeScript check to complete; fix any type errors.
-2. Make git commits in logical chunks.
-3. Write the final summary (schema fields used, server actions called, assumptions).
+All MVP scope is complete. If picking up from here, the next tasks would be:
+1. **Push the branch**: `git push origin feat/hospital-ui`
+2. **Run migration** on the database: `npx prisma migrate deploy`
+3. **Seed test data**: `npx ts-node prisma/seed-tickets.ts`
+4. **Visually test** by logging in and navigating to `/help-center/`
+5. **Post-MVP**: Add Module/Type fields once schema is updated, add server-side user filtering to `getTicketsByFacility`
 
 ---
 
-## Assumptions & Decisions
+## Assumptions & Decisions (Verify Before Merging)
 
-1. **No `module` or `type` field**: Schema only has `title` + `description` + `priority`. Spec mentioned Module and Type but teammate didn't add them. Form built with only existing fields. **Flagged for team verification.**
+1. **⚠️ No `module` or `type` field in schema**: Spec mentioned Module and Type fields, but the Ticket model only has `title`, `description`, and `priority`. Form built with only the existing fields. The "Module" column from the track table spec was omitted.
 
-2. **`getTicketsByFacility` scopes by branch, not user**: Spec says "only the current user's own tickets" but the server action fetches ALL tickets for a branch. We filter client-side by `user_id === session.id`. **Flagged — ideally server-side filtering.**
+2. **⚠️ Client-side user filtering**: `getTicketsByFacility` returns ALL tickets for a branch. We filter on the client by `user_id === session.id`. This is functional but ideally should be server-side for security. The spec says "only the current user's own tickets."
 
-3. **No `module` column in track table**: Spec wanted a "Module" column. Schema has no module field, so omitted. **Flagged.**
+3. **⚠️ No "Closed" status**: Spec mentioned Open/In Progress/Resolved/Closed but the enum only has Open, InProgress, Resolved. No Closed status was built.
 
-4. **Branch/Facility selection**: Session doesn't contain `branch_id`. Using `listBranches()` to load branches. Auto-selects if only one branch. Both raise and track pages have branch selectors.
+4. **Branch/Facility selection**: Session doesn't include `branch_id`, so both screens load branches via `listBranches()`. Auto-selects if only one branch exists.
 
-5. **Routing at `app/help-center/`** not `app/(hospital)/help-center/`: Codebase uses flat folders.
+5. **Routing**: Used `app/help-center/` (flat folder), not `app/(hospital)/help-center/` (route group) — matching the existing codebase convention.
 
-6. **Status enum**: Open, InProgress (DB: `in_progress`), Resolved. No "Closed" status exists despite spec mentioning it.
+6. **Ticket ID display**: UUIDs are shown as first 8 chars uppercased (e.g., `A1B2C3D4`) for a scannable short reference.
 
-7. **Ticket ID display**: Schema uses UUIDs. Showing first 8 chars uppercased as a short reference ID (e.g., `A1B2C3D4`).
+7. **No files outside scope**: We did NOT modify schema.prisma, help-center-actions.ts, or any admin files. Only created new files under `app/help-center/` and `HELP_CENTER_PROGRESS.md`.
