@@ -89,6 +89,7 @@ model Organization {
   shift_assignments             ShiftAssignment[]
   notifications                 Notification[]
   tickets                       Ticket[]
+  release_notes                 ReleaseNote[]
   expense_categories            ExpenseCategory[]
   vendors                       Vendor[]
   expenses                      Expense[]
@@ -2264,6 +2265,19 @@ model Notification {
   @@index([ticket_id])
   @@index([is_read])
   @@map("notifications")
+}
+
+model ReleaseNote {
+  id             String       @id @default(uuid())
+  title          String
+  content        String
+  version        String
+  organizationId String
+  created_at     DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@map("release_notes")
 }
 
 enum TicketPriority {
