@@ -495,6 +495,7 @@ model User {
   stock_transfers_stock_transfers_receive_user_idTousers  stock_transfers[]    @relation("stock_transfers_receive_user_idTousers")
   stores                                                  stores[]
   tickets                                                 Ticket[]
+  notifications                                           Notification[]
   organization                                            Organization         @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -2246,6 +2247,7 @@ model ShiftAssignment {
 model Notification {
   id             Int          @id @default(autoincrement())
   user_id        String
+  ticket_id      String?
   title          String
   body           String
   type           String       @default("info")
@@ -2254,9 +2256,12 @@ model Notification {
   organizationId String
   created_at     DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id])
+  user           User         @relation(fields: [user_id], references: [id])
+  ticket         Ticket?      @relation(fields: [ticket_id], references: [id])
 
   @@index([organizationId])
   @@index([user_id])
+  @@index([ticket_id])
   @@index([is_read])
   @@map("notifications")
 }
@@ -2290,6 +2295,7 @@ model Ticket {
   branch         Branch              @relation(fields: [branch_id], references: [id])
   organization   Organization        @relation(fields: [organizationId], references: [id])
   attachments    TicketAttachment[]
+  notifications  Notification[]
 
   @@index([organizationId])
   @@index([branch_id])
