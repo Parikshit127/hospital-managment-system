@@ -4,6 +4,13 @@ import { requireTenantContext } from '@/backend/tenant';
 import { TicketPriority, TicketStatus } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 
+// Human-readable labels for ticket statuses (used in user-facing messages).
+const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
+    [TicketStatus.Open]: 'Open',
+    [TicketStatus.InProgress]: 'In Progress',
+    [TicketStatus.Resolved]: 'Resolved',
+};
+
 // ========================================
 // CREATE TICKET
 // ========================================
@@ -132,7 +139,7 @@ export async function updateTicketStatus(ticketId: string, status: TicketStatus)
                     user_id: ticket.user_id,
                     ticket_id: ticket.id,
                     title: 'Ticket Status Updated',
-                    body: `Your ticket #${ticket.id} is now ${status}`,
+                    body: `Your ticket #${ticket.id} is now ${TICKET_STATUS_LABELS[status]}`,
                     organizationId,
                 },
             });
