@@ -44,13 +44,14 @@ import {
   getPatientLedger,
   getPatientTimeline,
 } from "@/app/actions/master-billing-actions";
-import { recordPayment, getMyRole, updatePayment, reversePayment, getInvoiceHistory, finalizeAndLockInvoice } from "@/app/actions/finance-actions";
+import { recordPayment, getMyRole, updatePayment, reversePayment, getInvoiceHistory, finalizeAndLockInvoice, revertInvoiceToDraft } from "@/app/actions/finance-actions";
 import { collectDeposit } from "@/app/actions/deposit-actions";
 import { getCashComplianceConfig } from "@/app/actions/cash-compliance-actions";
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan, resolveRegisteredPan } from "@/app/lib/cash-compliance";
 import { EditInvoiceModal } from "@/app/components/finance/EditInvoiceModal";
 import { RefundModal } from "@/app/components/finance/RefundModal";
-import { Pencil, Lock } from "lucide-react";
+import { CancelInvoiceModal } from "@/app/components/finance/CancelInvoiceModal";
+import { Pencil, Lock, Unlock } from "lucide-react";
 import toast from "react-hot-toast";
 
 const InlineBillBuilder = dynamic(
@@ -116,6 +117,9 @@ export default function PatientFinancialProfilePage() {
   const [showNewBill, setShowNewBill] = useState(false);
   const [finalizingInvoice, setFinalizingInvoice] = useState<any | null>(null);
   const [finalizeSubmitting, setFinalizeSubmitting] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<any | null>(null);
+  const [unlockTarget, setUnlockTarget] = useState<any | null>(null);
+  const [unlockSubmitting, setUnlockSubmitting] = useState(false);
 
   // Memoize initialPatient so its object reference is stable across parent re-renders.
   // Without this, every render creates a new object literal, causing RefundModal's
@@ -196,6 +200,20 @@ export default function PatientFinancialProfilePage() {
     }
   }, [finalizingInvoice, load]);
 
+  const handleConfirmUnlock = useCallback(async () => {
+    if (!unlockTarget) return;
+    setUnlockSubmitting(true);
+    const res = await revertInvoiceToDraft(Number(unlockTarget.id));
+    setUnlockSubmitting(false);
+    if (res.success) {
+      toast.success(`Bill ${unlockTarget.invoice_number ?? ''} unlocked to draft.`);
+      setUnlockTarget(null);
+      await load();
+    } else {
+      toast.error(res.error || 'Failed to unlock bill.');
+    }
+  }, [unlockTarget, load]);
+
   return (
     <AppShell
       pageTitle="Patient Financial Profile"
@@ -274,6 +292,8 @@ export default function PatientFinancialProfilePage() {
                   onCollectPayment={(inv: any) => setPayingInvoice(inv)}
                   onEdit={(inv: any) => setEditingInvoiceId(Number(inv.id))}
                   onFinalize={(inv: any) => setFinalizingInvoice(inv)}
+                  onCancel={(inv: any) => setCancelTarget(inv)}
+                  onUnlock={(inv: any) => setUnlockTarget(inv)}
                   onRefund={() => setRefundOpen(true)}
                   canEditPaid={canEditPaid}
                   setEditingPayment={setEditingPayment}
@@ -364,6 +384,66 @@ export default function PatientFinancialProfilePage() {
               >
                 {finalizeSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />}
                 {finalizeSubmitting ? "Finalising…" : "Finalize & Lock"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Invoice Modal (Admin/Finance) */}
+      {cancelTarget && (
+        <CancelInvoiceModal
+          invoiceId={Number(cancelTarget.id)}
+          invoiceNumber={cancelTarget.invoice_number}
+          patientName={profile?.patient?.full_name || ''}
+          amount={Number(cancelTarget.net_amount ?? 0)}
+          paidAmount={Number(cancelTarget.paid_amount ?? 0)}
+          onClose={() => setCancelTarget(null)}
+          onCancelled={() => {
+            setCancelTarget(null);
+            load();
+          }}
+        />
+      )}
+
+      {/* Unlock-to-Draft confirmation (Admin/Finance) */}
+      {unlockTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+              <Unlock className="h-4 w-4 text-amber-600" />
+              <h3 className="text-sm font-bold text-gray-900">
+                Unlock bill {unlockTarget.invoice_number}
+              </h3>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-3">
+                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  This reverts the finalised bill back to <span className="font-bold">Draft</span> so it can be
+                  edited again. A new bill version is recorded and the action is logged. Bills with collected
+                  payments cannot be unlocked — reverse the payment first.
+                </p>
+              </div>
+              <div className="text-xs text-gray-600">
+                Net amount: <span className="font-bold text-gray-900">₹{fmtMoney(Number(unlockTarget.net_amount))}</span>
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setUnlockTarget(null)}
+                disabled={unlockSubmitting}
+                className="px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-xs font-bold text-gray-700 rounded-lg disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmUnlock}
+                disabled={unlockSubmitting}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {unlockSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlock className="h-3.5 w-3.5" />}
+                {unlockSubmitting ? "Unlocking…" : "Unlock to Draft"}
               </button>
             </div>
           </div>
@@ -720,6 +800,8 @@ function InvoicesTab({
   onCollectPayment,
   onEdit,
   onFinalize,
+  onCancel,
+  onUnlock,
   onRefund,
   canEditPaid,
   setEditingPayment,
@@ -731,6 +813,8 @@ function InvoicesTab({
   onCollectPayment: (inv: any) => void;
   onEdit: (inv: any) => void;
   onFinalize: (inv: any) => void;
+  onCancel: (inv: any) => void;
+  onUnlock: (inv: any) => void;
   onRefund: () => void;
   canEditPaid: boolean;
   setEditingPayment: (p: any) => void;
@@ -1006,6 +1090,19 @@ function InvoicesTab({
                       <Pencil className="h-3 w-3" /> Edit
                     </button>
                   )}
+                  {/* Unlock a finalised bill back to Draft — Admin/Finance only. */}
+                  {inv.status === "Final" && canEditPaid && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onUnlock(inv);
+                      }}
+                      className="px-2.5 py-1 bg-white border border-amber-200 hover:border-amber-400 hover:bg-amber-50 text-xs font-bold text-amber-700 rounded flex items-center gap-1"
+                      title="Unlock this finalised bill back to Draft (Admin/Finance)"
+                    >
+                      <Unlock className="h-3 w-3" /> Unlock to Draft
+                    </button>
+                  )}
                   {Number(inv.balance_due) > 0 && inv.status !== "Cancelled" && (
                     <button
                       onClick={(e) => {
@@ -1084,6 +1181,19 @@ function InvoicesTab({
                   >
                     Refund
                   </button>
+                  {/* Cancel invoice — Admin/Finance only; not available on already-cancelled bills. */}
+                  {inv.status !== "Cancelled" && canEditPaid && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCancel(inv);
+                      }}
+                      className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded"
+                      title="Cancel this invoice (Admin/Finance only)"
+                    >
+                      Cancel
+                    </button>
+                  )}
                 </div>
               </div>
             )}

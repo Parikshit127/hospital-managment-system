@@ -950,6 +950,74 @@ export async function revertInvoice(invoiceId: number, reason?: string) {
     }
 }
 
+/**
+ * Unlock a FINALISED bill back to Draft — Admin / Finance only.
+ *
+ * Reopens a Final bill (Final -> Draft) so it becomes editable again, clearing
+ * the finalise + hard-lock state. Use this when a finalised bill needs to be
+ * amended through the normal draft edit flow.
+ *
+ * Guards:
+ *  - Role: admin / finance / superadmin (enforced server-side).
+ *  - Only `Final` bills qualify. Drafts are already editable; Cancelled bills
+ *    must be reopened via revertInvoice (Cancelled -> Final), not this.
+ *  - Refuses if money has been collected (paid_amount > 0) — reverse the payment
+ *    via Refund / Credit Note first, otherwise the bill could be edited out from
+ *    under a settled receipt.
+ */
+export async function revertInvoiceToDraft(invoiceId: number, reason?: string) {
+    try {
+        const { db, organizationId, session } = await requireRoleAndTenant(['admin', 'finance', 'superadmin']);
+
+        const existing = await db.invoices.findUnique({
+            where: { id: invoiceId },
+            select: { status: true, invoice_number: true, paid_amount: true },
+        });
+        if (!existing) return { success: false, error: 'Invoice not found.' };
+        if (existing.status !== 'Final') {
+            return { success: false, error: `Only finalised bills can be unlocked to draft (current status: ${existing.status}).` };
+        }
+        const paid = Number(existing.paid_amount ?? 0);
+        if (paid > 0) {
+            return {
+                success: false,
+                error: `Cannot unlock: ₹${paid.toLocaleString('en-IN')} already collected on this bill. Reverse the payment via Refund or issue a Credit Note first.`,
+            };
+        }
+
+        const invoice = await db.invoices.update({
+            where: { id: invoiceId },
+            data: {
+                status: 'Draft',
+                finalized_at: null,
+                is_locked: false,
+                locked_at: null,
+                locked_by: null,
+                version: { increment: 1 },
+            },
+        });
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'UNLOCK_INVOICE_TO_DRAFT',
+                module: 'finance',
+                entity_type: 'invoice',
+                entity_id: invoice.invoice_number,
+                details: JSON.stringify({ reason: (reason || '').trim() || null, by: session.username, previous_status: 'Final' }),
+                organizationId,
+            },
+        });
+
+        return { success: true, data: serialize(invoice) };
+    } catch (error: any) {
+        if (error?.name === 'ForbiddenError' || /FORBIDDEN/.test(error?.message || '')) {
+            return { success: false, error: 'Only Admin or Finance can unlock a bill to draft.' };
+        }
+        console.error('revertInvoiceToDraft error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 // ============================================
 // PAYMENT PROCESSING
 // ============================================
