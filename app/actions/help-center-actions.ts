@@ -124,6 +124,22 @@ export async function updateTicketStatus(ticketId: string, status: TicketStatus)
             data: { status },
         });
 
+        // Notify the ticket's creator of the status change. Isolated so a
+        // notification failure does not undo the successful status update.
+        try {
+            await db.notification.create({
+                data: {
+                    user_id: ticket.user_id,
+                    ticket_id: ticket.id,
+                    title: 'Ticket Status Updated',
+                    body: `Your ticket #${ticket.id} is now ${status}`,
+                    organizationId,
+                },
+            });
+        } catch (notifyError) {
+            console.error('Ticket Status Notification Error:', notifyError);
+        }
+
         revalidatePath('/help-center');
         revalidatePath('/admin/support');
         return { success: true, data: ticket };
