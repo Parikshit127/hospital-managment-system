@@ -4,6 +4,7 @@ import { getSession } from '@/app/lib/session';
 import { getPharmacyBranding } from '@/app/lib/pharmacy-branding';
 import { parseWalkinNote } from '@/app/lib/walkin-note';
 import { dispensingKey } from '@/app/lib/pharmacy-bill-group';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 function splitLineDoctor(desc: any): { text: string; doctor: string } {
     const parts = String(desc || '').split(' — ');
@@ -79,8 +80,60 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
         return <div style={{ padding: 40, fontFamily: 'Arial', color: '#6b7280' }}>No pharmacy items found on this IPD invoice.</div>;
     }
 
-    const headerDoctor = (invoice as any).doctor_name
-        || Array.from(new Set(items.map((i: any) => splitLineDoctor(i.description).doctor).filter(Boolean))).join(', ');
+    // Prescribing doctor + registration number, shown once in the header.
+    // Resolve the doctor as reliably as possible:
+    //   1. the invoice's own doctor (OPD / counter pharmacy),
+    //   2. the admission's attending doctor (IPD pharmacy),
+    //   3. the "— Dr. X" suffix carried on the medicine line descriptions.
+    // Then look the doctor up in the user master to print the registration number.
+    let doctorUser: { name: string | null; doctor_registration_no: string | null } | null = null;
+
+    const invoiceDoctorId = (invoice as any).doctor_id as string | null;
+    let admissionDoctorName = '';
+    if (invoiceDoctorId) {
+        doctorUser = await prisma.user.findFirst({
+            where: { id: invoiceDoctorId, organizationId: session.organization_id },
+            select: { name: true, doctor_registration_no: true },
+        });
+    }
+    if (!doctorUser && isIpd && (invoice as any).admission_id) {
+        const adm = await prisma.admissions.findFirst({
+            where: { admission_id: (invoice as any).admission_id, organizationId: session.organization_id },
+            select: { attending_doctor_id: true, doctor_name: true },
+        });
+        admissionDoctorName = adm?.doctor_name || '';
+        if (adm?.attending_doctor_id) {
+            doctorUser = await prisma.user.findFirst({
+                where: { id: adm.attending_doctor_id, organizationId: session.organization_id },
+                select: { name: true, doctor_registration_no: true },
+            });
+        }
+    }
+
+    const lineDoctor = Array.from(new Set(items.map((i: any) => splitLineDoctor(i.description).doctor).filter(Boolean))).join(', ');
+    const rawDoctorName = doctorUser?.name || (invoice as any).doctor_name || admissionDoctorName || lineDoctor || '';
+
+    // If we have a name but no matched user yet, try resolving by name to get the
+    // registration number (strip a leading "Dr." before matching).
+    if (!doctorUser && rawDoctorName) {
+        const nameGuess = rawDoctorName.replace(/^\s*(dr\.?|doctor)\s*/i, '').trim();
+        if (nameGuess) {
+            doctorUser = await prisma.user.findFirst({
+                where: {
+                    organizationId: session.organization_id,
+                    OR: [
+                        { name: { equals: nameGuess, mode: 'insensitive' } },
+                        { name: { equals: rawDoctorName, mode: 'insensitive' } },
+                        { name: { contains: nameGuess, mode: 'insensitive' } },
+                    ],
+                },
+                select: { name: true, doctor_registration_no: true },
+            });
+        }
+    }
+
+    const headerDoctor = rawDoctorName ? formatDoctorName(rawDoctorName) : '';
+    const doctorRegNo = doctorUser?.doctor_registration_no || '';
 
     // Per-line CGST/SGST — derive from tax_rate on each item
     const lineData = items.map((item: any) => {
@@ -248,8 +301,8 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
                     <div className="hosp-right">
                         <strong>Patient Name :</strong> {patientName}<br />
                         Patient Address : {patientAddress}<br />
-                        <strong>Dr Name :</strong> {headerDoctor || ''}<br />
-                        Dr Reg No.
+                        <strong>Dr Name :</strong> {headerDoctor || '—'}<br />
+                        Dr Reg No. : {doctorRegNo || '—'}
                     </div>
                 </div>
 
