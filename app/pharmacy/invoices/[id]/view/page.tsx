@@ -133,7 +133,6 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
     }
 
     const headerDoctor = rawDoctorName ? formatDoctorName(rawDoctorName) : '';
-    const doctorRegNo = doctorUser?.doctor_registration_no || '';
 
     // Per-line CGST/SGST — derive from tax_rate on each item
     const lineData = items.map((item: any) => {
@@ -301,8 +300,7 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
                     <div className="hosp-right">
                         <strong>Patient Name :</strong> {patientName}<br />
                         Patient Address : {patientAddress}<br />
-                        <strong>Dr Name :</strong> {headerDoctor || '—'}<br />
-                        Dr Reg No. : {doctorRegNo || '—'}
+                        <strong>Dr Name :</strong> {headerDoctor || '—'}
                     </div>
                 </div>
 
