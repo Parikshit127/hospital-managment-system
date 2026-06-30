@@ -4,7 +4,7 @@ import {
     Users, UserCog, Building2, ShieldCheck, UserRound,
     Settings, Palette, FileText, Bell, Plug, Clock, BarChart3, Lock,
     Workflow, Scissors, GitBranch, DatabaseBackup, BookOpen, Database,
-    ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck,
+    ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck, LifeBuoy,
     type LucideIcon,
 } from 'lucide-react';
 
@@ -90,6 +90,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
             { label: 'API Documentation', href: '/admin/api-docs', icon: BookOpen },
             { label: 'MFA Setup', href: '/admin/mfa-setup', icon: Lock },
             { label: 'Registration Config', href: '/admin/registration-config', icon: SlidersHorizontal },
+            { label: 'Support Portal', href: '/admin/support', icon: LifeBuoy },
         ],
     },
 ];
