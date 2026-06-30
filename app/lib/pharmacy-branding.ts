@@ -10,6 +10,8 @@ export interface PharmacyBranding {
     division: string;
     address: string;
     gstin: string;
+    phone: string;
+    email: string;
 }
 
 const PHARMACY_CONFIG: Record<string, PharmacyBranding> = {
@@ -19,13 +21,17 @@ const PHARMACY_CONFIG: Record<string, PharmacyBranding> = {
         division: '(Division of Garnet Pharmaceutical)',
         address: 'B-162, East of Kailash Road, New Delhi, Delhi 110065',
         gstin: '07AKIPA3324R1Z0',
+        phone: '',
+        email: '',
     },
     // Avise Hospital Superspeciality — Gurugram
     '0425857b-6293-4d91-86b2-bd049de66252': {
         name: 'Garnet Medicare',
         division: '(Division of Garnet Pharmaceutical)',
         address: '209-P, Sector-38, Gurugram, Haryana - 122001',
-        gstin: '',
+        gstin: '06ABCCS6562MIZW',
+        phone: '9717189900',
+        email: 'avisehospital@gmail.com',
     },
 };
 
@@ -34,6 +40,8 @@ const DEFAULT_PHARMACY: PharmacyBranding = {
     division: '(Division of Garnet Pharmaceutical)',
     address: '',
     gstin: '',
+    phone: '',
+    email: '',
 };
 
 export function getPharmacyBranding(organizationId: string): PharmacyBranding {
