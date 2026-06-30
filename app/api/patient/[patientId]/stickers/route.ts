@@ -166,18 +166,17 @@ function generateStickerHTML(patient: any, admission: any, appointment: any, bra
             display: grid;
             grid-template-columns: repeat(3, 64mm);
             grid-template-rows: repeat(8, 34mm);
-            grid-auto-rows: 34mm;
             align-content: start;
-            justify-content: center;
             gap: 0;
+            /* Oddy ST-24 A4 geometry (gapless, 24-up): the sheet fits A4 exactly —
+               3×64mm + 9mm side margins = 210mm, and 8×34mm + 12.5mm top/bottom
+               margins = 297mm. These margins (via padding) put each label's content
+               on its physical sticker. Print at 100% scale with page Margins = None,
+               else the printer scales/offsets it and the labels drift. */
             width: 210mm;
-            /* Do NOT force a full 297mm height — when the block is exactly the page
-               height the browser tends to "fit to page" and scales everything down a
-               hair, so each row drifts upward as you go down (labels print above the
-               physical sticker). Letting the grid be its natural 8×34mm height keeps
-               every row at an exact 34mm pitch. */
-            margin: 0 auto;
-            padding: 4.5mm 7mm;
+            height: 297mm;
+            margin: 0;
+            padding: 12.5mm 9mm;
         }
 
         .sticker {
