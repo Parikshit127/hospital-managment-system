@@ -304,7 +304,7 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
                     </div>
                 </div>
 
-                <div className="gstin-bar">GSTIN : {pharmacy.gstin || 'N/A'}</div>
+                <div className="gstin-bar">GSTIN : {pharmacy.gstin || ''}</div>
 
                 {/* GST Invoice Title */}
                 <div className="inv-title">GST INVOICE</div>

@@ -29,7 +29,7 @@ const PHARMACY_CONFIG: Record<string, PharmacyBranding> = {
         name: 'Garnet Medicare',
         division: '(Division of Garnet Pharmaceutical)',
         address: '209-P, Sector-38, Gurugram, Haryana - 122001',
-        gstin: '06ABCCS6562MIZW',
+        gstin: '',
         phone: '9717189900',
         email: 'avisehospital@gmail.com',
     },
