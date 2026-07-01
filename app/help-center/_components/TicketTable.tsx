@@ -130,15 +130,17 @@ export function TicketTable({ userId }: { userId: string }) {
     }, [notesCache]);
 
     const handleToggleExpand = useCallback((ticketId: string) => {
-        setExpandedTicketId((prev) => {
-            if (prev === ticketId) return null; // collapse
-            // expand — fetch if needed
-            if (!notesCache[ticketId]) {
-                fetchNotesForTicket(ticketId);
-            }
-            return ticketId;
-        });
-    }, [notesCache, fetchNotesForTicket]);
+        // Compute the next expansion state with a PURE updater. Previously the
+        // fetch (which calls setState) ran inside the setExpandedTicketId
+        // updater — React executes updaters during the render phase, so that
+        // triggered "Cannot update a component while rendering a different one".
+        // The fetch must happen in the event handler, not in the updater.
+        const willExpand = expandedTicketId !== ticketId;
+        setExpandedTicketId(willExpand ? ticketId : null);
+        if (willExpand && !notesCache[ticketId]) {
+            fetchNotesForTicket(ticketId);
+        }
+    }, [expandedTicketId, notesCache, fetchNotesForTicket]);
 
     const handleRetryNotes = useCallback((ticketId: string) => {
         // Clear cached error state and re-fetch
