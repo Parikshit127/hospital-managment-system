@@ -1706,6 +1706,7 @@ export async function getFinanceDashboardStats(params?: {
             todayRevenueInv,
             totalRevenueInv,
             periodRevenueInv,
+            unbilledAdvancesAgg,
         ] = await Promise.all([
             db.invoices.count({ where: { status: { not: 'Cancelled' } } }),
             db.invoices.count({ where: { status: 'Draft' } }),
@@ -1765,6 +1766,12 @@ export async function getFinanceDashboardStats(params?: {
                 _sum: { net_amount: true },
                 where: { status: 'Final', ...(dateFilter ? { created_at: dateFilter } : {}) },
             }),
+            // Advances (Unbilled): cash already collected against bills that are still
+            // Draft (not finalized). Visibility only — part of Collections, not Revenue.
+            db.payments.aggregate({
+                _sum: { amount: true },
+                where: { status: 'Completed', invoice: { status: 'Draft' } },
+            }),
         ]);
 
         // Resolve doctor names for revenue-by-doctor
@@ -1793,6 +1800,7 @@ export async function getFinanceDashboardStats(params?: {
                 todayCollection: Number(todayCollection._sum.amount || 0),
                 totalCollection: Number(totalCollection._sum.amount || 0),
                 periodCollection: Number(periodCollection._sum.amount || 0),
+                unbilledAdvances: Number(unbilledAdvancesAgg._sum.amount || 0),
                 totalPaymentsToday,
                 outstandingInvoices: outstandingSnapshot.count,
                 revenueByDepartment: revenueByDept.map((d: any) => ({
