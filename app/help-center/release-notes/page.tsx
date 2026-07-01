@@ -98,7 +98,7 @@ export default function ReleaseNotesPage() {
                                 </div>
                                 {note.file_url && note.file_name && (
                                     <Button
-                                        variant="outline"
+                                        variant="secondary"
                                         size="sm"
                                         icon={<Download className="h-4 w-4" />}
                                         onClick={() => handleDownload(note.file_url!, note.file_name!)}

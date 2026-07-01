@@ -250,7 +250,7 @@ export default function AuditLogsPage() {
                                 </p>
                                 <div className="flex items-center gap-2">
                                     <Button
-                                        variant="outline"
+                                        variant="secondary"
                                         size="sm"
                                         icon={<ChevronLeft className="h-4 w-4" />}
                                         onClick={() => setPage(p => Math.max(1, p - 1))}
@@ -259,7 +259,7 @@ export default function AuditLogsPage() {
                                         Previous
                                     </Button>
                                     <Button
-                                        variant="outline"
+                                        variant="secondary"
                                         size="sm"
                                         onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                                         disabled={page >= totalPages}
