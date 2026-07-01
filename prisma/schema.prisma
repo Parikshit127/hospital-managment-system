@@ -470,6 +470,7 @@ model User {
   email                                                   String?
   phone                                                   String?
   assigned_ward_id                                        Int?
+  branch_id                                               String?
   doctor_registration_no                                  String?
   qualifications                                          String?
   organizationId                                          String
@@ -509,6 +510,7 @@ model User {
 
   @@index([organizationId])
   @@index([doctor_group_id])
+  @@index([branch_id])
   @@map("users")
 }
 
