@@ -3,7 +3,7 @@
 import { requireRoleAndTenant, ForbiddenError, AuthError } from '@/backend/tenant';
 import { BroadcastAudience, BroadcastStatus } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
-import { deliverBroadcast } from '@/app/lib/broadcast-delivery';
+import { deliverBroadcast, audienceUserWhere } from '@/app/lib/broadcast-delivery';
 import { logAudit } from '@/app/lib/audit';
 
 interface SendBroadcastInput {
@@ -93,27 +93,10 @@ export async function getBroadcastAudienceCount(
     try {
         const { db, organizationId } = await requireRoleAndTenant(['admin']);
 
-        let count = 0;
-
-        if (audience === BroadcastAudience.ALL_FACILITIES) {
-            count = await db.user.count({ where: { organizationId, is_active: true } });
-        } else if (audience === BroadcastAudience.FACILITY && facilityId) {
-            count = await db.user.count({
-                where: {
-                    organizationId,
-                    is_active: true,
-                    branches: { some: { branch_id: facilityId } }
-                }
-            });
-        } else if (audience === BroadcastAudience.ROLE && targetRole) {
-            count = await db.user.count({
-                where: {
-                    organizationId,
-                    is_active: true,
-                    role: targetRole
-                }
-            });
-        }
+        // Same source of truth as deliverBroadcast — preview cannot drift from delivery.
+        const count = await db.user.count({
+            where: audienceUserWhere({ audience, facility_id: facilityId, target_role: targetRole, organizationId }),
+        });
 
         return { success: true, count };
     } catch (error) {

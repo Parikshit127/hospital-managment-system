@@ -10,32 +10,50 @@ import { publishNotificationToUsers } from '@/app/lib/notification-realtime';
  * explicitly so it is correct with either client.
  */
 
-interface DeliverableBroadcast {
+export interface AudienceSelector {
+    audience: BroadcastAudience;
+    facility_id?: string | null;
+    target_role?: string | null;
+    organizationId: string;
+}
+
+interface DeliverableBroadcast extends AudienceSelector {
     id: string;
     title: string;
     body: string;
-    audience: BroadcastAudience;
     facility_id: string | null;
     target_role: string | null;
-    organizationId: string;
+}
+
+/**
+ * SINGLE SOURCE OF TRUTH for resolving a broadcast audience to the set of
+ * recipient users. Used by BOTH deliverBroadcast (who actually gets a receipt)
+ * and getBroadcastAudienceCount (the compose-time preview), so the previewed
+ * count can never drift from actual delivery.
+ *
+ * Note: User has a scalar `branch_id` (no `branches` relation), so FACILITY
+ * filters on the scalar. An audience missing its required target matches nobody.
+ */
+export function audienceUserWhere(sel: AudienceSelector): Record<string, unknown> {
+    const where: Record<string, unknown> = {
+        organizationId: sel.organizationId,
+        is_active: true,
+    };
+    if (sel.audience === BroadcastAudience.FACILITY) {
+        if (!sel.facility_id) return { ...where, id: { in: [] } }; // matches nobody
+        where.branch_id = sel.facility_id;
+    } else if (sel.audience === BroadcastAudience.ROLE) {
+        if (!sel.target_role) return { ...where, id: { in: [] } }; // matches nobody
+        where.role = sel.target_role;
+    }
+    // ALL_FACILITIES => no extra filter (every active user in the org).
+    return where;
 }
 
 // Accept any Prisma-like client (tenant-scoped or base).
 export async function deliverBroadcast(db: any, broadcast: DeliverableBroadcast): Promise<number> {
-    // Resolve the target audience to a set of active users in the org.
-    const where: Record<string, unknown> = {
-        organizationId: broadcast.organizationId,
-        is_active: true,
-    };
-    if (broadcast.audience === BroadcastAudience.FACILITY) {
-        where.branch_id = broadcast.facility_id;
-    } else if (broadcast.audience === BroadcastAudience.ROLE) {
-        where.role = broadcast.target_role;
-    }
-    // ALL_FACILITIES => no extra filter (every active user in the org).
-
     const users: Array<{ id: string }> = await db.user.findMany({
-        where,
+        where: audienceUserWhere(broadcast),
         select: { id: true },
     });
 
