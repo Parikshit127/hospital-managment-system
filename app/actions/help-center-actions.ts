@@ -1,7 +1,7 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
-import { TicketPriority, TicketStatus } from '@prisma/client';
+import { TicketPriority, TicketStatus, TicketNoteVisibility } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@supabase/supabase-js';
 
@@ -249,6 +249,111 @@ export async function getAllTickets() {
         return { success: true, data };
     } catch (error) {
         console.error('Get All Tickets Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+// ========================================
+// TICKET NOTES / REPLIES
+// ========================================
+
+interface CreateTicketNoteInput {
+    ticketId: string;
+    body: string;
+    visibility?: TicketNoteVisibility;
+}
+
+/**
+ * Add a note/reply to a ticket. Authored by the current session user.
+ * Defaults to INTERNAL visibility (staff-only) unless explicitly shared.
+ */
+export async function createTicketNote(input: CreateTicketNoteInput) {
+    try {
+        const { db, session, organizationId } = await requireTenantContext();
+
+        // Tenant safety: the ticket must belong to the caller's org.
+        const ticket = await db.ticket.findFirst({
+            where: { id: input.ticketId, organizationId },
+            select: { id: true },
+        });
+
+        if (!ticket) {
+            return { success: false, data: null };
+        }
+
+        const note = await db.ticketNote.create({
+            data: {
+                ticket_id: input.ticketId,
+                author_id: session.id,
+                body: input.body,
+                visibility: input.visibility ?? TicketNoteVisibility.INTERNAL,
+                organizationId,
+            },
+        });
+
+        revalidatePath('/help-center');
+        revalidatePath('/admin/support');
+        return { success: true, data: note };
+    } catch (error) {
+        console.error('Create Ticket Note Error:', error);
+        return { success: false, data: null };
+    }
+}
+
+/**
+ * Hospital-portal fetch: returns ONLY hospital-visible notes for a ticket.
+ * INTERNAL staff notes are filtered out server-side and never leave the server.
+ */
+export async function getHospitalVisibleNotes(ticketId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const data = await db.ticketNote.findMany({
+            where: {
+                ticket_id: ticketId,
+                organizationId,
+                visibility: TicketNoteVisibility.HOSPITAL_VISIBLE,
+            },
+            orderBy: { created_at: 'asc' },
+            select: {
+                id: true,
+                body: true,
+                visibility: true,
+                created_at: true,
+                author: { select: { id: true, name: true, username: true } },
+            },
+        });
+
+        return { success: true, data };
+    } catch (error) {
+        console.error('Get Hospital Visible Notes Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+/**
+ * Admin-portal fetch: returns ALL notes for a ticket (INTERNAL + HOSPITAL_VISIBLE),
+ * scoped to the caller's organization.
+ */
+export async function getTicketNotes(ticketId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const data = await db.ticketNote.findMany({
+            where: { ticket_id: ticketId, organizationId },
+            orderBy: { created_at: 'asc' },
+            select: {
+                id: true,
+                body: true,
+                visibility: true,
+                created_at: true,
+                author: { select: { id: true, name: true, username: true } },
+            },
+        });
+
+        return { success: true, data };
+    } catch (error) {
+        console.error('Get Ticket Notes Error:', error);
         return { success: false, data: [] };
     }
 }
