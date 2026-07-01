@@ -10,6 +10,8 @@ export const metadata: Metadata = {
 
 export const dynamic = 'force-dynamic';
 
+import { HelpCenterNav } from './_components/HelpCenterNav';
+
 export default async function HelpCenterLayout({ children }: { children: ReactNode }) {
     try {
         await requireTenantContext();
@@ -17,5 +19,10 @@ export default async function HelpCenterLayout({ children }: { children: ReactNo
         redirect('/login');
     }
 
-    return <>{children}</>;
+    return (
+        <div className="flex flex-col min-h-screen bg-[var(--background)]">
+            <HelpCenterNav />
+            {children}
+        </div>
+    );
 }

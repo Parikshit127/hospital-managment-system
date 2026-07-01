@@ -10,8 +10,8 @@ export default async function TrackStatusPage() {
     }
 
     return (
-        <main className="min-h-screen bg-[var(--background)] px-4 py-8 sm:px-6 lg:px-8">
+        <div className="px-4 py-8 sm:px-6 lg:px-8">
             <TicketTable userId={session.id} />
-        </main>
+        </div>
     );
 }
