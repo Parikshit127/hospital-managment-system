@@ -2755,7 +2755,11 @@ export async function updateInvoiceItem(itemId: number, patch: {
         await checkPeriodLock(db, item.invoice.created_at as any);
 
         const quantity = patch.quantity !== undefined ? Number(patch.quantity) : Number(item.quantity);
-        const unit_price = patch.unit_price !== undefined ? Number(patch.unit_price) : Number(item.unit_price);
+        // Rule 6 & 8: unit price of a billed item is not editable (comes from the master).
+        // Reception can only change qty/discount; Admin/Finance may correct a price.
+        const unit_price = (isPrivilegedBilling(session) && patch.unit_price !== undefined)
+            ? Number(patch.unit_price)
+            : Number(item.unit_price);
         const discount = patch.discount !== undefined ? Number(patch.discount) : Number(item.discount);
         const tax_rate = patch.tax_rate !== undefined ? Number(patch.tax_rate) : Number(item.tax_rate || 0);
 
@@ -3119,7 +3123,13 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
                 if (!existing || existing.invoice_id !== invoiceId) continue;
 
                 const quantity = u.quantity !== undefined ? Number(u.quantity) : Number(existing.quantity);
-                const unit_price = u.unit_price !== undefined ? Number(u.unit_price) : Number(existing.unit_price);
+                // Rule 6 & 8: the unit price of a billed item is NOT editable — it comes
+                // from the pricing master. Non-privileged staff can only change qty and
+                // discount; the stored unit_price is preserved regardless of what the
+                // client sends. Admin/Finance retain the ability to correct a price.
+                const unit_price = (isPrivilegedBilling(session) && u.unit_price !== undefined)
+                    ? Number(u.unit_price)
+                    : Number(existing.unit_price);
                 const discount = u.discount !== undefined ? Number(u.discount) : Number(existing.discount);
                 const tax_rate = u.tax_rate !== undefined ? Number(u.tax_rate) : Number(existing.tax_rate || 0);
 
