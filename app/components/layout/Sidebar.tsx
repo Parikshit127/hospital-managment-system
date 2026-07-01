@@ -84,6 +84,7 @@ import {
   BookOpen,
   Landmark,
   TrendingUp,
+  LifeBuoy,
 } from "lucide-react";
 
 interface NavItem {
@@ -606,6 +607,7 @@ const PATH_ROLE: { prefix: string; role: string }[] = [
   { prefix: "/crm", role: "crm_manager" },
   { prefix: "/counselling", role: "counsellor" },
   { prefix: "/call-center", role: "call_center" },
+  { prefix: "/help-center", role: "admin" },
 ];
 
 function roleForPath(pathname: string): string | null {
@@ -670,7 +672,17 @@ export function Sidebar({ session }: SidebarProps) {
   const effectiveRole = session
     ? (isAdmin ? (roleForPath(pathname) ?? "admin") : session.role)
     : "";
-  const sections = effectiveRole ? NAV_BY_ROLE[effectiveRole] || [] : [];
+  const baseSections = effectiveRole ? NAV_BY_ROLE[effectiveRole] || [] : [];
+  const sections = [
+    ...baseSections,
+    ...(effectiveRole ? [{
+      title: "Support",
+      items: [
+        { label: "Raise Ticket", href: "/help-center/raise", icon: LifeBuoy },
+        { label: "Track Tickets", href: "/help-center/track", icon: LayoutList },
+      ],
+    }] : [])
+  ];
   const orgName = session?.organization_name || "Hospital OS";
 
   const allHrefs = sections.flatMap((s) => s.items.map((i) => i.href));
