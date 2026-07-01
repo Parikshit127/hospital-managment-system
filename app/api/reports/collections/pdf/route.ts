@@ -106,6 +106,50 @@ export async function GET(req: NextRequest) {
             orderBy: { created_at: 'asc' }
         });
 
+        // Enrich refunds with the ORIGINAL payment's tender + patient details.
+        // A refund is paid back through the same channel it was received, so its
+        // mode follows the linked payment's payment_method (not a hardcoded Cash),
+        // and the patient name/MRN come from the linked invoice.
+        const refundPaymentIds = [...new Set(
+            refunds.map(r => Number(r.payment_id)).filter(n => Number.isFinite(n))
+        )];
+        const refundPayments = refundPaymentIds.length
+            ? await prisma.payments.findMany({
+                where: { id: { in: refundPaymentIds }, organizationId },
+                select: {
+                    id: true,
+                    payment_method: true,
+                    invoice: {
+                        select: {
+                            invoice_type: true,
+                            patient: { select: { full_name: true, patient_id: true } }
+                        }
+                    }
+                }
+            })
+            : [];
+        const refundPaymentMap = new Map(refundPayments.map(p => [String(p.id), p]));
+
+        // Fallback for legacy refunds without a resolvable payment link: look up the
+        // invoice directly to still show the patient.
+        const unresolvedInvoiceIds = [...new Set(
+            refunds
+                .filter(r => !refundPaymentMap.has(String(r.payment_id)))
+                .map(r => Number(r.invoice_id))
+                .filter(n => Number.isFinite(n))
+        )];
+        const refundInvoices = unresolvedInvoiceIds.length
+            ? await prisma.invoices.findMany({
+                where: { id: { in: unresolvedInvoiceIds }, organizationId },
+                select: {
+                    id: true,
+                    invoice_type: true,
+                    patient: { select: { full_name: true, patient_id: true } }
+                }
+            })
+            : [];
+        const refundInvoiceMap = new Map(refundInvoices.map(i => [String(i.id), i]));
+
         // 6. Fetch Audit Logs for Payment Cashier resolution
         const receiptNumbers = payments.map(p => p.receipt_number);
         const paymentLogs = receiptNumbers.length
@@ -245,7 +289,14 @@ export async function GET(req: NextRequest) {
         refunds.forEach(r => {
             const cashierUser = r.processed_by || 'system';
             const cashierName = userMap.get(cashierUser.toLowerCase()) || cashierUser;
-            const mode = 'Cash'; // Default to cash for refunded payouts if not explicitly defined
+            const linkedPayment = refundPaymentMap.get(String(r.payment_id)) || null;
+            const linkedInvoice = linkedPayment?.invoice || refundInvoiceMap.get(String(r.invoice_id)) || null;
+            // The hospital pays every refund out as a bank transfer, so refunds are
+            // always reported under NEFT/RTGS regardless of the original tender.
+            const mode = 'NEFT/RTGS';
+            const patientName = linkedInvoice?.patient?.full_name || 'Refund Payout';
+            const patientId = linkedInvoice?.patient?.patient_id || '-';
+            const dept = linkedInvoice ? getDept(linkedInvoice.invoice_type || 'OPD') : 'OP/ER';
             allModes.add(mode);
             cashierList.add(cashierUser);
 
@@ -258,8 +309,8 @@ export async function GET(req: NextRequest) {
                 type: 'Refund',
                 receiptNo: `RF-${r.id}`,
                 invoiceNo: r.invoice_id ? String(r.invoice_id) : '-',
-                patientName: 'Refund Payout',
-                mrn: '-',
+                patientName,
+                mrn: patientId,
                 mode,
                 date: dateStr,
                 time: timeStr,
@@ -267,7 +318,7 @@ export async function GET(req: NextRequest) {
                 cashier: cashierName,
                 cashierUsername: cashierUser,
                 counter: 'MAIN CASH COUNTER',
-                department: 'OP/ER' // Default refund to OP/ER if unknown
+                department: dept
             });
         });
 

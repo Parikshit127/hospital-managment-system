@@ -166,25 +166,34 @@ function generateStickerHTML(patient: any, admission: any, appointment: any, bra
             display: grid;
             grid-template-columns: repeat(3, 64mm);
             grid-template-rows: repeat(8, 34mm);
+            align-content: start;
             gap: 0;
+            /* Oddy ST-24 A4 geometry (gapless, 24-up): the sheet fits A4 exactly —
+               3×64mm + 9mm side margins = 210mm, and 8×34mm + 12.5mm top/bottom
+               margins = 297mm. These margins (via padding) put each label's content
+               on its physical sticker. Print at 100% scale with page Margins = None,
+               else the printer scales/offsets it and the labels drift. */
             width: 210mm;
             height: 297mm;
-            margin: 0 auto;
-            padding: 4.5mm 7mm;
+            margin: 0;
+            padding: 12.5mm 9mm;
         }
 
         .sticker {
             width: 64mm;
             height: 34mm;
-            padding: 2mm 3mm;
+            /* Larger top/bottom padding (3mm vs 2mm) leaves an empty buffer inside
+               each cell, so minor print drift no longer overlaps the neighbouring
+               label. Content below is shrunk to still fit inside the buffer. */
+            padding: 3mm 3mm;
             overflow: hidden;
             display: flex;
             flex-direction: column;
             justify-content: flex-start;
         }
 
-        .st-name { font-size: 9.5px; font-weight: 900; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 0.5px; }
-        .st-row { font-size: 7.5px; line-height: 1.32; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .st-name { font-size: 9px; font-weight: 900; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 0.5px; }
+        .st-row { font-size: 7px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .st-age { float: right; font-weight: 700; }
 
         .barcode-container {
@@ -193,12 +202,12 @@ function generateStickerHTML(patient: any, admission: any, appointment: any, bra
         }
 
         .barcode-container svg {
-            height: 22px;
+            height: 20px;
             width: 95%;
             display: block;
             margin: 0 auto;
         }
-        .st-barcode-val { font-size: 6.5px; letter-spacing: 0.5px; line-height: 1.1; }
+        .st-barcode-val { font-size: 6px; letter-spacing: 0.5px; line-height: 1.05; }
 
         @media screen {
             .sticker { border: 0.5px dashed #ddd; }

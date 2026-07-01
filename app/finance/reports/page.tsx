@@ -293,7 +293,12 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
             refundsList.forEach((r: any) => {
                 const cashierUser = r.cashier_username || 'system';
                 const cashierName = r.cashier_name || cashierUser;
-                const mode = 'Cash'; // Default to cash for refunds
+                // Refund goes back through the original tender; only fall back to
+                // Cash when the payment link couldn't be resolved (legacy data).
+                const mode = r.payment_method ? canonicalTender(r.payment_method) : 'Cash';
+                const patientName = r.patient_name || 'Refund Payout';
+                const patientId = r.patient_id || '-';
+                const dept = r.invoice_type ? getDept(r.invoice_type) : 'OP/ER';
                 allModesSet.add(mode);
                 cashierList.add(cashierUser);
 
@@ -306,8 +311,8 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                     type: 'Refund',
                     receiptNo: `RF-${r.id}`,
                     invoiceNo: r.invoice_id ? String(r.invoice_id) : '-',
-                    patientName: 'Refund Payout',
-                    mrn: '-',
+                    patientName,
+                    mrn: patientId,
                     mode,
                     date: dateStr,
                     time: timeStr,
@@ -315,7 +320,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                     cashier: cashierName,
                     cashierUsername: cashierUser,
                     counter: 'MAIN CASH COUNTER',
-                    department: 'OP/ER' // Default refund to OP/ER if unknown
+                    department: dept
                 });
             });
 

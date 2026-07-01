@@ -26,6 +26,7 @@
  */
 
 import { requireTenantContext } from "@/backend/tenant";
+import { getTodayRange } from "@/app/lib/timezone";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -166,9 +167,14 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
     if (filter.corporate_id) where.corporate_id = filter.corporate_id;
     if (filter.date_from || filter.date_to) {
       where.created_at = {};
-      if (filter.date_from) where.created_at.gte = new Date(filter.date_from);
-      // Make the "to" date inclusive of the whole day (end-of-day)
-      if (filter.date_to) where.created_at.lte = new Date(filter.date_to + "T23:59:59.999");
+      // The date strings are IST calendar days (the UI builds them from the user's
+      // local date). Anchor both bounds to the IST day (+05:30) so the range matches
+      // the day the bill shows on — otherwise `new Date("YYYY-MM-DD")` parses as UTC
+      // midnight and a bill made 00:00–05:30 IST falls into the previous UTC day,
+      // dropping out of "Today" while still counting under "Last 30 Days".
+      if (filter.date_from) where.created_at.gte = new Date(filter.date_from + "T00:00:00.000+05:30");
+      // Make the "to" date inclusive of the whole IST day (end-of-day).
+      if (filter.date_to) where.created_at.lte = new Date(filter.date_to + "T23:59:59.999+05:30");
     }
 
     // Pharmacy COUNTER / OTC bills (invoice_type 'Pharmacy') belong to the
@@ -385,8 +391,9 @@ export async function getMasterBillingKPIs() {
     const { db, organizationId } = await requireTenantContext();
 
     const now = new Date();
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
+    // "Today" = the IST calendar day, not the server's local/UTC midnight, so
+    // Today's Revenue includes early-morning IST bills (same fix as the grid filter).
+    const { start: todayStart } = getTodayRange();
     const thirtyAgo = new Date(now);
     thirtyAgo.setDate(thirtyAgo.getDate() - 30);
     const overdueCutoff = new Date(now);

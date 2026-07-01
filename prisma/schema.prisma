@@ -89,6 +89,7 @@ model Organization {
   shift_assignments             ShiftAssignment[]
   notifications                 Notification[]
   tickets                       Ticket[]
+  release_notes                 ReleaseNote[]
   expense_categories            ExpenseCategory[]
   vendors                       Vendor[]
   expenses                      Expense[]
@@ -495,6 +496,7 @@ model User {
   stock_transfers_stock_transfers_receive_user_idTousers  stock_transfers[]    @relation("stock_transfers_receive_user_idTousers")
   stores                                                  stores[]
   tickets                                                 Ticket[]
+  notifications                                           Notification[]
   organization                                            Organization         @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -2246,6 +2248,7 @@ model ShiftAssignment {
 model Notification {
   id             Int          @id @default(autoincrement())
   user_id        String
+  ticket_id      String?
   title          String
   body           String
   type           String       @default("info")
@@ -2254,11 +2257,27 @@ model Notification {
   organizationId String
   created_at     DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id])
+  user           User         @relation(fields: [user_id], references: [id])
+  ticket         Ticket?      @relation(fields: [ticket_id], references: [id])
 
   @@index([organizationId])
   @@index([user_id])
+  @@index([ticket_id])
   @@index([is_read])
   @@map("notifications")
+}
+
+model ReleaseNote {
+  id             String       @id @default(uuid())
+  title          String
+  content        String
+  version        String
+  organizationId String
+  created_at     DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@map("release_notes")
 }
 
 enum TicketPriority {
@@ -2275,25 +2294,42 @@ enum TicketStatus {
 }
 
 model Ticket {
-  id             String         @id @default(uuid())
+  id             String              @id @default(uuid())
   title          String
   description    String
-  priority       TicketPriority @default(Medium)
-  status         TicketStatus   @default(Open)
+  module         String?
+  priority       TicketPriority      @default(Medium)
+  status         TicketStatus        @default(Open)
   user_id        String
   branch_id      String
   organizationId String
-  created_at     DateTime       @default(now())
-  updated_at     DateTime       @updatedAt
-  user           User           @relation(fields: [user_id], references: [id])
-  branch         Branch         @relation(fields: [branch_id], references: [id])
-  organization   Organization   @relation(fields: [organizationId], references: [id])
+  created_at     DateTime            @default(now())
+  updated_at     DateTime            @updatedAt
+  user           User                @relation(fields: [user_id], references: [id])
+  branch         Branch              @relation(fields: [branch_id], references: [id])
+  organization   Organization        @relation(fields: [organizationId], references: [id])
+  attachments    TicketAttachment[]
+  notifications  Notification[]
 
   @@index([organizationId])
   @@index([branch_id])
   @@index([user_id])
   @@index([status])
   @@map("tickets")
+}
+
+model TicketAttachment {
+  id          String   @id @default(uuid())
+  ticket_id   String
+  file_url    String
+  file_name   String
+  file_size   Int
+  mime_type   String
+  uploaded_at DateTime @default(now())
+  ticket      Ticket   @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+
+  @@index([ticket_id])
+  @@map("ticket_attachments")
 }
 
 model ExpenseCategory {

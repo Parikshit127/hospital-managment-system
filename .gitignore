@@ -56,3 +56,4 @@ prisma/dev.db
 .omc/
 .gemini/
 .claude/
+scratch/

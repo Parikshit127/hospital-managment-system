@@ -178,46 +178,47 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
         : (isFinal ? 'FINAL BILL' : 'INTERIM');
     const watermarkColor = showInterimBanner ? '#f59e0b' : (isFinal ? branding.accentColor : '#f59e0b');
 
-    // Consolidate per-day Room + Nursing rows into single summary rows
-    const consolidatedItems: any[] = [];
+    // Consolidate per-day Room + Nursing rows into summary rows. Group by the
+    // DISTINCT charge (description + rate) so different charges billed under the
+    // same category — e.g. a ₹1,500/day Room Rent and a ₹4,000/day ICU Bed — are
+    // never merged into one line mislabelled "Nd × ₹1,500/day". Each distinct
+    // charge gets its own line with the correct day count, rate and total.
+    const consolidateByCharge = (rows: any[], category: string) => {
+        const groups = new Map<string, any[]>();
+        for (const r of rows) {
+            const key = `${(r.description || '').trim()}||${Number(r.unit_price)}`;
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key)!.push(r);
+        }
+        return Array.from(groups.values()).map((g: any[]) => {
+            const unitPrice = Number(g[0].unit_price);
+            const days = g.reduce((s: number, r: any) => s + Number(r.quantity || 1), 0);
+            const totalPrice = g.reduce((s: number, r: any) => s + Number(r.net_price || 0), 0);
+            const taxAmount = g.reduce((s: number, r: any) => s + Number(r.tax_amount || 0), 0);
+            const baseDesc = g[0].description || category;
+            return {
+                ...g[0],
+                description: days > 1
+                    ? `${baseDesc} (${days}d × ₹${unitPrice.toLocaleString('en-IN')}/day)`
+                    : baseDesc,
+                quantity: days,
+                unit_price: unitPrice,
+                net_price: totalPrice,
+                total_price: totalPrice,
+                tax_amount: taxAmount,
+                service_category: category,
+            };
+        });
+    };
+
     const roomRows = items.filter((i: any) => i.service_category === 'Room');
     const nursingRows = items.filter((i: any) => i.service_category === 'Nursing');
     const otherRows = items.filter((i: any) => i.service_category !== 'Room' && i.service_category !== 'Nursing');
 
-    if (roomRows.length > 0) {
-        const unitPrice = Number(roomRows[0].unit_price);
-        const days = roomRows.length;
-        const totalPrice = roomRows.reduce((s: number, r: any) => s + Number(r.net_price || 0), 0);
-        const taxAmount = roomRows.reduce((s: number, r: any) => s + Number(r.tax_amount || 0), 0);
-        const wardName = roomRows[0].description?.split(' - ')[0] || 'Ward';
-        consolidatedItems.push({
-            ...roomRows[0],
-            description: `${wardName} - Room Charge (${days}d × ₹${unitPrice.toLocaleString('en-IN')}/day)`,
-            quantity: days,
-            unit_price: unitPrice,
-            net_price: totalPrice,
-            total_price: totalPrice,
-            tax_amount: taxAmount,
-            service_category: 'Room',
-        });
-    }
-
-    if (nursingRows.length > 0) {
-        const unitPrice = Number(nursingRows[0].unit_price);
-        const days = nursingRows.length;
-        const totalPrice = nursingRows.reduce((s: number, r: any) => s + Number(r.net_price || 0), 0);
-        const taxAmount = nursingRows.reduce((s: number, r: any) => s + Number(r.tax_amount || 0), 0);
-        consolidatedItems.push({
-            ...nursingRows[0],
-            description: `Nursing Charges (${days}d × ₹${unitPrice.toLocaleString('en-IN')}/day)`,
-            quantity: days,
-            unit_price: unitPrice,
-            net_price: totalPrice,
-            total_price: totalPrice,
-            tax_amount: taxAmount,
-            service_category: 'Nursing',
-        });
-    }
+    const consolidatedItems = [
+        ...consolidateByCharge(roomRows, 'Room'),
+        ...consolidateByCharge(nursingRows, 'Nursing'),
+    ];
 
     const displayItems = [...consolidatedItems, ...otherRows];
 
@@ -227,7 +228,10 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
         const cat = item.service_category || item.department || 'Other';
         if (!categoryMap[cat]) categoryMap[cat] = { items: [], total: 0 };
         categoryMap[cat].items.push(item);
-        categoryMap[cat].total += Number(item.net_price) + Number(item.tax_amount || 0);
+        // Line/category amounts are the pre-tax taxable value (net_price), matching
+        // the regular print bill. Tax is shown in its own GST column and summarised
+        // in the footer — it must NOT be added into the line total as well.
+        categoryMap[cat].total += Number(item.net_price);
     }
 
     let itemRows = '';
@@ -262,14 +266,14 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                     <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:right;">-</td>
                     <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:center;">-</td>
                     <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:right;">${g.tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:right;font-weight:600;">${(g.net + g.tax).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:right;font-weight:600;">${g.net.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 </tr>`;
                 if (includeMeds) {
                     for (const item of g.items) {
                         itemRows += `<tr>
                             <td style="padding:3px 12px;border-bottom:1px solid #f9fafb;"></td>
                             <td style="padding:3px 12px 3px 24px;border-bottom:1px solid #f9fafb;font-size:9px;color:#6b7280;" colspan="6">${item.description} × ${item.quantity}</td>
-                            <td style="padding:3px 12px;border-bottom:1px solid #f9fafb;font-size:9px;text-align:right;color:#6b7280;">${(Number(item.net_price) + Number(item.tax_amount || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                            <td style="padding:3px 12px;border-bottom:1px solid #f9fafb;font-size:9px;text-align:right;color:#6b7280;">${Number(item.net_price).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                         </tr>`;
                     }
                 }
@@ -286,7 +290,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                 <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:right;">${Number(item.unit_price).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:center;">${Number(item.tax_rate || 0)}%</td>
                 <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:right;">${Number(item.tax_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:right;font-weight:600;">${(Number(item.net_price) + Number(item.tax_amount || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:right;font-weight:600;">${Number(item.net_price).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
             </tr>`;
         }
     }

@@ -89,14 +89,11 @@ export async function getMasterBillingData(params: MasterBillingFilters) {
 
         if (params.dateFrom || params.dateTo) {
             invoiceWhere.created_at = {};
-            if (params.dateFrom) invoiceWhere.created_at.gte = new Date(params.dateFrom);
-            if (params.dateTo) {
-                // Inclusive end-of-day so a user picking "today" gets bills generated
-                // up to 23:59:59.999 — matches the visible calendar expectation.
-                const end = new Date(params.dateTo);
-                end.setHours(23, 59, 59, 999);
-                invoiceWhere.created_at.lte = end;
-            }
+            // Date strings are IST calendar days; anchor both bounds to the IST day
+            // (+05:30) so a bill made 00:00–05:30 IST isn't pushed into the previous
+            // UTC day and dropped from the range — matches the day the bill shows on.
+            if (params.dateFrom) invoiceWhere.created_at.gte = new Date(params.dateFrom + 'T00:00:00.000+05:30');
+            if (params.dateTo) invoiceWhere.created_at.lte = new Date(params.dateTo + 'T23:59:59.999+05:30');
             invoiceFilterActive = true;
         }
 

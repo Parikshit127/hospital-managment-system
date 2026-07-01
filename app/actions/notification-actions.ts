@@ -49,6 +49,26 @@ export async function getUnreadCount(userId: string) {
 }
 
 // ========================================
+// GET MY UNREAD (current authenticated session user)
+// ========================================
+
+export async function getMyUnreadNotifications() {
+    try {
+        const { db, session, organizationId } = await requireTenantContext();
+
+        const data = await db.notification.findMany({
+            where: { user_id: session.id, organizationId, is_read: false },
+            orderBy: { created_at: 'desc' },
+        });
+
+        return { success: true, data, unreadCount: data.length };
+    } catch (error) {
+        console.error('Get My Unread Notifications Error:', error);
+        return { success: false, data: [], unreadCount: 0 };
+    }
+}
+
+// ========================================
 // MARK AS READ
 // ========================================
 
