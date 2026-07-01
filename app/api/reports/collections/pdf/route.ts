@@ -25,6 +25,12 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: 'from and to dates are required' }, { status: 400 });
         }
 
+        // Format an ISO date string (YYYY-MM-DD) as DD-MM-YYYY for display
+        const toDMY = (s: string) => {
+            const [y, m, d] = s.split('-');
+            return (y && m && d) ? `${d}-${m}-${y}` : s;
+        };
+
         const fromDate = new Date(fromStr + 'T00:00:00+05:30');
         const toDate = new Date(toStr + 'T23:59:59.999+05:30');
 
@@ -57,6 +63,7 @@ export async function GET(req: NextRequest) {
                 invoice: {
                     select: {
                         invoice_number: true,
+                        final_bill_number: true,
                         invoice_type: true,
                         patient: {
                             select: {
@@ -221,7 +228,7 @@ export async function GET(req: NextRequest) {
                     srNo: sr++,
                     type: 'Receipt',
                     receiptNo: p.receipt_number,
-                    invoiceNo: p.invoice?.invoice_number || '-',
+                    invoiceNo: (p.invoice as any)?.final_bill_number || p.invoice?.invoice_number || '-',
                     patientName,
                     mrn: patientId,
                     mode,
@@ -238,7 +245,7 @@ export async function GET(req: NextRequest) {
                     srNo: sr++,
                     type: 'Refund',
                     receiptNo: p.receipt_number,
-                    invoiceNo: p.invoice?.invoice_number || '-',
+                    invoiceNo: (p.invoice as any)?.final_bill_number || p.invoice?.invoice_number || '-',
                     patientName,
                     mrn: patientId,
                     mode,
@@ -650,7 +657,7 @@ export async function GET(req: NextRequest) {
 
     <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:bold;margin-bottom:15px;">
         <span>Collection Report - Detail</span>
-        <span>${fromStr} 00:00 AM to ${toStr} 11:59 PM</span>
+        <span>${toDMY(fromStr)} 00:00 AM to ${toDMY(toStr)} 11:59 PM</span>
         <span>Counter : ALL COUNTERS</span>
     </div>
 

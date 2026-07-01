@@ -5,7 +5,7 @@ import { logAudit } from "@/app/lib/audit";
 import { revalidatePath } from "next/cache";
 import { getPatientBalances } from '@/app/actions/balance-actions';
 import { getRoomGSTRate } from '@/app/lib/gst';
-import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, generateDepositNumber as genDepNum, generateSequentialNumber as genBillNum } from '@/app/lib/sequence-generator';
+import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, generateDepositNumber as genDepNum, generateFinalBillNumber as genBillNum } from '@/app/lib/sequence-generator';
 import { isBillClosedForCharges } from '@/app/lib/bill-status';
 
 
@@ -933,9 +933,9 @@ export async function dischargePatientIPD(admissionId: string, notes?: string, d
     });
 
     if (invoice) {
-      // Rule 1/3: assign the official Final Bill No. at finalization (once).
+      // Rule 1/3: assign the official Final Bill No. at finalization (once). IPD series.
       const finalBillNumber = (invoice as any).final_bill_number
-        || await genBillNum(organizationId, 'BILL', db);
+        || await genBillNum(organizationId, true, db);
       await db.invoices.update({
         where: { id: invoice.id },
         data: {

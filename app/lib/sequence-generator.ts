@@ -175,6 +175,44 @@ export async function generateInvoiceNumber(
 }
 
 /**
+ * Generate the official Final Bill Number, with SEPARATE series for IPD and OPD.
+ *   IPD -> {ORG}-BILL-IPD-{FY}-001
+ *   OPD -> {ORG}-BILL-OPD-{FY}-001
+ * Assigned only at finalization; counts existing final_bill_numbers for that series.
+ */
+export async function generateFinalBillNumber(
+    organizationId: string,
+    isIpd: boolean,
+    db?: any
+): Promise<string> {
+    const database = db || prisma;
+    const org = await database.organization.findUnique({
+        where: { id: organizationId },
+        select: { code: true },
+    });
+    const orgCode = org?.code || 'HOS';
+    const fy = getFinancialYear();
+    const prefix = `${orgCode}-BILL-${isIpd ? 'IPD' : 'OPD'}-${fy}-`;
+
+    const count = await database.invoices.count({
+        where: { organizationId, final_bill_number: { startsWith: prefix } },
+    });
+
+    let attempt = count + 1;
+    let finalNumber = `${prefix}${String(attempt).padStart(3, '0')}`;
+    while (true) {
+        const existing = await database.invoices.findFirst({
+            where: { final_bill_number: finalNumber },
+            select: { id: true },
+        });
+        if (!existing) break;
+        attempt++;
+        finalNumber = `${prefix}${String(attempt).padStart(3, '0')}`;
+    }
+    return finalNumber;
+}
+
+/**
  * Generate receipt number
  */
 export async function generateReceiptNumber(organizationId: string, db?: any): Promise<string> {

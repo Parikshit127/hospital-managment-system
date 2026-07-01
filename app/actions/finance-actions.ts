@@ -7,7 +7,7 @@ import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
 import { billingInvoiceMsg, paymentReceiptMsg } from '@/app/lib/whatsapp-templates';
 import { postInvoiceToGL, postPaymentToGL, reverseJournalEntry } from './gl-actions';
 import { getCashThresholds, validateCashCompliance, normalizePan, resolveRegisteredPan, CASH_METHOD } from '@/app/lib/cash-compliance';
-import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, generateSequentialNumber } from '@/app/lib/sequence-generator';
+import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, generateFinalBillNumber } from '@/app/lib/sequence-generator';
 import { validateBackdate } from '@/app/lib/backdate';
 import { recomputeInvoiceCommission } from '@/app/lib/referral-commission';
 import { recomputeInvoiceDoctorCommission } from '@/app/lib/doctor-commission';
@@ -624,8 +624,9 @@ export async function finalizeInvoice(invoiceId: number) {
         }
 
         // Rule 1 & 3: assign the official Final Bill No. at finalization (once).
+        // Separate IPD/OPD series.
         const finalBillNumber = existing.final_bill_number
-            || await generateSequentialNumber(organizationId, 'BILL', db);
+            || await generateFinalBillNumber(organizationId, !!existing.admission_id, db);
 
         const invoice = await db.invoices.update({
             where: { id: invoiceId },

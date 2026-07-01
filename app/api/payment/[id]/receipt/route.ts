@@ -249,8 +249,8 @@ function generateReceiptHTML(payment: any, org: any, logoSignedUrl = '') {
             </div>
             <table style="width:100%;border-collapse:collapse;">
                 <tr>
-                    <td style="padding:8px 16px;font-size:12px;color:#6b7280;font-weight:600;width:180px;border-bottom:1px solid #f3f4f6;">Invoice Number</td>
-                    <td style="padding:8px 16px;font-size:12px;font-weight:600;border-bottom:1px solid #f3f4f6;font-family:monospace;">${invoice.invoice_number || '-'}</td>
+                    <td style="padding:8px 16px;font-size:12px;color:#6b7280;font-weight:600;width:180px;border-bottom:1px solid #f3f4f6;">Bill Number</td>
+                    <td style="padding:8px 16px;font-size:12px;font-weight:600;border-bottom:1px solid #f3f4f6;font-family:monospace;">${(invoice as any).final_bill_number || invoice.invoice_number || '-'}${(invoice as any).final_bill_number ? ` <span style="color:#9ca3af;font-weight:400;">(Ref: ${invoice.invoice_number})</span>` : ''}</td>
                 </tr>
                 <tr>
                     <td style="padding:8px 16px;font-size:12px;color:#6b7280;font-weight:600;border-bottom:1px solid #f3f4f6;">Payment Method</td>
