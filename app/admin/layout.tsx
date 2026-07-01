@@ -28,7 +28,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
     return (
         <ThemeProvider branding={branding}>
-            <AdminLayoutShell userName={session?.name} userRole={session?.role}>
+            <AdminLayoutShell 
+                userName={session?.name} 
+                userRole={session?.role}
+                userId={session?.id}
+                organizationId={session?.organization_id}
+            >
                 {children}
             </AdminLayoutShell>
         </ThemeProvider>

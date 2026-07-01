@@ -20,6 +20,7 @@ export function NotificationBell({ userId, organizationId }: NotificationBellPro
     const [notifications, setNotifications] = useState<any[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [open, setOpen] = useState(false);
+    const [expandedId, setExpandedId] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
     const router = useRouter();
@@ -51,11 +52,9 @@ export function NotificationBell({ userId, organizationId }: NotificationBellPro
                 .on(
                     'broadcast',
                     { event: 'new_notification' },
-                    (payload) => {
-                        if (payload.payload) {
-                            setNotifications((prev) => [payload.payload, ...prev]);
-                            setUnreadCount((prev) => prev + 1);
-                        }
+                    () => {
+                        // Refetch from server to get accurate receiptIds and states
+                        loadNotifications();
                     }
                 )
                 .subscribe();
@@ -154,14 +153,17 @@ export function NotificationBell({ userId, organizationId }: NotificationBellPro
                             notifications.map((n: any) => (
                                 <div key={n.receiptId}
                                     className={`px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer ${!n.read ? 'bg-blue-50/30' : ''}`}
-                                    onClick={() => !n.read && handleMarkRead(n.receiptId)}>
+                                    onClick={() => {
+                                        if (!n.read) handleMarkRead(n.receiptId);
+                                        setExpandedId(expandedId === n.receiptId ? null : n.receiptId);
+                                    }}>
                                     <div className="flex items-start gap-3">
                                         <div className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${!n.read ? getTypeColor(n.audience) : 'bg-gray-200'}`} />
                                         <div className="min-w-0 flex-1">
                                             <p className={`text-xs font-bold ${!n.read ? 'text-gray-900' : 'text-gray-500'}`}>
                                                 {n.title}
                                             </p>
-                                            <p className="text-[10px] text-gray-400 mt-0.5 line-clamp-2">{n.body}</p>
+                                            <p className={`text-[10px] text-gray-400 mt-0.5 ${expandedId === n.receiptId ? '' : 'line-clamp-2'}`}>{n.body}</p>
                                             <div className="flex items-center justify-between mt-1">
                                                 <span className="text-[9px] text-gray-300 font-medium">{timeAgo(n.createdAt)}</span>
                                                 {n.releaseNoteId && (

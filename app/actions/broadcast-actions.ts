@@ -95,7 +95,7 @@ export async function getBroadcastAudienceCount(
 
         let count = 0;
 
-        if (audience === BroadcastAudience.GLOBAL) {
+        if (audience === BroadcastAudience.ALL_FACILITIES) {
             count = await db.user.count({ where: { organizationId, is_active: true } });
         } else if (audience === BroadcastAudience.FACILITY && facilityId) {
             count = await db.user.count({

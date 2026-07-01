@@ -24,7 +24,7 @@ const ALL_ROLES = [
 ];
 
 const AUDIENCE_OPTIONS = [
-    { value: BroadcastAudience.GLOBAL, label: 'Global (All Users)' },
+    { value: BroadcastAudience.ALL_FACILITIES, label: 'Global (All Users)' },
     { value: BroadcastAudience.ROLE, label: 'By Role' },
     { value: BroadcastAudience.FACILITY, label: 'By Facility' },
 ];
@@ -32,7 +32,7 @@ const AUDIENCE_OPTIONS = [
 export default function AdminBroadcastsPage() {
     const [title, setTitle] = useState('');
     const [body, setBody] = useState('');
-    const [audience, setAudience] = useState<BroadcastAudience>(BroadcastAudience.GLOBAL);
+    const [audience, setAudience] = useState<BroadcastAudience>(BroadcastAudience.ALL_FACILITIES);
     const [facilityId, setFacilityId] = useState('');
     const [targetRole, setTargetRole] = useState('');
     const [scheduledFor, setScheduledFor] = useState('');

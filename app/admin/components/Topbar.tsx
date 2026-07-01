@@ -3,10 +3,13 @@
 import Breadcrumbs from './Breadcrumbs';
 import AdminPortalNav from './AdminPortalNav';
 import { User } from 'lucide-react';
+import { NotificationBell } from '@/app/components/NotificationBell';
 
 interface TopbarProps {
     userName?: string;
     userRole?: string;
+    userId?: string;
+    organizationId?: string;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -21,7 +24,7 @@ const ROLE_LABELS: Record<string, string> = {
     lab_technician: 'Lab Technician',
 };
 
-export default function Topbar({ userName, userRole }: TopbarProps) {
+export default function Topbar({ userName, userRole, userId, organizationId }: TopbarProps) {
     const roleLabel = userRole ? (ROLE_LABELS[userRole] ?? userRole) : '';
 
     return (
@@ -35,6 +38,7 @@ export default function Topbar({ userName, userRole }: TopbarProps) {
             <Breadcrumbs />
 
             <div className="flex items-center gap-3 ml-auto">
+                {userId && organizationId && <NotificationBell userId={userId} organizationId={organizationId} />}
                 <AdminPortalNav />
                 {userName && (
                     <div className="flex items-center gap-2">

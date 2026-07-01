@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { DateField } from '@/app/components/ui/DateField';
-import { Sidebar } from "@/app/components/layout/Sidebar";
+import { AppShell } from "@/app/components/layout/AppShell";
 import { getPatientQueue } from "@/app/actions/doctor-actions";
 import { Activity, CalendarDays, Clock3, Search, Users } from "lucide-react";
 
@@ -183,14 +183,11 @@ export default function DoctorOverviewDashboard() {
   }, [filteredPatients, sortBy]);
 
   return (
-    <div className="flex h-screen bg-gray-50 text-gray-900 overflow-hidden relative">
-      <Sidebar session={session} />
-
-      <main className="flex-1 min-w-0 h-full overflow-y-auto">
-        <div className="p-4 md:p-8 max-w-[1400px] mx-auto w-full space-y-6">
+    <AppShell pageTitle="Doctor Dashboard" pageIcon={<Activity className="h-5 w-5" />}>
+      <div className="space-y-6">
           <section className="rounded-2xl border border-gray-200 bg-white px-5 py-6 sm:px-6 shadow-sm">
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-gray-900">
-              Doctor Dashboard
+              Overview
             </h1>
             <p className="mt-2 text-sm text-gray-600">
               Track all your patients, consultation history, date-wise
@@ -395,8 +392,7 @@ export default function DoctorOverviewDashboard() {
               </table>
             </div>
           </section>
-        </div>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }
