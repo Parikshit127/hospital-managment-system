@@ -91,6 +91,8 @@ model Organization {
   tickets                       Ticket[]
   ticket_notes                  TicketNote[]
   release_notes                 ReleaseNote[]
+  broadcasts                    Broadcast[]
+  notification_receipts         NotificationReceipt[]
   expense_categories            ExpenseCategory[]
   vendors                       Vendor[]
   expenses                      Expense[]
@@ -272,6 +274,7 @@ model Branch {
   organization   Organization @relation(fields: [organizationId], references: [id])
   stores         stores[]
   tickets        Ticket[]
+  broadcasts     Broadcast[]
 
   @@index([organizationId])
   @@map("branches")
@@ -500,6 +503,8 @@ model User {
   assigned_tickets                                        Ticket[]             @relation("TicketAssignee")
   notifications                                           Notification[]
   ticket_notes                                            TicketNote[]
+  broadcasts_created                                      Broadcast[]
+  notification_receipts                                   NotificationReceipt[]
   organization                                            Organization         @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -2275,12 +2280,78 @@ model ReleaseNote {
   title          String
   content        String
   version        String
+  file_url       String?
+  file_name      String?
+  mime_type      String?
+  is_published   Boolean      @default(false)
+  published_at   DateTime?
+  created_by     String?
   organizationId String
   created_at     DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id])
+  broadcasts     Broadcast[]
 
   @@index([organizationId])
   @@map("release_notes")
+}
+
+enum BroadcastAudience {
+  ALL_FACILITIES
+  FACILITY
+  ROLE
+}
+
+enum BroadcastStatus {
+  SCHEDULED
+  SENT
+}
+
+// An admin-composed, audience-targeted notification. Fans out into one
+// NotificationReceipt per targeted user on send (immediate or scheduled).
+model Broadcast {
+  id              String            @id @default(uuid())
+  title           String
+  body            String
+  audience        BroadcastAudience
+  facility_id     String?
+  target_role     String?
+  status          BroadcastStatus   @default(SENT)
+  scheduled_for   DateTime?
+  sent_at         DateTime?
+  release_note_id String?
+  created_by      String
+  organizationId  String
+  created_at      DateTime          @default(now())
+
+  facility     Branch?               @relation(fields: [facility_id], references: [id])
+  creator      User                  @relation(fields: [created_by], references: [id])
+  releaseNote  ReleaseNote?          @relation(fields: [release_note_id], references: [id])
+  organization Organization          @relation(fields: [organizationId], references: [id])
+  receipts     NotificationReceipt[]
+
+  @@index([organizationId])
+  @@index([status, scheduled_for])
+  @@map("broadcasts")
+}
+
+// Per-user read receipt for a broadcast. Unread = read_at IS NULL. One row per
+// (broadcast, user) so unread counts stay correct across tabs/devices.
+model NotificationReceipt {
+  id             String    @id @default(uuid())
+  broadcast_id   String
+  user_id        String
+  read_at        DateTime?
+  organizationId String
+  created_at     DateTime  @default(now())
+
+  broadcast    Broadcast    @relation(fields: [broadcast_id], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [user_id], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([broadcast_id, user_id])
+  @@index([user_id, read_at])
+  @@index([organizationId])
+  @@map("notification_receipts")
 }
 
 enum TicketPriority {
