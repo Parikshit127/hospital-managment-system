@@ -1777,13 +1777,24 @@ export default function PharmacyPage() {
                 const hospitalAddress = branding?.hospitalAddress || pharmacyBranding?.address || '';
                 const hospitalPhone = branding?.hospitalPhone || '';
                 const hospitalEmail = branding?.hospitalEmail || '';
-                const hospitalGstin = branding?.gstin || pharmacyBranding?.gstin || '';
+                // This is a pharmacy (Garnet Medicare) bill, so the GSTIN must be the
+                // pharmacy's own — NOT the hospital org GSTIN. Orgs whose pharmacy has no
+                // GSTIN yet (e.g. Avise) therefore print a plain non-GST bill.
+                const hospitalGstin = pharmacyBranding?.gstin || '';
                 const patientName = isHospitalUse ? 'Hospital Internal Use' : (isWalkIn ? (walkInName || 'Walk-in / OTC') : (selectedPatient?.full_name || patientId));
                 const patientAddress = isWalkIn ? '' : (selectedPatient?.address || '');
 
                 // avg tax rate for GST note
                 const avgTaxRate = items.length > 0 ? (items.reduce((s: number, it: any) => s + (it.tax_rate || 0), 0) / items.length) : 0;
                 const halfTax = (avgTaxRate / 2).toFixed(1);
+
+                // GST presentation is only valid when the dispensing pharmacy has a GSTIN.
+                // Orgs without one (e.g. Avise — GST not issued yet) print a plain bill:
+                // no "GST INVOICE" title, no SGST/CGST columns/rows/note. To keep the
+                // totals reconciling, amounts are shown tax-inclusive in that mode.
+                const showGst = !!hospitalGstin;
+                const itemColCount = showGst ? 12 : 10;
+                const displaySubtotal = showGst ? subtotal : subtotal + cgstAmt + sgstAmt;
 
                 const TD: React.CSSProperties = { border: '1px solid #000', padding: '2px 4px', fontSize: '9px', verticalAlign: 'middle' };
                 const TH: React.CSSProperties = { border: '1px solid #000', padding: '2px 4px', fontSize: '9px', fontWeight: 700, background: '#f5f5f5', textAlign: 'center', verticalAlign: 'middle' };
@@ -1815,7 +1826,7 @@ export default function PharmacyPage() {
                         {hospitalGstin && <div style={{ fontSize: '9px', marginBottom: '3px' }}><strong>GSTIN : {hospitalGstin}</strong></div>}
 
                         {/* ── TITLE ── */}
-                        <div style={{ textAlign: 'center', fontSize: '14px', fontWeight: 900, borderTop: '1px solid #000', borderBottom: '1px solid #000', padding: '3px 0', marginBottom: '3px' }}>GST INVOICE</div>
+                        <div style={{ textAlign: 'center', fontSize: '14px', fontWeight: 900, borderTop: '1px solid #000', borderBottom: '1px solid #000', padding: '3px 0', marginBottom: '3px' }}>{showGst ? 'GST INVOICE' : 'INVOICE'}</div>
 
                         {/* Invoice no + date */}
                         <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '9px', marginBottom: '3px' }}>
@@ -1835,8 +1846,8 @@ export default function PharmacyPage() {
                                     <th style={{ ...TH, width: '32px' }}>QTY</th>
                                     <th style={{ ...TH, width: '48px' }}>MRP</th>
                                     <th style={{ ...TH, width: '48px' }}>RATE</th>
-                                    <th style={{ ...TH, width: '30px' }}>SGST</th>
-                                    <th style={{ ...TH, width: '30px' }}>CGST</th>
+                                    {showGst && <th style={{ ...TH, width: '30px' }}>SGST</th>}
+                                    {showGst && <th style={{ ...TH, width: '30px' }}>CGST</th>}
                                     <th style={{ ...TH, width: '52px' }}>AMOUNT</th>
                                 </tr>
                             </thead>
@@ -1856,16 +1867,16 @@ export default function PharmacyPage() {
                                             <td style={{ ...TD, textAlign: 'center' }}>{item.qty}</td>
                                             <td style={{ ...TD, textAlign: 'right' }}>{Number(item.mrp || 0).toFixed(2)}</td>
                                             <td style={{ ...TD, textAlign: 'right' }}>{rate.toFixed(2)}</td>
-                                            <td style={{ ...TD, textAlign: 'center' }}>{halfTaxRate.toFixed(2)}</td>
-                                            <td style={{ ...TD, textAlign: 'center' }}>{halfTaxRate.toFixed(2)}</td>
-                                            <td style={{ ...TD, textAlign: 'right' }}>{amount.toFixed(2)}</td>
+                                            {showGst && <td style={{ ...TD, textAlign: 'center' }}>{halfTaxRate.toFixed(2)}</td>}
+                                            {showGst && <td style={{ ...TD, textAlign: 'center' }}>{halfTaxRate.toFixed(2)}</td>}
+                                            <td style={{ ...TD, textAlign: 'right' }}>{(showGst ? amount : amount + (item.tax_amount || 0)).toFixed(2)}</td>
                                         </tr>
                                     );
                                 })}
                                 {/* empty rows to fill to at least 8 lines */}
                                 {Array.from({ length: Math.max(0, 8 - items.length) }).map((_, i) => (
                                     <tr key={`empty-${i}`}>
-                                        {Array.from({ length: 12 }).map((_, j) => <td key={j} style={{ ...TD, height: '14px' }}>&nbsp;</td>)}
+                                        {Array.from({ length: itemColCount }).map((_, j) => <td key={j} style={{ ...TD, height: '14px' }}>&nbsp;</td>)}
                                     </tr>
                                 ))}
                             </tbody>
@@ -1877,9 +1888,14 @@ export default function PharmacyPage() {
                                 <tr>
                                     {/* LEFT: GST note + terms */}
                                     <td style={{ width: '62%', verticalAlign: 'top', paddingRight: '8px' }}>
-                                        {avgTaxRate > 0 && (
+                                        {showGst && avgTaxRate > 0 && (
                                             <div style={{ fontSize: '8px', marginBottom: '4px' }}>
                                                 GST {subtotal.toFixed(2)}*{halfTax}+{halfTax}%={sgstAmt.toFixed(2)}SGST+{cgstAmt.toFixed(2)}CGST, &nbsp;&nbsp;<strong>*** GET WELL SOON **</strong>
+                                            </div>
+                                        )}
+                                        {!showGst && (
+                                            <div style={{ fontSize: '8px', marginBottom: '4px' }}>
+                                                <strong>*** GET WELL SOON **</strong>
                                             </div>
                                         )}
                                         <div style={{ fontSize: '8px', marginBottom: '2px' }}><strong>Terms &amp; Conditions</strong></div>
@@ -1896,11 +1912,11 @@ export default function PharmacyPage() {
                                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                             <tbody>
                                                 {[
-                                                    ['SUB TOTAL', subtotal.toFixed(2)],
+                                                    ['SUB TOTAL', displaySubtotal.toFixed(2)],
                                                     ['ROUND OFF', roundOff > 0 ? `-${Math.abs(roundOff).toFixed(2)}` : roundOff < 0 ? `+${Math.abs(roundOff).toFixed(2)}` : '0.00'],
                                                     ...(discountAmt > 0 ? [[`Discount ${discountPctVal > 0 ? discountPctVal + ' %' : ''}`, discountAmt.toFixed(2)]] : []),
-                                                    ...(sgstAmt > 0 ? [[`SGST ${halfTax} %`, sgstAmt.toFixed(2)]] : []),
-                                                    ...(cgstAmt > 0 ? [[`CGST ${halfTax} %`, cgstAmt.toFixed(2)]] : []),
+                                                    ...(showGst && sgstAmt > 0 ? [[`SGST ${halfTax} %`, sgstAmt.toFixed(2)]] : []),
+                                                    ...(showGst && cgstAmt > 0 ? [[`CGST ${halfTax} %`, cgstAmt.toFixed(2)]] : []),
                                                     ...(roundOff !== 0 ? [['Roundoff', Math.abs(roundOff).toFixed(2)]] : []),
                                                 ].map(([label, val], i) => (
                                                     <tr key={i}>
