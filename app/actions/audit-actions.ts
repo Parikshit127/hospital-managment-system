@@ -1,6 +1,6 @@
 'use server';
 
-import { requireTenantContext } from '@/backend/tenant';
+import { requireTenantContext, requireRoleAndTenant, ForbiddenError, AuthError } from '@/backend/tenant';
 
 // Log an audit event
 export async function logAuditEvent(params: {
@@ -45,9 +45,11 @@ export async function getAuditLogs(page: number = 1, limit: number = 50, filters
     entity_type?: string;
 }) {
     try {
-        const { db } = await requireTenantContext();
+        // Admin-only. system_audit_logs is not auto-tenant-scoped, so we must
+        // filter organizationId explicitly to prevent cross-org leakage.
+        const { db, organizationId } = await requireRoleAndTenant(['admin']);
 
-        const where: any = {};
+        const where: any = { organizationId };
         if (filters?.module) where.module = filters.module;
         if (filters?.action) where.action = { contains: filters.action, mode: 'insensitive' };
         if (filters?.username) where.username = { contains: filters.username, mode: 'insensitive' };
@@ -75,6 +77,9 @@ export async function getAuditLogs(page: number = 1, limit: number = 50, filters
             }
         };
     } catch (error: any) {
+        if (error instanceof ForbiddenError || error instanceof AuthError) {
+            return { success: false, error: 'Not authorized' };
+        }
         console.error('getAuditLogs error:', error);
         return { success: false, error: error.message };
     }
@@ -83,15 +88,16 @@ export async function getAuditLogs(page: number = 1, limit: number = 50, filters
 // Get audit stats
 export async function getAuditStats() {
     try {
-        const { db } = await requireTenantContext();
+        // Admin-only + org-scoped (see getAuditLogs).
+        const { db, organizationId } = await requireRoleAndTenant(['admin']);
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
         const [totalToday, totalAll, loginCount] = await Promise.all([
-            db.system_audit_logs.count({ where: { created_at: { gte: today } } }),
-            db.system_audit_logs.count(),
-            db.system_audit_logs.count({ where: { action: 'LOGIN', created_at: { gte: today } } })
+            db.system_audit_logs.count({ where: { organizationId, created_at: { gte: today } } }),
+            db.system_audit_logs.count({ where: { organizationId } }),
+            db.system_audit_logs.count({ where: { organizationId, action: 'LOGIN', created_at: { gte: today } } })
         ]);
 
         return {
@@ -99,6 +105,9 @@ export async function getAuditStats() {
             data: { totalToday, totalAll, loginCount }
         };
     } catch (error: any) {
+        if (error instanceof ForbiddenError || error instanceof AuthError) {
+            return { success: false, error: 'Not authorized' };
+        }
         console.error('getAuditStats error:', error);
         return { success: false, error: error.message };
     }
