@@ -31,7 +31,7 @@ function getFYStartDate(date: Date = new Date()): Date {
     return new Date(fyStartYear, 3, 1); // April 1st
 }
 
-export type NumberType = 'OPD' | 'IPD' | 'RCP' | 'DEP' | 'PHM' | 'CN' | 'EXP' | 'CLM' | 'WO' | 'REF' | 'IRC';
+export type NumberType = 'OPD' | 'IPD' | 'RCP' | 'DEP' | 'PHM' | 'CN' | 'EXP' | 'CLM' | 'WO' | 'REF' | 'IRC' | 'BILL';
 
 /**
  * Generate a sequential number for the given org and type.
@@ -112,6 +112,15 @@ export async function generateSequentialNumber(
             },
         });
         lastSeq = count;
+    } else if (type === 'BILL') {
+        // Final Bill Number — assigned only when a bill is finalized.
+        const count = await database.invoices.count({
+            where: {
+                organizationId,
+                final_bill_number: { startsWith: prefix },
+            },
+        });
+        lastSeq = count;
     } else {
         const count = await database.invoices.count({
             where: {
@@ -129,7 +138,7 @@ export async function generateSequentialNumber(
     let finalNumber = candidate;
     let attempt = lastSeq + 1;
     while (true) {
-        const field = type === 'RCP' ? 'receipt_number' : type === 'DEP' ? 'deposit_number' : type === 'CN' ? 'credit_note_number' : type === 'IRC' ? 'receipt_number' : 'invoice_number';
+        const field = type === 'RCP' ? 'receipt_number' : type === 'DEP' ? 'deposit_number' : type === 'CN' ? 'credit_note_number' : type === 'IRC' ? 'receipt_number' : type === 'BILL' ? 'final_bill_number' : 'invoice_number';
         const table = type === 'RCP' ? database.payments : type === 'DEP' ? database.patientDeposit : type === 'CN' ? database.creditNote : type === 'IRC' ? database.insuranceReceipt : database.invoices;
         const existing = await table.findFirst({
             where: { [field]: finalNumber },

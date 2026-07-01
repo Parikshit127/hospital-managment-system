@@ -36,7 +36,7 @@ export const revenueDepartmentWiseReport: ReportDefinition = {
       FROM invoice_items ii
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
       GROUP BY COALESCE(ii.department, 'Other')
@@ -86,7 +86,7 @@ export const revenuePayerTypeWiseReport: ReportDefinition = {
         SUM(i.paid_amount) as "total_collected"
       FROM invoices i
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
       GROUP BY UPPER(i.billing_patient_type)
@@ -141,7 +141,7 @@ export const revenuePayerNameWiseReport: ReportDefinition = {
       LEFT JOIN corporate_masters cm ON i.corporate_id = cm.id
       LEFT JOIN insurance_providers ip ON i.tpa_provider_id = ip.id
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
         ${payer_type ? Prisma.sql`AND i.billing_patient_type = ${payer_type}` : Prisma.empty}
@@ -204,7 +204,7 @@ export const revenueServiceTypeWiseReport: ReportDefinition = {
       FROM invoice_items ii
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
         ${service_category ? Prisma.sql`AND ii.service_category = ${service_category}` : Prisma.empty}
@@ -257,7 +257,7 @@ export const revenueBillingCategoryWiseReport: ReportDefinition = {
         SUM(i.total_amount) / NULLIF(COUNT(DISTINCT i.patient_id), 0) as "avg_revenue"
       FROM invoices i
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
       GROUP BY UPPER(i.invoice_type)
@@ -350,7 +350,7 @@ export const revenueDoctorWiseSummaryReport: ReportDefinition = {
       FROM invoices i
       LEFT JOIN "users" u ON i.doctor_id = u.id
       WHERE i."organizationId" = ${orgId}
-        AND LOWER(i.status) <> 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.invoice_type IN ('IPD', 'OPD')
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
@@ -437,7 +437,7 @@ export const revenueWardWiseReport: ReportDefinition = {
       JOIN admissions a ON i.admission_id = a.admission_id
       LEFT JOIN wards w ON a.ward_id = w.ward_id
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.invoice_type = 'IPD'
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}

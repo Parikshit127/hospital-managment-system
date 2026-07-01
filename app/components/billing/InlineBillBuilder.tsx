@@ -350,8 +350,9 @@ export function InlineBillBuilder({ patient, onCreated, onCancel }: Props) {
                               type="number"
                               min={0}
                               value={l.unit_price}
-                              onChange={(e) => updateLine(l.key, { unit_price: Math.max(0, parseFloat(e.target.value) || 0) })}
-                              className="w-20 text-right bg-transparent border border-gray-200 rounded px-1 py-0.5"
+                              readOnly
+                              title="Item prices cannot be edited. To change the amount, apply a discount or cancel the service and add it again."
+                              className="w-20 text-right bg-gray-50 text-gray-500 cursor-not-allowed border border-gray-200 rounded px-1 py-0.5"
                             />
                           </td>
                           <td className="px-3 py-2 text-right">

@@ -7,7 +7,7 @@ import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
 import { billingInvoiceMsg, paymentReceiptMsg } from '@/app/lib/whatsapp-templates';
 import { postInvoiceToGL, postPaymentToGL, reverseJournalEntry } from './gl-actions';
 import { getCashThresholds, validateCashCompliance, normalizePan, resolveRegisteredPan, CASH_METHOD } from '@/app/lib/cash-compliance';
-import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
+import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, generateSequentialNumber } from '@/app/lib/sequence-generator';
 import { validateBackdate } from '@/app/lib/backdate';
 import { recomputeInvoiceCommission } from '@/app/lib/referral-commission';
 import { recomputeInvoiceDoctorCommission } from '@/app/lib/doctor-commission';
@@ -609,7 +609,7 @@ export async function finalizeInvoice(invoiceId: number) {
         // Rule 3: an IPD bill can only be finalized after the patient is discharged.
         const existing = await db.invoices.findUnique({
             where: { id: invoiceId },
-            select: { admission_id: true },
+            select: { admission_id: true, final_bill_number: true },
         });
         if (!existing) return { success: false, error: 'Invoice not found.' };
         if (existing.admission_id) {
@@ -621,14 +621,25 @@ export async function finalizeInvoice(invoiceId: number) {
             if (!gate.ok) return { success: false, error: gate.error };
         }
 
+        // Rule 1 & 3: assign the official Final Bill No. at finalization (once).
+        const finalBillNumber = existing.final_bill_number
+            || await generateSequentialNumber(organizationId, 'BILL', db);
+
         const invoice = await db.invoices.update({
             where: { id: invoiceId },
             data: {
                 status: 'Final',
                 finalized_at: new Date(),
+                final_bill_number: finalBillNumber,
                 version: { increment: 1 },
             },
         });
+
+        // Rule 2 & 4: revenue is recognized at finalization — post to the GL now
+        // (Draft bills are skipped by postInvoiceToGL).
+        await postInvoiceToGL(invoice.id).catch(err =>
+            console.error('GL posting on finalize failed for invoice:', invoice.id, err)
+        );
 
         await db.system_audit_logs.create({
             data: {
@@ -1713,10 +1724,11 @@ export async function getFinanceDashboardStats(params?: {
             db.payments.count({
                 where: { status: 'Completed', created_at: { gte: today } },
             }),
+            // Rule 2: revenue recognized only on Final bills.
             db.invoice_items.groupBy({
                 by: ['department'],
                 _sum: { net_price: true },
-                where: dateFilter ? { created_at: dateFilter } : undefined,
+                where: { invoice: { status: 'Final' }, ...(dateFilter ? { created_at: dateFilter } : {}) },
             }),
             db.invoice_items.groupBy({
                 by: ['ref_id'],
@@ -1724,30 +1736,31 @@ export async function getFinanceDashboardStats(params?: {
                 where: {
                     service_category: 'Consultation',
                     ref_id: { not: null },
+                    invoice: { status: 'Final' },
                     ...(dateFilter ? { created_at: dateFilter } : {}),
                 },
             }),
             db.invoices.aggregate({
                 _sum: { net_amount: true },
                 _count: { _all: true },
-                where: { invoice_type: 'IPD', status: { not: 'Cancelled' }, ...(dateFilter ? { created_at: dateFilter } : {}) },
+                where: { invoice_type: 'IPD', status: 'Final', ...(dateFilter ? { created_at: dateFilter } : {}) },
             }),
             db.invoices.aggregate({
                 _sum: { net_amount: true },
                 _count: { _all: true },
-                where: { invoice_type: 'OPD', status: { not: 'Cancelled' }, ...(dateFilter ? { created_at: dateFilter } : {}) },
+                where: { invoice_type: 'OPD', status: 'Final', ...(dateFilter ? { created_at: dateFilter } : {}) },
             }),
             db.invoices.aggregate({
                 _sum: { net_amount: true },
-                where: { status: { not: 'Cancelled' }, created_at: { gte: today } },
+                where: { status: 'Final', created_at: { gte: today } },
             }),
             db.invoices.aggregate({
                 _sum: { net_amount: true },
-                where: { status: { not: 'Cancelled' } },
+                where: { status: 'Final' },
             }),
             db.invoices.aggregate({
                 _sum: { net_amount: true },
-                where: { status: { not: 'Cancelled' }, ...(dateFilter ? { created_at: dateFilter } : {}) },
+                where: { status: 'Final', ...(dateFilter ? { created_at: dateFilter } : {}) },
             }),
         ]);
 
@@ -3330,7 +3343,7 @@ export async function getDrillDownData(type: DrillDownType, filters: Record<stri
 
         if (type === 'total-revenue') {
             const invoices = await db.invoices.findMany({
-                where: { status: { not: 'Cancelled' } },
+                where: { status: 'Final' },
                 include: { patient: { select: { full_name: true } } },
                 orderBy: { created_at: 'desc' },
                 take: 100,
@@ -3467,7 +3480,7 @@ export async function getDrillDownData(type: DrillDownType, filters: Record<stri
             }
             const invoices = await db.invoices.findMany({
                 where: {
-                    status: { not: 'Cancelled' },
+                    status: 'Final',
                     items: { some: { department: dept } },
                 },
                 include: {
@@ -3502,7 +3515,7 @@ export async function getDrillDownData(type: DrillDownType, filters: Record<stri
             }
             const invoices = await db.invoices.findMany({
                 where: {
-                    status: { not: 'Cancelled' },
+                    status: 'Final',
                     items: { some: { ref_id: doctorId, service_category: 'Consultation' } },
                 },
                 include: {
@@ -3532,7 +3545,7 @@ export async function getDrillDownData(type: DrillDownType, filters: Record<stri
         if (type === 'ipd' || type === 'opd') {
             const invoiceType = type.toUpperCase();
             const invoices = await db.invoices.findMany({
-                where: { invoice_type: invoiceType, status: { not: 'Cancelled' } },
+                where: { invoice_type: invoiceType, status: 'Final' },
                 include: { patient: { select: { full_name: true } } },
                 orderBy: { created_at: 'desc' },
                 take: 100,

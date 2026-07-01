@@ -1114,6 +1114,9 @@ model wards {
 model invoices {
   id                       Int       @id @default(autoincrement())
   invoice_number           String    @unique
+  // Official "Final Bill No." — assigned only when the bill is finalized (Rule 1/3).
+  // Draft bills have no final_bill_number; it is the number shown on official/final bills.
+  final_bill_number        String?   @unique
   patient_id               String
   admission_id             String?
   invoice_type             String    @default("OPD")

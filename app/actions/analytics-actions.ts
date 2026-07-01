@@ -98,19 +98,20 @@ export async function getFinancialAnalytics() {
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         
+        // Rule 2: revenue is recognized only on Final bills.
         const thisMonthInvoices = await db.invoices.aggregate({
             _sum: { net_amount: true, paid_amount: true },
-            where: { organizationId, created_at: { gte: startOfMonth }, status: { not: 'Cancelled' } }
-        });
-        
-        const lastMonthInvoices = await db.invoices.aggregate({
-            _sum: { net_amount: true, paid_amount: true },
-            where: { organizationId, created_at: { gte: startOfLastMonth, lt: startOfMonth }, status: { not: 'Cancelled' } }
+            where: { organizationId, created_at: { gte: startOfMonth }, status: 'Final' }
         });
 
-        // 2. Top Revenue Departments
+        const lastMonthInvoices = await db.invoices.aggregate({
+            _sum: { net_amount: true, paid_amount: true },
+            where: { organizationId, created_at: { gte: startOfLastMonth, lt: startOfMonth }, status: 'Final' }
+        });
+
+        // 2. Top Revenue Departments (Final bills only)
         const items = await db.invoice_items.findMany({
-            where: { organizationId, created_at: { gte: startOfMonth } }
+            where: { organizationId, created_at: { gte: startOfMonth }, invoice: { status: 'Final' } }
         });
         
         const deptRevenue: Record<string, number> = {};
@@ -172,7 +173,7 @@ export async function getRevenueForecast() {
         const invoices = await db.invoices.findMany({
             where: {
                 organizationId,
-                status: { not: 'Cancelled' },
+                status: 'Final',
                 created_at: { gte: historyStart },
             },
             select: { net_amount: true, created_at: true },
