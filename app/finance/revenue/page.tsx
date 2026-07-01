@@ -1,12 +1,38 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getRevenueByDepartment, getDailyCollectionSummary, getProfitLossReport } from '@/app/actions/report-actions';
+import { getRevenueByDepartment, getDailyCollectionSummary, getProfitLossReport, getMISReport } from '@/app/actions/report-actions';
 import { DateRangePicker } from '@/app/components/finance/DateRangePicker';
 import { ReportChart } from '@/app/components/finance/ReportChart';
 import { ExportButton } from '@/app/components/finance/ExportButton';
-import { TrendingUp, BarChart3, PieChart, Loader2, IndianRupee, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { TrendingUp, BarChart3, PieChart, Loader2, IndianRupee, ArrowUpRight, ArrowDownRight, ListFilter } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
+import Link from 'next/link';
+
+// Columns for the detailed per-bill revenue breakup + its Excel export. Keep the
+// export list and on-screen table in sync so what's shown is what's downloaded.
+const DETAIL_COLUMNS: { key: string; label: string }[] = [
+    { key: 'bill_date_fmt', label: 'Bill Date' },
+    { key: 'bill_no', label: 'Bill No' },
+    { key: 'patient_name', label: 'Patient Name' },
+    { key: 'uhid', label: 'UHID' },
+    { key: 'phone', label: 'Phone' },
+    { key: 'bill_type', label: 'Bill Type' },
+    { key: 'admission_category', label: 'Patient Type' },
+    { key: 'tpa_corporate_name', label: 'TPA / Corporate' },
+    { key: 'doctor_name', label: 'Doctor' },
+    { key: 'department', label: 'Department' },
+    { key: 'admission_date_fmt', label: 'Admission Date' },
+    { key: 'discharge_date_fmt', label: 'Discharge Date' },
+    { key: 'gross_amount', label: 'Gross Amount' },
+    { key: 'discount', label: 'Discount' },
+    { key: 'net_amount', label: 'Net Amount' },
+    { key: 'received_amount', label: 'Payment Collected' },
+    { key: 'outstanding_amount', label: 'Outstanding' },
+    { key: 'approved_amount', label: 'TPA Approved' },
+    { key: 'settled_amount', label: 'TPA Settled' },
+    { key: 'status', label: 'Status' },
+];
 
 export default function RevenuePage() {
     const _now = new Date();
@@ -19,25 +45,52 @@ export default function RevenuePage() {
     const [deptData, setDeptData] = useState<any>(null);
     const [dailyData, setDailyData] = useState<any[]>([]);
     const [plData, setPLData] = useState<any>(null);
+    const [detailRows, setDetailRows] = useState<any[]>([]);
+    const [detailSummary, setDetailSummary] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => { loadData(); }, [from, to]);
 
+    const fmtDMY = (iso: any) => (iso ? new Date(iso).toLocaleDateString('en-GB') : '');
+
     async function loadData() {
         setLoading(true);
-        const [deptRes, dailyRes, plRes] = await Promise.all([
+        const [deptRes, dailyRes, plRes, misRes] = await Promise.all([
             getRevenueByDepartment({ from, to }),
             getDailyCollectionSummary({ from, to }),
             getProfitLossReport({ from, to }),
+            getMISReport({ from, to }),
         ]);
         if (deptRes.success) setDeptData(deptRes.data);
         if (dailyRes.success) setDailyData(dailyRes.data || []);
         if (plRes.success) setPLData(plRes.data);
+        const misData = misRes.success ? (misRes as any).data : null;
+        if (misData) {
+            const rows = (misData.rows || []).map((r: any) => ({
+                ...r,
+                // Pre-format dates so the on-screen table and the Excel export match.
+                bill_date_fmt: fmtDMY(r.bill_date),
+                admission_date_fmt: fmtDMY(r.admission_date),
+                discharge_date_fmt: fmtDMY(r.discharge_date),
+            }));
+            setDetailRows(rows);
+            setDetailSummary(misData.summary || null);
+        } else {
+            setDetailRows([]);
+            setDetailSummary(null);
+        }
         setLoading(false);
     }
 
     const fmt = (n: number) => n.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
-    const totalRevenue = deptData?.byDepartment?.reduce((s: number, d: any) => s + d.amount, 0) || 0;
+    // Department sum is a service-date (accrual) view: it splits a multi-day IPD bill
+    // across the days its line items were rendered. Kept only for the department table's
+    // %-share denominator so those shares still total 100%.
+    const deptRevenueTotal = deptData?.byDepartment?.reduce((s: number, d: any) => s + d.amount, 0) || 0;
+    // Headline Total Revenue = the detailed breakup's Net Billed (bill-date basis), so the
+    // top card always reconciles with the per-bill table below. Falls back to the
+    // department sum only until the MIS summary loads.
+    const totalRevenue = detailSummary?.total_net ?? deptRevenueTotal;
     const totalExpenses = plData?.totalExpenses || 0;
     const netProfit = plData?.netProfit || 0;
 
@@ -189,7 +242,7 @@ export default function RevenuePage() {
                                             <td className="px-6 py-3 text-sm font-semibold text-gray-900 text-right">{fmt(d.amount)}</td>
                                             <td className="px-6 py-3 text-sm text-gray-600 text-right">{d.count}</td>
                                             <td className="px-6 py-3 text-sm text-gray-600 text-right">
-                                                {totalRevenue > 0 ? ((d.amount / totalRevenue) * 100).toFixed(1) : '0'}%
+                                                {deptRevenueTotal > 0 ? ((d.amount / deptRevenueTotal) * 100).toFixed(1) : '0'}%
                                             </td>
                                         </tr>
                                     ))}
@@ -197,6 +250,98 @@ export default function RevenuePage() {
                             </table>
                         </div>
                     )}
+
+                    {/* Detailed per-bill Revenue Breakup */}
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div>
+                                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                                    <ListFilter className="h-4 w-4 text-emerald-600" /> Detailed Revenue Breakup
+                                </h3>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                    Every bill for {new Date(from).toLocaleDateString('en-GB')} – {new Date(to).toLocaleDateString('en-GB')} — patient, payment collected, outstanding, IPD dates and TPA amounts.
+                                </p>
+                            </div>
+                            <ExportButton
+                                data={detailRows}
+                                filename={`revenue-breakup-${from}-to-${to}`}
+                                columns={DETAIL_COLUMNS}
+                            />
+                        </div>
+
+                        {/* Summary chips */}
+                        {detailSummary && (
+                            <div className="flex flex-wrap gap-4 px-6 py-3 bg-gray-50 border-b border-gray-100 text-sm">
+                                <span className="text-gray-500">Bills: <span className="font-bold text-gray-900">{detailSummary.total_bills}</span></span>
+                                <span className="text-gray-500">Net Billed: <span className="font-bold text-gray-900">{fmt(detailSummary.total_net || 0)}</span></span>
+                                <span className="text-gray-500">Collected: <span className="font-bold text-emerald-600">{fmt(detailSummary.total_received || 0)}</span></span>
+                                <span className="text-gray-500">Outstanding: <span className="font-bold text-rose-600">{fmt(detailSummary.total_outstanding || 0)}</span></span>
+                                {detailSummary.total_approved > 0 && <span className="text-gray-500">TPA Approved: <span className="font-bold text-gray-900">{fmt(detailSummary.total_approved)}</span></span>}
+                                {detailSummary.total_settled > 0 && <span className="text-gray-500">TPA Settled: <span className="font-bold text-gray-900">{fmt(detailSummary.total_settled)}</span></span>}
+                            </div>
+                        )}
+
+                        {detailRows.length === 0 ? (
+                            <div className="py-16 text-center text-sm text-gray-400">No bills in this period.</div>
+                        ) : (
+                            <div className="overflow-x-auto max-h-[70vh]">
+                                <table className="w-full text-xs whitespace-nowrap">
+                                    <thead className="bg-gray-50 sticky top-0 z-10">
+                                        <tr className="text-[10px] uppercase tracking-wider text-gray-500">
+                                            <th className="px-3 py-2 text-left font-semibold">Bill Date</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Bill No</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Patient</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Type</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Patient Type</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Doctor</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Admit</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Discharge</th>
+                                            <th className="px-3 py-2 text-right font-semibold">Net</th>
+                                            <th className="px-3 py-2 text-right font-semibold">Collected</th>
+                                            <th className="px-3 py-2 text-right font-semibold">Outstanding</th>
+                                            <th className="px-3 py-2 text-right font-semibold">TPA Appr.</th>
+                                            <th className="px-3 py-2 text-right font-semibold">TPA Settled</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {detailRows.map((r: any, i: number) => (
+                                            <tr key={r.invoice_id ?? i} className="hover:bg-emerald-50/30">
+                                                <td className="px-3 py-2 text-gray-600">{r.bill_date_fmt}</td>
+                                                <td className="px-3 py-2 font-mono text-gray-700">
+                                                    {r.invoice_id ? (
+                                                        <Link href={`/finance/invoices/${r.invoice_id}`} className="text-emerald-700 hover:underline">{r.bill_no}</Link>
+                                                    ) : r.bill_no}
+                                                </td>
+                                                <td className="px-3 py-2 font-medium text-gray-900">
+                                                    {r.uhid ? (
+                                                        <Link href={`/billing/patient/${r.uhid}`} className="hover:underline">{r.patient_name}</Link>
+                                                    ) : r.patient_name}
+                                                    {r.uhid && <span className="block text-[10px] text-gray-400 font-mono">{r.uhid}</span>}
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${r.bill_type === 'IPD' ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'}`}>{r.bill_type}</span>
+                                                </td>
+                                                <td className="px-3 py-2 text-gray-600">
+                                                    {r.admission_category}
+                                                    {r.tpa_corporate_name && <span className="block text-[10px] text-gray-400">{r.tpa_corporate_name}</span>}
+                                                </td>
+                                                <td className="px-3 py-2 text-gray-600">{r.doctor_name || '-'}</td>
+                                                <td className="px-3 py-2 text-gray-600">{r.admission_date_fmt || '-'}</td>
+                                                <td className="px-3 py-2 text-gray-600">{r.discharge_date_fmt || '-'}</td>
+                                                <td className="px-3 py-2 text-right font-semibold text-gray-900">{fmt(r.net_amount || 0)}</td>
+                                                <td className="px-3 py-2 text-right font-semibold text-emerald-700">{fmt(r.received_amount || 0)}</td>
+                                                <td className={`px-3 py-2 text-right font-semibold ${(r.outstanding_amount || 0) > 0 ? 'text-rose-600' : 'text-gray-400'}`}>{fmt(r.outstanding_amount || 0)}</td>
+                                                <td className="px-3 py-2 text-right text-gray-600">{r.approved_amount > 0 ? fmt(r.approved_amount) : '-'}</td>
+                                                <td className="px-3 py-2 text-right text-gray-600">{r.settled_amount > 0 ? fmt(r.settled_amount) : '-'}</td>
+                                                <td className="px-3 py-2 text-gray-500">{r.status}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
         </div>

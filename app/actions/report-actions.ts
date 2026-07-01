@@ -1180,6 +1180,7 @@ export async function getMISReport(filters: { from: string; to: string; billType
             const netPatientReceipt = Math.max(0, patientPayments - refundAmount);
 
             return {
+                invoice_id: inv.id,
                 patient_name: inv.patient?.full_name || '-',
                 bill_type: inv.invoice_type || 'OPD',
                 admission_category: admCat,
@@ -1218,6 +1219,8 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 // bills; left at 0 (renders as "-") for Cash/Corporate so the column
                 // reads cleanly for the TPA patients it's intended for.
                 approved_amount: effectiveType === 'tpa_insurance' ? Number(inv.tpa_approved_amount || 0) : 0,
+                // TPA amount actually settled/received from the payer (paid against the claim).
+                settled_amount: effectiveType === 'tpa_insurance' ? Number(inv.tpa_settled_amount || 0) : 0,
                 tpa_corporate_name: tpaCorporateName,
                 referral_source: inv.admission?.admission_source || '',
                 package_vs_nonpackage: hasPackage ? 'Package' : 'Non-Package',
@@ -1234,6 +1237,7 @@ export async function getMISReport(filters: { from: string; to: string; billType
             total_received: rows.reduce((s: number, r: any) => s + r.received_amount, 0),
             total_outstanding: rows.reduce((s: number, r: any) => s + r.outstanding_amount, 0),
             total_approved: rows.reduce((s: number, r: any) => s + r.approved_amount, 0),
+            total_settled: rows.reduce((s: number, r: any) => s + r.settled_amount, 0),
             total_discount: rows.reduce((s: number, r: any) => s + r.discount, 0),
             total_pharma: rows.reduce((s: number, r: any) => s + r.pharma_income, 0),
             total_lab: rows.reduce((s: number, r: any) => s + r.lab_income, 0),

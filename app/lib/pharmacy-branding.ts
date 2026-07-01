@@ -21,8 +21,8 @@ const PHARMACY_CONFIG: Record<string, PharmacyBranding> = {
         division: '(Division of Garnet Pharmaceutical)',
         address: 'B-162, East of Kailash Road, New Delhi, Delhi 110065',
         gstin: '07AKIPA3324R1Z0',
-        phone: '',
-        email: '',
+        phone: '9650506959',
+        email: ' garnetmedicare@gmail.com',
     },
     // Avise Hospital Superspeciality — Gurugram
     '0425857b-6293-4d91-86b2-bd049de66252': {
@@ -30,8 +30,8 @@ const PHARMACY_CONFIG: Record<string, PharmacyBranding> = {
         division: '(Division of Garnet Pharmaceutical)',
         address: '209-P, Sector-38, Gurugram, Haryana - 122001',
         gstin: '',
-        phone: '9717189900',
-        email: 'avisehospital@gmail.com',
+        phone: '9650506959',
+        email: 'garnetmedicare@gmail.com',
     },
 };
 

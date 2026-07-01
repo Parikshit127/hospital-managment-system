@@ -210,7 +210,9 @@ export default function ReceptionDashboard() {
     }, [loadData, loadArrivals, loadIPDData]);
 
     useEffect(() => {
-        if (pathname === '/reception/dashboard') {
+        // This component is also mounted at /finance/patients (finance portal). Refetch
+        // when landing on either host route.
+        if (pathname === '/reception/dashboard' || pathname === '/finance/patients') {
             loadData();
         }
     }, [pathname, loadData]);
@@ -397,7 +399,7 @@ export default function ReceptionDashboard() {
 
     return (
         <AppShell
-            pageTitle="Reception"
+            pageTitle={pathname?.startsWith('/finance') ? 'Patients' : 'Reception'}
             pageIcon={<Users className="h-5 w-5" />}
             headerActions={headerActions}
             onRefresh={() => { loadData(); loadArrivals(); if (ipdLoaded.current) loadIPDData(); }}
