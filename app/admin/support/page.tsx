@@ -6,7 +6,7 @@ import {
     LifeBuoy, Search, Filter, CheckCircle2, Clock, AlertCircle, AlertTriangle,
     Building2, User, Calendar, Loader2, RefreshCw, X, Check, Paperclip, Eye, Download, Image, FileText
 } from 'lucide-react';
-import { getAllTickets, updateTicketStatus } from '@/app/actions/help-center-actions';
+import { getAllTickets, updateTicketStatus, getAttachmentSignedUrl } from '@/app/actions/help-center-actions';
 import { listBranches } from '@/app/actions/branch-actions';
 import { TicketPriority, TicketStatus } from '@prisma/client';
 
@@ -87,7 +87,21 @@ export default function SupportPortalPage() {
             ]);
 
             if (ticketsRes.success && ticketsRes.data) {
-                setTickets(ticketsRes.data as Ticket[]);
+                const rawTickets = ticketsRes.data as Ticket[];
+                // Resolve a signed URL for every attachment (private bucket).
+                const enriched = await Promise.all(
+                    rawTickets.map(async (t) => {
+                        if (!t.attachments || t.attachments.length === 0) return t;
+                        const attachments = await Promise.all(
+                            t.attachments.map(async (att) => {
+                                const res = await getAttachmentSignedUrl(att.file_url);
+                                return { ...att, signedUrl: res.success ? res.signedUrl ?? undefined : undefined };
+                            })
+                        );
+                        return { ...t, attachments };
+                    })
+                );
+                setTickets(enriched);
             } else {
                 triggerNotification('error', 'Failed to fetch support tickets');
             }
@@ -129,6 +143,30 @@ export default function SupportPortalPage() {
             triggerNotification('error', 'An error occurred while updating the ticket');
         } finally {
             setUpdatingTicketId(null);
+        }
+    };
+
+    /* ─── Download Handler (blob-based so cross-origin signed URLs force a real download) ─── */
+    const handleDownloadAttachment = async (att: TicketAttachment) => {
+        if (!att.signedUrl) {
+            triggerNotification('error', 'File is not available for download');
+            return;
+        }
+        try {
+            const res = await fetch(att.signedUrl);
+            if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+            const blob = await res.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = objectUrl;
+            a.download = att.file_name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(objectUrl);
+        } catch (error) {
+            console.error('Attachment download failed:', error);
+            triggerNotification('error', 'Failed to download attachment');
         }
     };
 
@@ -498,16 +536,14 @@ export default function SupportPortalPage() {
                                                                 >
                                                                     <Eye className="h-3.5 w-3.5" />
                                                                 </button>
-                                                                <a
-                                                                    href={att.signedUrl || '#'}
-                                                                    download={att.file_name}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="p-1.5 hover:bg-white rounded-lg text-slate-500 hover:text-emerald-600 border border-transparent hover:border-slate-100 transition-all shadow-sm"
+                                                                <button
+                                                                    onClick={() => handleDownloadAttachment(att)}
+                                                                    disabled={!att.signedUrl}
+                                                                    className="p-1.5 hover:bg-white rounded-lg text-slate-500 hover:text-emerald-600 border border-transparent hover:border-slate-100 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                                                                     title="Download"
                                                                 >
                                                                     <Download className="h-3.5 w-3.5" />
-                                                                </a>
+                                                                </button>
                                                             </div>
                                                         </div>
                                                     );
