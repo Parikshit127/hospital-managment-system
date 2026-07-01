@@ -401,7 +401,7 @@ export function TicketTable({ userId }: { userId: string }) {
             {loadState === 'loaded' && filteredTickets.length > 0 && (
                 <Table>
                     <TableHeader>
-                        <TableCell header className="w-8"></TableCell>
+                        <TableCell header className="w-8">{null}</TableCell>
                         <TableCell header>Ticket ID</TableCell>
                         <TableCell header>Summary</TableCell>
                         <TableCell header>Module</TableCell>
