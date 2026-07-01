@@ -638,7 +638,7 @@ export default function AdmissionDetailPage() {
             <div className="max-w-6xl mx-auto space-y-4">
 
                 {/* ── Header Card ── */}
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 relative overflow-hidden">
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 relative">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-orange-500 rounded-l-2xl" />
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div className="pl-2">

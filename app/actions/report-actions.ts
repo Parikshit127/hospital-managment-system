@@ -186,17 +186,66 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
                 created_at: { gte: fromDate, lte: toDate },
                 status: { in: ['Approved', 'Processed'] }
             },
-            select: { id: true, invoice_id: true, amount: true, processed_by: true, created_at: true },
+            select: { id: true, invoice_id: true, payment_id: true, amount: true, processed_by: true, created_at: true },
             orderBy: { created_at: 'asc' }
         });
+
+        // Resolve each refund's original tender + patient. A refund is paid back
+        // through the same channel it was received, so its mode follows the linked
+        // payment's payment_method, and the patient comes from the linked invoice.
+        const refundPaymentIds = [...new Set(
+            refundRows.map((r: any) => Number(r.payment_id)).filter((n: number) => Number.isFinite(n))
+        )];
+        const refundPayments = refundPaymentIds.length
+            ? await db.payments.findMany({
+                where: { id: { in: refundPaymentIds } },
+                select: {
+                    id: true,
+                    payment_method: true,
+                    invoice: {
+                        select: {
+                            invoice_type: true,
+                            patient: { select: { full_name: true, patient_id: true } }
+                        }
+                    }
+                }
+            })
+            : [];
+        const refundPaymentMap = new Map<string, any>(refundPayments.map((p: any) => [String(p.id), p]));
+
+        const unresolvedInvoiceIds = [...new Set(
+            refundRows
+                .filter((r: any) => !refundPaymentMap.has(String(r.payment_id)))
+                .map((r: any) => Number(r.invoice_id))
+                .filter((n: number) => Number.isFinite(n))
+        )];
+        const refundInvoices = unresolvedInvoiceIds.length
+            ? await db.invoices.findMany({
+                where: { id: { in: unresolvedInvoiceIds } },
+                select: {
+                    id: true,
+                    invoice_type: true,
+                    patient: { select: { full_name: true, patient_id: true } }
+                }
+            })
+            : [];
+        const refundInvoiceMap = new Map<string, any>(refundInvoices.map((i: any) => [String(i.id), i]));
 
         const enrichedRefunds = refundRows.map((r: any) => {
             const username = String(r.processed_by || 'system');
             const fullName = userMap.get(username.toLowerCase()) || username;
+            const linkedPayment = refundPaymentMap.get(String(r.payment_id)) || null;
+            const linkedInvoice = linkedPayment?.invoice || refundInvoiceMap.get(String(r.invoice_id)) || null;
             return {
                 ...r,
                 cashier_username: username,
-                cashier_name: fullName
+                cashier_name: fullName,
+                // The hospital pays every refund out as a bank transfer, so refunds
+                // are always reported under NEFT/RTGS regardless of the original tender.
+                payment_method: 'NEFT/RTGS',
+                invoice_type: linkedInvoice?.invoice_type || null,
+                patient_name: linkedInvoice?.patient?.full_name || null,
+                patient_id: linkedInvoice?.patient?.patient_id || null
             };
         });
 
@@ -825,7 +874,7 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 admission: {
                     select: {
                         admission_id: true, admission_date: true, discharge_date: true,
-                        doctor_name: true, diagnosis: true, patient_class: true,
+                        doctor_name: true, attending_doctor_id: true, diagnosis: true, patient_class: true,
                         billing_category: true, admission_source: true,
                         bed: { select: { bed_category: true, pricing_tier: true } },
                         ward: { select: { ward_name: true, ward_type: true } },
@@ -946,6 +995,39 @@ export async function getMISReport(filters: { from: string; to: string; billType
             }
         }
 
+        // Refunds — money paid back to the patient against a bill. Netted off both
+        // Received and Patient Receipt so a refund reduces the recorded collection
+        // (and correspondingly raises outstanding). Only settled refunds count.
+        const refundByInvoice: Record<number, number> = {};
+        // invoices.id is Int but refunds.invoice_id is String — match on string keys.
+        const refundRows = await db.refund.findMany({
+            where: { invoice_id: { in: invoiceIds.map(String) }, status: { in: ['Approved', 'Processed'] } },
+            select: { invoice_id: true, amount: true },
+        });
+        for (const r of refundRows as any[]) {
+            if (r.invoice_id != null) {
+                const key = Number(r.invoice_id);
+                refundByInvoice[key] = (refundByInvoice[key] || 0) + Number(r.amount || 0);
+            }
+        }
+
+        // Real IPD attending consultant (attending_doctor_id → user name). This is the
+        // doctor the admission form captured and the patient profile shows, as opposed to
+        // admission.doctor_name which often holds the duty/RMO placeholder.
+        const attendingIds = [...new Set(
+            invoices.map((i: any) => i.admission?.attending_doctor_id).filter(Boolean)
+        )] as string[];
+        const attendingDocById: Record<string, string> = {};
+        if (attendingIds.length) {
+            const attendingUsers = await db.user.findMany({
+                where: { id: { in: attendingIds } },
+                select: { id: true, name: true },
+            });
+            for (const u of attendingUsers as any[]) {
+                if (u.name) attendingDocById[u.id] = u.name;
+            }
+        }
+
         const rows = invoices.map((inv: any) => {
             const items = inv.items || [];
             const categorySums: Record<string, number> = {
@@ -1010,10 +1092,20 @@ export async function getMISReport(filters: { from: string; to: string; billType
                     || '';
             }
 
-            // Doctor — admission doctor → invoice doctor → appointment (real consultant)
-            // → consultation line item. Generic placeholders ("RMO"/"Resident") are
-            // skipped in favour of the actual doctor where available.
-            let doctorName = inv.admission?.doctor_name || (inv as any).doctor_name || '';
+            // Doctor — IPD attending consultant (matches patient profile) → admission
+            // doctor_name → invoice doctor → appointment (real consultant) → consultation
+            // line item. Generic placeholders ("RMO"/"Resident") are skipped in favour of
+            // the actual doctor where available.
+            const attendingName = inv.admission?.attending_doctor_id
+                ? (attendingDocById[inv.admission.attending_doctor_id] || '')
+                : '';
+            let doctorName = '';
+            if (attendingName && !isGenericDoc(attendingName)) {
+                // The explicitly-recorded admitting consultant is authoritative for IPD.
+                doctorName = attendingName;
+            } else {
+                doctorName = inv.admission?.doctor_name || (inv as any).doctor_name || '';
+            }
             if (isGenericDoc(doctorName) && apptDocByPatient[inv.patient_id]) {
                 doctorName = apptDocByPatient[inv.patient_id];
             }
@@ -1082,7 +1174,10 @@ export async function getMISReport(filters: { from: string; to: string; billType
             const netAmount = Number(inv.total_amount || 0) - Number(inv.total_discount || 0) + Number(inv.total_tax || 0);
             const appliedDep = appliedDepByInvoice[inv.id] || 0;
             const availDep = inv.admission_id ? (availDepByAdmission[inv.admission_id] || 0) : 0;
-            const receivedAmount = nonDepositPaid + appliedDep + availDep;
+            const refundAmount = refundByInvoice[inv.id] || 0;
+            // Net refunds off collection figures (floored at 0).
+            const receivedAmount = Math.max(0, nonDepositPaid + appliedDep + availDep - refundAmount);
+            const netPatientReceipt = Math.max(0, patientPayments - refundAmount);
 
             return {
                 patient_name: inv.patient?.full_name || '-',
@@ -1118,7 +1213,7 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 gross_net_diff: grossAmount - netAmount,
                 received_amount: receivedAmount,
                 outstanding_amount: Math.max(0, netAmount - receivedAmount),
-                patient_receipt: patientPayments,
+                patient_receipt: netPatientReceipt,
                 // TPA sanctioned/approved amount — only meaningful for TPA/Insurance
                 // bills; left at 0 (renders as "-") for Cash/Corporate so the column
                 // reads cleanly for the TPA patients it's intended for.
