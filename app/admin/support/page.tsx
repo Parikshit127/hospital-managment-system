@@ -4,13 +4,24 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { AdminPage } from '@/app/admin/components/AdminPage';
 import {
     LifeBuoy, Search, Filter, CheckCircle2, Clock, AlertCircle, AlertTriangle,
-    Building2, User, Calendar, Loader2, RefreshCw, X, Check
+    Building2, User, Calendar, Loader2, RefreshCw, X, Check, Paperclip, Eye, Download, Image, FileText
 } from 'lucide-react';
-import { getAllTickets, updateTicketStatus } from '@/app/actions/help-center-actions';
+import { getAllTickets, updateTicketStatus, getAttachmentSignedUrl } from '@/app/actions/help-center-actions';
 import { listBranches } from '@/app/actions/branch-actions';
 import { TicketPriority, TicketStatus } from '@prisma/client';
 
 /* ─── Interfaces ─── */
+interface TicketAttachment {
+    id: string;
+    ticket_id: string;
+    file_url: string;
+    file_name: string;
+    file_size: number;
+    mime_type: string;
+    uploaded_at: Date | string;
+    signedUrl?: string;
+}
+
 interface Ticket {
     id: string;
     title: string;
@@ -31,6 +42,7 @@ interface Ticket {
         id: string;
         branch_name: string;
     };
+    attachments?: TicketAttachment[];
 }
 
 interface Branch {
@@ -46,6 +58,7 @@ export default function SupportPortalPage() {
     const [refreshing, setRefreshing] = useState(false);
     const [updatingTicketId, setUpdatingTicketId] = useState<string | null>(null);
     const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+    const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
     /* ─── Filter States ─── */
     const [searchQuery, setSearchQuery] = useState('');
@@ -74,7 +87,21 @@ export default function SupportPortalPage() {
             ]);
 
             if (ticketsRes.success && ticketsRes.data) {
-                setTickets(ticketsRes.data as Ticket[]);
+                const rawTickets = ticketsRes.data as Ticket[];
+                // Resolve a signed URL for every attachment (private bucket).
+                const enriched = await Promise.all(
+                    rawTickets.map(async (t) => {
+                        if (!t.attachments || t.attachments.length === 0) return t;
+                        const attachments = await Promise.all(
+                            t.attachments.map(async (att) => {
+                                const res = await getAttachmentSignedUrl(att.file_url);
+                                return { ...att, signedUrl: res.success ? res.signedUrl ?? undefined : undefined };
+                            })
+                        );
+                        return { ...t, attachments };
+                    })
+                );
+                setTickets(enriched);
             } else {
                 triggerNotification('error', 'Failed to fetch support tickets');
             }
@@ -116,6 +143,30 @@ export default function SupportPortalPage() {
             triggerNotification('error', 'An error occurred while updating the ticket');
         } finally {
             setUpdatingTicketId(null);
+        }
+    };
+
+    /* ─── Download Handler (blob-based so cross-origin signed URLs force a real download) ─── */
+    const handleDownloadAttachment = async (att: TicketAttachment) => {
+        if (!att.signedUrl) {
+            triggerNotification('error', 'File is not available for download');
+            return;
+        }
+        try {
+            const res = await fetch(att.signedUrl);
+            if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+            const blob = await res.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = objectUrl;
+            a.download = att.file_name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(objectUrl);
+        } catch (error) {
+            console.error('Attachment download failed:', error);
+            triggerNotification('error', 'Failed to download attachment');
         }
     };
 
@@ -434,6 +485,73 @@ export default function SupportPortalPage() {
                                         <p className="text-slate-600 text-sm leading-relaxed mt-1.5 whitespace-pre-line">{ticket.description}</p>
                                     </div>
 
+                                    {/* Attachments Section */}
+                                    {ticket.attachments && ticket.attachments.length > 0 && (
+                                        <div className="mt-4 pt-3 border-t border-slate-100/60">
+                                            <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                                <Paperclip className="h-3.5 w-3.5" />
+                                                Attachments ({ticket.attachments.length})
+                                            </h5>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                                {ticket.attachments.map((att) => {
+                                                    const isImage = att.mime_type.startsWith('image/');
+                                                    const sizeKb = Math.round(att.file_size / 102.4) / 10;
+                                                    return (
+                                                        <div key={att.id} className="flex items-center justify-between p-2 rounded-xl border border-slate-100 bg-slate-50/30 hover:bg-slate-50/70 hover:border-slate-200/85 transition-all group">
+                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                <div className="h-9 w-9 rounded-lg bg-white border border-slate-100 text-slate-400 shrink-0 shadow-sm flex items-center justify-center overflow-hidden">
+                                                                    {isImage && att.signedUrl ? (
+                                                                        <img 
+                                                                            src={att.signedUrl} 
+                                                                            alt={att.file_name} 
+                                                                            className="h-full w-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200" 
+                                                                            onClick={() => setPreviewImageUrl(att.signedUrl || null)}
+                                                                        />
+                                                                    ) : isImage ? (
+                                                                        <Image className="h-4 w-4 text-[var(--admin-primary)]" />
+                                                                    ) : (
+                                                                        <FileText className="h-4 w-4" />
+                                                                    )}
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-xs font-semibold text-slate-700 truncate" title={att.file_name}>
+                                                                        {att.file_name}
+                                                                    </p>
+                                                                    <p className="text-[10px] text-slate-400 font-medium">
+                                                                        {sizeKb} KB
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        if (isImage && att.signedUrl) {
+                                                                            setPreviewImageUrl(att.signedUrl || null);
+                                                                        } else if (att.signedUrl) {
+                                                                            window.open(att.signedUrl, '_blank');
+                                                                        }
+                                                                    }}
+                                                                    className="p-1.5 hover:bg-white rounded-lg text-slate-500 hover:text-[var(--admin-primary)] border border-transparent hover:border-slate-100 transition-all shadow-sm cursor-pointer"
+                                                                    title="View"
+                                                                >
+                                                                    <Eye className="h-3.5 w-3.5" />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDownloadAttachment(att)}
+                                                                    disabled={!att.signedUrl}
+                                                                    className="p-1.5 hover:bg-white rounded-lg text-slate-500 hover:text-emerald-600 border border-transparent hover:border-slate-100 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                                                                    title="Download"
+                                                                >
+                                                                    <Download className="h-3.5 w-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Metadata Footer */}
                                     <div className="flex flex-wrap items-center gap-y-2 gap-x-5 text-xs text-slate-500 pt-1.5 border-t border-slate-100/60">
                                         {/* User author info */}
@@ -510,6 +628,31 @@ export default function SupportPortalPage() {
                             </div>
                         );
                     })}
+                </div>
+            )}
+
+            {/* Image Preview Lightbox Modal */}
+            {previewImageUrl && (
+                <div 
+                    className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 cursor-zoom-out animate-fade-in"
+                    onClick={() => setPreviewImageUrl(null)}
+                >
+                    <div 
+                        className="relative max-w-4xl max-h-[90vh] bg-white rounded-2xl overflow-hidden shadow-2xl p-2 cursor-default animate-scale-in"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <button
+                            onClick={() => setPreviewImageUrl(null)}
+                            className="absolute top-4 right-4 p-2 bg-white/90 hover:bg-white rounded-full shadow-md text-slate-700 hover:text-slate-900 transition-all z-10 border border-slate-100 cursor-pointer"
+                        >
+                            <X className="h-5 w-5" />
+                        </button>
+                        <img 
+                            src={previewImageUrl} 
+                            alt="Attachment Preview" 
+                            className="max-w-full max-h-[80vh] object-contain rounded-xl"
+                        />
+                    </div>
                 </div>
             )}
         </AdminPage>

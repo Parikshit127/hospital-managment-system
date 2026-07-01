@@ -3,6 +3,27 @@
 import { requireTenantContext } from '@/backend/tenant';
 import { TicketPriority, TicketStatus } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
+import { createClient } from '@supabase/supabase-js';
+
+// Bucket the ticket attachments are uploaded to (see RaiseTicketForm.tsx).
+const ATTACHMENTS_BUCKET = 'ticket_attachments';
+
+// The DB may store either a bare storage path (e.g. "1699-abc.png") or a full
+// Supabase URL. Supabase's createSignedUrl expects the RELATIVE path within the
+// bucket, so normalize to that here.
+function toStoragePath(fileUrl: string): string {
+    // Full storage URL: .../object/(public|sign|authenticated)/<bucket>/<path>
+    const apiMatch = fileUrl.match(/\/object\/(?:public|sign|authenticated)\/[^/]+\/(.+?)(?:\?|$)/);
+    if (apiMatch) return decodeURIComponent(apiMatch[1]);
+
+    // Any other URL that still contains the bucket segment: strip up to it.
+    const marker = `/${ATTACHMENTS_BUCKET}/`;
+    const idx = fileUrl.indexOf(marker);
+    if (idx !== -1) return decodeURIComponent(fileUrl.slice(idx + marker.length).split('?')[0]);
+
+    // Otherwise assume it is already a relative path.
+    return fileUrl.replace(/^\/+/, '').split('?')[0];
+}
 
 // Human-readable labels for ticket statuses (used in user-facing messages).
 const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
@@ -95,6 +116,56 @@ export async function saveTicketAttachment(input: SaveTicketAttachmentInput) {
 }
 
 // ========================================
+// GENERATE SIGNED URL FOR AN ATTACHMENT
+// (private bucket -> reads require a signed URL)
+// ========================================
+
+export async function getAttachmentSignedUrl(fileUrl: string) {
+    try {
+        // Require an authenticated tenant session (admin support portal).
+        await requireTenantContext();
+
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        // Service role bypasses storage RLS server-side (the app uses its own
+        // JWT auth, not Supabase Auth, so the anon role has no RLS grant here).
+        const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+        if (!supabaseUrl || !serviceKey) {
+            console.error(
+                'Get Attachment Signed URL Error: missing env',
+                JSON.stringify({
+                    hasUrl: Boolean(supabaseUrl),
+                    hasServiceKey: Boolean(serviceKey),
+                }),
+            );
+            return { success: false, signedUrl: null };
+        }
+
+        const path = toStoragePath(fileUrl);
+        const supabase = createClient(supabaseUrl, serviceKey);
+        const { data, error } = await supabase.storage
+            .from(ATTACHMENTS_BUCKET)
+            .createSignedUrl(path, 60 * 60);
+
+        if (error || !data?.signedUrl) {
+            console.error(
+                'Get Attachment Signed URL Error:',
+                error?.message ?? 'no signedUrl returned',
+                '| bucket:', ATTACHMENTS_BUCKET,
+                '| path:', path,
+                '| original:', fileUrl,
+            );
+            return { success: false, signedUrl: null };
+        }
+
+        return { success: true, signedUrl: data.signedUrl };
+    } catch (error) {
+        console.error('Get Attachment Signed URL Error (unexpected):', error);
+        return { success: false, signedUrl: null };
+    }
+}
+
+// ========================================
 // FETCH TICKETS SCOPED TO A FACILITY (Branch)
 // ========================================
 
@@ -108,6 +179,7 @@ export async function getTicketsByFacility(branchId: string) {
             include: {
                 user: { select: { id: true, name: true, username: true } },
                 branch: { select: { id: true, branch_name: true } },
+                attachments: true,
             },
         });
 
@@ -170,6 +242,7 @@ export async function getAllTickets() {
             include: {
                 user: { select: { id: true, name: true, username: true } },
                 branch: { select: { id: true, branch_name: true } },
+                attachments: true,
             },
         });
 
