@@ -4,6 +4,7 @@ import { requireTenantContext } from '@/backend/tenant';
 import { TicketPriority, TicketStatus, TicketNoteVisibility } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@supabase/supabase-js';
+import { logAudit } from '@/app/lib/audit';
 
 // Bucket the ticket attachments are uploaded to (see RaiseTicketForm.tsx).
 const ATTACHMENTS_BUCKET = 'ticket_attachments';
@@ -59,6 +60,14 @@ export async function createTicket(input: CreateTicketInput) {
                 branch_id: input.branchId,
                 organizationId,
             },
+        });
+
+        await logAudit({
+            action: 'ticket.created',
+            module: 'HelpCenter',
+            entity_type: 'Ticket',
+            entity_id: ticket.id,
+            details: `Ticket "${ticket.title}" created with ${ticket.priority} priority`,
         });
 
         revalidatePath('/help-center');
@@ -219,6 +228,14 @@ export async function updateTicketStatus(ticketId: string, status: TicketStatus)
             console.error('Ticket Status Notification Error:', notifyError);
         }
 
+        await logAudit({
+            action: 'ticket.status_changed',
+            module: 'HelpCenter',
+            entity_type: 'Ticket',
+            entity_id: ticketId,
+            details: `Status changed to ${status}`,
+        });
+
         revalidatePath('/help-center');
         revalidatePath('/admin/support');
         return { success: true, data: ticket };
@@ -309,6 +326,14 @@ export async function assignTicket(ticketId: string, userId: string | null) {
             data: { assigned_to_id: userId },
         });
 
+        await logAudit({
+            action: userId ? 'ticket.assigned' : 'ticket.unassigned',
+            module: 'HelpCenter',
+            entity_type: 'Ticket',
+            entity_id: ticketId,
+            details: userId ? `Assigned to user ${userId}` : 'Ticket unassigned',
+        });
+
         revalidatePath('/admin/support');
         return { success: true, data: ticket };
     } catch (error) {
@@ -353,6 +378,14 @@ export async function createTicketNote(input: CreateTicketNoteInput) {
                 visibility: input.visibility ?? TicketNoteVisibility.INTERNAL,
                 organizationId,
             },
+        });
+
+        await logAudit({
+            action: 'ticket.note_added',
+            module: 'HelpCenter',
+            entity_type: 'Ticket',
+            entity_id: input.ticketId,
+            details: `${note.visibility} note added`,
         });
 
         revalidatePath('/help-center');
