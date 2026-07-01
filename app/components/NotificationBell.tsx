@@ -100,7 +100,7 @@ export function NotificationBell({ userId, organizationId }: NotificationBellPro
 
     const getTypeColor = (audience: string) => {
         switch (audience) {
-            case 'GLOBAL': return 'bg-purple-500';
+            case 'ALL_FACILITIES': return 'bg-purple-500';
             case 'ROLE': return 'bg-blue-500';
             case 'FACILITY': return 'bg-emerald-500';
             default: return 'bg-gray-500';

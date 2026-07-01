@@ -82,7 +82,6 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
             { label: 'Notifications', href: '/admin/notifications', icon: Bell },
             { label: 'Integrations', href: '/admin/integrations', icon: Plug },
             { label: 'Tally Integration', href: '/admin/integrations/tally', icon: Plug },
-            { label: 'Audit Trail', href: '/admin/audit', icon: Clock },
             { label: 'Audit Logs', href: '/admin/audit-logs', icon: Clock },
             { label: 'Broadcasts', href: '/admin/broadcasts', icon: Megaphone },
             { label: 'Release Notes', href: '/admin/release-notes', icon: BookOpen },
