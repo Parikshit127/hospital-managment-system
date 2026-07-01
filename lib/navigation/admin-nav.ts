@@ -4,7 +4,7 @@ import {
     Users, UserCog, Building2, ShieldCheck, UserRound,
     Settings, Palette, FileText, Bell, Plug, Clock, BarChart3, Lock,
     Workflow, Scissors, GitBranch, DatabaseBackup, BookOpen, Database,
-    ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck, LifeBuoy,
+    ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck, LifeBuoy, Megaphone,
     type LucideIcon,
 } from 'lucide-react';
 
@@ -83,6 +83,9 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
             { label: 'Integrations', href: '/admin/integrations', icon: Plug },
             { label: 'Tally Integration', href: '/admin/integrations/tally', icon: Plug },
             { label: 'Audit Trail', href: '/admin/audit', icon: Clock },
+            { label: 'Audit Logs', href: '/admin/audit-logs', icon: Clock },
+            { label: 'Broadcasts', href: '/admin/broadcasts', icon: Megaphone },
+            { label: 'Release Notes', href: '/admin/release-notes', icon: BookOpen },
             { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
             { label: 'Workflows', href: '/admin/workflows', icon: Workflow },
             { label: 'Data Import', href: '/admin/data-import', icon: DatabaseBackup },

@@ -83,6 +83,49 @@ export async function sendBroadcast(input: SendBroadcastInput) {
 }
 
 /**
+ * Get audience count for broadcast preview.
+ */
+export async function getBroadcastAudienceCount(
+    audience: BroadcastAudience,
+    facilityId?: string | null,
+    targetRole?: string | null
+) {
+    try {
+        const { db, organizationId } = await requireRoleAndTenant(['admin']);
+
+        let count = 0;
+
+        if (audience === BroadcastAudience.GLOBAL) {
+            count = await db.user.count({ where: { organizationId, is_active: true } });
+        } else if (audience === BroadcastAudience.FACILITY && facilityId) {
+            count = await db.user.count({
+                where: {
+                    organizationId,
+                    is_active: true,
+                    branches: { some: { branch_id: facilityId } }
+                }
+            });
+        } else if (audience === BroadcastAudience.ROLE && targetRole) {
+            count = await db.user.count({
+                where: {
+                    organizationId,
+                    is_active: true,
+                    role: targetRole
+                }
+            });
+        }
+
+        return { success: true, count };
+    } catch (error) {
+        if (error instanceof ForbiddenError || error instanceof AuthError) {
+            return { success: false, error: 'Not authorized', count: 0 };
+        }
+        console.error('Get Audience Count Error:', error);
+        return { success: false, error: 'Internal error', count: 0 };
+    }
+}
+
+/**
  * List broadcasts for the admin broadcast console (newest first).
  */
 export async function getBroadcasts() {
