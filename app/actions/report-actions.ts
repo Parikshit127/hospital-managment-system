@@ -186,17 +186,64 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
                 created_at: { gte: fromDate, lte: toDate },
                 status: { in: ['Approved', 'Processed'] }
             },
-            select: { id: true, invoice_id: true, amount: true, processed_by: true, created_at: true },
+            select: { id: true, invoice_id: true, payment_id: true, amount: true, processed_by: true, created_at: true },
             orderBy: { created_at: 'asc' }
         });
+
+        // Resolve each refund's original tender + patient. A refund is paid back
+        // through the same channel it was received, so its mode follows the linked
+        // payment's payment_method, and the patient comes from the linked invoice.
+        const refundPaymentIds = [...new Set(
+            refundRows.map((r: any) => Number(r.payment_id)).filter((n: number) => Number.isFinite(n))
+        )];
+        const refundPayments = refundPaymentIds.length
+            ? await db.payments.findMany({
+                where: { id: { in: refundPaymentIds } },
+                select: {
+                    id: true,
+                    payment_method: true,
+                    invoice: {
+                        select: {
+                            invoice_type: true,
+                            patient: { select: { full_name: true, patient_id: true } }
+                        }
+                    }
+                }
+            })
+            : [];
+        const refundPaymentMap = new Map<string, any>(refundPayments.map((p: any) => [String(p.id), p]));
+
+        const unresolvedInvoiceIds = [...new Set(
+            refundRows
+                .filter((r: any) => !refundPaymentMap.has(String(r.payment_id)))
+                .map((r: any) => Number(r.invoice_id))
+                .filter((n: number) => Number.isFinite(n))
+        )];
+        const refundInvoices = unresolvedInvoiceIds.length
+            ? await db.invoices.findMany({
+                where: { id: { in: unresolvedInvoiceIds } },
+                select: {
+                    id: true,
+                    invoice_type: true,
+                    patient: { select: { full_name: true, patient_id: true } }
+                }
+            })
+            : [];
+        const refundInvoiceMap = new Map<string, any>(refundInvoices.map((i: any) => [String(i.id), i]));
 
         const enrichedRefunds = refundRows.map((r: any) => {
             const username = String(r.processed_by || 'system');
             const fullName = userMap.get(username.toLowerCase()) || username;
+            const linkedPayment = refundPaymentMap.get(String(r.payment_id)) || null;
+            const linkedInvoice = linkedPayment?.invoice || refundInvoiceMap.get(String(r.invoice_id)) || null;
             return {
                 ...r,
                 cashier_username: username,
-                cashier_name: fullName
+                cashier_name: fullName,
+                payment_method: linkedPayment?.payment_method || null,
+                invoice_type: linkedInvoice?.invoice_type || null,
+                patient_name: linkedInvoice?.patient?.full_name || null,
+                patient_id: linkedInvoice?.patient?.patient_id || null
             };
         });
 
