@@ -108,6 +108,7 @@ export async function getTicketsByFacility(branchId: string) {
             include: {
                 user: { select: { id: true, name: true, username: true } },
                 branch: { select: { id: true, branch_name: true } },
+                attachments: true,
             },
         });
 
@@ -170,6 +171,7 @@ export async function getAllTickets() {
             include: {
                 user: { select: { id: true, name: true, username: true } },
                 branch: { select: { id: true, branch_name: true } },
+                attachments: true,
             },
         });
 
