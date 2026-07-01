@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { TicketStatus } from '@prisma/client';
-import { Plus, TicketCheck, RefreshCw } from 'lucide-react';
-import { getTicketsByFacility } from '@/app/actions/help-center-actions';
+import { Plus, TicketCheck, RefreshCw, ChevronDown, ChevronRight, Loader2, MessageSquare, AlertTriangle } from 'lucide-react';
+import { getTicketsByFacility, getHospitalVisibleNotes } from '@/app/actions/help-center-actions';
 import { listBranches } from '@/app/actions/branch-actions';
 import { Table, TableHeader, TableBody, TableRow, TableCell } from '@/app/components/ui/Table';
 import { Badge } from '@/app/components/ui/Badge';
@@ -31,12 +31,27 @@ interface TicketRow {
     branch: { id: string; branch_name: string } | null;
 }
 
+interface NoteData {
+    id: string;
+    body: string;
+    visibility: string;
+    created_at: string;
+    author: { id: string; name: string | null; username: string };
+}
+
+type NotesFetchState = 'idle' | 'loading' | 'loaded' | 'error';
+
 interface BranchOption {
     id: string;
     branch_name: string;
 }
 
 type LoadState = 'loading' | 'loaded' | 'error' | 'security-error';
+
+// The exact enum value from TicketNoteVisibility in schema.prisma.
+// Used as a client-side safety guard to ensure INTERNAL notes never render,
+// even if the server action were to return them by mistake.
+const VISIBLE_TO_HOSPITAL = 'HOSPITAL_VISIBLE';
 
 // -------------------------------------------------
 // Status display config
@@ -84,6 +99,57 @@ export function TicketTable({ userId }: { userId: string }) {
     const [statusFilter, setStatusFilter] = useState<string>('All');
     const [dateFrom, setDateFrom] = useState<string>('');
     const [dateTo, setDateTo] = useState<string>('');
+
+    // Reply expansion state
+    const [expandedTicketId, setExpandedTicketId] = useState<string | null>(null);
+    const [notesCache, setNotesCache] = useState<Record<string, NoteData[]>>({});
+    const [notesFetchState, setNotesFetchState] = useState<Record<string, NotesFetchState>>({});
+
+    const fetchNotesForTicket = useCallback(async (ticketId: string) => {
+        // Skip if already cached
+        if (notesCache[ticketId]) return;
+
+        setNotesFetchState((prev) => ({ ...prev, [ticketId]: 'loading' }));
+        try {
+            const result = await getHospitalVisibleNotes(ticketId);
+            if (result.success && result.data) {
+                // CLIENT-SIDE SAFETY GUARD: even though the server action already
+                // filters to HOSPITAL_VISIBLE, double-filter here so INTERNAL
+                // notes can never render if the server action were ever changed.
+                const safeNotes = (result.data as NoteData[]).filter(
+                    (note) => note.visibility === VISIBLE_TO_HOSPITAL
+                );
+                setNotesCache((prev) => ({ ...prev, [ticketId]: safeNotes }));
+                setNotesFetchState((prev) => ({ ...prev, [ticketId]: 'loaded' }));
+            } else {
+                setNotesFetchState((prev) => ({ ...prev, [ticketId]: 'error' }));
+            }
+        } catch {
+            setNotesFetchState((prev) => ({ ...prev, [ticketId]: 'error' }));
+        }
+    }, [notesCache]);
+
+    const handleToggleExpand = useCallback((ticketId: string) => {
+        setExpandedTicketId((prev) => {
+            if (prev === ticketId) return null; // collapse
+            // expand — fetch if needed
+            if (!notesCache[ticketId]) {
+                fetchNotesForTicket(ticketId);
+            }
+            return ticketId;
+        });
+    }, [notesCache, fetchNotesForTicket]);
+
+    const handleRetryNotes = useCallback((ticketId: string) => {
+        // Clear cached error state and re-fetch
+        setNotesCache((prev) => {
+            const next = { ...prev };
+            delete next[ticketId];
+            return next;
+        });
+        setNotesFetchState((prev) => ({ ...prev, [ticketId]: 'idle' }));
+        fetchNotesForTicket(ticketId);
+    }, [fetchNotesForTicket]);
 
     // Load branches
     useEffect(() => {
@@ -333,6 +399,7 @@ export function TicketTable({ userId }: { userId: string }) {
             {loadState === 'loaded' && filteredTickets.length > 0 && (
                 <Table>
                     <TableHeader>
+                        <TableCell header className="w-8"></TableCell>
                         <TableCell header>Ticket ID</TableCell>
                         <TableCell header>Summary</TableCell>
                         <TableCell header>Module</TableCell>
@@ -346,38 +413,116 @@ export function TicketTable({ userId }: { userId: string }) {
                                 label: ticket.status,
                                 variant: 'neutral' as const,
                             };
+                            const isExpanded = expandedTicketId === ticket.id;
+                            const ticketNoteState = notesFetchState[ticket.id] || 'idle';
+                            const ticketNotes = notesCache[ticket.id];
 
                             return (
-                                <TableRow key={ticket.id}>
-                                    <TableCell className="font-mono text-xs text-gray-500 whitespace-nowrap">
-                                        {ticket.id.slice(0, 8).toUpperCase()}
-                                    </TableCell>
-                                    <TableCell className="max-w-[260px]">
-                                        <span className="line-clamp-2 text-sm font-medium text-gray-900">
-                                            {ticket.title}
-                                        </span>
-                                    </TableCell>
-                                    <TableCell>
-                                        <span className="text-sm text-gray-600">{ticket.module || 'General'}</span>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge
-                                            variant={PRIORITY_VARIANT[ticket.priority] || 'neutral'}
-                                            size="sm"
-                                            dot
-                                        >
-                                            {ticket.priority}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant={statusCfg.variant} size="sm" dot>
-                                            {statusCfg.label}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-xs text-gray-500 whitespace-nowrap">
-                                        {formatDate(ticket.created_at)}
-                                    </TableCell>
-                                </TableRow>
+                                <React.Fragment key={ticket.id}>
+                                    <TableRow onClick={() => handleToggleExpand(ticket.id)} className={isExpanded ? 'bg-gray-50/80' : ''}>
+                                        <TableCell className="w-8 pr-0">
+                                            {isExpanded
+                                                ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+                                                : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+                                            }
+                                        </TableCell>
+                                        <TableCell className="font-mono text-xs text-gray-500 whitespace-nowrap">
+                                            {ticket.id.slice(0, 8).toUpperCase()}
+                                        </TableCell>
+                                        <TableCell className="max-w-[260px]">
+                                            <span className="line-clamp-2 text-sm font-medium text-gray-900">
+                                                {ticket.title}
+                                            </span>
+                                        </TableCell>
+                                        <TableCell>
+                                            <span className="text-sm text-gray-600">{ticket.module || 'General'}</span>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge
+                                                variant={PRIORITY_VARIANT[ticket.priority] || 'neutral'}
+                                                size="sm"
+                                                dot
+                                            >
+                                                {ticket.priority}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant={statusCfg.variant} size="sm" dot>
+                                                {statusCfg.label}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-xs text-gray-500 whitespace-nowrap">
+                                            {formatDate(ticket.created_at)}
+                                        </TableCell>
+                                    </TableRow>
+
+                                    {/* Expansion panel — reply thread */}
+                                    {isExpanded && (
+                                        <tr>
+                                            <td colSpan={7} className="p-0">
+                                                <div className="border-l-2 border-gray-200 bg-gray-50/50 px-6 py-4 mx-4 mb-2 rounded-b-lg">
+                                                    {/* Loading state */}
+                                                    {ticketNoteState === 'loading' && (
+                                                        <div className="flex items-center gap-2 py-2">
+                                                            <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
+                                                            <span className="text-xs text-gray-500">Loading replies…</span>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Error state */}
+                                                    {ticketNoteState === 'error' && (
+                                                        <div className="flex items-center gap-3 py-2">
+                                                            <AlertTriangle className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                                                            <span className="text-xs text-rose-600 font-medium">Could not load replies. Try again.</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => { e.stopPropagation(); handleRetryNotes(ticket.id); }}
+                                                                className="text-xs font-semibold text-primary-600 hover:text-primary-700 underline underline-offset-2"
+                                                            >
+                                                                Retry
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Loaded — zero replies */}
+                                                    {ticketNoteState === 'loaded' && ticketNotes && ticketNotes.length === 0 && (
+                                                        <p className="text-xs text-gray-400 italic py-1">No replies yet.</p>
+                                                    )}
+
+                                                    {/* Loaded — has replies */}
+                                                    {ticketNoteState === 'loaded' && ticketNotes && ticketNotes.length > 0 && (
+                                                        <div className="space-y-3">
+                                                            <div className="flex items-center gap-1.5 mb-1">
+                                                                <MessageSquare className="h-3.5 w-3.5 text-gray-400" />
+                                                                <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                                                                    Replies ({ticketNotes.length})
+                                                                </span>
+                                                            </div>
+                                                            {ticketNotes.map((note) => (
+                                                                <div
+                                                                    key={note.id}
+                                                                    className="bg-white rounded-lg border border-gray-200/60 px-4 py-3 shadow-[var(--shadow-card)]"
+                                                                >
+                                                                    <div className="flex items-center justify-between mb-1.5">
+                                                                        <span className="text-xs font-semibold text-gray-700">
+                                                                            {note.author?.name || note.author?.username || 'Support Team'}
+                                                                        </span>
+                                                                        <span className="text-[11px] text-gray-400">
+                                                                            {formatDate(note.created_at)}
+                                                                        </span>
+                                                                    </div>
+                                                                    <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
+                                                                        {note.body}
+                                                                    </p>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </React.Fragment>
                             );
                         })}
                     </TableBody>
