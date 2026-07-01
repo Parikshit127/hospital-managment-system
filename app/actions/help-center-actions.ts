@@ -285,20 +285,23 @@ export async function getAssignableUsers() {
 }
 
 /**
- * Assign a ticket to a user. Both the ticket and the assignee must belong to
- * the caller's organization (tenant safety).
+ * Assign a ticket to a user, or unassign it when userId is null.
+ * Both the ticket and the assignee must belong to the caller's organization.
  */
-export async function assignTicket(ticketId: string, userId: string) {
+export async function assignTicket(ticketId: string, userId: string | null) {
     try {
         const { db, organizationId } = await requireTenantContext();
 
-        const assignee = await db.user.findFirst({
-            where: { id: userId, organizationId },
-            select: { id: true },
-        });
+        // When assigning, verify the assignee belongs to the caller's org.
+        if (userId) {
+            const assignee = await db.user.findFirst({
+                where: { id: userId, organizationId },
+                select: { id: true },
+            });
 
-        if (!assignee) {
-            return { success: false, data: null };
+            if (!assignee) {
+                return { success: false, data: null };
+            }
         }
 
         const ticket = await db.ticket.update({

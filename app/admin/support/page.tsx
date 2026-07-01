@@ -4,11 +4,15 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { AdminPage } from '@/app/admin/components/AdminPage';
 import {
     LifeBuoy, Search, Filter, CheckCircle2, Clock, AlertCircle, AlertTriangle,
-    Building2, User, Calendar, Loader2, RefreshCw, X, Check, Paperclip, Eye, Download, Image, FileText
+    Building2, User, Calendar, Loader2, RefreshCw, X, Check, Paperclip, Eye, Download, Image, FileText,
+    UserCheck, MessageSquare, Lock, Globe
 } from 'lucide-react';
-import { getAllTickets, updateTicketStatus, getAttachmentSignedUrl } from '@/app/actions/help-center-actions';
+import {
+    getAllTickets, updateTicketStatus, getAttachmentSignedUrl,
+    getAssignableUsers, assignTicket, createTicketNote, getTicketNotes
+} from '@/app/actions/help-center-actions';
 import { listBranches } from '@/app/actions/branch-actions';
-import { TicketPriority, TicketStatus } from '@prisma/client';
+import { TicketPriority, TicketStatus, TicketNoteVisibility } from '@prisma/client';
 
 /* ─── Interfaces ─── */
 interface TicketAttachment {
@@ -43,6 +47,12 @@ interface Ticket {
         branch_name: string;
     };
     attachments?: TicketAttachment[];
+    assigned_to_id?: string | null;
+    assigned_to?: {
+        id: string;
+        name: string | null;
+        username: string;
+    } | null;
 }
 
 interface Branch {
@@ -51,12 +61,39 @@ interface Branch {
     branch_code: string;
 }
 
+interface Developer {
+    id: string;
+    name: string | null;
+    username: string;
+    role: string;
+}
+
+interface TicketNote {
+    id: string;
+    body: string;
+    visibility: TicketNoteVisibility;
+    created_at: Date | string;
+    author: {
+        id: string;
+        name: string | null;
+        username: string;
+    };
+}
+
 export default function SupportPortalPage() {
     const [tickets, setTickets] = useState<Ticket[]>([]);
     const [branches, setBranches] = useState<Branch[]>([]);
+    const [developers, setDevelopers] = useState<Developer[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [updatingTicketId, setUpdatingTicketId] = useState<string | null>(null);
+    const [assigningTicketId, setAssigningTicketId] = useState<string | null>(null);
+    const [activeNotesTicketId, setActiveNotesTicketId] = useState<string | null>(null);
+    const [ticketNotes, setTicketNotes] = useState<Record<string, TicketNote[]>>({});
+    const [loadingNotesTicketId, setLoadingNotesTicketId] = useState<string | null>(null);
+    const [noteInput, setNoteInput] = useState('');
+    const [noteVisibility, setNoteVisibility] = useState<TicketNoteVisibility>(TicketNoteVisibility.INTERNAL);
+    const [submittingNoteTicketId, setSubmittingNoteTicketId] = useState<string | null>(null);
     const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
@@ -81,9 +118,10 @@ export default function SupportPortalPage() {
         }
 
         try {
-            const [ticketsRes, branchesRes] = await Promise.all([
+            const [ticketsRes, branchesRes, devsRes] = await Promise.all([
                 getAllTickets(),
-                listBranches()
+                listBranches(),
+                getAssignableUsers()
             ]);
 
             if (ticketsRes.success && ticketsRes.data) {
@@ -108,6 +146,10 @@ export default function SupportPortalPage() {
 
             if (branchesRes.success && branchesRes.data) {
                 setBranches(branchesRes.data as Branch[]);
+            }
+
+            if (devsRes.success && devsRes.data) {
+                setDevelopers(devsRes.data as Developer[]);
             }
         } catch (error) {
             console.error('Error loading support portal data:', error);
@@ -167,6 +209,110 @@ export default function SupportPortalPage() {
         } catch (error) {
             console.error('Attachment download failed:', error);
             triggerNotification('error', 'Failed to download attachment');
+        }
+    };
+
+    /* ─── Assign Ticket Handler ─── */
+    const handleAssignTicket = async (ticketId: string, developerId: string | null) => {
+        setAssigningTicketId(ticketId);
+        try {
+            const res = await assignTicket(ticketId, developerId);
+            if (res.success && res.data) {
+                const assignedDev = developers.find((d) => d.id === developerId) || null;
+                setTickets((prev) =>
+                    prev.map((t) =>
+                        t.id === ticketId
+                            ? {
+                                  ...t,
+                                  assigned_to_id: developerId,
+                                  assigned_to: assignedDev
+                                      ? {
+                                            id: assignedDev.id,
+                                            name: assignedDev.name,
+                                            username: assignedDev.username,
+                                        }
+                                      : null,
+                              }
+                            : t
+                    )
+                );
+                triggerNotification(
+                    'success',
+                    developerId
+                        ? `Ticket assigned to ${assignedDev?.name || assignedDev?.username}`
+                        : 'Ticket unassigned successfully'
+                );
+            } else {
+                triggerNotification('error', 'Failed to assign ticket');
+            }
+        } catch (error) {
+            console.error('Error assigning ticket:', error);
+            triggerNotification('error', 'An error occurred while assigning the ticket');
+        } finally {
+            setAssigningTicketId(null);
+        }
+    };
+
+    /* ─── Load Ticket Notes ─── */
+    const loadNotes = async (ticketId: string) => {
+        setLoadingNotesTicketId(ticketId);
+        try {
+            const res = await getTicketNotes(ticketId);
+            if (res.success && res.data) {
+                setTicketNotes((prev) => ({
+                    ...prev,
+                    [ticketId]: res.data as TicketNote[],
+                }));
+            } else {
+                triggerNotification('error', 'Failed to fetch ticket notes');
+            }
+        } catch (error) {
+            console.error('Error fetching ticket notes:', error);
+            triggerNotification('error', 'An error occurred while loading notes');
+        } finally {
+            setLoadingNotesTicketId(null);
+        }
+    };
+
+    /* ─── Toggle Notes Drawer ─── */
+    const handleToggleNotes = (ticketId: string) => {
+        if (activeNotesTicketId === ticketId) {
+            setActiveNotesTicketId(null);
+        } else {
+            setActiveNotesTicketId(ticketId);
+            setNoteInput('');
+            setNoteVisibility(TicketNoteVisibility.INTERNAL);
+            loadNotes(ticketId);
+        }
+    };
+
+    /* ─── Submit Note/Reply ─── */
+    const handleSubmitNote = async (ticketId: string) => {
+        if (!noteInput.trim()) return;
+        setSubmittingNoteTicketId(ticketId);
+        try {
+            const res = await createTicketNote({
+                ticketId,
+                body: noteInput,
+                visibility: noteVisibility,
+            });
+            if (res.success && res.data) {
+                await loadNotes(ticketId);
+                setNoteInput('');
+                triggerNotification(
+                    'success',
+                    noteVisibility === TicketNoteVisibility.HOSPITAL_VISIBLE
+                        ? 'Reply sent to hospital successfully'
+                        : 'Internal note saved successfully'
+                );
+            } else {
+                triggerNotification('error', 'Failed to create note');
+            }
+        } catch (error) {
+            console.error('Error creating note:', error);
+            triggerNotification('error', 'An error occurred while submitting the note');
+        } finally {
+            setSubmittingNoteTicketId(null);
         }
     };
 
@@ -235,6 +381,67 @@ export default function SupportPortalPage() {
             case TicketStatus.Open:
             default:
                 return 'bg-amber-50 text-amber-700 border-amber-200';
+        }
+    };
+
+    /* ─── SLA Calculation ─── */
+    const getSLADetails = (ticket: Ticket) => {
+        const priority = ticket.priority;
+        const createdAt = new Date(ticket.created_at);
+        const resolved = ticket.status === TicketStatus.Resolved;
+        const resolvedAt = resolved ? new Date(ticket.updated_at) : new Date();
+
+        let slaHours = 24; // Default fallback
+        switch (priority) {
+            case TicketPriority.Critical:
+                slaHours = 4;
+                break;
+            case TicketPriority.High:
+                slaHours = 12;
+                break;
+            case TicketPriority.Medium:
+                slaHours = 24;
+                break;
+            case TicketPriority.Low:
+                slaHours = 72;
+                break;
+        }
+
+        const slaLimitTime = createdAt.getTime() + slaHours * 60 * 60 * 1000;
+        const remainingTimeMs = slaLimitTime - resolvedAt.getTime();
+        const remainingHours = remainingTimeMs / (1000 * 60 * 60);
+
+        if (resolved) {
+            const metSla = resolvedAt.getTime() <= slaLimitTime;
+            return {
+                status: metSla ? 'RESOLVED_MET' : 'RESOLVED_BREACHED',
+                label: metSla ? 'Resolved (SLA Met)' : 'Resolved (SLA Breached)',
+                colorClass: metSla ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200',
+                remainingText: metSla ? 'Met SLA' : `Breached by ${Math.abs(remainingHours).toFixed(1)} hrs`,
+            };
+        } else {
+            if (remainingTimeMs < 0) {
+                return {
+                    status: 'BREACHED',
+                    label: 'SLA Breached',
+                    colorClass: 'bg-rose-50 text-rose-700 border-rose-200 animate-pulse',
+                    remainingText: `Breached by ${Math.abs(remainingHours).toFixed(1)} hrs`,
+                };
+            } else if (remainingHours <= 2) {
+                return {
+                    status: 'APPROACHING',
+                    label: 'Approaching Breach',
+                    colorClass: 'bg-amber-50 text-amber-700 border-amber-200 font-semibold',
+                    remainingText: `${remainingHours.toFixed(1)} hrs remaining`,
+                };
+            } else {
+                return {
+                    status: 'WITHIN_SLA',
+                    label: 'Within SLA',
+                    colorClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                    remainingText: `${remainingHours.toFixed(1)} hrs remaining`,
+                };
+            }
         }
     };
 
@@ -478,6 +685,16 @@ export default function SupportPortalPage() {
                                         <span className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full border ${getPriorityBadgeStyles(ticket.priority)}`}>
                                             {ticket.priority} Priority
                                         </span>
+
+                                        {/* SLA Badge */}
+                                        {(() => {
+                                            const sla = getSLADetails(ticket);
+                                            return (
+                                                <span className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full border ${sla.colorClass}`}>
+                                                    {sla.label} ({sla.remainingText})
+                                                </span>
+                                            );
+                                        })()}
                                     </div>
 
                                     <div>
@@ -552,6 +769,121 @@ export default function SupportPortalPage() {
                                         </div>
                                     )}
 
+                                    {/* Notes & Replies Section Toggle */}
+                                    <div className="mt-3 pt-3 border-t border-slate-100/60">
+                                        <button
+                                            onClick={() => handleToggleNotes(ticket.id)}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-[var(--admin-primary)] bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-xl transition-all shadow-sm cursor-pointer"
+                                        >
+                                            <MessageSquare className="h-3.5 w-3.5" />
+                                            {activeNotesTicketId === ticket.id ? 'Hide Notes & Replies' : 'Show Notes & Replies'}
+                                        </button>
+                                    </div>
+
+                                    {/* Collapsible Notes Drawer */}
+                                    {activeNotesTicketId === ticket.id && (
+                                        <div className="mt-3.5 p-4 rounded-2xl border border-slate-100 bg-slate-50/40 space-y-4">
+                                            <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                                <MessageSquare className="h-3.5 w-3.5 text-slate-400" />
+                                                Ticket Notes & Replies
+                                            </h5>
+
+                                            {/* Notes List */}
+                                            {loadingNotesTicketId === ticket.id && !ticketNotes[ticket.id] ? (
+                                                <div className="flex items-center gap-2 py-3 text-xs text-slate-400">
+                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                    Loading notes...
+                                                </div>
+                                            ) : !ticketNotes[ticket.id] || ticketNotes[ticket.id].length === 0 ? (
+                                                <p className="text-xs text-slate-400 italic py-2">No notes or replies added yet.</p>
+                                            ) : (
+                                                <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                                                    {ticketNotes[ticket.id].map((note) => {
+                                                        const isInternal = note.visibility === TicketNoteVisibility.INTERNAL;
+                                                        return (
+                                                            <div
+                                                                key={note.id}
+                                                                className={`p-3 rounded-xl border text-xs shadow-sm space-y-1.5 ${
+                                                                    isInternal
+                                                                        ? 'bg-amber-50/50 border-amber-100/60'
+                                                                        : 'bg-blue-50/40 border-blue-100/60'
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
+                                                                    <span className="flex items-center gap-1">
+                                                                        <User className="h-3 w-3" />
+                                                                        {note.author.name || note.author.username}
+                                                                    </span>
+                                                                    <span className="flex items-center gap-1">
+                                                                        {isInternal ? (
+                                                                            <span className="flex items-center gap-0.5 text-amber-600 bg-amber-100/60 px-1.5 py-0.5 rounded-full uppercase text-[8px] font-black">
+                                                                                <Lock className="h-2 w-2" /> Internal Note
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="flex items-center gap-0.5 text-blue-600 bg-blue-100/60 px-1.5 py-0.5 rounded-full uppercase text-[8px] font-black">
+                                                                                <Globe className="h-2 w-2" /> Reply
+                                                                            </span>
+                                                                        )}
+                                                                        <span>•</span>
+                                                                        <span>{new Date(note.created_at).toLocaleString()}</span>
+                                                                    </span>
+                                                                </div>
+                                                                <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{note.body}</p>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+
+                                            {/* Add Note Form */}
+                                            <div className="space-y-3 pt-3 border-t border-slate-100">
+                                                <textarea
+                                                    value={noteInput}
+                                                    onChange={(e) => setNoteInput(e.target.value)}
+                                                    placeholder="Type an internal note or a message to the hospital..."
+                                                    rows={3}
+                                                    className="w-full p-3 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]/20 bg-white"
+                                                />
+                                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                                    {/* Visibility selector */}
+                                                    <div className="flex items-center gap-4">
+                                                        <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+                                                            <input
+                                                                type="radio"
+                                                                name={`note-vis-${ticket.id}`}
+                                                                checked={noteVisibility === TicketNoteVisibility.INTERNAL}
+                                                                onChange={() => setNoteVisibility(TicketNoteVisibility.INTERNAL)}
+                                                                className="text-[var(--admin-primary)] focus:ring-[var(--admin-primary)]"
+                                                            />
+                                                            <Lock className="h-3 w-3 text-amber-500" />
+                                                            <span>Internal Note (Staff-only)</span>
+                                                        </label>
+                                                        <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+                                                            <input
+                                                                type="radio"
+                                                                name={`note-vis-${ticket.id}`}
+                                                                checked={noteVisibility === TicketNoteVisibility.HOSPITAL_VISIBLE}
+                                                                onChange={() => setNoteVisibility(TicketNoteVisibility.HOSPITAL_VISIBLE)}
+                                                                className="text-[var(--admin-primary)] focus:ring-[var(--admin-primary)]"
+                                                            />
+                                                            <Globe className="h-3 w-3 text-blue-500" />
+                                                            <span>Reply (Share with Hospital)</span>
+                                                        </label>
+                                                    </div>
+
+                                                    <button
+                                                        onClick={() => handleSubmitNote(ticket.id)}
+                                                        disabled={submittingNoteTicketId === ticket.id || !noteInput.trim()}
+                                                        className="px-4 py-2 text-xs font-bold text-white bg-[var(--admin-primary)] hover:bg-[var(--admin-primary-dark)] rounded-xl transition-all shadow-sm disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+                                                    >
+                                                        {submittingNoteTicketId === ticket.id && <Loader2 className="h-3 w-3 animate-spin" />}
+                                                        Submit
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Metadata Footer */}
                                     <div className="flex flex-wrap items-center gap-y-2 gap-x-5 text-xs text-slate-500 pt-1.5 border-t border-slate-100/60">
                                         {/* User author info */}
@@ -586,6 +918,26 @@ export default function SupportPortalPage() {
                                 {/* Action controls (Right) */}
                                 <div className="p-6 md:border-l border-slate-100 flex items-center justify-end bg-slate-50/50 md:bg-transparent min-w-[200px] shrink-0">
                                     <div className="flex flex-row md:flex-col gap-2 w-full md:w-auto">
+                                        {/* Developer Assignee Dropdown */}
+                                        <div className="space-y-1 mb-2 w-full">
+                                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Assignee</label>
+                                            <div className="relative">
+                                                <select
+                                                    value={ticket.assigned_to_id || ''}
+                                                    onChange={(e) => handleAssignTicket(ticket.id, e.target.value || null)}
+                                                    disabled={assigningTicketId === ticket.id}
+                                                    className="w-full pl-7 pr-2 py-1 border border-slate-200 rounded-lg text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)] hover:border-slate-300 transition-colors disabled:opacity-50 cursor-pointer"
+                                                >
+                                                    <option value="">Unassigned</option>
+                                                    {developers.map((dev) => (
+                                                        <option key={dev.id} value={dev.id}>
+                                                            {dev.name || dev.username}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <UserCheck className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                                            </div>
+                                        </div>
                                         {/* Mark In Progress (Only if ticket is Open) */}
                                         {ticket.status === TicketStatus.Open && (
                                             <button
