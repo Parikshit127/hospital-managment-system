@@ -83,7 +83,14 @@ export default function RevenuePage() {
     }
 
     const fmt = (n: number) => n.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
-    const totalRevenue = deptData?.byDepartment?.reduce((s: number, d: any) => s + d.amount, 0) || 0;
+    // Department sum is a service-date (accrual) view: it splits a multi-day IPD bill
+    // across the days its line items were rendered. Kept only for the department table's
+    // %-share denominator so those shares still total 100%.
+    const deptRevenueTotal = deptData?.byDepartment?.reduce((s: number, d: any) => s + d.amount, 0) || 0;
+    // Headline Total Revenue = the detailed breakup's Net Billed (bill-date basis), so the
+    // top card always reconciles with the per-bill table below. Falls back to the
+    // department sum only until the MIS summary loads.
+    const totalRevenue = detailSummary?.total_net ?? deptRevenueTotal;
     const totalExpenses = plData?.totalExpenses || 0;
     const netProfit = plData?.netProfit || 0;
 
@@ -235,7 +242,7 @@ export default function RevenuePage() {
                                             <td className="px-6 py-3 text-sm font-semibold text-gray-900 text-right">{fmt(d.amount)}</td>
                                             <td className="px-6 py-3 text-sm text-gray-600 text-right">{d.count}</td>
                                             <td className="px-6 py-3 text-sm text-gray-600 text-right">
-                                                {totalRevenue > 0 ? ((d.amount / totalRevenue) * 100).toFixed(1) : '0'}%
+                                                {deptRevenueTotal > 0 ? ((d.amount / deptRevenueTotal) * 100).toFixed(1) : '0'}%
                                             </td>
                                         </tr>
                                     ))}
