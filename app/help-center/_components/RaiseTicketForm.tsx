@@ -155,14 +155,14 @@ export function RaiseTicketForm() {
             const fileExt = file.name.split('.').pop();
             const filePath = `${Date.now()}-${id}.${fileExt}`;
             
-            const { data: uploadData, error: uploadError } = await supabase.storage.from('ticket-attachments').upload(filePath, file);
+            const { data: uploadData, error: uploadError } = await supabase.storage.from('ticket_attachments').upload(filePath, file);
             
             if (uploadError || !uploadData) {
                 setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error', errorMessage: uploadError?.message || 'Upload failed' } : f));
                 return;
             }
 
-            const { data: signedData, error: signedError } = await supabase.storage.from('ticket-attachments').createSignedUrl(uploadData.path, 60 * 60);
+            const { data: signedData, error: signedError } = await supabase.storage.from('ticket_attachments').createSignedUrl(uploadData.path, 60 * 60);
 
             if (signedError || !signedData) {
                 setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'error', errorMessage: 'Failed to generate preview URL' } : f));
