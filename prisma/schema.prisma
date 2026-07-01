@@ -496,7 +496,8 @@ model User {
   stock_transfers_stock_transfers_dispatch_user_idTousers stock_transfers[]    @relation("stock_transfers_dispatch_user_idTousers")
   stock_transfers_stock_transfers_receive_user_idTousers  stock_transfers[]    @relation("stock_transfers_receive_user_idTousers")
   stores                                                  stores[]
-  tickets                                                 Ticket[]
+  tickets                                                 Ticket[]             @relation("TicketCreator")
+  assigned_tickets                                        Ticket[]             @relation("TicketAssignee")
   notifications                                           Notification[]
   ticket_notes                                            TicketNote[]
   organization                                            Organization         @relation(fields: [organizationId], references: [id])
@@ -2303,11 +2304,13 @@ model Ticket {
   priority       TicketPriority      @default(Medium)
   status         TicketStatus        @default(Open)
   user_id        String
+  assigned_to_id String?
   branch_id      String
   organizationId String
   created_at     DateTime            @default(now())
   updated_at     DateTime            @updatedAt
-  user           User                @relation(fields: [user_id], references: [id])
+  user           User                @relation("TicketCreator", fields: [user_id], references: [id])
+  assignee       User?               @relation("TicketAssignee", fields: [assigned_to_id], references: [id])
   branch         Branch              @relation(fields: [branch_id], references: [id])
   organization   Organization        @relation(fields: [organizationId], references: [id])
   attachments    TicketAttachment[]
@@ -2317,6 +2320,7 @@ model Ticket {
   @@index([organizationId])
   @@index([branch_id])
   @@index([user_id])
+  @@index([assigned_to_id])
   @@index([status])
   @@map("tickets")
 }

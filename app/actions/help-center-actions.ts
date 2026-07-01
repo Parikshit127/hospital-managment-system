@@ -254,6 +254,67 @@ export async function getAllTickets() {
 }
 
 // ========================================
+// TICKET ASSIGNMENT
+// ========================================
+
+const ASSIGNABLE_ROLES = ['admin', 'developer'];
+
+/**
+ * Fetch users who can be assigned tickets (Admin / Developer roles),
+ * scoped to the caller's organization.
+ */
+export async function getAssignableUsers() {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const data = await db.user.findMany({
+            where: {
+                organizationId,
+                is_active: true,
+                role: { in: ASSIGNABLE_ROLES },
+            },
+            select: { id: true, name: true, username: true, role: true },
+            orderBy: { name: 'asc' },
+        });
+
+        return { success: true, data };
+    } catch (error) {
+        console.error('Get Assignable Users Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+/**
+ * Assign a ticket to a user. Both the ticket and the assignee must belong to
+ * the caller's organization (tenant safety).
+ */
+export async function assignTicket(ticketId: string, userId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const assignee = await db.user.findFirst({
+            where: { id: userId, organizationId },
+            select: { id: true },
+        });
+
+        if (!assignee) {
+            return { success: false, data: null };
+        }
+
+        const ticket = await db.ticket.update({
+            where: { id: ticketId, organizationId },
+            data: { assigned_to_id: userId },
+        });
+
+        revalidatePath('/admin/support');
+        return { success: true, data: ticket };
+    } catch (error) {
+        console.error('Assign Ticket Error:', error);
+        return { success: false, data: null };
+    }
+}
+
+// ========================================
 // TICKET NOTES / REPLIES
 // ========================================
 
