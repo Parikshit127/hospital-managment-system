@@ -462,6 +462,129 @@ export async function getPackageUtilization(admissionId: string) {
     }
 }
 
+// Settle a package admission's billing.
+//
+// Policy (applies to every package admission — TPA, cash or corporate):
+//   • The PACKAGE amount is the billable revenue and what a TPA/corporate is
+//     claimed for.
+//   • Every NON-package charge (room, pharmacy, services…) is absorbed by the
+//     hospital: it is (a) recorded as a hospital Expense, and (b) removed from
+//     the patient/TPA claim via a negative adjustment line so the invoice net
+//     equals the package amount.
+//
+// Re-runnable: each call rebuilds the adjustment and the expense from the
+// current charges, so it can be run again after more charges are posted.
+export async function settlePackageBilling(admissionId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const r2 = (n: number) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+        const genExpenseNumber = () => {
+            const seq = String(Number(String(Date.now()).slice(-6))).padStart(6, '0');
+            return `EXP-PKG-${seq}`;
+        };
+
+        const admPkg = await db.ipdAdmissionPackage.findFirst({
+            where: { admission_id: admissionId },
+            include: { package: true },
+        });
+        if (!admPkg) return { success: false, error: 'No package is applied to this admission' };
+
+        const invoice = await db.invoices.findFirst({
+            where: { admission_id: admissionId, status: { not: 'Cancelled' } },
+            include: { items: true },
+        });
+        if (!invoice) return { success: false, error: 'No IPD invoice found for this admission' };
+
+        const ADJ_CAT = 'Package Adjustment';
+        const catOf = (i: any) => String(i.service_category || '');
+        const extras = invoice.items.filter((i: any) => catOf(i) !== 'Package' && catOf(i) !== ADJ_CAT);
+        const packageLines = invoice.items.filter((i: any) => catOf(i) === 'Package');
+
+        const extraNet = r2(extras.reduce((s: number, i: any) => s + Number(i.net_price || 0), 0));
+        const extraTax = r2(extras.reduce((s: number, i: any) => s + Number(i.tax_amount || 0), 0));
+        const absorbedGross = r2(extraNet + extraTax);
+        const packageGross = r2(packageLines.reduce((s: number, i: any) =>
+            s + Number(i.net_price || 0) + Number(i.tax_amount || 0), 0));
+
+        // Find/create the expense category for absorbed package costs.
+        let cat = await db.expenseCategory.findFirst({ where: { organizationId, name: 'Package Absorbed Cost' } });
+        if (!cat) {
+            cat = await db.expenseCategory.create({
+                data: { name: 'Package Absorbed Cost', code: 'PKG-ABSORB', organizationId },
+            });
+        }
+
+        const expenseRef = `PKG-ABSORB-${admissionId}`;
+
+        await db.$transaction(async (tx: any) => {
+            // Rebuild the absorption adjustment from scratch (idempotent).
+            await tx.invoice_items.deleteMany({ where: { invoice_id: invoice.id, service_category: ADJ_CAT } });
+            if (absorbedGross > 0) {
+                await tx.invoice_items.create({
+                    data: {
+                        invoice_id: invoice.id,
+                        department: ADJ_CAT,
+                        service_category: ADJ_CAT,
+                        description: 'Less: Non-package services absorbed by hospital (package billing)',
+                        quantity: 1,
+                        unit_price: 0,
+                        total_price: -extraNet,
+                        discount: 0,
+                        net_price: -extraNet,
+                        tax_rate: 0,
+                        tax_amount: -extraTax,
+                        organizationId,
+                    },
+                });
+            }
+        });
+
+        // Recompute invoice totals — net now equals the package amount.
+        await recalculateInvoiceWithGst(invoice.id);
+
+        // Upsert the hospital expense for the absorbed (non-package) amount.
+        const existingExp = await db.expense.findFirst({ where: { organizationId, reference_no: expenseRef } });
+        const desc = `Package absorbed cost — ${admPkg.package?.package_name || 'Package'} (Admission ${admissionId})`;
+        if (absorbedGross > 0) {
+            if (existingExp) {
+                await db.expense.update({
+                    where: { id: existingExp.id },
+                    data: { amount: absorbedGross, total_amount: absorbedGross, description: desc },
+                });
+            } else {
+                await db.expense.create({
+                    data: {
+                        expense_number: genExpenseNumber(),
+                        category_id: cat.id,
+                        description: desc,
+                        amount: absorbedGross,
+                        total_amount: absorbedGross,
+                        status: 'Approved',
+                        reference_no: expenseRef,
+                        notes: 'Auto-generated: non-package IPD charges absorbed under package billing.',
+                        organizationId,
+                    },
+                });
+            }
+        } else if (existingExp) {
+            await db.expense.delete({ where: { id: existingExp.id } });
+        }
+
+        await logAudit({
+            action: 'SETTLE_PACKAGE_BILLING',
+            module: 'ipd',
+            entity_type: 'admission',
+            entity_id: admissionId,
+            details: JSON.stringify({ packageGross, absorbedGross }),
+        });
+
+        return { success: true, data: { packageGross, absorbedGross } };
+    } catch (error: any) {
+        console.error('settlePackageBilling error:', error?.message || error);
+        return { success: false, error: error?.message || 'Failed to settle package billing' };
+    }
+}
+
 // ============================================
 // INTERIM BILL
 // ============================================
