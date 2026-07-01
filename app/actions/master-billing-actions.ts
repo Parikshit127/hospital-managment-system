@@ -467,7 +467,8 @@ export async function getMasterBillingKPIs() {
         where: {
           organizationId,
           created_at: { gte: thirtyAgo },
-          status: { notIn: ["Cancelled", "Voided"] },
+          // Rule 2: billed revenue counts Final bills only (drafts are not revenue).
+          status: "Final",
         },
         _sum: { net_amount: true },
       }),
