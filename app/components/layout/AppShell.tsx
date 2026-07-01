@@ -146,7 +146,7 @@ export function AppShell({
                     />
                   </button>
                 )}
-                {session?.id && <NotificationBell userId={session.id} />}
+                {session?.id && session?.organization_id && <NotificationBell userId={session.id} organizationId={session.organization_id} />}
                 {headerActions}
               </div>
             </div>

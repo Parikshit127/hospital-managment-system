@@ -3,39 +3,68 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Bell, Check, CheckCheck, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
-import {
-    getNotifications, markNotificationRead, markAllNotificationsRead
-} from '@/app/actions/notification-actions';
+import { createClient } from '@supabase/supabase-js';
+import { useRouter } from 'next/navigation';
+
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+);
 
 interface NotificationBellProps {
     userId: string;
+    organizationId: string;
 }
 
-export function NotificationBell({ userId }: NotificationBellProps) {
+export function NotificationBell({ userId, organizationId }: NotificationBellProps) {
     const [notifications, setNotifications] = useState<any[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
+    const router = useRouter();
 
     const loadNotifications = useCallback(async () => {
         if (!userId) return;
         setLoading(true);
         try {
-            const res = await getNotifications(userId, { limit: 10 });
-            if (res.success) {
-                setNotifications(res.data || []);
-                setUnreadCount(res.unreadCount || 0);
+            const res = await fetch('/api/notifications?limit=50');
+            const data = await res.json();
+            if (data.success) {
+                setNotifications(data.notifications || []);
+                setUnreadCount(data.unreadCount || 0);
             }
-        } catch (e) { console.error(e); }
-        finally { setLoading(false); }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
     }, [userId]);
 
     useEffect(() => {
         loadNotifications();
-        const interval = setInterval(loadNotifications, 60000);
-        return () => clearInterval(interval);
-    }, [loadNotifications]);
+
+        if (organizationId && userId) {
+            const channel = supabase.channel(`notifications:${organizationId}:${userId}`);
+            
+            channel
+                .on(
+                    'broadcast',
+                    { event: 'new_notification' },
+                    (payload) => {
+                        if (payload.payload) {
+                            setNotifications((prev) => [payload.payload, ...prev]);
+                            setUnreadCount((prev) => prev + 1);
+                        }
+                    }
+                )
+                .subscribe();
+
+            return () => {
+                supabase.removeChannel(channel);
+            };
+        }
+    }, [loadNotifications, organizationId, userId]);
 
     // Close on outside click
     useEffect(() => {
@@ -46,24 +75,36 @@ export function NotificationBell({ userId }: NotificationBellProps) {
         return () => document.removeEventListener('mousedown', handleClick);
     }, []);
 
-    const handleMarkRead = async (id: number) => {
-        await markNotificationRead(id);
-        setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-        setUnreadCount(prev => Math.max(prev - 1, 0));
+    const handleMarkRead = async (receiptId: string) => {
+        try {
+            const res = await fetch(`/api/notifications/${receiptId}/read`, { method: 'POST' });
+            if (res.ok) {
+                setNotifications(prev => prev.map(n => n.receiptId === receiptId ? { ...n, read: true } : n));
+                setUnreadCount(prev => Math.max(prev - 1, 0));
+            }
+        } catch (e) {
+            console.error(e);
+        }
     };
 
     const handleMarkAllRead = async () => {
-        await markAllNotificationsRead(userId);
-        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-        setUnreadCount(0);
+        try {
+            const res = await fetch('/api/notifications/read-all', { method: 'POST' });
+            if (res.ok) {
+                setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+                setUnreadCount(0);
+            }
+        } catch (e) {
+            console.error(e);
+        }
     };
 
-    const getTypeColor = (type: string) => {
-        switch (type) {
-            case 'success': return 'bg-emerald-500';
-            case 'warning': return 'bg-amber-500';
-            case 'critical': return 'bg-red-500';
-            default: return 'bg-blue-500';
+    const getTypeColor = (audience: string) => {
+        switch (audience) {
+            case 'GLOBAL': return 'bg-purple-500';
+            case 'ROLE': return 'bg-blue-500';
+            case 'FACILITY': return 'bg-emerald-500';
+            default: return 'bg-gray-500';
         }
     };
 
@@ -111,28 +152,28 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                             </div>
                         ) : (
                             notifications.map((n: any) => (
-                                <div key={n.id}
-                                    className={`px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer ${!n.is_read ? 'bg-blue-50/30' : ''}`}
-                                    onClick={() => !n.is_read && handleMarkRead(n.id)}>
+                                <div key={n.receiptId}
+                                    className={`px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer ${!n.read ? 'bg-blue-50/30' : ''}`}
+                                    onClick={() => !n.read && handleMarkRead(n.receiptId)}>
                                     <div className="flex items-start gap-3">
-                                        <div className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${!n.is_read ? getTypeColor(n.type) : 'bg-gray-200'}`} />
+                                        <div className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${!n.read ? getTypeColor(n.audience) : 'bg-gray-200'}`} />
                                         <div className="min-w-0 flex-1">
-                                            <p className={`text-xs font-bold ${!n.is_read ? 'text-gray-900' : 'text-gray-500'}`}>
+                                            <p className={`text-xs font-bold ${!n.read ? 'text-gray-900' : 'text-gray-500'}`}>
                                                 {n.title}
                                             </p>
                                             <p className="text-[10px] text-gray-400 mt-0.5 line-clamp-2">{n.body}</p>
                                             <div className="flex items-center justify-between mt-1">
-                                                <span className="text-[9px] text-gray-300 font-medium">{timeAgo(n.created_at)}</span>
-                                                {n.link && (
-                                                    <Link href={n.link} onClick={() => setOpen(false)}
+                                                <span className="text-[9px] text-gray-300 font-medium">{timeAgo(n.createdAt)}</span>
+                                                {n.releaseNoteId && (
+                                                    <Link href={`/help-center/release-notes?id=${n.releaseNoteId}`} onClick={() => setOpen(false)}
                                                         className="text-[9px] text-orange-500 font-bold flex items-center gap-0.5 hover:text-orange-600">
                                                         View <ExternalLink className="h-2 w-2" />
                                                     </Link>
                                                 )}
                                             </div>
                                         </div>
-                                        {!n.is_read && (
-                                            <button onClick={(e) => { e.stopPropagation(); handleMarkRead(n.id); }}
+                                        {!n.read && (
+                                            <button onClick={(e) => { e.stopPropagation(); handleMarkRead(n.receiptId); }}
                                                 className="p-1 hover:bg-gray-200 rounded-lg shrink-0" title="Mark as read">
                                                 <Check className="h-3 w-3 text-gray-400" />
                                             </button>
