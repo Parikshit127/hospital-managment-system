@@ -26,6 +26,7 @@
  */
 
 import { requireTenantContext } from "@/backend/tenant";
+import { getTodayRange } from "@/app/lib/timezone";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -390,8 +391,9 @@ export async function getMasterBillingKPIs() {
     const { db, organizationId } = await requireTenantContext();
 
     const now = new Date();
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
+    // "Today" = the IST calendar day, not the server's local/UTC midnight, so
+    // Today's Revenue includes early-morning IST bills (same fix as the grid filter).
+    const { start: todayStart } = getTodayRange();
     const thirtyAgo = new Date(now);
     thirtyAgo.setDate(thirtyAgo.getDate() - 30);
     const overdueCutoff = new Date(now);
