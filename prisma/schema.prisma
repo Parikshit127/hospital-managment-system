@@ -89,6 +89,7 @@ model Organization {
   shift_assignments             ShiftAssignment[]
   notifications                 Notification[]
   tickets                       Ticket[]
+  ticket_notes                  TicketNote[]
   release_notes                 ReleaseNote[]
   expense_categories            ExpenseCategory[]
   vendors                       Vendor[]
@@ -497,6 +498,7 @@ model User {
   stores                                                  stores[]
   tickets                                                 Ticket[]
   notifications                                           Notification[]
+  ticket_notes                                            TicketNote[]
   organization                                            Organization         @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -2310,6 +2312,7 @@ model Ticket {
   organization   Organization        @relation(fields: [organizationId], references: [id])
   attachments    TicketAttachment[]
   notifications  Notification[]
+  notes          TicketNote[]
 
   @@index([organizationId])
   @@index([branch_id])
@@ -2330,6 +2333,29 @@ model TicketAttachment {
 
   @@index([ticket_id])
   @@map("ticket_attachments")
+}
+
+enum TicketNoteVisibility {
+  INTERNAL
+  HOSPITAL_VISIBLE
+}
+
+model TicketNote {
+  id             String               @id @default(uuid())
+  ticket_id      String
+  author_id      String
+  body           String
+  visibility     TicketNoteVisibility @default(INTERNAL)
+  organizationId String
+  created_at     DateTime             @default(now())
+  ticket         Ticket               @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  author         User                 @relation(fields: [author_id], references: [id])
+  organization   Organization         @relation(fields: [organizationId], references: [id])
+
+  @@index([ticket_id])
+  @@index([organizationId])
+  @@index([visibility])
+  @@map("ticket_notes")
 }
 
 model ExpenseCategory {
