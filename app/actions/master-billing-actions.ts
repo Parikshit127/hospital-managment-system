@@ -195,6 +195,7 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
       const q = filter.search.trim();
       where.OR = [
         { invoice_number: { contains: q, mode: "insensitive" } },
+        { final_bill_number: { contains: q, mode: "insensitive" } },
         { patient_id: { contains: q, mode: "insensitive" } },
         { admission_id: { contains: q, mode: "insensitive" } },
         { tpa_claim_number: { contains: q, mode: "insensitive" } },
@@ -317,7 +318,10 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
 
       return {
         invoice_id: inv.id,
-        invoice_number: inv.invoice_number,
+        // Show the official Final Bill No. once finalized; internal ref as fallback (drafts).
+        invoice_number: (inv as any).final_bill_number ?? inv.invoice_number,
+        final_bill_number: (inv as any).final_bill_number ?? null,
+        internal_ref: inv.invoice_number,
         version: inv.version, // optimistic lock for downstream mutating actions
         patient_id: inv.patient_id,
         patient_name: inv.patient?.full_name ?? "—",

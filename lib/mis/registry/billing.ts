@@ -173,7 +173,7 @@ export const billingDetailReport: ReportDefinition = {
     const rows = await prisma.$queryRaw<any[]>`
       SELECT 
         DATE(i.created_at) as "date",
-        i.invoice_number as "invoice_number",
+        COALESCE(i.final_bill_number, i.invoice_number) as "invoice_number",
         ii.department as "department",
         ii.description as "item_name",
         ii.quantity as "quantity",
@@ -398,7 +398,7 @@ export const billingSummaryDetailReport: ReportDefinition = {
     const rows = await prisma.$queryRaw<any[]>`
       SELECT 
         i.patient_id as "patient_id",
-        i.invoice_number as "invoice_number",
+        COALESCE(i.final_bill_number, i.invoice_number) as "invoice_number",
         DATE(i.created_at) as "date",
         i.total_amount as "total_amount",
         i.net_amount as "net_amount",
@@ -669,7 +669,7 @@ export const billingDiscountSummaryReport: ReportDefinition = {
     const rows = await prisma.$queryRaw<any[]>`
       SELECT 
         DATE(i.created_at) as "date",
-        i.invoice_number as "invoice_number",
+        COALESCE(i.final_bill_number, i.invoice_number) as "invoice_number",
         COALESCE(opd.full_name, 'Unknown') as "patient_name",
         i.total_amount as "invoice_total",
         i.total_discount as "discount_amount",
@@ -730,7 +730,7 @@ export const billingDueSettledReport: ReportDefinition = {
     const rows = await prisma.$queryRaw<any[]>`
       SELECT 
         DATE(p.created_at) as "settlement_date",
-        i.invoice_number as "invoice_number",
+        COALESCE(i.final_bill_number, i.invoice_number) as "invoice_number",
         DATE(i.created_at) as "original_bill_date",
         i.net_amount as "billed_amount",
         p.amount as "settled_amount",
@@ -857,7 +857,7 @@ export const billingOpRefundReport: ReportDefinition = {
         DATE(r.created_at) as "date",
         i.patient_id as "uhid",
         COALESCE(opd.full_name, 'Unknown') as "patient_name",
-        i.invoice_number as "op_invoice_number",
+        COALESCE(i.final_bill_number, i.invoice_number) as "op_invoice_number",
         r.amount as "refund_amount",
         COALESCE(r.processed_by, 'System') as "processed_by"
       FROM refunds r
@@ -1378,7 +1378,7 @@ export const billingPendingBillsReport: ReportDefinition = {
     const rows = await prisma.$queryRaw<any[]>`
       SELECT 
         DATE(i.created_at) as "invoice_date",
-        i.invoice_number as "invoice_number",
+        COALESCE(i.final_bill_number, i.invoice_number) as "invoice_number",
         COALESCE(opd.full_name, 'Unknown') as "patient_name",
         i.total_amount as "billed_amount",
         i.paid_amount as "paid_amount",
@@ -1616,7 +1616,7 @@ export const billingCancelBillReport: ReportDefinition = {
     const rows = await prisma.$queryRaw<any[]>`
       SELECT 
         DATE(i.updated_at) as "cancel_date",
-        i.invoice_number as "invoice_number",
+        COALESCE(i.final_bill_number, i.invoice_number) as "invoice_number",
         COALESCE(opd.full_name, 'Unknown') as "patient_name",
         i.total_amount as "original_amount",
         COALESCE(i.notes, 'Cancelled') as "cancellation_reason",

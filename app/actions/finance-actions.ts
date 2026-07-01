@@ -516,7 +516,9 @@ export async function getInvoices(filters?: {
         const unified = [
             ...standardInvoices.map((inv: any) => ({
                 id: inv.id,
-                invoice_number: inv.invoice_number,
+                // Official Final Bill No. once finalized; internal ref as fallback (drafts).
+                invoice_number: inv.final_bill_number ?? inv.invoice_number,
+                internal_ref: inv.invoice_number,
                 patient_id: inv.patient_id,
                 patient: inv.patient,
                 notes: inv.notes,
