@@ -112,3 +112,59 @@ export async function getAuditStats() {
         return { success: false, error: error.message };
     }
 }
+
+/**
+ * Verify the caller may view the underlying entity, MIRRORING the access the
+ * existing record-level gate grants — never a new/looser permission model.
+ * Unknown entity types default-deny so this can't become "read any entity's
+ * audit history by ID".
+ */
+async function canViewEntity(db: any, entityType: string, entityId: string): Promise<boolean> {
+    switch (entityType) {
+        case 'invoice': {
+            // Mirrors getInvoiceDetail (finance-actions.ts): an invoice is visible
+            // to any authenticated user whose org owns it. `invoices` is tenant-
+            // scoped, so this findFirst is auto-filtered to the caller's org.
+            // Audit rows key on invoice_number, so match on that.
+            const invoice = await db.invoices.findFirst({
+                where: { invoice_number: entityId },
+                select: { id: true },
+            });
+            return Boolean(invoice);
+        }
+        default:
+            return false;
+    }
+}
+
+/**
+ * Entity-scoped audit history (e.g. one invoice's changes) for inline display.
+ * Available to any authenticated user, org-scoped, but ONLY after confirming
+ * the caller can view the underlying entity (see canViewEntity). This is the
+ * non-admin counterpart to the admin-only getAuditLogs full-trail viewer.
+ */
+export async function getEntityAuditLogs(entityType: string, entityId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        if (!entityType || !entityId) {
+            return { success: false, data: [], error: 'entityType and entityId are required' };
+        }
+
+        const allowed = await canViewEntity(db, entityType, entityId);
+        if (!allowed) {
+            return { success: false, data: [], error: 'Not authorized' };
+        }
+
+        const data = await db.system_audit_logs.findMany({
+            where: { organizationId, entity_type: entityType, entity_id: entityId },
+            orderBy: { created_at: 'desc' },
+            take: 100,
+        });
+
+        return { success: true, data };
+    } catch (error: any) {
+        console.error('getEntityAuditLogs error:', error);
+        return { success: false, data: [], error: error.message };
+    }
+}

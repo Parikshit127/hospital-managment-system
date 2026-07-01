@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getInvoiceDetail, addInvoiceItem, removeInvoiceItem, finalizeInvoice, cancelInvoice } from '@/app/actions/finance-actions';
-import { getAuditLogs } from '@/app/actions/audit-actions';
+import { getEntityAuditLogs } from '@/app/actions/audit-actions';
 import { getIpdServices } from '@/app/actions/ipd-master-actions';
 import { useToast } from '@/app/components/ui/Toast';
 import { formatDoctorName } from '@/app/lib/format-name';
@@ -41,7 +41,7 @@ export default function InvoiceDetailPage() {
         const res = await getInvoiceDetail(invoiceId);
         if (res.success) {
             setInvoice(res.data);
-            const auditRes = await getAuditLogs(1, 50, { entity_type: 'invoice', entity_id: res.data.invoice_number });
+            const auditRes = await getEntityAuditLogs('invoice', res.data.invoice_number);
             if (auditRes.success) {
                 setAuditLogs(auditRes.data || []);
             }
