@@ -6,6 +6,7 @@ import { createJournalEntry } from './gl-actions';
 import { accrueIPDDailyCharges } from '@/app/actions/ipd-actions';
 import { getPackageGSTRate, getRoomGSTRate } from '@/app/lib/gst';
 import { generateInvoiceNumber as genInvNum } from '@/app/lib/sequence-generator';
+import { isBillClosedForCharges, BILL_FINALIZED_INTENT_MSG } from '@/app/lib/bill-status';
 
 
 function serialize<T>(data: T): T {
@@ -186,6 +187,24 @@ export async function postChargeToIpdBill(data: {
 }) {
     try {
         const { db, session, organizationId } = await requireTenantContext();
+
+        // Rules 4 & 5: once the patient is discharged or the bill is finalized/locked,
+        // no department (pharmacy, nursing, lab, OT, package, manual) may post new charges.
+        const admissionRec = await db.admissions.findUnique({
+            where: { admission_id: data.admission_id },
+            select: { status: true },
+        });
+        if (!admissionRec) return { success: false, error: 'Admission not found' };
+        if (admissionRec.status === 'Discharged') {
+            return { success: false, error: BILL_FINALIZED_INTENT_MSG };
+        }
+        const activeInvoice = await db.invoices.findFirst({
+            where: { admission_id: data.admission_id, status: { not: 'Cancelled' } },
+            select: { status: true, is_locked: true },
+        });
+        if (isBillClosedForCharges(activeInvoice)) {
+            return { success: false, error: BILL_FINALIZED_INTENT_MSG };
+        }
 
         // Look up master service if service_id provided
         let masterService: any = null;

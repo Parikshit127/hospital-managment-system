@@ -12,7 +12,7 @@ import { validateBackdate } from '@/app/lib/backdate';
 import { recomputeInvoiceCommission } from '@/app/lib/referral-commission';
 import { recomputeInvoiceDoctorCommission } from '@/app/lib/doctor-commission';
 import { dispensingKey } from '@/app/lib/pharmacy-bill-group';
-import { isPrivilegedBillingRole } from '@/app/lib/bill-status';
+import { isPrivilegedBillingRole, canEditBill, canFinalizeInvoice, BILL_FINALIZED_INTENT_MSG } from '@/app/lib/bill-status';
 
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
@@ -209,6 +209,13 @@ export async function addInvoiceItem(data: {
 
         const invoice = await db.invoices.findUnique({ where: { id: data.invoice_id } });
         if (!invoice) return { success: false, error: 'Invoice not found' };
+
+        // Rules 4 & 5: no new billable entries once the bill is Final/Cancelled/locked.
+        // Admin/Finance retain the authorized amend path (canEditBill) on a Final bill;
+        // everyone else is blocked. A hard-locked bill is frozen for all until unlocked.
+        if (invoice.is_locked || !canEditBill(invoice.status, session?.role)) {
+            return { success: false, error: BILL_FINALIZED_INTENT_MSG };
+        }
 
         const isIpd = invoice.invoice_type === 'IPD' || invoice.admission_id !== null;
         if (isIpd) {
@@ -598,6 +605,21 @@ export async function getInvoiceDetail(invoiceId: number) {
 export async function finalizeInvoice(invoiceId: number) {
     try {
         const { db, organizationId } = await requireTenantContext();
+
+        // Rule 3: an IPD bill can only be finalized after the patient is discharged.
+        const existing = await db.invoices.findUnique({
+            where: { id: invoiceId },
+            select: { admission_id: true },
+        });
+        if (!existing) return { success: false, error: 'Invoice not found.' };
+        if (existing.admission_id) {
+            const adm = await db.admissions.findUnique({
+                where: { admission_id: existing.admission_id },
+                select: { status: true },
+            });
+            const gate = canFinalizeInvoice(existing, adm);
+            if (!gate.ok) return { success: false, error: gate.error };
+        }
 
         const invoice = await db.invoices.update({
             where: { id: invoiceId },
@@ -2428,6 +2450,12 @@ export async function removeInvoiceItem(itemId: number, invoiceId: number) {
             include: { invoice: true }
         });
         if (!item) return { success: false, error: 'Invoice item not found' };
+
+        // Rules 4 & 5: a Final/Cancelled/locked bill is closed — only the authorized
+        // amend path (Admin/Finance on a Final, unlocked bill) may remove items.
+        if (item.invoice && (item.invoice.is_locked || !canEditBill(item.invoice.status, session?.role))) {
+            return { success: false, error: 'This bill is finalized/locked; items can no longer be removed.' };
+        }
 
         const isIpd = item.invoice && (item.invoice.invoice_type === 'IPD' || item.invoice.admission_id !== null);
         if (isIpd) {

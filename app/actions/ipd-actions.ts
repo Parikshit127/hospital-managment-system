@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { getPatientBalances } from '@/app/actions/balance-actions';
 import { getRoomGSTRate } from '@/app/lib/gst';
 import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, generateDepositNumber as genDepNum } from '@/app/lib/sequence-generator';
+import { isBillClosedForCharges } from '@/app/lib/bill-status';
 
 
 function serialize<T>(data: T): T {
@@ -680,6 +681,11 @@ export async function accrueIPDDailyCharges(admissionId: string) {
 
     if (!admission) return { success: false, error: "Admission not found" };
 
+    // Rules 4 & 5: stop accruing room/nursing charges once the patient is discharged.
+    if (admission.status === 'Discharged') {
+      return { success: false, error: "Admission is discharged; no further charges are accrued." };
+    }
+
     const ward = admission.ward || admission.bed?.wards;
     if (!ward) return { success: false, error: "Ward info not found" };
 
@@ -687,6 +693,11 @@ export async function accrueIPDDailyCharges(admissionId: string) {
     let invoice = await db.invoices.findFirst({
       where: { admission_id: admissionId, status: { not: "Cancelled" } },
     });
+
+    // Don't accrue onto a finalized/locked bill.
+    if (isBillClosedForCharges(invoice)) {
+      return { success: false, error: "Bill is finalized; no further charges are accrued." };
+    }
 
     if (!invoice) {
       invoice = await db.invoices.create({
