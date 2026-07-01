@@ -291,9 +291,9 @@ export async function GET(req: NextRequest) {
             const cashierName = userMap.get(cashierUser.toLowerCase()) || cashierUser;
             const linkedPayment = refundPaymentMap.get(String(r.payment_id)) || null;
             const linkedInvoice = linkedPayment?.invoice || refundInvoiceMap.get(String(r.invoice_id)) || null;
-            // Refund goes back through the original tender; only fall back to Cash
-            // when the payment link can't be resolved (legacy data).
-            const mode = linkedPayment ? canonicalTender(linkedPayment.payment_method) : 'Cash';
+            // The hospital pays every refund out as a bank transfer, so refunds are
+            // always reported under NEFT/RTGS regardless of the original tender.
+            const mode = 'NEFT/RTGS';
             const patientName = linkedInvoice?.patient?.full_name || 'Refund Payout';
             const patientId = linkedInvoice?.patient?.patient_id || '-';
             const dept = linkedInvoice ? getDept(linkedInvoice.invoice_type || 'OPD') : 'OP/ER';

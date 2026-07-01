@@ -240,7 +240,9 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
                 ...r,
                 cashier_username: username,
                 cashier_name: fullName,
-                payment_method: linkedPayment?.payment_method || null,
+                // The hospital pays every refund out as a bank transfer, so refunds
+                // are always reported under NEFT/RTGS regardless of the original tender.
+                payment_method: 'NEFT/RTGS',
                 invoice_type: linkedInvoice?.invoice_type || null,
                 patient_name: linkedInvoice?.patient?.full_name || null,
                 patient_id: linkedInvoice?.patient?.patient_id || null
