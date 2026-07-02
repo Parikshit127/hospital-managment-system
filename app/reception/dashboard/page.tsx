@@ -14,6 +14,7 @@ import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Skeleton, SkeletonCard } from '@/app/components/ui/Skeleton';
+import { DateField } from '@/app/components/ui/DateField';
 import {
     getRegisteredPatients, getReceptionStats, getReceptionRevenueToday,
     getExpectedArrivals, checkInPatient,
@@ -522,96 +523,107 @@ export default function ReceptionDashboard() {
                     TAB: OPD PATIENTS
                    ═══════════════════════════════════════════════════════════ */}
                 {activeTab === 'opd' && <>
-                <div className="flex flex-wrap items-center gap-3">
-                    <div className="relative flex-1 min-w-[240px]">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <div className="flex flex-wrap items-center gap-3 mb-4">
+                    {/* Search */}
+                    <div className="relative flex-1 min-w-[200px] max-w-xs">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                         <input
                             type="text"
                             value={searchInput}
                             onChange={e => setSearchInput(e.target.value)}
-                            placeholder="Search by name, patient ID, or phone..."
-                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+                            placeholder="Search name, ID, or phone..."
+                            className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-orange-400 placeholder-gray-400 transition-colors shadow-sm"
                         />
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Filter className="h-4 w-4 text-gray-400" />
-                        <select
-                            value={department}
-                            onChange={e => { setDepartment(e.target.value); setPage(1); }}
-                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
-                        >
-                            <option value="">All Departments</option>
-                            <option value="General Medicine">General Medicine</option>
-                            <option value="Cardiology">Cardiology</option>
-                            <option value="Orthopedics">Orthopedics</option>
-                            <option value="Pediatrics">Pediatrics</option>
-                            <option value="Neurology">Neurology</option>
-                            <option value="ENT">ENT</option>
-                            <option value="Dermatology">Dermatology</option>
-                            <option value="Pulmonology">Pulmonology</option>
-                        </select>
-                        <select
-                            value={dateRange}
-                            onChange={e => { setDateRange(e.target.value as any); setPage(1); }}
-                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
-                        >
-                            <option value="all">All Time</option>
-                            <option value="today">Today</option>
-                            <option value="week">This Week</option>
-                            <option value="month">This Month</option>
-                        </select>
-                        <select
-                            value={paymentType}
-                            onChange={e => { setPaymentType(e.target.value); setPage(1); }}
-                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
-                            title="Filter by payment type"
-                        >
-                            {PAYMENT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                        </select>
-                        <select
-                            value={doctorFilter}
-                            onChange={e => { setDoctorFilter(e.target.value); setPage(1); }}
-                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
-                            title="Filter by doctor"
-                        >
-                            <option value="">All Doctors</option>
-                            {doctorsList.map((d: any) => (
-                                <option key={d.id} value={d.id}>{d.name}</option>
-                            ))}
-                        </select>
-                        <input
-                            type="date"
+
+                    {/* Filters */}
+                    <select
+                        value={department}
+                        onChange={e => { setDepartment(e.target.value); setPage(1); }}
+                        className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 hover:bg-gray-50 focus:outline-none focus:border-orange-400 transition-colors shadow-sm cursor-pointer"
+                    >
+                        <option value="">All Depts</option>
+                        <option value="General Medicine">General Med</option>
+                        <option value="Cardiology">Cardiology</option>
+                        <option value="Orthopedics">Orthopedics</option>
+                        <option value="Pediatrics">Pediatrics</option>
+                        <option value="Neurology">Neurology</option>
+                        <option value="ENT">ENT</option>
+                        <option value="Dermatology">Dermatology</option>
+                        <option value="Pulmonology">Pulmonology</option>
+                    </select>
+                    <select
+                        value={dateRange}
+                        onChange={e => { setDateRange(e.target.value as any); setPage(1); }}
+                        className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 hover:bg-gray-50 focus:outline-none focus:border-orange-400 transition-colors shadow-sm cursor-pointer"
+                    >
+                        <option value="all">All Time</option>
+                        <option value="today">Today</option>
+                        <option value="week">This Week</option>
+                        <option value="month">This Month</option>
+                    </select>
+                    <select
+                        value={paymentType}
+                        onChange={e => { setPaymentType(e.target.value); setPage(1); }}
+                        className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 hover:bg-gray-50 focus:outline-none focus:border-orange-400 transition-colors shadow-sm cursor-pointer"
+                        title="Filter by payment type"
+                    >
+                        {PAYMENT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <select
+                        value={doctorFilter}
+                        onChange={e => { setDoctorFilter(e.target.value); setPage(1); }}
+                        className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 hover:bg-gray-50 focus:outline-none focus:border-orange-400 transition-colors shadow-sm cursor-pointer max-w-[120px] truncate"
+                        title="Filter by doctor"
+                    >
+                        <option value="">All Doctors</option>
+                        {doctorsList.map((d: any) => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                    </select>
+                    
+                    {/* Grouped Date Range */}
+                    <div className="flex items-center bg-white border border-gray-200 rounded-xl shadow-sm focus-within:border-orange-400 focus-within:ring-1 focus-within:ring-orange-400 transition-colors px-2">
+                        <Calendar className="h-3.5 w-3.5 text-gray-400 mr-1.5" />
+                        <DateField
                             value={fromDate}
                             max={toDate || undefined}
                             onChange={e => { setFromDate(e.target.value); setPage(1); }}
-                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
+                            className="py-2 bg-transparent text-xs text-gray-700 focus:outline-none cursor-pointer w-[75px]"
+                            placeholder="dd/mm/yyyy"
                             title="Registered from"
                         />
-                        <input
-                            type="date"
+                        <span className="text-gray-300 text-[10px] font-medium px-1.5">to</span>
+                        <DateField
                             value={toDate}
                             min={fromDate || undefined}
                             onChange={e => { setToDate(e.target.value); setPage(1); }}
-                            className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-orange-500"
+                            className="py-2 bg-transparent text-xs text-gray-700 focus:outline-none cursor-pointer w-[75px]"
+                            placeholder="dd/mm/yyyy"
                             title="Registered to"
                         />
-                        {(fromDate || toDate || paymentType || doctorFilter) && (
-                            <button
-                                onClick={() => { setFromDate(''); setToDate(''); setPaymentType(''); setDoctorFilter(''); setPage(1); }}
-                                className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-50 transition-colors"
-                                title="Clear date & payment filters"
-                            >
-                                Clear
-                            </button>
-                        )}
-                        <button
-                            onClick={handleExportOpd}
-                            className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors"
-                            title="Export current list to Excel"
-                        >
-                            <Download className="h-4 w-4" /> Export
-                        </button>
                     </div>
+
+                    {(fromDate || toDate || paymentType || doctorFilter || department || dateRange !== 'all') && (
+                        <button
+                            onClick={() => { setFromDate(''); setToDate(''); setPaymentType(''); setDoctorFilter(''); setDepartment(''); setDateRange('all'); setPage(1); }}
+                            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors shadow-sm"
+                            title="Clear filters"
+                        >
+                            Clear
+                        </button>
+                    )}
+
+                    <button
+                        onClick={handleExportOpd}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors shadow-sm ml-auto"
+                        title="Export current list to Excel"
+                    >
+                        <Download className="h-3.5 w-3.5" /> Export
+                    </button>
+                    <span className="text-xs text-gray-400">
+                        {total || 0} record{(total || 0) !== 1 ? 's' : ''}
+                    </span>
                 </div>
 
                 {/* OPD PATIENT TABLE */}
