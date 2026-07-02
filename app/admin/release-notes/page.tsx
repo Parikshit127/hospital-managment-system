@@ -9,10 +9,12 @@ import { Input, Textarea } from '@/app/components/ui/Input';
 import { Card, CardHeader, CardTitle } from '@/app/components/ui/Card';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
+const getSupabase = () => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) throw new Error('Supabase env vars not configured');
+    return createClient(url, key);
+};
 
 interface UploadedFile {
     file: File;
@@ -62,7 +64,7 @@ export default function AdminReleaseNotesPage() {
         const fileExt = file.name.split('.').pop();
         const filePath = `${Date.now()}-${id}.${fileExt}`;
 
-        const { data: uploadData, error: uploadError } = await supabase.storage.from('release_docs').upload(filePath, file);
+        const { data: uploadData, error: uploadError } = await getSupabase().storage.from('release_docs').upload(filePath, file);
 
         if (uploadError || !uploadData) {
             setUploadedFile({ file, status: 'error', errorMessage: uploadError?.message || 'Upload failed' });
