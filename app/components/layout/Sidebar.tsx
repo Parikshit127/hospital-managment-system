@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { logout } from "@/app/login/actions";
@@ -653,6 +653,24 @@ export function Sidebar({ session }: SidebarProps) {
     window.localStorage.setItem("sidebar-collapsed", String(collapsed));
   }, [collapsed]);
 
+  // Every page renders its own AppShell, so the sidebar unmounts/remounts on
+  // each navigation — which snapped a scrolled menu (e.g. the long Finance nav)
+  // back to the top. Persist the nav scroll position and restore it on mount.
+  const navRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    try {
+      const saved = window.sessionStorage.getItem("sidebar-scroll");
+      if (saved) el.scrollTop = parseInt(saved, 10) || 0;
+    } catch {}
+    const onScroll = () => {
+      try { window.sessionStorage.setItem("sidebar-scroll", String(el.scrollTop)); } catch {}
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
   // An admin viewing a portal sees that portal's nav (derived from the URL);
   // everyone else sees their own role's nav.
   const isAdmin = session?.role === "admin";
@@ -792,7 +810,7 @@ export function Sidebar({ session }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 px-2.5 space-y-5">
+      <nav ref={navRef} className="flex-1 overflow-y-auto py-4 px-2.5 space-y-5">
         {/* Admin-only portal switcher — jump between portals, staying admin */}
         {isAdmin && !collapsed && (
           <div className="pb-3 -mt-1 border-b border-white/10">
