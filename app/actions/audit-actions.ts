@@ -36,13 +36,14 @@ export async function logAuditEvent(params: {
     }
 }
 
-// Get paginated audit logs
 export async function getAuditLogs(page: number = 1, limit: number = 50, filters?: {
     module?: string;
     action?: string;
     username?: string;
     entity_id?: string;
     entity_type?: string;
+    from?: string;
+    to?: string;
 }) {
     try {
         // Admin-only. system_audit_logs is not auto-tenant-scoped, so we must
@@ -55,6 +56,18 @@ export async function getAuditLogs(page: number = 1, limit: number = 50, filters
         if (filters?.username) where.username = { contains: filters.username, mode: 'insensitive' };
         if (filters?.entity_id) where.entity_id = filters.entity_id;
         if (filters?.entity_type) where.entity_type = filters.entity_type;
+        
+        if (filters?.from || filters?.to) {
+            where.created_at = {};
+            if (filters?.from) {
+                where.created_at.gte = new Date(filters.from);
+            }
+            if (filters?.to) {
+                const toDate = new Date(filters.to);
+                toDate.setHours(23, 59, 59, 999);
+                where.created_at.lte = toDate;
+            }
+        }
 
         const [logs, total] = await Promise.all([
             db.system_audit_logs.findMany({
