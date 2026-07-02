@@ -20,6 +20,8 @@ interface OrderItem {
 interface PharmacyOrder {
   id: number;
   patient_id: string;
+  doctor_id?: string;
+  requested_by_name?: string | null;
   status: string;
   created_at: string;
   admission_id: string | null;
