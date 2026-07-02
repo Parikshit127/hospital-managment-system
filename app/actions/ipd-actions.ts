@@ -5,7 +5,8 @@ import { logAudit } from "@/app/lib/audit";
 import { revalidatePath } from "next/cache";
 import { getPatientBalances } from '@/app/actions/balance-actions';
 import { getRoomGSTRate } from '@/app/lib/gst';
-import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, generateDepositNumber as genDepNum } from '@/app/lib/sequence-generator';
+import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, generateDepositNumber as genDepNum, generateFinalBillNumber as genBillNum } from '@/app/lib/sequence-generator';
+import { isBillClosedForCharges } from '@/app/lib/bill-status';
 
 
 function serialize<T>(data: T): T {
@@ -680,6 +681,11 @@ export async function accrueIPDDailyCharges(admissionId: string) {
 
     if (!admission) return { success: false, error: "Admission not found" };
 
+    // Rules 4 & 5: stop accruing room/nursing charges once the patient is discharged.
+    if (admission.status === 'Discharged') {
+      return { success: false, error: "Admission is discharged; no further charges are accrued." };
+    }
+
     const ward = admission.ward || admission.bed?.wards;
     if (!ward) return { success: false, error: "Ward info not found" };
 
@@ -687,6 +693,11 @@ export async function accrueIPDDailyCharges(admissionId: string) {
     let invoice = await db.invoices.findFirst({
       where: { admission_id: admissionId, status: { not: "Cancelled" } },
     });
+
+    // Don't accrue onto a finalized/locked bill.
+    if (isBillClosedForCharges(invoice)) {
+      return { success: false, error: "Bill is finalized; no further charges are accrued." };
+    }
 
     if (!invoice) {
       invoice = await db.invoices.create({
@@ -865,7 +876,7 @@ export async function accrueIPDDailyCharges(admissionId: string) {
 // Discharge a patient from IPD
 export async function dischargePatientIPD(admissionId: string, notes?: string, dischargeDate?: string) {
   try {
-    const { db } = await requireTenantContext();
+    const { db, organizationId } = await requireTenantContext();
     const admission = await db.admissions.findUnique({
       where: { admission_id: admissionId },
       include: { patient: true, ward: true, bed: { include: { wards: true } } },
@@ -922,11 +933,15 @@ export async function dischargePatientIPD(admissionId: string, notes?: string, d
     });
 
     if (invoice) {
+      // Rule 1/3: assign the official Final Bill No. at finalization (once). IPD series.
+      const finalBillNumber = (invoice as any).final_bill_number
+        || await genBillNum(organizationId, true, db);
       await db.invoices.update({
         where: { id: invoice.id },
         data: {
           status: "Final",
           finalized_at: new Date(),
+          final_bill_number: finalBillNumber,
         },
       });
     }

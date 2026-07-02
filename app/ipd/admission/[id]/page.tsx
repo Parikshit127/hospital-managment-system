@@ -17,7 +17,7 @@ import {
     recordWardRound, assignDietPlan, addMedicalNote, getWardsWithBeds, transferPatient,
     updateAdmissionDiagnosis, updateAdmissionBasicDetails, undischargeAdmission
 } from '@/app/actions/ipd-actions';
-import { generateInterimBill, postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
+import { generateInterimBill, postChargeToIpdBill, settlePackageBilling } from '@/app/actions/ipd-finance-actions';
 import { removeInvoiceItem } from '@/app/actions/finance-actions';
 import {
     searchDoctorsForIPD,
@@ -225,6 +225,22 @@ export default function AdmissionDetailPage() {
     useEffect(() => {
         if (activeTab === 'billing') loadBill();
     }, [activeTab, loadBill]);
+
+    // Package billing: keep only the package amount as revenue/claim and absorb
+    // every non-package charge as a hospital expense.
+    const [settlingPackage, setSettlingPackage] = useState(false);
+    const handleSettlePackage = useCallback(async () => {
+        if (!confirm('Settle package billing? The package amount stays as the bill/claim; all non-package charges (room, pharmacy, services) will be absorbed as a hospital expense and removed from the patient/TPA balance. You can run this again after adding more charges.')) return;
+        setSettlingPackage(true);
+        const res = await settlePackageBilling(params.id as string);
+        setSettlingPackage(false);
+        if (res.success) {
+            toast.success(`Package settled — bill kept at ₹${Number(res.data?.packageGross || 0).toLocaleString('en-IN')}, ₹${Number(res.data?.absorbedGross || 0).toLocaleString('en-IN')} absorbed as expense.`);
+            setBill(null); loadBill();
+        } else {
+            toast.error(res.error || 'Failed to settle package billing');
+        }
+    }, [params.id, toast, loadBill]);
 
     // Debounced doctor search
     useEffect(() => {
@@ -1776,6 +1792,16 @@ export default function AdmissionDetailPage() {
                                                 &nbsp;·&nbsp; Days: {bill.admission.days_admitted}
                                             </p>
                                             <div className="flex items-center gap-3">
+                                                {billItemsByCategory['Package'] && (
+                                                    <button
+                                                        onClick={handleSettlePackage}
+                                                        disabled={settlingPackage}
+                                                        className="text-[10px] text-indigo-700 font-bold hover:underline disabled:opacity-50"
+                                                        title="Keep only the package amount as bill/claim; absorb non-package charges as a hospital expense"
+                                                    >
+                                                        {settlingPackage ? 'Settling…' : '📦 Settle Package (absorb extras)'}
+                                                    </button>
+                                                )}
                                                 <button
                                                     onClick={() => window.open(`/api/ipd/${params.id}/package-acceptance`, '_blank')}
                                                     className="text-[10px] text-emerald-700 font-bold hover:underline"

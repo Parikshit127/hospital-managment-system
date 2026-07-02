@@ -155,6 +155,7 @@ export default function IPMedicationOrdersPage() {
                     <tr>
                       <th className="text-left px-6 py-4 font-bold text-xs uppercase tracking-wider">Patient</th>
                       <th className="text-left px-6 py-4 font-bold text-xs uppercase tracking-wider">Medicine</th>
+                      <th className="text-left px-6 py-4 font-bold text-xs uppercase tracking-wider">Requested By</th>
                       <th className="text-center px-6 py-4 font-bold text-xs uppercase tracking-wider">Dose / Qty</th>
                       <th className="text-center px-6 py-4 font-bold text-xs uppercase tracking-wider">Status</th>
                       <th className="text-center px-6 py-4 font-bold text-xs uppercase tracking-wider">Actions</th>
@@ -173,6 +174,14 @@ export default function IPMedicationOrdersPage() {
                             </td>
                           )}
                           <td className="px-6 py-4 text-gray-700 font-medium">{item.medicine_name}</td>
+                          {/* Nurse / requester name */}
+                          {idx === 0 && (
+                            <td className="px-6 py-4 text-gray-600 text-xs font-medium align-top" rowSpan={order.items.length}>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-teal-50 text-teal-700 rounded-full font-bold text-[10px]">
+                                {order.requested_by_name || order.doctor_id || '—'}
+                              </span>
+                            </td>
+                          )}
                           <td className="px-6 py-4 text-center text-gray-700 font-semibold">{item.quantity_requested}</td>
                           <td className="px-6 py-4 text-center">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold tracking-wide ${STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-800'}`}>

@@ -494,17 +494,19 @@ export async function createMedicalIntent(data: {
     patientId: string;
     admissionId: string;
     nurseId: string;
+    nurseName?: string;    // display name shown on pharmacy portal
     doctorName: string;
     items: MedicalIntentItem[];
 }) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
 
         // Create the pharmacy order (intent) for IPD
         const order = await db.pharmacy_orders.create({
             data: {
                 patient_id: data.patientId,
-                doctor_id: data.nurseId,       // nurse raising the intent
+                doctor_id: data.nurseId,           // nurse raising the intent
+                requested_by_name: data.nurseName || null,  // shown on pharmacy portal
                 admission_id: data.admissionId,
                 is_ipd_linked: true,
                 status: 'Pending',
@@ -512,6 +514,7 @@ export async function createMedicalIntent(data: {
                 items_dispensed: 0,
                 items_missing: data.items.filter((i) => i.quantityApproved < i.quantityRequested).length,
                 total_amount: 0,
+                organizationId,
                 items: {
                     create: data.items.map((item) => ({
                         medicine_id: item.medicineId,
@@ -534,5 +537,22 @@ export async function createMedicalIntent(data: {
     } catch (error) {
         console.error('Create Medical Intent Error:', error);
         return { success: false, error: 'Failed to create medical intent' };
+    }
+}
+
+// ─── Indent history for a patient ────────────────────────────────────────────
+export async function getPatientIndentHistory(patientId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const orders = await db.pharmacy_orders.findMany({
+            where: { patient_id: patientId, organizationId },
+            orderBy: { created_at: 'desc' },
+            include: { items: true },
+            take: 50,
+        });
+        return { success: true, data: orders };
+    } catch (error) {
+        console.error('getPatientIndentHistory error:', error);
+        return { success: false, data: [] };
     }
 }

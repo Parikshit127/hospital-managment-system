@@ -7,12 +7,12 @@ import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
 import { billingInvoiceMsg, paymentReceiptMsg } from '@/app/lib/whatsapp-templates';
 import { postInvoiceToGL, postPaymentToGL, reverseJournalEntry } from './gl-actions';
 import { getCashThresholds, validateCashCompliance, normalizePan, resolveRegisteredPan, CASH_METHOD } from '@/app/lib/cash-compliance';
-import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
+import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, generateFinalBillNumber } from '@/app/lib/sequence-generator';
 import { validateBackdate } from '@/app/lib/backdate';
 import { recomputeInvoiceCommission } from '@/app/lib/referral-commission';
 import { recomputeInvoiceDoctorCommission } from '@/app/lib/doctor-commission';
 import { dispensingKey } from '@/app/lib/pharmacy-bill-group';
-import { isPrivilegedBillingRole } from '@/app/lib/bill-status';
+import { isPrivilegedBillingRole, canEditBill, canFinalizeInvoice, BILL_FINALIZED_INTENT_MSG } from '@/app/lib/bill-status';
 
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
@@ -209,6 +209,13 @@ export async function addInvoiceItem(data: {
 
         const invoice = await db.invoices.findUnique({ where: { id: data.invoice_id } });
         if (!invoice) return { success: false, error: 'Invoice not found' };
+
+        // Rules 4 & 5: no new billable entries once the bill is Final/Cancelled/locked.
+        // Admin/Finance retain the authorized amend path (canEditBill) on a Final bill;
+        // everyone else is blocked. A hard-locked bill is frozen for all until unlocked.
+        if (invoice.is_locked || !canEditBill(invoice.status, session?.role)) {
+            return { success: false, error: BILL_FINALIZED_INTENT_MSG };
+        }
 
         const isIpd = invoice.invoice_type === 'IPD' || invoice.admission_id !== null;
         if (isIpd) {
@@ -509,7 +516,9 @@ export async function getInvoices(filters?: {
         const unified = [
             ...standardInvoices.map((inv: any) => ({
                 id: inv.id,
-                invoice_number: inv.invoice_number,
+                // Official Final Bill No. once finalized; internal ref as fallback (drafts).
+                invoice_number: inv.final_bill_number ?? inv.invoice_number,
+                internal_ref: inv.invoice_number,
                 patient_id: inv.patient_id,
                 patient: inv.patient,
                 notes: inv.notes,
@@ -599,14 +608,41 @@ export async function finalizeInvoice(invoiceId: number) {
     try {
         const { db, organizationId } = await requireTenantContext();
 
+        // Rule 3: an IPD bill can only be finalized after the patient is discharged.
+        const existing = await db.invoices.findUnique({
+            where: { id: invoiceId },
+            select: { admission_id: true, final_bill_number: true },
+        });
+        if (!existing) return { success: false, error: 'Invoice not found.' };
+        if (existing.admission_id) {
+            const adm = await db.admissions.findUnique({
+                where: { admission_id: existing.admission_id },
+                select: { status: true },
+            });
+            const gate = canFinalizeInvoice(existing, adm);
+            if (!gate.ok) return { success: false, error: gate.error };
+        }
+
+        // Rule 1 & 3: assign the official Final Bill No. at finalization (once).
+        // Separate IPD/OPD series.
+        const finalBillNumber = existing.final_bill_number
+            || await generateFinalBillNumber(organizationId, !!existing.admission_id, db);
+
         const invoice = await db.invoices.update({
             where: { id: invoiceId },
             data: {
                 status: 'Final',
                 finalized_at: new Date(),
+                final_bill_number: finalBillNumber,
                 version: { increment: 1 },
             },
         });
+
+        // Rule 2 & 4: revenue is recognized at finalization — post to the GL now
+        // (Draft bills are skipped by postInvoiceToGL).
+        await postInvoiceToGL(invoice.id).catch(err =>
+            console.error('GL posting on finalize failed for invoice:', invoice.id, err)
+        );
 
         await db.system_audit_logs.create({
             data: {
@@ -1670,6 +1706,7 @@ export async function getFinanceDashboardStats(params?: {
             todayRevenueInv,
             totalRevenueInv,
             periodRevenueInv,
+            unbilledAdvancesAgg,
         ] = await Promise.all([
             db.invoices.count({ where: { status: { not: 'Cancelled' } } }),
             db.invoices.count({ where: { status: 'Draft' } }),
@@ -1691,10 +1728,11 @@ export async function getFinanceDashboardStats(params?: {
             db.payments.count({
                 where: { status: 'Completed', created_at: { gte: today } },
             }),
+            // Rule 2: revenue recognized only on Final bills.
             db.invoice_items.groupBy({
                 by: ['department'],
                 _sum: { net_price: true },
-                where: dateFilter ? { created_at: dateFilter } : undefined,
+                where: { invoice: { status: 'Final' }, ...(dateFilter ? { created_at: dateFilter } : {}) },
             }),
             db.invoice_items.groupBy({
                 by: ['ref_id'],
@@ -1702,30 +1740,37 @@ export async function getFinanceDashboardStats(params?: {
                 where: {
                     service_category: 'Consultation',
                     ref_id: { not: null },
+                    invoice: { status: 'Final' },
                     ...(dateFilter ? { created_at: dateFilter } : {}),
                 },
             }),
             db.invoices.aggregate({
                 _sum: { net_amount: true },
                 _count: { _all: true },
-                where: { invoice_type: 'IPD', status: { not: 'Cancelled' }, ...(dateFilter ? { created_at: dateFilter } : {}) },
+                where: { invoice_type: 'IPD', status: 'Final', ...(dateFilter ? { created_at: dateFilter } : {}) },
             }),
             db.invoices.aggregate({
                 _sum: { net_amount: true },
                 _count: { _all: true },
-                where: { invoice_type: 'OPD', status: { not: 'Cancelled' }, ...(dateFilter ? { created_at: dateFilter } : {}) },
+                where: { invoice_type: 'OPD', status: 'Final', ...(dateFilter ? { created_at: dateFilter } : {}) },
             }),
             db.invoices.aggregate({
                 _sum: { net_amount: true },
-                where: { status: { not: 'Cancelled' }, created_at: { gte: today } },
+                where: { status: 'Final', created_at: { gte: today } },
             }),
             db.invoices.aggregate({
                 _sum: { net_amount: true },
-                where: { status: { not: 'Cancelled' } },
+                where: { status: 'Final' },
             }),
             db.invoices.aggregate({
                 _sum: { net_amount: true },
-                where: { status: { not: 'Cancelled' }, ...(dateFilter ? { created_at: dateFilter } : {}) },
+                where: { status: 'Final', ...(dateFilter ? { created_at: dateFilter } : {}) },
+            }),
+            // Advances (Unbilled): cash already collected against bills that are still
+            // Draft (not finalized). Visibility only — part of Collections, not Revenue.
+            db.payments.aggregate({
+                _sum: { amount: true },
+                where: { status: 'Completed', invoice: { status: 'Draft' } },
             }),
         ]);
 
@@ -1755,6 +1800,7 @@ export async function getFinanceDashboardStats(params?: {
                 todayCollection: Number(todayCollection._sum.amount || 0),
                 totalCollection: Number(totalCollection._sum.amount || 0),
                 periodCollection: Number(periodCollection._sum.amount || 0),
+                unbilledAdvances: Number(unbilledAdvancesAgg._sum.amount || 0),
                 totalPaymentsToday,
                 outstandingInvoices: outstandingSnapshot.count,
                 revenueByDepartment: revenueByDept.map((d: any) => ({
@@ -2429,6 +2475,12 @@ export async function removeInvoiceItem(itemId: number, invoiceId: number) {
         });
         if (!item) return { success: false, error: 'Invoice item not found' };
 
+        // Rules 4 & 5: a Final/Cancelled/locked bill is closed — only the authorized
+        // amend path (Admin/Finance on a Final, unlocked bill) may remove items.
+        if (item.invoice && (item.invoice.is_locked || !canEditBill(item.invoice.status, session?.role))) {
+            return { success: false, error: 'This bill is finalized/locked; items can no longer be removed.' };
+        }
+
         const isIpd = item.invoice && (item.invoice.invoice_type === 'IPD' || item.invoice.admission_id !== null);
         if (isIpd) {
             const isPharm = item.department.toLowerCase() === 'pharmacy' || item.service_category?.toLowerCase() === 'pharmacy';
@@ -2727,7 +2779,11 @@ export async function updateInvoiceItem(itemId: number, patch: {
         await checkPeriodLock(db, item.invoice.created_at as any);
 
         const quantity = patch.quantity !== undefined ? Number(patch.quantity) : Number(item.quantity);
-        const unit_price = patch.unit_price !== undefined ? Number(patch.unit_price) : Number(item.unit_price);
+        // Rule 6 & 8: unit price of a billed item is not editable (comes from the master).
+        // Reception can only change qty/discount; Admin/Finance may correct a price.
+        const unit_price = (isPrivilegedBilling(session) && patch.unit_price !== undefined)
+            ? Number(patch.unit_price)
+            : Number(item.unit_price);
         const discount = patch.discount !== undefined ? Number(patch.discount) : Number(item.discount);
         const tax_rate = patch.tax_rate !== undefined ? Number(patch.tax_rate) : Number(item.tax_rate || 0);
 
@@ -3091,7 +3147,13 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
                 if (!existing || existing.invoice_id !== invoiceId) continue;
 
                 const quantity = u.quantity !== undefined ? Number(u.quantity) : Number(existing.quantity);
-                const unit_price = u.unit_price !== undefined ? Number(u.unit_price) : Number(existing.unit_price);
+                // Rule 6 & 8: the unit price of a billed item is NOT editable — it comes
+                // from the pricing master. Non-privileged staff can only change qty and
+                // discount; the stored unit_price is preserved regardless of what the
+                // client sends. Admin/Finance retain the ability to correct a price.
+                const unit_price = (isPrivilegedBilling(session) && u.unit_price !== undefined)
+                    ? Number(u.unit_price)
+                    : Number(existing.unit_price);
                 const discount = u.discount !== undefined ? Number(u.discount) : Number(existing.discount);
                 const tax_rate = u.tax_rate !== undefined ? Number(u.tax_rate) : Number(existing.tax_rate || 0);
 
@@ -3292,7 +3354,7 @@ export async function getDrillDownData(type: DrillDownType, filters: Record<stri
 
         if (type === 'total-revenue') {
             const invoices = await db.invoices.findMany({
-                where: { status: { not: 'Cancelled' } },
+                where: { status: 'Final' },
                 include: { patient: { select: { full_name: true } } },
                 orderBy: { created_at: 'desc' },
                 take: 100,
@@ -3429,7 +3491,7 @@ export async function getDrillDownData(type: DrillDownType, filters: Record<stri
             }
             const invoices = await db.invoices.findMany({
                 where: {
-                    status: { not: 'Cancelled' },
+                    status: 'Final',
                     items: { some: { department: dept } },
                 },
                 include: {
@@ -3464,7 +3526,7 @@ export async function getDrillDownData(type: DrillDownType, filters: Record<stri
             }
             const invoices = await db.invoices.findMany({
                 where: {
-                    status: { not: 'Cancelled' },
+                    status: 'Final',
                     items: { some: { ref_id: doctorId, service_category: 'Consultation' } },
                 },
                 include: {
@@ -3494,7 +3556,7 @@ export async function getDrillDownData(type: DrillDownType, filters: Record<stri
         if (type === 'ipd' || type === 'opd') {
             const invoiceType = type.toUpperCase();
             const invoices = await db.invoices.findMany({
-                where: { invoice_type: invoiceType, status: { not: 'Cancelled' } },
+                where: { invoice_type: invoiceType, status: 'Final' },
                 include: { patient: { select: { full_name: true } } },
                 orderBy: { created_at: 'desc' },
                 take: 100,

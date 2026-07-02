@@ -358,7 +358,7 @@ export const opticalItemBillingReport: ReportDefinition = {
     const rows = await prisma.$queryRaw<any[]>`
       SELECT
         DATE(oo.order_date)                                AS "date",
-        COALESCE(i.invoice_number, '—')                    AS "invoice_number",
+        COALESCE(i.final_bill_number, i.invoice_number, '—')                    AS "invoice_number",
         oo.order_number                                    AS "order_number",
         oi.item_type                                       AS "item_type",
         oi.item_name                                       AS "item_name",
@@ -469,7 +469,7 @@ export const opticalDailySettlementReport: ReportDefinition = {
       SELECT
         DATE(p.created_at)                                 AS "date",
         oo.order_number                                    AS "order_number",
-        i.invoice_number                                   AS "invoice_number",
+        COALESCE(i.final_bill_number, i.invoice_number)    AS "invoice_number",
         oo.patient_id                                      AS "patient_id",
         p.payment_method                                   AS "payment_method",
         p.amount                                           AS "settled_amount"

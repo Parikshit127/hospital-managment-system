@@ -412,6 +412,13 @@ export async function postInvoiceToGL(invoiceId: number) {
       return { success: false, error: 'Invoice not found' };
     }
 
+    // Rule 2: a Draft bill is not an official bill — it must never hit the ledger
+    // (revenue/receivable are recognized only on finalization). Cancelled bills
+    // are likewise not posted.
+    if (invoice.status === 'Draft' || invoice.status === 'Cancelled') {
+      return { success: true, message: `Skipped GL posting for ${invoice.status} invoice` };
+    }
+
     // Check if already posted
     const existingEntry = await prisma.gL_JournalEntry.findFirst({
       where: {

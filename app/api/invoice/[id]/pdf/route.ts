@@ -430,7 +430,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
                 <!-- Bill Details Grid -->
                 <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
                     <div>
-                        <p style="font-size:11px;"><strong>Bill No.:</strong> ${invoice.invoice_number}</p>
+                        <p style="font-size:11px;"><strong>Bill No.:</strong> ${(invoice as any).final_bill_number || invoice.invoice_number}${(invoice as any).final_bill_number ? ` <span style="color:#9ca3af;font-size:9px;">(Ref: ${invoice.invoice_number})</span>` : ''}</p>
                         ${isIPD ? `<p style="font-size:11px;"><strong>Regn No.:</strong> ${admission.admission_id}</p>` : ''}
                         ${isIPD ? `<p style="font-size:11px;"><strong>Bed No.:</strong> ${admission.bed?.bed_id || '-'}/${admission.ward?.ward_name || '-'}</p>` : ''}
                         <p style="font-size:11px;"><strong>Rate Category:</strong> ${invoice.invoice_type || 'OPD'}</p>

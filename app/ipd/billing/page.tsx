@@ -953,9 +953,9 @@ export default function IpdBillingPage() {
                                         step="0.01"
                                         inputMode="decimal"
                                         value={chargeRate}
-                                        onFocus={e => e.target.select()}
-                                        onChange={e => setChargeRate(e.target.value)}
-                                        className="w-full px-3 py-2 border rounded-md"
+                                        readOnly
+                                        title="Item prices cannot be edited. To change the amount, apply a discount or cancel the service and add it again."
+                                        className="w-full px-3 py-2 border rounded-md bg-gray-100 text-gray-500 cursor-not-allowed"
                                     />
                                 </div>
                                 <div>

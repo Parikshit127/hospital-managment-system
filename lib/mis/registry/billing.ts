@@ -107,7 +107,7 @@ export const dailyRevenueReport: ReportDefinition = {
       LEFT JOIN "users" u ON i.doctor_id = u.id
       LEFT JOIN payments p ON p.invoice_id = i.id
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.created_at >= ${start}
         AND i.created_at <= ${end}
         ${department_id ? Prisma.sql`AND (u.department = ${department_id} OR u.specialty = ${department_id})` : Prisma.empty}
@@ -173,7 +173,7 @@ export const billingDetailReport: ReportDefinition = {
     const rows = await prisma.$queryRaw<any[]>`
       SELECT 
         DATE(i.created_at) as "date",
-        i.invoice_number as "invoice_number",
+        COALESCE(i.final_bill_number, i.invoice_number) as "invoice_number",
         ii.department as "department",
         ii.description as "item_name",
         ii.quantity as "quantity",
@@ -181,7 +181,7 @@ export const billingDetailReport: ReportDefinition = {
       FROM invoice_items ii
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
         ${department_id ? Prisma.sql`AND ii.department = ${department_id}` : Prisma.empty}
@@ -217,7 +217,7 @@ export const billingDetailReport: ReportDefinition = {
       FROM invoice_items ii
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
         ${department_id ? Prisma.sql`AND ii.department = ${department_id}` : Prisma.empty}
@@ -259,7 +259,7 @@ export const billingItemDetailReport: ReportDefinition = {
       FROM invoice_items ii
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
         ${item_name ? Prisma.sql`AND ii.description ILIKE ${'%' + item_name + '%'}` : Prisma.empty}
@@ -339,7 +339,7 @@ export const billingSummaryReport: ReportDefinition = {
         COUNT(i.id) as "invoice_count"
       FROM invoices i
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.created_at >= ${startBoundary}
         AND i.created_at <= ${endBoundary}
         ${branch_id ? Prisma.sql`AND i.branch_id = ${branch_id}` : Prisma.empty}
@@ -398,7 +398,7 @@ export const billingSummaryDetailReport: ReportDefinition = {
     const rows = await prisma.$queryRaw<any[]>`
       SELECT 
         i.patient_id as "patient_id",
-        i.invoice_number as "invoice_number",
+        COALESCE(i.final_bill_number, i.invoice_number) as "invoice_number",
         DATE(i.created_at) as "date",
         i.total_amount as "total_amount",
         i.net_amount as "net_amount",
@@ -406,7 +406,7 @@ export const billingSummaryDetailReport: ReportDefinition = {
         i.balance_due as "balance_due"
       FROM invoices i
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
         ${patient_uhid ? Prisma.sql`AND i.patient_id = ${patient_uhid}` : Prisma.empty}
@@ -471,7 +471,7 @@ export const billingPaymentModeReport: ReportDefinition = {
         FROM payments p
         JOIN invoices i ON p.invoice_id = i.id
         WHERE i."organizationId" = ${orgId}
-          AND i.status != 'cancelled'
+          AND LOWER(i.status) = 'final'
           AND i.created_at >= ${toStartOfDay(date_start)}
           AND i.created_at <= ${toEndOfDay(date_end)}
           AND p.status = 'Completed'
@@ -669,7 +669,7 @@ export const billingDiscountSummaryReport: ReportDefinition = {
     const rows = await prisma.$queryRaw<any[]>`
       SELECT 
         DATE(i.created_at) as "date",
-        i.invoice_number as "invoice_number",
+        COALESCE(i.final_bill_number, i.invoice_number) as "invoice_number",
         COALESCE(opd.full_name, 'Unknown') as "patient_name",
         i.total_amount as "invoice_total",
         i.total_discount as "discount_amount",
@@ -678,7 +678,7 @@ export const billingDiscountSummaryReport: ReportDefinition = {
       FROM invoices i
       LEFT JOIN "OPD_REG" opd ON i.patient_id = opd.patient_id
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.total_discount > 0
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
@@ -730,7 +730,7 @@ export const billingDueSettledReport: ReportDefinition = {
     const rows = await prisma.$queryRaw<any[]>`
       SELECT 
         DATE(p.created_at) as "settlement_date",
-        i.invoice_number as "invoice_number",
+        COALESCE(i.final_bill_number, i.invoice_number) as "invoice_number",
         DATE(i.created_at) as "original_bill_date",
         i.net_amount as "billed_amount",
         p.amount as "settled_amount",
@@ -857,7 +857,7 @@ export const billingOpRefundReport: ReportDefinition = {
         DATE(r.created_at) as "date",
         i.patient_id as "uhid",
         COALESCE(opd.full_name, 'Unknown') as "patient_name",
-        i.invoice_number as "op_invoice_number",
+        COALESCE(i.final_bill_number, i.invoice_number) as "op_invoice_number",
         r.amount as "refund_amount",
         COALESCE(r.processed_by, 'System') as "processed_by"
       FROM refunds r
@@ -1035,7 +1035,7 @@ export const billingDoctorPayoutReport: ReportDefinition = {
       LEFT JOIN "users" u ON i.doctor_id = u.id
       LEFT JOIN "OPD_REG" opd ON i.patient_id = opd.patient_id
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
         ${doctor_id ? Prisma.sql`AND u.id = ${doctor_id}` : Prisma.empty}
@@ -1096,7 +1096,7 @@ export const billingDoctorAccountPayableReport: ReportDefinition = {
       JOIN invoices i ON ii.invoice_id = i.id
       JOIN "users" u ON i.doctor_id = u.id
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.created_at <= ${toEndOfDay(date_end)}
         AND (u.role = 'doctor' OR u.role = 'surgeon')
       GROUP BY u.id, u.name, u.department, u.specialty, u.consultation_fee
@@ -1169,7 +1169,7 @@ export const billingIpPackageReport: ReportDefinition = {
       LEFT JOIN admissions adm ON i.admission_id = adm.admission_id
       LEFT JOIN "OPD_REG" opd ON i.patient_id = opd.patient_id
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.invoice_type = 'IPD'
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
@@ -1224,7 +1224,7 @@ export const billingHealthCheckupCountReport: ReportDefinition = {
       FROM invoice_items ii
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND (ii.department ILIKE '%checkup%' OR ii.service_category ILIKE '%checkup%' OR ii.description ILIKE '%checkup%')
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
@@ -1378,7 +1378,7 @@ export const billingPendingBillsReport: ReportDefinition = {
     const rows = await prisma.$queryRaw<any[]>`
       SELECT 
         DATE(i.created_at) as "invoice_date",
-        i.invoice_number as "invoice_number",
+        COALESCE(i.final_bill_number, i.invoice_number) as "invoice_number",
         COALESCE(opd.full_name, 'Unknown') as "patient_name",
         i.total_amount as "billed_amount",
         i.paid_amount as "paid_amount",
@@ -1387,7 +1387,7 @@ export const billingPendingBillsReport: ReportDefinition = {
       FROM invoices i
       LEFT JOIN "OPD_REG" opd ON i.patient_id = opd.patient_id
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.balance_due > 0
         AND i.created_at <= ${new Date(as_of_date)}
         ${patient_type ? Prisma.sql`AND i.invoice_type = ${patient_type}` : Prisma.empty}
@@ -1441,7 +1441,7 @@ export const billingPaymentServiceTypeReport: ReportDefinition = {
       FROM invoice_items ii
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
       GROUP BY COALESCE(ii.service_category, ii.department, 'Unknown')
@@ -1565,7 +1565,7 @@ export const billingRevenueSummaryReport: ReportDefinition = {
         SUM(i.balance_due) as "outstanding_balance"
       FROM invoices i
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
       GROUP BY DATE(i.created_at)
@@ -1616,7 +1616,7 @@ export const billingCancelBillReport: ReportDefinition = {
     const rows = await prisma.$queryRaw<any[]>`
       SELECT 
         DATE(i.updated_at) as "cancel_date",
-        i.invoice_number as "invoice_number",
+        COALESCE(i.final_bill_number, i.invoice_number) as "invoice_number",
         COALESCE(opd.full_name, 'Unknown') as "patient_name",
         i.total_amount as "original_amount",
         COALESCE(i.notes, 'Cancelled') as "cancellation_reason",
@@ -1670,7 +1670,7 @@ export const billingServiceTypeSummaryReport: ReportDefinition = {
       FROM invoice_items ii
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE i."organizationId" = ${orgId}
-        AND i.status != 'cancelled'
+        AND LOWER(i.status) = 'final'
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
       GROUP BY COALESCE(ii.service_category, ii.department, 'Other')

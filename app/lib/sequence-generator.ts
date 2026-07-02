@@ -31,7 +31,7 @@ function getFYStartDate(date: Date = new Date()): Date {
     return new Date(fyStartYear, 3, 1); // April 1st
 }
 
-export type NumberType = 'OPD' | 'IPD' | 'RCP' | 'DEP' | 'PHM' | 'CN' | 'EXP' | 'CLM' | 'WO' | 'REF' | 'IRC';
+export type NumberType = 'OPD' | 'IPD' | 'RCP' | 'DEP' | 'PHM' | 'CN' | 'EXP' | 'CLM' | 'WO' | 'REF' | 'IRC' | 'BILL';
 
 /**
  * Generate a sequential number for the given org and type.
@@ -112,6 +112,15 @@ export async function generateSequentialNumber(
             },
         });
         lastSeq = count;
+    } else if (type === 'BILL') {
+        // Final Bill Number — assigned only when a bill is finalized.
+        const count = await database.invoices.count({
+            where: {
+                organizationId,
+                final_bill_number: { startsWith: prefix },
+            },
+        });
+        lastSeq = count;
     } else {
         const count = await database.invoices.count({
             where: {
@@ -129,7 +138,7 @@ export async function generateSequentialNumber(
     let finalNumber = candidate;
     let attempt = lastSeq + 1;
     while (true) {
-        const field = type === 'RCP' ? 'receipt_number' : type === 'DEP' ? 'deposit_number' : type === 'CN' ? 'credit_note_number' : type === 'IRC' ? 'receipt_number' : 'invoice_number';
+        const field = type === 'RCP' ? 'receipt_number' : type === 'DEP' ? 'deposit_number' : type === 'CN' ? 'credit_note_number' : type === 'IRC' ? 'receipt_number' : type === 'BILL' ? 'final_bill_number' : 'invoice_number';
         const table = type === 'RCP' ? database.payments : type === 'DEP' ? database.patientDeposit : type === 'CN' ? database.creditNote : type === 'IRC' ? database.insuranceReceipt : database.invoices;
         const existing = await table.findFirst({
             where: { [field]: finalNumber },
@@ -163,6 +172,44 @@ export async function generateInvoiceNumber(
 ): Promise<string> {
     const typeCode = getInvoiceTypeCode(invoiceType, hasAdmission);
     return generateSequentialNumber(organizationId, typeCode, db);
+}
+
+/**
+ * Generate the official Final Bill Number, with SEPARATE series for IPD and OPD.
+ *   IPD -> {ORG}-BILL-IPD-{FY}-001
+ *   OPD -> {ORG}-BILL-OPD-{FY}-001
+ * Assigned only at finalization; counts existing final_bill_numbers for that series.
+ */
+export async function generateFinalBillNumber(
+    organizationId: string,
+    isIpd: boolean,
+    db?: any
+): Promise<string> {
+    const database = db || prisma;
+    const org = await database.organization.findUnique({
+        where: { id: organizationId },
+        select: { code: true },
+    });
+    const orgCode = org?.code || 'HOS';
+    const fy = getFinancialYear();
+    const prefix = `${orgCode}-BILL-${isIpd ? 'IPD' : 'OPD'}-${fy}-`;
+
+    const count = await database.invoices.count({
+        where: { organizationId, final_bill_number: { startsWith: prefix } },
+    });
+
+    let attempt = count + 1;
+    let finalNumber = `${prefix}${String(attempt).padStart(3, '0')}`;
+    while (true) {
+        const existing = await database.invoices.findFirst({
+            where: { final_bill_number: finalNumber },
+            select: { id: true },
+        });
+        if (!existing) break;
+        attempt++;
+        finalNumber = `${prefix}${String(attempt).padStart(3, '0')}`;
+    }
+    return finalNumber;
 }
 
 /**

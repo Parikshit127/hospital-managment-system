@@ -8,13 +8,14 @@ import {
     BedDouble, Building2, Stethoscope, Plus, Save, Calendar,
     Activity, Heart, Thermometer, Wind, Droplets, Weight,
     AlertTriangle, CheckCircle2, ShoppingCart, Trash2, ChevronDown,
-    Package, FlaskConical, Send,
+    Package, FlaskConical, Send, ClipboardList,
 } from 'lucide-react';
 import {
     getWardPatients, getWardsList, getNursingNotes, addNursingNote,
     recordVitals, getPatientVitals, searchMedicines, checkMedicineStock,
-    createMedicalIntent, type MedicalIntentItem,
+    createMedicalIntent, getPatientIndentHistory, type MedicalIntentItem,
 } from '@/app/actions/nurse-actions';
+import { getNursesForDropdown } from '@/app/actions/admin-actions';
 import { formatDoctorName } from '@/app/lib/format-name';
 
 type TabId = 'vitals' | 'notes' | 'pharmacy';
@@ -130,10 +131,15 @@ export default function NursePatientsPage() {
     const [submittingIntent, setSubmittingIntent] = useState(false);
     const [intentSuccess, setIntentSuccess] = useState<string | null>(null);
     const [intentError, setIntentError] = useState<string | null>(null);
+    const [indentHistory, setIndentHistory] = useState<any[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
     const medSearchRef = useRef<HTMLDivElement>(null);
     const medDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // ── Session ──
+    const [nursesList, setNursesList] = useState<{ id: string; name: string }[]>([]);
+    const [selectedNurseName, setSelectedNurseName] = useState('');
+
     useEffect(() => {
         (async () => {
             try {
@@ -141,8 +147,12 @@ export default function NursePatientsPage() {
                 if (res.ok) {
                     const d = await res.json();
                     setNurseId(d.id || '');
+                    setSelectedNurseName(d.name || '');
                 }
             } catch {}
+            // Load all nurses for dropdown
+            const nRes = await getNursesForDropdown();
+            if (nRes.success) setNursesList(nRes.data || []);
         })();
     }, []);
 
@@ -176,18 +186,23 @@ export default function NursePatientsPage() {
         setMedSuggestions([]);
         setIntentSuccess(null);
         setIntentError(null);
+        setIndentHistory([]);
 
-        // preload vitals & notes in parallel
+        // preload vitals, notes & indent history in parallel
         setLoadingVitals(true);
         setLoadingNotes(true);
-        const [vRes, nRes] = await Promise.all([
+        setLoadingHistory(true);
+        const [vRes, nRes, hRes] = await Promise.all([
             getPatientVitals(patient.patientId),
             getNursingNotes(patient.admissionId),
+            getPatientIndentHistory(patient.patientId),
         ]);
         if (vRes.success) setVitalsHistory(vRes.data || []);
         if (nRes.success) setNotes(nRes.data || []);
+        if (hRes.success) setIndentHistory(hRes.data || []);
         setLoadingVitals(false);
         setLoadingNotes(false);
+        setLoadingHistory(false);
     };
 
     const closeModal = () => { setShowModal(false); setSelectedPatient(null); };
@@ -335,6 +350,7 @@ export default function NursePatientsPage() {
                 patientId: selectedPatient.patientId,
                 admissionId: selectedPatient.admissionId,
                 nurseId,
+                nurseName: selectedNurseName || undefined,
                 doctorName: selectedPatient.doctorName || '',
                 items,
             });
@@ -346,6 +362,10 @@ export default function NursePatientsPage() {
                         ? `Intent #${res.orderId} submitted. ⚠️ ${shortItems.map((l) => l.medicineName).join(', ')} had insufficient stock — pharmacy notified.`
                         : `Intent #${res.orderId} submitted successfully to pharmacy.`
                 );
+                // Refresh history
+                getPatientIndentHistory(selectedPatient.patientId).then(h => {
+                    if (h.success) setIndentHistory(h.data || []);
+                });
             } else {
                 setIntentError('Failed to submit intent. Please try again.');
             }
@@ -716,10 +736,28 @@ export default function NursePatientsPage() {
                                                 </div>
                                             )}
 
-                                            <div className="flex justify-end">
+                                            <div className="flex items-center justify-between gap-3">
+                                                {/* Nurse selector */}
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-xs font-bold text-gray-500 whitespace-nowrap">Requested by:</label>
+                                                    <select
+                                                        value={nurseId}
+                                                        onChange={e => {
+                                                            const nurse = nursesList.find(n => n.id === e.target.value);
+                                                            setNurseId(e.target.value);
+                                                            setSelectedNurseName(nurse?.name || '');
+                                                        }}
+                                                        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-400 min-w-[160px]"
+                                                    >
+                                                        <option value="">— Select Nurse —</option>
+                                                        {nursesList.map(n => (
+                                                            <option key={n.id} value={n.id}>{n.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
                                                 <button
                                                     onClick={handleSubmitIntent}
-                                                    disabled={submittingIntent || intentLines.some((l) => l.checkingStock)}
+                                                    disabled={submittingIntent || intentLines.some((l) => l.checkingStock) || !nurseId}
                                                     className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-orange-500/25 hover:from-orange-400 hover:to-amber-400 disabled:opacity-50 transition-all"
                                                 >
                                                     {submittingIntent ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -742,6 +780,59 @@ export default function NursePatientsPage() {
                                             {intentSuccess}
                                         </div>
                                     )}
+
+                                    {/* ── Indent History ── */}
+                                    <div className="mt-4">
+                                        <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider flex items-center gap-2 mb-3">
+                                            <ClipboardList className="h-3.5 w-3.5 text-gray-400" /> Indent History
+                                        </h4>
+                                        {loadingHistory ? (
+                                            <div className="flex items-center gap-2 text-xs text-gray-400 py-4 justify-center">
+                                                <Loader2 className="h-4 w-4 animate-spin" /> Loading history...
+                                            </div>
+                                        ) : indentHistory.length === 0 ? (
+                                            <p className="text-xs text-gray-400 italic py-2">No indents placed yet for this patient.</p>
+                                        ) : (
+                                            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                                                {indentHistory.map((order: any) => (
+                                                    <div key={order.id} className="border border-gray-200 rounded-xl p-3 bg-gray-50/50">
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] font-mono font-bold text-gray-500">#{order.id}</span>
+                                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                                                    order.status === 'Completed' || order.status === 'Dispensed'
+                                                                        ? 'bg-emerald-100 text-emerald-700'
+                                                                        : order.status === 'Pending'
+                                                                        ? 'bg-amber-100 text-amber-700'
+                                                                        : 'bg-blue-100 text-blue-700'
+                                                                }`}>{order.status}</span>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-[10px] text-gray-400">
+                                                                    {new Date(order.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                                                </p>
+                                                                {order.requested_by_name && (
+                                                                    <p className="text-[10px] font-bold text-teal-700">👤 {order.requested_by_name}</p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {order.items?.map((item: any, i: number) => (
+                                                                <span key={i} className={`px-2 py-0.5 rounded-lg text-[10px] font-medium border ${
+                                                                    item.status === 'Dispensed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                                                    item.status === 'OutOfStock' ? 'bg-red-50 text-red-600 border-red-200' :
+                                                                    'bg-white text-gray-700 border-gray-200'
+                                                                }`}>
+                                                                    {item.medicine_name} × {item.quantity_requested}
+                                                                    {item.status === 'OutOfStock' && ' ⚠'}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             )}
                         </div>

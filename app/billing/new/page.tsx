@@ -595,9 +595,9 @@ export default function ReceptionGenerateBillPage() {
                                         inputMode="decimal"
                                         value={draftUnitPrice}
                                         placeholder={selectedServiceId ? String(Number(services.find(s => s.id === selectedServiceId)?.default_rate || 0)) : '0'}
-                                        onFocus={e => e.target.select()}
-                                        onChange={e => setDraftUnitPrice(sanitizeDecimal(e.target.value))}
-                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none focus:border-blue-400"
+                                        readOnly
+                                        title="Item prices cannot be edited. To change the amount, apply a discount or cancel the service and add it again."
+                                        className="w-full p-2.5 bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200 rounded-lg text-sm font-medium outline-none"
                                     />
                                 </div>
 

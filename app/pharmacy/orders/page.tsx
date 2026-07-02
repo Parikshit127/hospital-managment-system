@@ -80,7 +80,7 @@ export default function PharmacyOrdersPage() {
                             {filteredOrders.length > 0 ? filteredOrders.map((order) => (
                                 <tr key={order.id} className="hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4 font-bold text-gray-900">{order.patient?.full_name || 'Unknown'}</td>
-                                    <td className="px-6 py-4 font-medium text-gray-600">{order.doctor_id}</td>
+                                    <td className="px-6 py-4 font-medium text-gray-600">{order.requested_by_name || order.doctor_id}</td>
                                     <td className="px-6 py-4 text-gray-500 text-xs">
                                         {new Date(order.created_at).toLocaleString()}
                                     </td>
