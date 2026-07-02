@@ -36,6 +36,8 @@ export default function AuditLogsPage() {
     const [filterAction, setFilterAction] = useState('');
     const [filterUsername, setFilterUsername] = useState('');
     const [filterEntityType, setFilterEntityType] = useState('');
+    const [filterDateFrom, setFilterDateFrom] = useState('');
+    const [filterDateTo, setFilterDateTo] = useState('');
 
     const fetchLogs = useCallback(async () => {
         setLoading(true);
@@ -44,13 +46,15 @@ export default function AuditLogsPage() {
             action: filterAction || undefined,
             username: filterUsername || undefined,
             entity_type: filterEntityType || undefined,
+            from: filterDateFrom || undefined,
+            to: filterDateTo || undefined,
         });
         if (res.success && res.data) {
             setLogs(res.data);
             setTotalPages(res.pagination?.totalPages || 1);
         }
         setLoading(false);
-    }, [page, limit, filterModule, filterAction, filterUsername, filterEntityType]);
+    }, [page, limit, filterModule, filterAction, filterUsername, filterEntityType, filterDateFrom, filterDateTo]);
 
     useEffect(() => {
         fetchLogs();
@@ -180,8 +184,8 @@ export default function AuditLogsPage() {
 
                 {/* Filters */}
                 <Card padding="md">
-                    <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4 items-end">
-                        <div className="flex-1 w-full">
+                    <form onSubmit={handleSearch} className="flex flex-col gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                             <Input
                                 id="filter-username"
                                 label="Username"
@@ -189,8 +193,6 @@ export default function AuditLogsPage() {
                                 value={filterUsername}
                                 onChange={(e) => setFilterUsername(e.target.value)}
                             />
-                        </div>
-                        <div className="flex-1 w-full">
                             <Input
                                 id="filter-action"
                                 label="Action"
@@ -198,8 +200,6 @@ export default function AuditLogsPage() {
                                 value={filterAction}
                                 onChange={(e) => setFilterAction(e.target.value)}
                             />
-                        </div>
-                        <div className="flex-1 w-full">
                             <Select
                                 id="filter-module"
                                 label="Module"
@@ -207,8 +207,6 @@ export default function AuditLogsPage() {
                                 value={filterModule}
                                 onChange={(e) => setFilterModule(e.target.value)}
                             />
-                        </div>
-                        <div className="flex-1 w-full">
                             <Input
                                 id="filter-entity-type"
                                 label="Entity Type"
@@ -217,10 +215,26 @@ export default function AuditLogsPage() {
                                 onChange={(e) => setFilterEntityType(e.target.value)}
                             />
                         </div>
-                        <div className="w-full md:w-auto">
-                            <Button type="submit" variant="primary" icon={<Filter className="h-4 w-4" />}>
-                                Apply Filters
-                            </Button>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                            <Input
+                                id="filter-date-from"
+                                type="date"
+                                label="From Date"
+                                value={filterDateFrom}
+                                onChange={(e) => setFilterDateFrom(e.target.value)}
+                            />
+                            <Input
+                                id="filter-date-to"
+                                type="date"
+                                label="To Date"
+                                value={filterDateTo}
+                                onChange={(e) => setFilterDateTo(e.target.value)}
+                            />
+                            <div className="md:col-span-2 flex justify-end">
+                                <Button type="submit" variant="primary" icon={<Filter className="h-4 w-4" />}>
+                                    Apply Filters
+                                </Button>
+                            </div>
                         </div>
                     </form>
                 </Card>
