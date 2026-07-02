@@ -8,12 +8,12 @@ import {
     BedDouble, Building2, Stethoscope, Plus, Save, Calendar,
     Activity, Heart, Thermometer, Wind, Droplets, Weight,
     AlertTriangle, CheckCircle2, ShoppingCart, Trash2, ChevronDown,
-    Package, FlaskConical, Send,
+    Package, FlaskConical, Send, ClipboardList,
 } from 'lucide-react';
 import {
     getWardPatients, getWardsList, getNursingNotes, addNursingNote,
     recordVitals, getPatientVitals, searchMedicines, checkMedicineStock,
-    createMedicalIntent, type MedicalIntentItem,
+    createMedicalIntent, getPatientIndentHistory, type MedicalIntentItem,
 } from '@/app/actions/nurse-actions';
 import { getNursesForDropdown } from '@/app/actions/admin-actions';
 import { formatDoctorName } from '@/app/lib/format-name';
@@ -131,6 +131,8 @@ export default function NursePatientsPage() {
     const [submittingIntent, setSubmittingIntent] = useState(false);
     const [intentSuccess, setIntentSuccess] = useState<string | null>(null);
     const [intentError, setIntentError] = useState<string | null>(null);
+    const [indentHistory, setIndentHistory] = useState<any[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
     const medSearchRef = useRef<HTMLDivElement>(null);
     const medDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -184,18 +186,23 @@ export default function NursePatientsPage() {
         setMedSuggestions([]);
         setIntentSuccess(null);
         setIntentError(null);
+        setIndentHistory([]);
 
-        // preload vitals & notes in parallel
+        // preload vitals, notes & indent history in parallel
         setLoadingVitals(true);
         setLoadingNotes(true);
-        const [vRes, nRes] = await Promise.all([
+        setLoadingHistory(true);
+        const [vRes, nRes, hRes] = await Promise.all([
             getPatientVitals(patient.patientId),
             getNursingNotes(patient.admissionId),
+            getPatientIndentHistory(patient.patientId),
         ]);
         if (vRes.success) setVitalsHistory(vRes.data || []);
         if (nRes.success) setNotes(nRes.data || []);
+        if (hRes.success) setIndentHistory(hRes.data || []);
         setLoadingVitals(false);
         setLoadingNotes(false);
+        setLoadingHistory(false);
     };
 
     const closeModal = () => { setShowModal(false); setSelectedPatient(null); };
@@ -355,6 +362,10 @@ export default function NursePatientsPage() {
                         ? `Intent #${res.orderId} submitted. ⚠️ ${shortItems.map((l) => l.medicineName).join(', ')} had insufficient stock — pharmacy notified.`
                         : `Intent #${res.orderId} submitted successfully to pharmacy.`
                 );
+                // Refresh history
+                getPatientIndentHistory(selectedPatient.patientId).then(h => {
+                    if (h.success) setIndentHistory(h.data || []);
+                });
             } else {
                 setIntentError('Failed to submit intent. Please try again.');
             }
@@ -769,6 +780,59 @@ export default function NursePatientsPage() {
                                             {intentSuccess}
                                         </div>
                                     )}
+
+                                    {/* ── Indent History ── */}
+                                    <div className="mt-4">
+                                        <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider flex items-center gap-2 mb-3">
+                                            <ClipboardList className="h-3.5 w-3.5 text-gray-400" /> Indent History
+                                        </h4>
+                                        {loadingHistory ? (
+                                            <div className="flex items-center gap-2 text-xs text-gray-400 py-4 justify-center">
+                                                <Loader2 className="h-4 w-4 animate-spin" /> Loading history...
+                                            </div>
+                                        ) : indentHistory.length === 0 ? (
+                                            <p className="text-xs text-gray-400 italic py-2">No indents placed yet for this patient.</p>
+                                        ) : (
+                                            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                                                {indentHistory.map((order: any) => (
+                                                    <div key={order.id} className="border border-gray-200 rounded-xl p-3 bg-gray-50/50">
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] font-mono font-bold text-gray-500">#{order.id}</span>
+                                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                                                    order.status === 'Completed' || order.status === 'Dispensed'
+                                                                        ? 'bg-emerald-100 text-emerald-700'
+                                                                        : order.status === 'Pending'
+                                                                        ? 'bg-amber-100 text-amber-700'
+                                                                        : 'bg-blue-100 text-blue-700'
+                                                                }`}>{order.status}</span>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-[10px] text-gray-400">
+                                                                    {new Date(order.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                                                </p>
+                                                                {order.requested_by_name && (
+                                                                    <p className="text-[10px] font-bold text-teal-700">👤 {order.requested_by_name}</p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {order.items?.map((item: any, i: number) => (
+                                                                <span key={i} className={`px-2 py-0.5 rounded-lg text-[10px] font-medium border ${
+                                                                    item.status === 'Dispensed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                                                    item.status === 'OutOfStock' ? 'bg-red-50 text-red-600 border-red-200' :
+                                                                    'bg-white text-gray-700 border-gray-200'
+                                                                }`}>
+                                                                    {item.medicine_name} × {item.quantity_requested}
+                                                                    {item.status === 'OutOfStock' && ' ⚠'}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             )}
                         </div>

@@ -538,3 +538,20 @@ export async function createMedicalIntent(data: {
         return { success: false, error: 'Failed to create medical intent' };
     }
 }
+
+// ─── Indent history for a patient ────────────────────────────────────────────
+export async function getPatientIndentHistory(patientId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const orders = await db.pharmacy_orders.findMany({
+            where: { patient_id: patientId, organizationId },
+            orderBy: { created_at: 'desc' },
+            include: { items: true },
+            take: 50,
+        });
+        return { success: true, data: orders };
+    } catch (error) {
+        console.error('getPatientIndentHistory error:', error);
+        return { success: false, data: [] };
+    }
+}
