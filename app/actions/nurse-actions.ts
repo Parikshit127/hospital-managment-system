@@ -499,7 +499,7 @@ export async function createMedicalIntent(data: {
     items: MedicalIntentItem[];
 }) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
 
         // Create the pharmacy order (intent) for IPD
         const order = await db.pharmacy_orders.create({
@@ -514,6 +514,7 @@ export async function createMedicalIntent(data: {
                 items_dispensed: 0,
                 items_missing: data.items.filter((i) => i.quantityApproved < i.quantityRequested).length,
                 total_amount: 0,
+                organizationId,
                 items: {
                     create: data.items.map((item) => ({
                         medicine_id: item.medicineId,
