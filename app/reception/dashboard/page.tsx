@@ -63,6 +63,25 @@ const PAYMENT_TYPE_OPTIONS = [
     { value: 'tpa_insurance', label: 'TPA / Insurance' },
 ] as const;
 
+function getOpdColValue(p: any, colKey: string): string {
+    if (!p) return '';
+    if (colKey === 'patient_id') return p.patient_id || '';
+    if (colKey === 'full_name') return p.full_name || '';
+    if (colKey === 'doctor') return p.doctorName || '';
+    if (colKey === 'age_gender') return `${p.age || '-'} / ${p.gender || '-'}`;
+    if (colKey === 'phone') return p.phone || '';
+    if (colKey === 'category') {
+        if (p.patient_type === 'tpa_insurance') return 'TPA';
+        if (p.patient_type === 'corporate') return 'Corporate';
+        return p.patient_type && p.patient_type !== 'cash' ? p.patient_type : 'Cash';
+    }
+    if (colKey === 'registered') {
+        if (!p.created_at) return '';
+        return new Date(p.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
+    }
+    return '';
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function ReceptionDashboard() {
@@ -113,6 +132,31 @@ export default function ReceptionDashboard() {
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, [openColFilter]);
+
+    // ── OPD inline column filters ──
+    const [opdColFilters, setOpdColFilters] = useState<Record<string, string>>({});
+    const [openOpdColFilter, setOpenOpdColFilter] = useState<string | null>(null);
+    const opdColFilterRef = useRef<HTMLDivElement | null>(null);
+
+    // Close OPD column-filter dropdown on outside click
+    useEffect(() => {
+        if (!openOpdColFilter) return;
+        const handler = (e: MouseEvent) => {
+            if (opdColFilterRef.current && !opdColFilterRef.current.contains(e.target as Node)) {
+                setOpenOpdColFilter(null);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [openOpdColFilter]);
+
+    const setOpdFilter = (col: string, value: string) => {
+        setOpdColFilters(prev => {
+            const next = { ...prev };
+            if (value) next[col] = value; else delete next[col];
+            return next;
+        });
+    };
 
     // ── IPD balance sort ──
     const [ipdBalanceSort, setIpdBalanceSort] = useState<'none' | 'high' | 'low'>('none');
@@ -373,26 +417,18 @@ export default function ReceptionDashboard() {
     const revenueDrill = `/finance/invoices?rev=${activeTab === 'ipd' ? 'ipd' : activeTab === 'opd' ? 'opd' : 'total'}`;
 
     const headerActions = (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
             <Link href="/reception/register"
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md transition-all">
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md transition-all whitespace-nowrap">
                 <UserPlus className="h-3.5 w-3.5" /> Register Patient
             </Link>
-            <Link href="/reception/appointments"
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all">
-                <Calendar className="h-3.5 w-3.5" /> Book Appointment
-            </Link>
-            <Link href="/reception/queue"
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all">
-                <Activity className="h-3.5 w-3.5" /> Manage Queue
-            </Link>
             <Link href="/reception/ipd/admit"
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all">
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all whitespace-nowrap">
                 <Bed className="h-3.5 w-3.5" /> Admit IPD
             </Link>
-            <Link href="/reception/triage"
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all">
-                <Zap className="h-3.5 w-3.5" /> AI Triage
+            <Link href="/ipd"
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md transition-all whitespace-nowrap">
+                <Bed className="h-3.5 w-3.5" /> Enter IPD Portal
             </Link>
         </div>
     );
@@ -445,15 +481,7 @@ export default function ReceptionDashboard() {
                     </Link>
                 </div>
 
-                {/* Compact IPD Portal Entry */}
-                <Link href="/ipd"
-                    className="group flex items-center justify-between bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl px-4 py-2.5 shadow-sm transition-all">
-                    <div className="flex items-center gap-2.5">
-                        <Bed className="h-4 w-4 text-white/90" />
-                        <p className="text-xs font-bold">Enter IPD Portal <span className="font-normal text-violet-200">— admissions, beds, billing &amp; more</span></p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-white/70 group-hover:text-white transition-colors" />
-                </Link>
+
 
                 {/* TAB SWITCHER */}
                 <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1 w-fit">
@@ -592,8 +620,116 @@ export default function ReceptionDashboard() {
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-gray-200">
-                                    {['Patient ID', 'Name', 'Age / Gender', 'Phone', 'Category', 'Doctor', 'Registered', 'Balance', 'Actions'].map(h => (
-                                        <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                                    {([
+                                        { label: 'Patient ID', key: 'patient_id', type: 'filter' },
+                                        { label: 'Name', key: 'full_name', type: 'filter' },
+                                        { label: 'Age / Gender', key: 'age_gender', type: 'filter' },
+                                        { label: 'Phone', key: 'phone', type: 'filter' },
+                                        { label: 'Category', key: 'category', type: 'filter' },
+                                        { label: 'Doctor', key: 'doctor', type: 'filter' },
+                                        { label: 'Registered', key: 'registered', type: 'filter' },
+                                        { label: 'Balance', key: '', type: 'plain' },
+                                        { label: 'Actions', key: '', type: 'plain' },
+                                    ] as { label: string; key: string; type: string }[]).map(col => (
+                                        <th
+                                            key={col.label}
+                                            className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide relative"
+                                        >
+                                            {/* ── Filterable column header ── */}
+                                            {col.type === 'filter' && col.key ? (
+                                                <div className="relative" ref={openOpdColFilter === col.key ? opdColFilterRef : undefined}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setOpenOpdColFilter(openOpdColFilter === col.key ? null : col.key)}
+                                                        className={`flex items-center gap-1 w-full group py-1 rounded transition-colors ${
+                                                            opdColFilters[col.key]
+                                                                ? 'text-orange-700'
+                                                                : 'text-gray-500 hover:text-gray-800'
+                                                        }`}
+                                                        title={`Filter by ${col.label}`}
+                                                    >
+                                                        <span className="truncate">{col.label}</span>
+                                                        <ChevronDown className={`h-3 w-3 flex-shrink-0 transition-transform ${
+                                                            openOpdColFilter === col.key ? 'rotate-180' : ''
+                                                        } ${opdColFilters[col.key] ? 'text-orange-500' : 'text-gray-400 group-hover:text-gray-600'}`} />
+                                                        {opdColFilters[col.key] && (
+                                                            <span className="flex-shrink-0 h-1.5 w-1.5 rounded-full bg-orange-500" />
+                                                        )}
+                                                    </button>
+
+                                                    {openOpdColFilter === col.key && (
+                                                        <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg min-w-[200px] max-w-[260px]"
+                                                             onClick={e => e.stopPropagation()}>
+                                                            <div className="p-2 border-b border-gray-100">
+                                                                <div className="relative">
+                                                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+                                                                    <input
+                                                                        type="text"
+                                                                        autoFocus
+                                                                        value={opdColFilters[col.key] || ''}
+                                                                        onChange={e => setOpdFilter(col.key, e.target.value)}
+                                                                        placeholder={`Filter ${col.label.toLowerCase()}...`}
+                                                                        className="w-full pl-7 pr-7 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-orange-400 focus:bg-white"
+                                                                    />
+                                                                    {opdColFilters[col.key] && (
+                                                                        <button
+                                                                            onClick={() => setOpdFilter(col.key, '')}
+                                                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                                                        >
+                                                                            <X className="h-3 w-3" />
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="max-h-[200px] overflow-y-auto p-1">
+                                                                {(() => {
+                                                                    const seen = new Set<string>();
+                                                                    for (const p of patients) {
+                                                                        const v = getOpdColValue(p, col.key).trim();
+                                                                        if (v && v !== '-' && v !== '—') seen.add(v);
+                                                                    }
+                                                                    const uniqueVals = Array.from(seen).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+
+                                                                    if (uniqueVals.length === 0) {
+                                                                        return <p className="text-[10px] text-gray-400 text-center py-3">No values</p>;
+                                                                    }
+                                                                    return uniqueVals
+                                                                        .filter(v => !opdColFilters[col.key] || v.toLowerCase().includes((opdColFilters[col.key] || '').toLowerCase()))
+                                                                        .slice(0, 50)
+                                                                        .map(val => (
+                                                                            <button
+                                                                                key={val}
+                                                                                type="button"
+                                                                                onClick={() => { setOpdFilter(col.key, val); setOpenOpdColFilter(null); }}
+                                                                                className={`w-full text-left px-2.5 py-1.5 text-xs rounded-lg transition-colors truncate ${
+                                                                                    opdColFilters[col.key] === val
+                                                                                        ? 'bg-orange-50 text-orange-700 font-semibold'
+                                                                                        : 'text-gray-700 hover:bg-gray-50'
+                                                                                }`}
+                                                                            >
+                                                                                {val}
+                                                                            </button>
+                                                                        ));
+                                                                })()}
+                                                            </div>
+                                                            {opdColFilters[col.key] && (
+                                                                <div className="p-1.5 border-t border-gray-100">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => { setOpdFilter(col.key, ''); setOpenOpdColFilter(null); }}
+                                                                        className="w-full px-2.5 py-1.5 text-[10px] font-bold text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                                    >
+                                                                        Clear filter
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <span>{col.label}</span>
+                                            )}
+                                        </th>
                                     ))}
                                 </tr>
                             </thead>
@@ -618,7 +754,29 @@ export default function ReceptionDashboard() {
                                             <p className="text-gray-300 text-xs mt-1">Try adjusting your search or filters</p>
                                         </td>
                                     </tr>
-                                ) : patients.map((patient: any) => (
+                                ) : (() => {
+                                    const opdFiltered = patients.filter((p: any) => {
+                                        for (const [col, filterVal] of Object.entries(opdColFilters)) {
+                                            if (!filterVal) continue;
+                                            const cellVal = getOpdColValue(p, col).toLowerCase();
+                                            if (!cellVal.includes(filterVal.toLowerCase())) return false;
+                                        }
+                                        return true;
+                                    });
+
+                                    if (opdFiltered.length === 0 && patients.length > 0) {
+                                        return (
+                                            <tr>
+                                                <td colSpan={9} className="text-center py-16">
+                                                    <Users className="h-8 w-8 text-gray-200 mx-auto mb-2" />
+                                                    <p className="text-gray-400 text-sm font-medium">No matching patients</p>
+                                                    <p className="text-gray-300 text-xs mt-1">Try adjusting your column filters</p>
+                                                </td>
+                                            </tr>
+                                        );
+                                    }
+
+                                    return opdFiltered.map((patient: any) => (
                                     <tr key={patient.patient_id} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-4 py-3">
                                             <span className="text-xs font-mono font-bold text-orange-600">{patient.patient_id}</span>
@@ -711,7 +869,8 @@ export default function ReceptionDashboard() {
                                             </div>
                                         </td>
                                     </tr>
-                                ))}
+                                    ));
+                                })()}
                             </tbody>
                         </table>
                     </div>

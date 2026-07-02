@@ -207,9 +207,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       items: [
         { label: "Dashboard", href: "/reception/dashboard", icon: LayoutDashboard },
         { label: "Master Billing", href: "/billing", icon: CircleDollarSign },
-        { label: "Fee Receipt", href: "/billing/fee-receipt", icon: ReceiptText },
         { label: "IPD Settlement", href: "/ipd/discharge-settlement", icon: Wallet },
-        { label: "All Invoices", href: "/finance/invoices", icon: FileText },
         { label: "Patient History", href: "/reception/history", icon: Clock },
       ],
     },
@@ -221,19 +219,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "AI Triage", href: "/reception/triage", icon: Brain },
       ],
     },
-    {
-      title: "OPD",
-      items: [
-        { label: "OPD Patients", href: "/reception/opd", icon: Stethoscope },
-      ],
-    },
-    {
-      title: "IPD",
-      items: [
-        { label: "IPD Admissions", href: "/reception/ipd", icon: Bed },
-        { label: "Admit Patient", href: "/reception/ipd/admit", icon: UserPlus },
-      ],
-    },
+
     {
       title: "Reports",
       items: [
