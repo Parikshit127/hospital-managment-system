@@ -884,6 +884,7 @@ model pharmacy_orders {
   id                    Int                    @id @default(autoincrement())
   patient_id            String
   doctor_id             String
+  requested_by_name     String?               // Display name of nurse/staff who placed the indent
   total_amount          Float                  @default(0.0)
   status                String                 @default("Pending")
   total_items_requested Int?

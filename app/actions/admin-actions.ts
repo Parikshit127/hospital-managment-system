@@ -815,6 +815,20 @@ export async function getDoctorsForDropdown() {
   }
 }
 
+export async function getNursesForDropdown() {
+  try {
+    const { db, organizationId } = await requireTenantContext();
+    const nurses = await db.user.findMany({
+      where: { organizationId, role: 'nurse', is_active: true },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    return { success: true, data: nurses };
+  } catch (error: any) {
+    return { success: false, error: error.message, data: [] };
+  }
+}
+
 export async function getWardsForDropdown() {
   try {
     const { db, organizationId } = await requireTenantContext();

@@ -494,6 +494,7 @@ export async function createMedicalIntent(data: {
     patientId: string;
     admissionId: string;
     nurseId: string;
+    nurseName?: string;    // display name shown on pharmacy portal
     doctorName: string;
     items: MedicalIntentItem[];
 }) {
@@ -504,7 +505,8 @@ export async function createMedicalIntent(data: {
         const order = await db.pharmacy_orders.create({
             data: {
                 patient_id: data.patientId,
-                doctor_id: data.nurseId,       // nurse raising the intent
+                doctor_id: data.nurseId,           // nurse raising the intent
+                requested_by_name: data.nurseName || null,  // shown on pharmacy portal
                 admission_id: data.admissionId,
                 is_ipd_linked: true,
                 status: 'Pending',

@@ -15,6 +15,7 @@ import {
     recordVitals, getPatientVitals, searchMedicines, checkMedicineStock,
     createMedicalIntent, type MedicalIntentItem,
 } from '@/app/actions/nurse-actions';
+import { getNursesForDropdown } from '@/app/actions/admin-actions';
 import { formatDoctorName } from '@/app/lib/format-name';
 
 type TabId = 'vitals' | 'notes' | 'pharmacy';
@@ -134,6 +135,9 @@ export default function NursePatientsPage() {
     const medDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // ── Session ──
+    const [nursesList, setNursesList] = useState<{ id: string; name: string }[]>([]);
+    const [selectedNurseName, setSelectedNurseName] = useState('');
+
     useEffect(() => {
         (async () => {
             try {
@@ -141,8 +145,12 @@ export default function NursePatientsPage() {
                 if (res.ok) {
                     const d = await res.json();
                     setNurseId(d.id || '');
+                    setSelectedNurseName(d.name || '');
                 }
             } catch {}
+            // Load all nurses for dropdown
+            const nRes = await getNursesForDropdown();
+            if (nRes.success) setNursesList(nRes.data || []);
         })();
     }, []);
 
@@ -335,6 +343,7 @@ export default function NursePatientsPage() {
                 patientId: selectedPatient.patientId,
                 admissionId: selectedPatient.admissionId,
                 nurseId,
+                nurseName: selectedNurseName || undefined,
                 doctorName: selectedPatient.doctorName || '',
                 items,
             });
@@ -716,10 +725,28 @@ export default function NursePatientsPage() {
                                                 </div>
                                             )}
 
-                                            <div className="flex justify-end">
+                                            <div className="flex items-center justify-between gap-3">
+                                                {/* Nurse selector */}
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-xs font-bold text-gray-500 whitespace-nowrap">Requested by:</label>
+                                                    <select
+                                                        value={nurseId}
+                                                        onChange={e => {
+                                                            const nurse = nursesList.find(n => n.id === e.target.value);
+                                                            setNurseId(e.target.value);
+                                                            setSelectedNurseName(nurse?.name || '');
+                                                        }}
+                                                        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-400 min-w-[160px]"
+                                                    >
+                                                        <option value="">— Select Nurse —</option>
+                                                        {nursesList.map(n => (
+                                                            <option key={n.id} value={n.id}>{n.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
                                                 <button
                                                     onClick={handleSubmitIntent}
-                                                    disabled={submittingIntent || intentLines.some((l) => l.checkingStock)}
+                                                    disabled={submittingIntent || intentLines.some((l) => l.checkingStock) || !nurseId}
                                                     className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-orange-500/25 hover:from-orange-400 hover:to-amber-400 disabled:opacity-50 transition-all"
                                                 >
                                                     {submittingIntent ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
