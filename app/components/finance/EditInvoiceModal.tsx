@@ -595,14 +595,26 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                     />
                                                 </td>
                                                 <td className="px-2 py-1.5 text-right">
-                                                    <input
-                                                        type="number"
-                                                        step="any"
-                                                        className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-right bg-gray-50 text-gray-500 cursor-not-allowed"
-                                                        value={it.unit_price}
-                                                        readOnly
-                                                        title="Item prices cannot be edited. To change the amount, apply a discount or cancel the service and add it again."
-                                                    />
+                                                    {canEditPaid ? (
+                                                        <input
+                                                            type="number"
+                                                            min={0}
+                                                            step="any"
+                                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-right"
+                                                            value={it.unit_price}
+                                                            onChange={e => updateItem(idx, { unit_price: Number(e.target.value) })}
+                                                            disabled={readOnly || saving}
+                                                        />
+                                                    ) : (
+                                                        <input
+                                                            type="number"
+                                                            step="any"
+                                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-right bg-gray-50 text-gray-500 cursor-not-allowed"
+                                                            value={it.unit_price}
+                                                            readOnly
+                                                            title="Item prices cannot be edited. To change the amount, apply a discount or cancel the service and add it again."
+                                                        />
+                                                    )}
                                                 </td>
                                                 <td className="px-2 py-1.5 text-right">
                                                     <input
