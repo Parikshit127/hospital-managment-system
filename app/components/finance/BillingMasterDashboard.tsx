@@ -138,6 +138,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
 
     const loadData = useCallback(async () => {
         setLoading(true);
+        try {
         const res = await getMasterBillingData({
             page,
             limit: 15,
@@ -184,8 +185,16 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
             });
             setData(enriched);
             setMeta(res.meta);
+        } else {
+            toast.error(res.error || 'Failed to load billing data.');
         }
-        setLoading(false);
+        } catch {
+            // Network blip or an interrupted request (e.g. during a deploy) —
+            // clear the spinner and let the user retry instead of hanging forever.
+            toast.error('Could not load billing. Please retry.');
+        } finally {
+            setLoading(false);
+        }
     }, [page, search, filter]);
 
     useEffect(() => {
