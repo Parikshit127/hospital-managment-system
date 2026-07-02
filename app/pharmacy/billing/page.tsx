@@ -989,7 +989,7 @@ export default function PharmacyPage() {
                                                 <span className="font-mono text-gray-400 text-xs font-normal ml-2">({order.patient_id})</span>
                                             </h3>
                                             <p className="text-sm text-gray-500 flex items-center gap-2 mt-1">
-                                                <span className="bg-gray-100 px-2 py-0.5 rounded text-xs font-bold text-gray-500 border border-gray-200">Dr. {order.doctor_id}</span>
+                                                <span className="bg-gray-100 px-2 py-0.5 rounded text-xs font-bold text-gray-500 border border-gray-200">{order.requested_by_name ? `Nurse: ${order.requested_by_name}` : `Dr. ${order.doctor_id}`}</span>
                                                 <span className="text-gray-300">|</span>
                                                 <Clock className="h-3 w-3 text-gray-400" />
                                                 <span className="text-xs">{new Date(order.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
@@ -2057,13 +2057,22 @@ export default function PharmacyPage() {
 
                         <div className="p-5 bg-gray-50 border-t border-gray-200 shrink-0">
                             <div className="flex gap-2 mb-3">
-                                {PAYMENT_METHODS.map(m => (
+                                {[...PAYMENT_METHODS, { id: 'Credit', label: 'Credit (IPD)', icon: Clock }].map(m => (
                                     <button key={m.id} onClick={() => setPaymentMethod(m.id)}
-                                        className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${paymentMethod === m.id ? 'bg-orange-50 border-teal-300 text-orange-700' : 'bg-white border-gray-200 text-gray-500'}`}>
+                                        className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${
+                                            paymentMethod === m.id
+                                                ? m.id === 'Credit' ? 'bg-amber-50 border-amber-400 text-amber-700' : 'bg-orange-50 border-teal-300 text-orange-700'
+                                                : 'bg-white border-gray-200 text-gray-500'
+                                        }`}>
                                         <m.icon className="h-3.5 w-3.5" /> {m.label}
                                     </button>
                                 ))}
                             </div>
+                            {paymentMethod === 'Credit' && (
+                                <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 mb-3 font-medium">
+                                    💳 Credit — payment pending, will be collected at IPD discharge.
+                                </p>
+                            )}
                             <div className="flex gap-3">
                                 <button onClick={() => setSelectedOrder(null)} className="px-6 py-3 text-gray-400 font-bold hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all">Cancel</button>
                                 <button
@@ -2081,7 +2090,7 @@ export default function PharmacyPage() {
                                     disabled={isSubmitting}
                                     className="flex-1 px-8 py-3 bg-gradient-to-r from-teal-500 to-emerald-600 text-white font-bold rounded-xl hover:from-teal-400 hover:to-emerald-500 shadow-xl shadow-teal-500/20 flex items-center justify-center gap-2 disabled:opacity-70 transition-all active:scale-[0.98]"
                                 >
-                                    {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <><CheckCircle className="h-5 w-5" /> Mark Paid & Delivered</>}
+                                    {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <><CheckCircle className="h-5 w-5" /> {paymentMethod === 'Credit' ? 'Mark Delivered (Credit)' : 'Mark Paid & Delivered'}</>}
                                 </button>
                             </div>
                         </div>
