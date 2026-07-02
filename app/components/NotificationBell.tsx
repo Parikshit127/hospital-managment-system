@@ -6,10 +6,9 @@ import Link from 'next/link';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
+const supabase = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+    : null;
 
 interface NotificationBellProps {
     userId: string;
@@ -45,15 +44,14 @@ export function NotificationBell({ userId, organizationId }: NotificationBellPro
     useEffect(() => {
         loadNotifications();
 
-        if (organizationId && userId) {
+        if (supabase && organizationId && userId) {
             const channel = supabase.channel(`notifications:${organizationId}:${userId}`);
-            
+
             channel
                 .on(
                     'broadcast',
                     { event: 'new_notification' },
                     () => {
-                        // Refetch from server to get accurate receiptIds and states
                         loadNotifications();
                     }
                 )
