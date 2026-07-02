@@ -220,7 +220,7 @@ export async function GET(req: NextRequest) {
             cashierList.add(cashierUser);
 
             const dt = new Date(p.created_at);
-            const dateStr = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' });
+            const dateStr = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
             const timeStr = dt.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
 
             if (p.status === 'Completed') {
@@ -271,7 +271,7 @@ export async function GET(req: NextRequest) {
             cashierList.add(cashierUser);
 
             const dt = new Date(d.created_at);
-            const dateStr = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' });
+            const dateStr = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
             const timeStr = dt.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
 
             itemsList.push({
@@ -308,7 +308,7 @@ export async function GET(req: NextRequest) {
             cashierList.add(cashierUser);
 
             const dt = new Date(r.created_at);
-            const dateStr = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' });
+            const dateStr = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
             const timeStr = dt.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
 
             itemsList.push({
@@ -624,7 +624,7 @@ export async function GET(req: NextRequest) {
             </div>`;
         });
 
-        const printedDateStr = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+        const printedDateStr = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }).replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$1-$2-$3');
 
         const html = `<!DOCTYPE html>
 <html>

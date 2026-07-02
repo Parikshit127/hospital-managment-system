@@ -3,7 +3,6 @@
 import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
 import { getRoomGSTRate } from '@/app/lib/gst';
-import { generateInvoiceNumber as genInvNum } from '@/app/lib/sequence-generator';
 
 function serialize<T>(data: T): T {
     return JSON.parse(JSON.stringify(data, (_, value) =>
@@ -214,7 +213,8 @@ export async function ensureIPDRoomChargesAccrued(admissionId: string) {
         if (!invoice) {
             invoice = await db.invoices.create({
                 data: {
-                    invoice_number: await genInvNum(organizationId, 'IPD', true, db),
+                    // Numberless draft — number assigned at finalization (ongoing IPD series).
+                    invoice_number: null,
                     patient_id: admission.patient_id,
                     admission_id: admissionId,
                     invoice_type: 'IPD',

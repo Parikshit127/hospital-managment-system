@@ -191,7 +191,7 @@ export default function AnalyticsDashboard() {
                                                         <li key={idx} className="p-3 hover:bg-gray-50 flex justify-between items-center">
                                                             <div>
                                                                 <p className="text-sm font-bold text-gray-800">{item.admission?.patient?.full_name}</p>
-                                                                <p className="text-xs font-medium text-gray-500">Invoice: {item.invoice?.invoice_number}</p>
+                                                                <p className="text-xs font-medium text-gray-500">Invoice: {item.invoice?.invoice_number || 'Draft (unsaved)'}</p>
                                                             </div>
                                                             <div className="text-right">
                                                                 <p className="text-sm font-black text-rose-600">{fmt(item.invoice?.balance_due)}</p>

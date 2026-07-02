@@ -409,7 +409,7 @@ export default function MasterBillingPage() {
                       </span>
                     </Td>
                     <Td>{r.admission_type}</Td>
-                    <Td><span className="font-mono">{r.invoice_number}</span></Td>
+                    <Td><span className="font-mono">{r.invoice_number || 'Draft (unsaved)'}</span></Td>
                     <Td>{r.billing_category ?? "—"}</Td>
                     <Td>{r.corporate_name ?? "—"}</Td>
                     <Td><InvoiceBadge status={r.invoice_status} /></Td>

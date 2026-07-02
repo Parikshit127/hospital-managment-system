@@ -512,7 +512,7 @@ export default function DepositsPage() {
                                     <option value="">Choose an invoice...</option>
                                     {invoices.map(inv => (
                                         <option key={inv.id} value={inv.id}>
-                                            {inv.invoice_number} — Balance: {fmt(Number(inv.balance_due || 0))} ({inv.status})
+                                            {inv.invoice_number || 'Draft (unsaved)'} — Balance: {fmt(Number(inv.balance_due || 0))} ({inv.status})
                                         </option>
                                     ))}
                                 </select>

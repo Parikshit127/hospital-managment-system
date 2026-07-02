@@ -5,7 +5,7 @@ import { logAudit } from "@/app/lib/audit";
 import { revalidatePath } from "next/cache";
 import { getPatientBalances } from '@/app/actions/balance-actions';
 import { getRoomGSTRate } from '@/app/lib/gst';
-import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, generateDepositNumber as genDepNum, generateFinalBillNumber as genBillNum } from '@/app/lib/sequence-generator';
+import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, generateDepositNumber as genDepNum } from '@/app/lib/sequence-generator';
 import { isBillClosedForCharges } from '@/app/lib/bill-status';
 
 
@@ -359,7 +359,8 @@ export async function admitPatientIPD(data: {
         // Create IPD invoice
         const newInvoice = await tx.invoices.create({
             data: {
-                invoice_number: await genInvNum(organizationId, 'IPD', true, tx),
+                // Numberless draft — number assigned at finalization (ongoing IPD series).
+                invoice_number: null,
                 patient_id: data.patient_id,
                 admission_id: newAdmission.admission_id,
                 invoice_type: "IPD",
@@ -702,7 +703,8 @@ export async function accrueIPDDailyCharges(admissionId: string) {
     if (!invoice) {
       invoice = await db.invoices.create({
         data: {
-          invoice_number: await genInvNum(organizationId, 'IPD', true, db),
+          // Numberless draft — number assigned at finalization (ongoing IPD series).
+          invoice_number: null,
           patient_id: admission.patient_id,
           admission_id: admissionId,
           invoice_type: "IPD",
@@ -933,15 +935,16 @@ export async function dischargePatientIPD(admissionId: string, notes?: string, d
     });
 
     if (invoice) {
-      // Rule 1/3: assign the official Final Bill No. at finalization (once). IPD series.
-      const finalBillNumber = (invoice as any).final_bill_number
-        || await genBillNum(organizationId, true, db);
+      // Rule 1/3: assign the bill number at finalization (once), continuing the
+      // ongoing IPD series in invoice_number. Drafts are numberless.
+      const billNumber = invoice.invoice_number
+        || await genInvNum(organizationId, 'IPD', true, db);
       await db.invoices.update({
         where: { id: invoice.id },
         data: {
           status: "Final",
           finalized_at: new Date(),
-          final_bill_number: finalBillNumber,
+          invoice_number: billNumber,
         },
       });
     }

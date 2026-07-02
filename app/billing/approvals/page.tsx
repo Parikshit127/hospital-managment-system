@@ -352,7 +352,7 @@ export default function ApprovalCenterPage() {
                         )}
                       </td>
                       <td className="px-3 py-2 font-mono text-gray-500">
-                        {item.invoice_number ?? "—"}
+                        {item.invoice_number ?? 'Draft (unsaved)'}
                       </td>
                       <td className="px-3 py-2 text-gray-700 max-w-xs truncate" title={item.reason}>
                         {item.reason}

@@ -59,7 +59,7 @@ export default function OTWorklistPage() {
         </div>
       ) : schedules.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-2xl py-16 text-center text-sm text-gray-400">
-          No surgeries on {date}.
+          No surgeries on {date.split('-').reverse().join('-')}.
         </div>
       ) : (
         <div className="space-y-3">

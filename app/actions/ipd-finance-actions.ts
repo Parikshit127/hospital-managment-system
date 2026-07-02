@@ -5,7 +5,7 @@ import { logAudit } from '@/app/lib/audit';
 import { createJournalEntry } from './gl-actions';
 import { accrueIPDDailyCharges } from '@/app/actions/ipd-actions';
 import { getPackageGSTRate, getRoomGSTRate } from '@/app/lib/gst';
-import { generateInvoiceNumber as genInvNum, generateFinalBillNumber } from '@/app/lib/sequence-generator';
+import { generateInvoiceNumber as genInvNum } from '@/app/lib/sequence-generator';
 import { isBillClosedForCharges, BILL_FINALIZED_INTENT_MSG } from '@/app/lib/bill-status';
 
 
@@ -242,7 +242,8 @@ export async function postChargeToIpdBill(data: {
 
             invoice = await db.invoices.create({
                 data: {
-                    invoice_number: await genInvNum(organizationId, 'IPD', true, db),
+                    // Numberless draft — number assigned at finalization (ongoing IPD series).
+                    invoice_number: null,
                     patient_id: admission.patient_id,
                     admission_id: data.admission_id,
                     invoice_type: 'IPD',
@@ -1041,12 +1042,13 @@ export async function settleAndDischarge(data: {
 
         // Discharge always finalises the bill. Payment state lives in
         // paid_amount / balance_due, not status.
-        // Rule 1/3: assign the official Final Bill No. at finalization (once). IPD series.
-        const finalBillNumber = (finalInvoice as any)?.final_bill_number
-            || await generateFinalBillNumber(organizationId, true, db);
+        // Rule 1/3: assign the bill number at finalization (once), continuing the
+        // ongoing IPD series in invoice_number. Drafts are numberless.
+        const billNumber = finalInvoice?.invoice_number
+            || await genInvNum(organizationId, 'IPD', true, db);
         await db.invoices.update({
             where: { id: invoice.id },
-            data: { status: 'Final', finalized_at: new Date(), final_bill_number: finalBillNumber },
+            data: { status: 'Final', finalized_at: new Date(), invoice_number: billNumber },
         });
 
         // Referral + doctor commission accrue on the collected IPD bill (best-effort)

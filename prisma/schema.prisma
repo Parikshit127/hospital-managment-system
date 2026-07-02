@@ -1124,9 +1124,11 @@ model wards {
 
 model invoices {
   id                       Int       @id @default(autoincrement())
-  invoice_number           String    @unique
-  // Official "Final Bill No." — assigned only when the bill is finalized (Rule 1/3).
-  // Draft bills have no final_bill_number; it is the number shown on official/final bills.
+  // Bill number — assigned only when the bill is finalized (Draft -> Final). Drafts
+  // are numberless (null). Finalized bills continue the ongoing OPD/IPD series.
+  invoice_number           String?   @unique
+  // Legacy "Final Bill No." series (ORG-BILL-...). No longer assigned; the finalized
+  // number now lives in invoice_number. Kept nullable for historical rows only.
   final_bill_number        String?   @unique
   patient_id               String
   admission_id             String?

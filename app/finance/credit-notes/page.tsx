@@ -200,7 +200,7 @@ export default function CreditNotesPage() {
                                     ) : filtered.map(cn => (
                                         <tr key={cn.id} className="hover:bg-gray-50">
                                             <td className="px-5 py-3 text-sm font-medium text-gray-900">{cn.credit_note_number}</td>
-                                            <td className="px-5 py-3 text-sm text-blue-600 font-medium">{cn.original_invoice?.invoice_number || '—'}</td>
+                                            <td className="px-5 py-3 text-sm text-blue-600 font-medium">{cn.original_invoice?.invoice_number || 'Draft (unsaved)'}</td>
                                             <td className="px-5 py-3 text-sm text-gray-600">{cn.original_invoice?.patient_id || '—'}</td>
                                             <td className="px-5 py-3 text-sm text-gray-600 max-w-[200px] truncate">{cn.reason}</td>
                                             <td className="px-5 py-3 text-sm font-semibold text-gray-900 text-right">{fmt(Number(cn.total_amount))}</td>
@@ -247,7 +247,7 @@ export default function CreditNotesPage() {
                                         <option value="">Select an invoice...</option>
                                         {invoices.map(inv => (
                                             <option key={inv.id} value={inv.id}>
-                                                {inv.invoice_number} — {fmt(Number(inv.net_amount || 0))} ({inv.status})
+                                                {inv.invoice_number || 'Draft (unsaved)'} — {fmt(Number(inv.net_amount || 0))} ({inv.status})
                                             </option>
                                         ))}
                                     </select>

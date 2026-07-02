@@ -869,7 +869,7 @@ function AgingReport({ data, fmt }: { data: any; fmt: (n: number) => string }) {
                                 const bucketColor = inv.aging_bucket === '60+' ? 'bg-red-50 text-red-700' : inv.aging_bucket === '30-60' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700';
                                 return (
                                     <tr key={inv.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-3 text-sm font-mono text-gray-600">{inv.invoice_number}</td>
+                                        <td className="px-6 py-3 text-sm font-mono text-gray-600">{inv.invoice_number || 'Draft (unsaved)'}</td>
                                         <td className="px-6 py-3 text-sm text-gray-900">{inv.patient?.full_name || '-'}</td>
                                         <td className="px-6 py-3 text-sm font-semibold text-gray-900 text-right">{fmt(Number(inv.balance_due))}</td>
                                         <td className="px-6 py-3 text-sm text-gray-600 text-right">{inv.days_overdue}d</td>
@@ -1160,7 +1160,7 @@ function IncomeRow({ r, fmt, onViewVoucher }: { r: any; fmt: (n: number) => stri
                                 className="text-emerald-700 hover:text-emerald-900 hover:underline font-semibold"
                                 title="Open full invoice page"
                             >
-                                {r.invoice_number} ↗
+                                {r.invoice_number || 'Draft (unsaved)'} ↗
                             </Link>
                             <button
                                 type="button"
@@ -1172,7 +1172,7 @@ function IncomeRow({ r, fmt, onViewVoucher }: { r: any; fmt: (n: number) => stri
                             </button>
                         </div>
                     ) : (
-                        r.invoice_number
+                        r.invoice_number || 'Draft (unsaved)'
                     )}
                 </td>
                 <td className="px-3 py-2">

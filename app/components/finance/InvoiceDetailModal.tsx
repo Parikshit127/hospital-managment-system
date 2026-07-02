@@ -12,7 +12,7 @@ export function InvoiceDetailModal({ invoice, onClose }: InvoiceDetailModalProps
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
             <div className="bg-white border border-gray-200 shadow-sm rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-auto p-6 space-y-5">
                 <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-black text-gray-900">Invoice: {invoice.invoice_number}</h3>
+                    <h3 className="text-lg font-black text-gray-900">Invoice: {invoice.invoice_number || 'Draft (unsaved)'}</h3>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-900 text-xl">&times;</button>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-xs">

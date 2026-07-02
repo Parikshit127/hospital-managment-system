@@ -84,7 +84,7 @@ export default async function PatientPaymentsPage() {
                                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                                         <div>
                                             <div className="flex items-center gap-3 mb-1">
-                                                <p className="font-bold text-gray-900">{inv.invoice_number}</p>
+                                                <p className="font-bold text-gray-900">{inv.invoice_number || 'Draft (unsaved)'}</p>
                                                 <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wide ${
                                                     isPaid ? 'bg-green-100 text-green-700' :
                                                     inv.paid_amount > 0 ? 'bg-blue-100 text-blue-700' :

@@ -444,7 +444,7 @@ function PatientHistoryTab() {
                                                 <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] uppercase tracking-widest font-black rounded-md flex items-center gap-1">
                                                     <CreditCard className="h-3 w-3" /> {record.status}
                                                 </span>
-                                                <span className="text-[10px] text-gray-400 font-mono">Invoice: {record.invoice_number}</span>
+                                                <span className="text-[10px] text-gray-400 font-mono">Invoice: {record.invoice_number || 'Draft (unsaved)'}</span>
                                             </div>
                                         </td>
                                     </tr>

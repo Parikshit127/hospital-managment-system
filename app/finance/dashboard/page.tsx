@@ -453,7 +453,7 @@ export default function FinanceDashboard() {
                                                     <tr><td colSpan={8} className="px-5 py-16 text-center text-gray-300"><FileText className="h-8 w-8 mx-auto mb-2" /><p className="text-xs font-bold">No invoices found</p></td></tr>
                                                 ) : filteredInvoices.map((inv: any) => (
                                                     <tr key={inv.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-                                                        <td className="px-5 py-3.5 text-xs font-bold text-gray-700 font-mono">{inv.invoice_number}</td>
+                                                        <td className="px-5 py-3.5 text-xs font-bold text-gray-700 font-mono">{inv.invoice_number || 'Draft (unsaved)'}</td>
                                                         <td className="px-5 py-3.5"><p className="text-xs font-bold text-gray-700">{inv.patient?.full_name || inv.patient_id}</p><p className="text-[10px] text-gray-400">{inv.patient_id}</p></td>
                                                         <td className="px-5 py-3.5"><span className={`text-[10px] font-black px-2 py-0.5 rounded ${inv.invoice_type === 'IPD' ? 'bg-violet-500/10 text-violet-400' : 'bg-orange-500/10 text-teal-400'}`}>{inv.invoice_type}</span></td>
                                                         <td className="px-5 py-3.5 text-right text-xs font-black text-gray-700">{INR}{Number(inv.net_amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>

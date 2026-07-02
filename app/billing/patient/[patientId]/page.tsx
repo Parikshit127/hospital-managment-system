@@ -353,7 +353,7 @@ export default function PatientFinancialProfilePage() {
             <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
               <Lock className="h-4 w-4 text-emerald-600" />
               <h3 className="text-sm font-bold text-gray-900">
-                Finalize bill {finalizingInvoice.invoice_number}
+                Finalize bill {finalizingInvoice.invoice_number || 'Draft (unsaved)'}
               </h3>
             </div>
             <div className="px-5 py-4 space-y-3">
@@ -413,7 +413,7 @@ export default function PatientFinancialProfilePage() {
             <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
               <Unlock className="h-4 w-4 text-amber-600" />
               <h3 className="text-sm font-bold text-gray-900">
-                Unlock bill {unlockTarget.invoice_number}
+                Unlock bill {unlockTarget.invoice_number || 'Draft (unsaved)'}
               </h3>
             </div>
             <div className="px-5 py-4 space-y-3">
@@ -853,7 +853,7 @@ function InvoicesTab({
             >
               <div className="flex items-center gap-3 min-w-0">
                 <span className="font-mono text-xs font-bold text-gray-700">
-                  {inv.invoice_number}
+                  {inv.invoice_number || 'Draft (unsaved)'}
                 </span>
                 <span
                   className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
@@ -1469,7 +1469,7 @@ function CollectPaymentModal({
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/60">
           <div>
             <h3 className="text-sm font-bold text-gray-900">Collect Payment</h3>
-            <p className="text-[11px] text-gray-500 font-mono mt-0.5">{invoice.invoice_number}</p>
+            <p className="text-[11px] text-gray-500 font-mono mt-0.5">{invoice.invoice_number || 'Draft (unsaved)'}</p>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-500">
             <XCircle className="h-4 w-4" />
@@ -1699,7 +1699,7 @@ function PaymentsTab({ invoices, setEditingPayment, setReversingPayment }: { inv
         {payments.map((p: any) => (
           <tr key={p.id} className="border-b border-gray-50">
             <td className="py-2 font-mono">{p.receipt_number}</td>
-            <td className="py-2 font-mono text-gray-500">{p.invoice_number}</td>
+            <td className="py-2 font-mono text-gray-500">{p.invoice_number || 'Draft (unsaved)'}</td>
             <td className="py-2">{p.payment_method}</td>
             <td className="py-2 text-gray-500">{p.reference ?? "—"}</td>
             <td className="py-2 text-gray-500">{fmtDateTime(p.created_at)}</td>
@@ -2187,7 +2187,7 @@ function CreditNotesTab({ invoices }: { invoices: any[] }) {
           {notes.map((cn: any) => (
             <tr key={cn.id} className="border-b border-gray-50">
               <td className="py-2 font-mono">{cn.credit_note_number}</td>
-              <td className="py-2 font-mono text-gray-500">{cn.invoice_number}</td>
+              <td className="py-2 font-mono text-gray-500">{cn.invoice_number || 'Draft (unsaved)'}</td>
               <td className="py-2">{cn.reason}</td>
               <td className="py-2">
                 <span
@@ -2332,7 +2332,7 @@ function WriteoffsTab({
                   <td className="px-3 py-2 font-mono font-bold">{wo.writeoff_number}</td>
                   <td className="px-3 py-2 capitalize">{wo.writeoff_type.replace(/_/g, " ")}</td>
                   <td className="px-3 py-2 font-mono text-gray-500">
-                    {wo.invoice?.invoice_number ?? "—"}
+                    {wo.invoice?.invoice_number ?? 'Draft (unsaved)'}
                   </td>
                   <td className="px-3 py-2 max-w-xs truncate" title={wo.reason}>
                     {wo.reason}
@@ -2395,7 +2395,7 @@ function WriteoffsTab({
                   .filter((i: any) => Number(i.balance_due) > 0)
                   .map((i: any) => (
                     <option key={i.id} value={i.id}>
-                      {i.invoice_number} · ₹{Number(i.balance_due).toLocaleString("en-IN")}
+                      {i.invoice_number || 'Draft (unsaved)'} · ₹{Number(i.balance_due).toLocaleString("en-IN")}
                     </option>
                   ))}
               </select>

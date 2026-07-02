@@ -74,7 +74,7 @@ export default function PaymentsLedgerPage() {
                                     </td>
                                     <td className="px-6 py-4 font-medium text-gray-500">{new Date(p.created_at).toLocaleString()}</td>
                                     <td className="px-6 py-4">
-                                        <div className="font-bold text-indigo-700 hover:text-indigo-900 cursor-pointer">{p.invoice?.invoice_number}</div>
+                                        <div className="font-bold text-indigo-700 hover:text-indigo-900 cursor-pointer">{p.invoice?.invoice_number || 'Draft (unsaved)'}</div>
                                         <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{p.invoice?.patient?.full_name}</div>
                                     </td>
                                     <td className="px-6 py-4">

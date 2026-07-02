@@ -130,7 +130,7 @@ export default function InvoicesPage() {
                                     </td>
                                     <td className="px-3 py-4 font-black flex items-center gap-1.5">
                                         <FileText className="h-4 w-4 text-indigo-400 group-hover:text-indigo-600 transition-colors" />
-                                        <span className="text-gray-900 tracking-tight text-[13px]">{inv.invoice_number}</span>
+                                        <span className="text-gray-900 tracking-tight text-[13px]">{inv.invoice_number || 'Draft (unsaved)'}</span>
                                     </td>
                                     <td className="px-3 py-4 font-medium text-gray-500 text-[13px]">{new Date(inv.created_at).toLocaleDateString('en-GB')}</td>
                                     <td className="px-3 py-4">

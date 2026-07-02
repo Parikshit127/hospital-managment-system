@@ -193,7 +193,7 @@ export default function BillingPaymentsTab({
                           onClick={() => toggleInvoice(invId)}
                         >
                           <td className="px-4 py-3 text-gray-800 font-semibold whitespace-nowrap">
-                            {inv.invoice_number || 'N/A'}
+                            {inv.invoice_number || 'Draft (unsaved)'}
                           </td>
                           <td className="px-4 py-3 text-gray-600">
                             {inv.invoice_type || inv.type || 'N/A'}

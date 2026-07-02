@@ -142,7 +142,7 @@ export function RecordTpaPaymentModal({
         <Modal
             isOpen
             onClose={submitting ? () => {} : onClose}
-            title={`Record TPA Payment — ${invoice.invoice_number}`}
+            title={`Record TPA Payment — ${invoice.invoice_number || 'Draft (unsaved)'}`}
             icon={<Banknote className="h-4 w-4" />}
             maxWidth="xl"
         >
@@ -159,7 +159,7 @@ export function RecordTpaPaymentModal({
                         <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">Invoice</p>
                         <p className="text-sm font-bold text-gray-900 truncate flex items-center gap-1.5">
                             <FileText className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                            {invoice.invoice_number}
+                            {invoice.invoice_number || 'Draft (unsaved)'}
                         </p>
                     </div>
                     <div className="bg-gray-50 rounded-xl p-3">

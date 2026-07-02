@@ -909,7 +909,7 @@ export default function PatientProfilePage() {
                                                         <button onClick={() => setExpandedInvoice(expanded ? null : inv.id)}
                                                             className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 text-left">
                                                             <div className="flex items-center gap-3 min-w-0 flex-wrap">
-                                                                <span className="font-mono text-xs font-bold text-orange-600">{inv.invoice_number}</span>
+                                                                <span className="font-mono text-xs font-bold text-orange-600">{inv.invoice_number || 'Draft (unsaved)'}</span>
                                                                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${inv.status === 'Final' ? 'bg-emerald-100 text-emerald-700' :
                                                                         inv.status === 'Cancelled' ? 'bg-gray-100 text-gray-500' :
                                                                             'bg-blue-100 text-blue-700'
@@ -1380,7 +1380,7 @@ function CollectPaymentModal({ invoice, registeredPan, registeredPanName, onClos
                 <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/60">
                     <div>
                         <h3 className="text-sm font-bold text-gray-900">Collect Payment</h3>
-                        <p className="text-[11px] text-gray-500 font-mono mt-0.5">{invoice.invoice_number}</p>
+                        <p className="text-[11px] text-gray-500 font-mono mt-0.5">{invoice.invoice_number || 'Draft (unsaved)'}</p>
                     </div>
                     <button onClick={onClose} className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-500">
                         <X className="h-4 w-4" />

@@ -168,7 +168,7 @@ export default function CaseSheetPage() {
                                 <div className="space-y-4">
                                     <h2 className="font-semibold text-gray-800">24-Hour Treatment Timeline</h2>
                                     {caseSheet?.timeline.length === 0 ? (
-                                        <p className="text-gray-500 text-sm">No activities recorded for {selectedDate}</p>
+                                        <p className="text-gray-500 text-sm">No activities recorded for {selectedDate.split('-').reverse().join('-')}</p>
                                     ) : (
                                         <div className="relative">
                                             <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />

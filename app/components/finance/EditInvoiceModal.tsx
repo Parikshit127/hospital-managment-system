@@ -416,7 +416,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
             });
 
             if (res.success) {
-                toast.success(`Invoice ${invoiceMeta.invoice_number} updated.`);
+                toast.success(`Invoice ${invoiceMeta.invoice_number || 'Draft (unsaved)'} updated.`);
                 onSaved?.();
                 onClose();
             } else {
@@ -459,7 +459,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
         <Modal
             isOpen
             onClose={saving ? () => {} : onClose}
-            title={`Edit Invoice${invoiceMeta ? ` — ${invoiceMeta.invoice_number}` : ''}`}
+            title={`Edit Invoice${invoiceMeta ? ` — ${invoiceMeta.invoice_number || 'Draft (unsaved)'}` : ''}`}
             icon={<Pencil className="h-4 w-4" />}
             maxWidth="2xl"
         >

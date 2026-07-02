@@ -300,7 +300,7 @@ export function RefundModal({
                                             <div className="bg-gray-50 px-3 py-2 flex items-center justify-between">
                                                 <div>
                                                     <p className="text-xs font-bold text-gray-900 font-mono">
-                                                        {inv.invoice_number}
+                                                        {inv.invoice_number || 'Draft (unsaved)'}
                                                     </p>
                                                     <p className="text-[10px] text-gray-500">
                                                         {inv.invoice_type} · {fmtDate(inv.created_at)}
@@ -373,7 +373,7 @@ export function RefundModal({
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <span className="text-gray-500 font-bold">Invoice</span>
-                                    <span className="font-mono">{selectedPayment.inv.invoice_number}</span>
+                                    <span className="font-mono">{selectedPayment.inv.invoice_number || 'Draft (unsaved)'}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <span className="text-gray-500 font-bold">Method</span>

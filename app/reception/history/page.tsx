@@ -223,7 +223,7 @@ export default function PatientHistoryPage() {
                                                     <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] uppercase tracking-widest font-black rounded-md flex items-center gap-1">
                                                         <CreditCard className="h-3 w-3" /> {record.status}
                                                     </span>
-                                                    <span className="text-[10px] text-gray-400 font-mono">Invoice: {record.invoice_number}</span>
+                                                    <span className="text-[10px] text-gray-400 font-mono">Invoice: {record.invoice_number || 'Draft (unsaved)'}</span>
                                                     <button 
                                                         onClick={() => handlePrintRecord(record)}
                                                         className="mt-1 p-2 text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-200 rounded-lg transition-all no-print flex items-center gap-1.5"
@@ -252,7 +252,7 @@ export default function PatientHistoryPage() {
                         {/* Invoice number top-right */}
                         <div className="flex justify-end border-b-2 border-gray-300 pb-4">
                             <div className="text-right space-y-1">
-                                <p className="text-xl font-bold">{printingRecord.invoice_number}</p>
+                                <p className="text-xl font-bold">{printingRecord.invoice_number || 'Draft (unsaved)'}</p>
                                 <p className="text-sm font-medium">{new Date(printingRecord.date).toLocaleDateString('en-GB')} {new Date(printingRecord.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                             </div>
                         </div>

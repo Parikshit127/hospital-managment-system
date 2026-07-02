@@ -7,7 +7,7 @@ import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
 import { billingInvoiceMsg, paymentReceiptMsg } from '@/app/lib/whatsapp-templates';
 import { postInvoiceToGL, postPaymentToGL, reverseJournalEntry } from './gl-actions';
 import { getCashThresholds, validateCashCompliance, normalizePan, resolveRegisteredPan, CASH_METHOD } from '@/app/lib/cash-compliance';
-import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, generateFinalBillNumber } from '@/app/lib/sequence-generator';
+import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
 import { validateBackdate } from '@/app/lib/backdate';
 import { recomputeInvoiceCommission } from '@/app/lib/referral-commission';
 import { recomputeInvoiceDoctorCommission } from '@/app/lib/doctor-commission';
@@ -116,12 +116,14 @@ export async function createInvoice(data: {
 
         // Only block if the existing draft has no items (truly accidental duplicate)
         if (existingDraft && existingDraft.items.length === 0) {
-            return { success: false, error: `Duplicate invoice detected. A Draft invoice (${existingDraft.invoice_number}) was created for this patient recently.` };
+            return { success: false, error: `Duplicate invoice detected. A Draft invoice was created for this patient recently.` };
         }
 
         const invoice = await db.invoices.create({
             data: {
-                invoice_number: await genInvNum(organizationId, data.invoice_type, !!data.admission_id, db),
+                // Drafts are numberless — the bill number is assigned at finalization
+                // (continuing the ongoing OPD/IPD series). See finalizeInvoice.
+                invoice_number: null,
                 patient_id: data.patient_id,
                 admission_id: data.admission_id || null,
                 invoice_type: data.invoice_type,
@@ -151,7 +153,7 @@ export async function createInvoice(data: {
                 action: 'CREATE_INVOICE',
                 module: 'finance',
                 entity_type: 'invoice',
-                entity_id: invoice.invoice_number,
+                entity_id: String(invoice.id),
                 details: JSON.stringify({ patient_id: data.patient_id, type: data.invoice_type }),
                 organizationId,
             },
@@ -611,7 +613,7 @@ export async function finalizeInvoice(invoiceId: number) {
         // Rule 3: an IPD bill can only be finalized after the patient is discharged.
         const existing = await db.invoices.findUnique({
             where: { id: invoiceId },
-            select: { admission_id: true, final_bill_number: true },
+            select: { admission_id: true, invoice_type: true, invoice_number: true },
         });
         if (!existing) return { success: false, error: 'Invoice not found.' };
         if (existing.admission_id) {
@@ -623,17 +625,18 @@ export async function finalizeInvoice(invoiceId: number) {
             if (!gate.ok) return { success: false, error: gate.error };
         }
 
-        // Rule 1 & 3: assign the official Final Bill No. at finalization (once).
-        // Separate IPD/OPD series.
-        const finalBillNumber = existing.final_bill_number
-            || await generateFinalBillNumber(organizationId, !!existing.admission_id, db);
+        // Rule 1 & 3: the bill number is assigned once, at finalization — drafts are
+        // numberless. Final bills continue the ongoing OPD/IPD series (not a separate
+        // BILL series). Idempotent: keep the existing number on re-finalize.
+        const billNumber = existing.invoice_number
+            || await genInvNum(organizationId, existing.invoice_type, !!existing.admission_id, db);
 
         const invoice = await db.invoices.update({
             where: { id: invoiceId },
             data: {
                 status: 'Final',
                 finalized_at: new Date(),
-                final_bill_number: finalBillNumber,
+                invoice_number: billNumber,
                 version: { increment: 1 },
             },
         });
@@ -1861,7 +1864,8 @@ export async function autoCreateBillingRecord(data: {
             } else {
                 const newInvoice = await db.invoices.create({
                     data: {
-                        invoice_number: await genInvNum(organizationId, 'OPD', false, db),
+                        // Numberless draft — number assigned at finalization (ongoing OPD/IPD series).
+                        invoice_number: null,
                         patient_id: data.patient_id,
                         invoice_type: 'OPD',
                         status: 'Draft',

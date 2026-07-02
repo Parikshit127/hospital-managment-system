@@ -542,7 +542,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                     )}
                     {datePreset !== 'ALL' && (
                         <FilterChip
-                            label={datePreset === 'CUSTOM' ? `${dateFrom || '…'} → ${dateTo || '…'}` : datePreset.toLowerCase()}
+                            label={datePreset === 'CUSTOM' ? `${dateFrom ? dateFrom.split('-').reverse().join('-') : '…'} → ${dateTo ? dateTo.split('-').reverse().join('-') : '…'}` : datePreset.toLowerCase()}
                             onClear={() => applyDatePreset('ALL')}
                         />
                     )}
@@ -726,7 +726,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                                                                                     <div className="flex-1">
                                                                                                         <p className="font-medium text-slate-800">{item.description}</p>
                                                                                                         <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-0.5">
-                                                                                                            <span className="font-mono text-orange-600/70">{item.invoice_number}</span> • 
+                                                                                                            <span className="font-mono text-orange-600/70">{item.invoice_number || 'Draft (unsaved)'}</span> •
                                                                                                             <span>{formatDate(item.date)}</span>
                                                                                                         </div>
                                                                                                     </div>
@@ -759,7 +759,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                                                                 <div key={inv.id} className="flex flex-col gap-2 p-3 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-orange-200 transition-colors">
                                                                                     <div className="flex justify-between items-start">
                                                                                         <div>
-                                                                                            <p className="text-[10px] font-mono font-bold text-slate-500">{inv.invoice_number}</p>
+                                                                                            <p className="text-[10px] font-mono font-bold text-slate-500">{inv.invoice_number || 'Draft (unsaved)'}</p>
                                                                                             <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">{inv.invoice_type}</span>
                                                                                         </div>
                                                                                         <div className="text-right">
@@ -843,7 +843,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                                                                                 <p className="text-xs text-slate-500 mt-0.5">{p.payment_method} · {p.payment_type}</p>
                                                                                                 
                                                                                                 <div className="flex items-center justify-between mt-1">
-                                                                                                    <span className="text-[10px] font-mono text-gray-400">Inv: {p.invoice_number}</span>
+                                                                                                    <span className="text-[10px] font-mono text-gray-400">Inv: {p.invoice_number || 'Draft (unsaved)'}</span>
                                                                                                     {role === 'admin' && p.status === 'Completed' && (
                                                                                                         <button onClick={() => handleReversePayment(p.id)} className="text-[10px] font-bold text-rose-500 hover:text-rose-700 underline">Reverse</button>
                                                                                                     )}

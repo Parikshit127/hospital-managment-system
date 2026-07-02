@@ -184,7 +184,7 @@ export default function InvoiceDetailPage() {
                         <div>
                             <h1 className="text-xl font-bold text-gray-900">{invoice.patient?.full_name || 'Patient'}</h1>
                             <p className="text-sm text-gray-500">
-                                UHID: {invoice.patient_id} | Invoice: {invoice.invoice_number}
+                                UHID: {invoice.patient_id} | Invoice: {invoice.invoice_number || 'Draft (unsaved)'}
                             </p>
                             {invoice.admission && (
                                 <p className="text-sm text-gray-500">
@@ -497,7 +497,7 @@ export default function InvoiceDetailPage() {
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-lg w-full max-w-lg overflow-hidden shadow-2xl">
                         <div className="p-4 border-b bg-red-50">
-                            <h3 className="font-bold text-red-900">Cancel Invoice {invoice.invoice_number}?</h3>
+                            <h3 className="font-bold text-red-900">Cancel Invoice {invoice.invoice_number || 'Draft (unsaved)'}?</h3>
                             <p className="text-xs text-red-700 mt-1">This action cannot be undone. Reason is mandatory.</p>
                         </div>
                         <div className="p-4 space-y-3">

@@ -190,10 +190,10 @@ export async function bookAppointment(
 
             // PAV: create unpaid invoice to collect at desk
             if (resolvedMode === 'PAV' && doctorFee > 0) {
-                const invNum = await genInvNum(session.organization_id, 'OPD', false, tx);
                 await tx.invoices.create({
                     data: {
-                        invoice_number: invNum,
+                        // Numberless draft — number assigned at finalization (ongoing OPD series).
+                        invoice_number: null,
                         patient_id: session.id,
                         invoice_type: 'OPD',
                         total_amount: doctorFee,

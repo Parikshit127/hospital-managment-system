@@ -132,7 +132,7 @@ export default function LabInventoryPage() {
                                         <p className="text-[10px] text-gray-400 font-medium">Min: {item.min_threshold}</p>
                                     </td>
                                     <td className="px-6 py-4 text-gray-500 text-xs font-medium">
-                                        {item.expiry_date ? new Date(item.expiry_date).toISOString().split('T')[0] : 'N/A'}
+                                        {item.expiry_date ? new Date(item.expiry_date).toISOString().split('T')[0].split('-').reverse().join('-') : 'N/A'}
                                     </td>
                                     <td className="px-6 py-4">
                                         {isLowStock(item) ? (

@@ -262,7 +262,7 @@ export default function WriteoffsPage() {
                           </Link>
                         </td>
                         <td className="px-3 py-2 font-mono text-gray-500">
-                          {wo.invoice?.invoice_number ?? "—"}
+                          {wo.invoice?.invoice_number ?? 'Draft (unsaved)'}
                         </td>
                         <td className="px-3 py-2 capitalize">
                           {wo.writeoff_type.replace(/_/g, " ")}

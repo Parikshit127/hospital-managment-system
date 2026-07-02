@@ -250,7 +250,7 @@ export function TpaProfilePanel({ patientId, patientName, patientType }: PanelPr
                                             return (
                                                 <tr key={inv.id} className="border-t border-gray-100">
                                                     <td className="py-2 px-4">
-                                                        <span className="font-mono text-gray-700">{inv.invoice_number}</span>
+                                                        <span className="font-mono text-gray-700">{inv.invoice_number || 'Draft (unsaved)'}</span>
                                                         {inv.tpa_provider_name && (
                                                             <span className="block text-[10px] text-gray-400">{inv.tpa_provider_name}</span>
                                                         )}

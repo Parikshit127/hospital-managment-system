@@ -1788,7 +1788,7 @@ export default function AdmissionDetailPage() {
                                         {/* Invoice Number + Days */}
                                         <div className="flex items-center justify-between px-1">
                                             <p className="text-xs font-bold text-gray-500">
-                                                Invoice: <span className="font-mono text-gray-800">{bill.invoice.invoice_number}</span>
+                                                Invoice: <span className="font-mono text-gray-800">{bill.invoice.invoice_number || 'Draft (unsaved)'}</span>
                                                 &nbsp;·&nbsp; Days: {bill.admission.days_admitted}
                                             </p>
                                             <div className="flex items-center gap-3">

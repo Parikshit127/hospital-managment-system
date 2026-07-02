@@ -22,7 +22,7 @@ export function PaymentRecordModal({ invoice, form, onFormChange, onSubmit, onCl
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-900 text-xl">&times;</button>
                 </div>
                 <div className="text-xs text-gray-500 font-mono bg-gray-100 p-3 rounded-xl">
-                    Invoice: {invoice.invoice_number} &bull; Balance: {'\u20B9'}{Number(invoice.balance_due).toLocaleString()}
+                    Invoice: {invoice.invoice_number || 'Draft (unsaved)'} &bull; Balance: {'\u20B9'}{Number(invoice.balance_due).toLocaleString()}
                 </div>
                 <div className="space-y-3">
                     <div>

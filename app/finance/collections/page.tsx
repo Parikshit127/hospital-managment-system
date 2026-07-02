@@ -197,7 +197,7 @@ export default function CollectionsPage() {
                                                 <tr><td colSpan={7} className="py-16 text-center text-gray-400 text-sm">No overdue invoices found</td></tr>
                                             ) : filteredOverdue.map(inv => (
                                                 <tr key={inv.id} className="hover:bg-gray-50">
-                                                    <td className="px-5 py-3 text-sm font-medium text-gray-900">{inv.invoice_number}</td>
+                                                    <td className="px-5 py-3 text-sm font-medium text-gray-900">{inv.invoice_number || 'Draft (unsaved)'}</td>
                                                     <td className="px-5 py-3 text-sm text-gray-600">
                                                         <div>{inv.patient?.full_name || inv.patient_id}</div>
                                                     </td>

@@ -80,7 +80,7 @@ function VoucherBody({ v }: { v: any }) {
                 <Meta label="Voucher Type" value={v.voucher_type} />
                 <Meta label="Voucher No." value={v.voucher_number || (v.posted ? '—' : 'Not posted')} mono />
                 <Meta label="Date" value={fmtDate(v.voucher_date)} />
-                <Meta label="Reference Invoice" value={v.invoice_number} mono />
+                <Meta label="Reference Invoice" value={v.invoice_number || 'Draft (unsaved)'} mono />
                 <Meta label="Patient" value={v.patient_name} />
                 <Meta label="Patient Type" value={payer} />
             </div>

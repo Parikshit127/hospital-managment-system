@@ -287,7 +287,7 @@ export async function renderReportHtml(
 
     <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:bold;margin-bottom:15px;">
         <span>${escapeHtml(title)}</span>
-        <span>${escapeHtml(fromStr)} to ${escapeHtml(toStr)}</span>
+        <span>${escapeHtml(fromStr.split('-').reverse().join('-'))} to ${escapeHtml(toStr.split('-').reverse().join('-'))}</span>
         <span>Total Records : ${rows.length}</span>
     </div>
 

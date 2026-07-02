@@ -496,7 +496,7 @@ export default function IpdBillingPage() {
                                                 <div className="grid grid-cols-2 gap-2 text-xs">
                                                     <div className="flex justify-between p-2 bg-gray-50 rounded">
                                                         <span className="text-gray-500">Invoice #</span>
-                                                        <span className="font-mono">{billData.invoice.invoice_number}</span>
+                                                        <span className="font-mono">{billData.invoice.invoice_number || 'Draft (unsaved)'}</span>
                                                     </div>
                                                     <div className="flex justify-between p-2 bg-gray-50 rounded">
                                                         <span className="text-gray-500">Days Admitted</span>
@@ -749,7 +749,7 @@ export default function IpdBillingPage() {
                         {/* Bill Invoice # */}
                         {billData && (
                             <div className="bg-white rounded-lg shadow p-4 text-xs space-y-1">
-                                <p><span className="text-gray-500">Invoice:</span> {billData.invoice.invoice_number}</p>
+                                <p><span className="text-gray-500">Invoice:</span> {billData.invoice.invoice_number || 'Draft (unsaved)'}</p>
                                 <p><span className="text-gray-500">Admitted:</span> {new Date(billData.admission.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                                 {billData.admission.discharge_date && (
                                     <p><span className="text-gray-500">Discharged:</span> {new Date(billData.admission.discharge_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
@@ -1130,7 +1130,7 @@ export default function IpdBillingPage() {
                                     <p className="text-xs font-black uppercase tracking-widest" style={{ color: branding?.accentColor || '#1e3a6e' }}>
                                         {billData.admission.discharge_date ? 'Final Bill' : 'Interim Bill'}
                                     </p>
-                                    <p className="text-xs font-mono text-gray-600 mt-0.5">{billData.invoice.invoice_number}</p>
+                                    <p className="text-xs font-mono text-gray-600 mt-0.5">{billData.invoice.invoice_number || 'Draft (unsaved)'}</p>
                                     <p className="text-xs text-gray-500">Admitted: {new Date(billData.admission.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                                     {billData.admission.discharge_date && (
                                         <p className="text-xs text-gray-500">Discharged: {new Date(billData.admission.discharge_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>

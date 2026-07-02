@@ -190,7 +190,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
         if (doctorFilter !== 'All') chips.push({ key: 'doctor', label: `Dr. ${doctorFilter}`, clear: () => setDoctorFilter('All') });
         if (categoryFilter !== 'All') chips.push({ key: 'category', label: `Category: ${categoryFilter}`, clear: () => setCategoryFilter('All') });
         if (billingFilter !== 'All') chips.push({ key: 'billing', label: `Class: ${billingFilter}`, clear: () => setBillingFilter('All') });
-        if (fromDate || toDate) chips.push({ key: 'date', label: `Admitted: ${fromDate || '…'} – ${toDate || '…'}`, clear: () => { setFromDate(''); setToDate(''); } });
+        if (fromDate || toDate) chips.push({ key: 'date', label: `Admitted: ${fromDate ? fromDate.split('-').reverse().join('-') : '…'} – ${toDate ? toDate.split('-').reverse().join('-') : '…'}`, clear: () => { setFromDate(''); setToDate(''); } });
         return chips;
     }, [search, wardFilter, doctorFilter, categoryFilter, billingFilter, fromDate, toDate, wardNameById]);
 

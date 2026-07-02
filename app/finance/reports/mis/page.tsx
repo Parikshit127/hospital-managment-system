@@ -248,7 +248,7 @@ export default function MISReportPage() {
                                 Showing {filtered.length} of {rows.length} bills
                             </span>
                             <span className="text-xs text-gray-400">
-                                {from} to {to} | Scroll horizontally for all columns
+                                {from.split('-').reverse().join('-')} to {to.split('-').reverse().join('-')} | Scroll horizontally for all columns
                             </span>
                         </div>
                         <div className="overflow-x-auto">
