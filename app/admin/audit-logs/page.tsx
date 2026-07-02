@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { AdminPage } from '@/app/admin/components/AdminPage';
-import { Clock, Search, Filter, ChevronLeft, ChevronRight, Activity, AlertCircle, Database, ShieldAlert, FileText, CheckCircle2 } from 'lucide-react';
+import { Clock, Search, Filter, ChevronLeft, ChevronRight, Activity, AlertCircle, Database, ShieldAlert, FileText, CheckCircle2, Download } from 'lucide-react';
 import { getAuditLogs, getAuditStats } from '@/app/actions/audit-actions';
 import { Button } from '@/app/components/ui/Button';
 import { Input } from '@/app/components/ui/Input';
@@ -91,10 +91,51 @@ export default function AuditLogsPage() {
         return <Badge variant="neutral" size="sm">{action}</Badge>;
     };
 
+    const handleExportCSV = () => {
+        if (!logs || logs.length === 0) return;
+        
+        const headers = ['Timestamp', 'User', 'Role', 'Module', 'Action', 'Entity Type', 'Entity ID', 'Details', 'IP Address'];
+        
+        const csvRows = logs.map(log => {
+            return [
+                new Date(log.created_at).toLocaleString().replace(/,/g, ''), // prevent commas in date
+                log.username || 'System',
+                log.role || '-',
+                log.module || '-',
+                log.action || '-',
+                log.entity_type || '-',
+                log.entity_id || '-',
+                log.details ? `"${log.details.replace(/"/g, '""')}"` : '-',
+                log.ip_address || '-'
+            ].join(',');
+        });
+        
+        const csvString = [headers.join(','), ...csvRows].join('\n');
+        
+        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `audit_logs_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     return (
         <AdminPage
             pageTitle="Audit Logs"
             pageIcon={<Clock className="h-5 w-5" />}
+            headerActions={
+                <Button 
+                    variant="secondary" 
+                    icon={<Download className="h-4 w-4" />}
+                    onClick={handleExportCSV}
+                    disabled={logs.length === 0}
+                >
+                    Export CSV
+                </Button>
+            }
         >
             <div className="max-w-7xl mx-auto py-6 space-y-6">
                 
