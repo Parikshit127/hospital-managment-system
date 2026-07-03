@@ -142,6 +142,21 @@ const medicineMasterColumns: ImportColumn[] = [
     { name: 'is_active', required: false, type: 'boolean', description: 'Active status', example: 'true' },
 ];
 
+const radiologyMasterColumns: ImportColumn[] = [
+    { name: 'procedure_name', required: true, type: 'string', description: 'Procedure name (unique)', example: 'X-Ray Chest PA View' },
+    { name: 'procedure_code', required: false, type: 'string', description: 'Procedure code', example: 'XRAY-001' },
+    { name: 'modality', required: false, type: 'string', description: 'Imaging modality', example: 'X-Ray' },
+    { name: 'body_part', required: false, type: 'string', description: 'Body part / region', example: 'Chest' },
+    { name: 'category', required: false, type: 'string', description: 'Category (X-Ray, MRI, CT, USG, etc.)', example: 'X-Ray' },
+    { name: 'price', required: true, type: 'number', description: 'Procedure price (INR)', example: '400' },
+    { name: 'tax_rate', required: false, type: 'number', description: 'Tax rate (%)', example: '5' },
+    { name: 'hsn_sac_code', required: false, type: 'string', description: 'HSN/SAC code for GST', example: '9993' },
+    { name: 'description', required: false, type: 'string', description: 'Procedure description', example: 'Chest X-ray, posteroanterior view' },
+    { name: 'turnaround_time', required: false, type: 'string', description: 'Estimated report time', example: '2 hours' },
+    { name: 'requires_prescription', required: false, type: 'boolean', description: 'Requires doctor prescription', example: 'false' },
+    { name: 'is_available', required: false, type: 'boolean', description: 'Available for ordering', example: 'true' },
+];
+
 const TEMPLATES: Record<ImportType, Omit<ImportTemplate, 'import_type'>> = {
     patients: {
         name: 'Patient Records',
@@ -197,6 +212,11 @@ const TEMPLATES: Record<ImportType, Omit<ImportTemplate, 'import_type'>> = {
         name: 'Medicine Master',
         description: 'Bulk import medicine catalog with MRP, purchase, and selling prices',
         columns: medicineMasterColumns,
+    },
+    radiology_master: {
+        name: 'Radiology/Imaging Master',
+        description: 'Bulk import radiology and imaging procedures (X-Ray, MRI, CT, USG, ECG, Echo, etc.)',
+        columns: radiologyMasterColumns,
     },
 };
 

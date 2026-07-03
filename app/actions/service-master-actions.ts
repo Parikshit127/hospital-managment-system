@@ -337,3 +337,15 @@ export async function deleteRadiologyImaging(id: number) {
     return { success: true };
   } catch (e: any) { return { success: false, error: e.message }; }
 }
+
+// ---- Export radiology/imaging as JSON (for client-side XLSX download) ----
+export async function exportRadiologyImaging() {
+  try {
+    const { db, organizationId } = await requireTenantContext();
+    const rows = await db.radiology_imaging.findMany({
+      where: { organizationId },
+      orderBy: { procedure_name: 'asc' },
+    });
+    return { success: true, data: serialize(rows) };
+  } catch (e: any) { return { success: false, error: e.message, data: [] }; }
+}

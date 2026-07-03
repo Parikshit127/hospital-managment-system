@@ -5,7 +5,7 @@ import {
   createDoctor,
 } from './doctor-master-actions';
 import {
-  createService, createLabTest, createPackage,
+  createService, createLabTest, createPackage, createRadiologyImaging,
 } from './service-master-actions';
 import {
   createMedicine,
@@ -57,6 +57,9 @@ export async function importMasterData(
             break;
           case 'medicine_master':
             result = await createMedicine(row);
+            break;
+          case 'radiology_master':
+            result = await createRadiologyImaging(row);
             break;
           default:
             throw new Error(`Unknown import type: ${type}`);

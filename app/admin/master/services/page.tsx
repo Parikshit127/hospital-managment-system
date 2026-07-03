@@ -8,6 +8,7 @@ import {
   listLabTests, createLabTest, updateLabTest, deleteLabTest,
   listPackages, createPackage, updatePackage, deletePackage,
   listRadiologyImaging, createRadiologyImaging, updateRadiologyImaging, deleteRadiologyImaging,
+  exportRadiologyImaging,
 } from '@/app/actions/service-master-actions';
 import { ensureIPDDemoMasterData } from '@/app/actions/ipd-billing-helpers';
 import MasterImportButton from '@/app/components/master/MasterImportButton';
@@ -732,10 +733,21 @@ export default function ServiceMasterPage() {
                 className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-blue-500"
               />
             </div>
-            <button onClick={openCreateRad}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">
-              <Plus className="h-4 w-4" /> Add Procedure
-            </button>
+            <div className="flex items-center gap-2">
+              <MasterExportButton
+                filename="radiology-imaging"
+                sheetName="Radiology"
+                fetchRows={async () => {
+                  const res = await exportRadiologyImaging();
+                  return (res.data ?? []) as Record<string, unknown>[];
+                }}
+              />
+              <MasterImportButton type="radiology_master" onImportComplete={loadRadiology} />
+              <button onClick={openCreateRad}
+                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">
+                <Plus className="h-4 w-4" /> Add Procedure
+              </button>
+            </div>
           </div>
 
           {/* Create/Edit Modal */}

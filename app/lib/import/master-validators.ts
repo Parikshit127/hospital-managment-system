@@ -6,7 +6,8 @@ export type MasterImportType =
   | 'service_master'
   | 'lab_test_master'
   | 'package_master'
-  | 'medicine_master';
+  | 'medicine_master'
+  | 'radiology_master';
 
 export const MASTER_IMPORT_MAX_ROWS = 500;
 
@@ -87,6 +88,15 @@ export interface MedicineRow {
   mrp: number; purchase_price: number; selling_price: number;
   gst_percent: number; min_threshold: number;
   hsn_sac_code?: string; is_active: boolean;
+}
+
+export interface RadiologyRow {
+  procedure_name: string; price: number;
+  procedure_code?: string; modality?: string; body_part?: string;
+  category?: string; description?: string;
+  hsn_sac_code?: string; tax_rate: number;
+  turnaround_time?: string; requires_prescription: boolean;
+  is_available: boolean;
 }
 
 export const SERVICE_CATEGORIES = ['OPD Consultation', 'ICU', 'Procedure', 'Room', 'Nursing', 'Diet', 'Consumable', 'Home Care', 'Visit Charges', 'Misc'] as const;
@@ -232,15 +242,45 @@ export function validateMedicineRows(rows: Record<string, unknown>[]): ValidateR
   return { valid, errors };
 }
 
+export function validateRadiologyRows(rows: Record<string, unknown>[]): ValidateResult<RadiologyRow> {
+  const valid: RadiologyRow[] = [];
+  const errors: RowError[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const rowNum = i + 1;
+    const errs: string[] = [];
+    const procedure_name = str(r.procedure_name); if (!procedure_name) errs.push('procedure_name is required');
+    const priceRaw = toNum(r.price, 'price');
+    if (typeof priceRaw === 'string') errs.push(priceRaw);
+    if (errs.length > 0) { errors.push({ rowIndex: rowNum, reason: errs.join('; '), originalData: r }); continue; }
+    valid.push({
+      procedure_name,
+      price: priceRaw as number,
+      procedure_code: optStr(r.procedure_code),
+      modality: optStr(r.modality),
+      body_part: optStr(r.body_part),
+      category: optStr(r.category),
+      description: optStr(r.description),
+      hsn_sac_code: optStr(r.hsn_sac_code),
+      tax_rate: optNum(r.tax_rate) ?? 0,
+      turnaround_time: optStr(r.turnaround_time),
+      requires_prescription: parseBool(r.requires_prescription),
+      is_available: parseBool(r.is_available),
+    });
+  }
+  return { valid, errors };
+}
+
 export function validateMasterRows(
   type: MasterImportType,
   rows: Record<string, unknown>[],
-): ValidateResult<DoctorRow | ServiceRow | LabTestRow | PackageRow | MedicineRow> {
+): ValidateResult<DoctorRow | ServiceRow | LabTestRow | PackageRow | MedicineRow | RadiologyRow> {
   switch (type) {
     case 'doctor_master': return validateDoctorRows(rows);
     case 'service_master': return validateServiceRows(rows);
     case 'lab_test_master': return validateLabTestRows(rows);
     case 'package_master': return validatePackageRows(rows);
     case 'medicine_master': return validateMedicineRows(rows);
+    case 'radiology_master': return validateRadiologyRows(rows);
   }
 }

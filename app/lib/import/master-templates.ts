@@ -33,6 +33,12 @@ const SAMPLE_ROWS: Record<MasterImportType, Record<string, string>> = {
     mrp: '20', purchase_price: '8', selling_price: '15',
     gst_percent: '12', min_threshold: '10', hsn_sac_code: '3004', is_active: 'true',
   },
+  radiology_master: {
+    procedure_name: 'X-Ray Chest PA View', procedure_code: 'XRAY-001', modality: 'X-Ray',
+    body_part: 'Chest', category: 'X-Ray', price: '400', tax_rate: '5',
+    hsn_sac_code: '9993', description: 'Chest X-ray, posteroanterior view',
+    turnaround_time: '30 min', requires_prescription: 'false', is_available: 'true',
+  },
 };
 
 function triggerDownload(buffer: ArrayBuffer, fileName: string) {
