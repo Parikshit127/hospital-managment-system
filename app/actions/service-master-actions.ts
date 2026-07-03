@@ -258,3 +258,82 @@ export async function deletePackage(id: number) {
     return { success: true };
   } catch (e: any) { return { success: false, error: e.message }; }
 }
+
+// ---- Radiology/Imaging (radiology_imaging) ----
+const radiologySchema = z.object({
+  procedure_name: z.string().min(1),
+  price: z.number().nonnegative(),
+  is_available: z.boolean().default(true),
+  procedure_code: optionalText,
+  category: optionalText,
+  description: optionalText,
+  hsn_sac_code: optionalText,
+  tax_rate: z.number().nonnegative().default(0),
+  turnaround_time: optionalText,
+  requires_prescription: z.boolean().default(false),
+  modality: optionalText,
+  body_part: optionalText,
+});
+
+export async function listRadiologyImaging(opts?: { search?: string; page?: number; limit?: number }) {
+  try {
+    const { db, organizationId } = await requireTenantContext();
+    const page = opts?.page ?? 1;
+    const limit = opts?.limit ?? 25;
+    const where: any = { organizationId };
+    if (opts?.search?.trim()) where.OR = [
+      { procedure_name: { contains: opts.search, mode: 'insensitive' } },
+      { modality: { contains: opts.search, mode: 'insensitive' } },
+      { category: { contains: opts.search, mode: 'insensitive' } },
+    ];
+    const [rows, total] = await Promise.all([
+      db.radiology_imaging.findMany({ where, orderBy: { procedure_name: 'asc' }, skip: (page-1)*limit, take: limit }),
+      db.radiology_imaging.count({ where }),
+    ]);
+    return { success: true, data: { rows: serialize(rows), total, totalPages: Math.ceil(total/limit), page } };
+  } catch (e: any) { return { success: false, error: e.message, data: { rows: [], total: 0, totalPages: 0, page: 1 } }; }
+}
+
+export async function createRadiologyImaging(input: unknown) {
+  try {
+    const { db, organizationId, session } = await requireTenantContext();
+    if (session.role !== 'admin') return { success: false, error: 'Admin only' };
+    const data = radiologySchema.parse(input);
+    const row = await db.radiology_imaging.create({ data: { ...data, organizationId } });
+    await db.system_audit_logs.create({ data: {
+      action: 'CREATE_RADIOLOGY', module: 'master-data',
+      details: `Created radiology procedure ${data.procedure_name}`, organizationId,
+      user_id: session.id, username: session.username, role: session.role,
+    }});
+    return { success: true, data: serialize(row) };
+  } catch (e: any) { return { success: false, error: toMessage(e, 'procedure name') }; }
+}
+
+export async function updateRadiologyImaging(id: number, input: unknown) {
+  try {
+    const { db, organizationId, session } = await requireTenantContext();
+    if (session.role !== 'admin') return { success: false, error: 'Admin only' };
+    const data = radiologySchema.partial().parse(input);
+    const row = await db.radiology_imaging.update({ where: { id }, data });
+    await db.system_audit_logs.create({ data: {
+      action: 'UPDATE_RADIOLOGY', module: 'master-data',
+      details: `Updated radiology procedure ${id}`, organizationId,
+      user_id: session.id, username: session.username, role: session.role,
+    }});
+    return { success: true, data: serialize(row) };
+  } catch (e: any) { return { success: false, error: e.message }; }
+}
+
+export async function deleteRadiologyImaging(id: number) {
+  try {
+    const { db, organizationId, session } = await requireTenantContext();
+    if (session.role !== 'admin') return { success: false, error: 'Admin only' };
+    await db.radiology_imaging.delete({ where: { id } });
+    await db.system_audit_logs.create({ data: {
+      action: 'DELETE_RADIOLOGY', module: 'master-data',
+      details: `Deleted radiology procedure ${id}`, organizationId,
+      user_id: session.id, username: session.username, role: session.role,
+    }});
+    return { success: true };
+  } catch (e: any) { return { success: false, error: e.message }; }
+}

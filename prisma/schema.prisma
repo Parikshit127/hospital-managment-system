@@ -36,6 +36,7 @@ model Organization {
   lab_test_inventory            lab_test_inventory[]
   lab_panels                    LabPanel[]
   lab_staff                     lab_staff[]
+  radiology_imaging             radiology_imaging[]
   lab_audit_logs                lab_audit_logs[]
   pharmacy_medicine_master      pharmacy_medicine_master[]
   pharmacy_orders               pharmacy_orders[]
@@ -787,6 +788,30 @@ model LabPanelTest {
 
   @@unique([panel_id, test_id])
   @@map("lab_panel_tests")
+}
+
+model radiology_imaging {
+  id                    Int            @id @default(autoincrement())
+  procedure_name        String
+  procedure_code        String?
+  price                 Float
+  category              String?        // e.g., "X-Ray", "MRI", "CT Scan", "Ultrasound", "ECG", "Echo"
+  description           String?
+  is_available          Boolean        @default(true)
+  hsn_sac_code          String?
+  tax_rate              Float?         @default(0)
+  turnaround_time       String?        // e.g., "2 hours", "1 day"
+  requires_prescription Boolean        @default(false)
+  modality              String?        // e.g., "X-Ray", "MRI", "CT", "USG", "Fluoroscopy"
+  body_part             String?        // e.g., "Chest", "Head", "Abdomen"
+  organizationId        String
+  created_at            DateTime       @default(now())
+  updated_at            DateTime       @updatedAt
+  organization          Organization   @relation(fields: [organizationId], references: [id])
+
+  @@unique([procedure_name, organizationId])
+  @@index([organizationId])
+  @@map("radiology_imaging")
 }
 
 model lab_staff {

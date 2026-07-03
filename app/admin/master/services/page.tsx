@@ -7,6 +7,7 @@ import {
   listServices, createService, updateService, deactivateService, deleteService,
   listLabTests, createLabTest, updateLabTest, deleteLabTest,
   listPackages, createPackage, updatePackage, deletePackage,
+  listRadiologyImaging, createRadiologyImaging, updateRadiologyImaging, deleteRadiologyImaging,
 } from '@/app/actions/service-master-actions';
 import { ensureIPDDemoMasterData } from '@/app/actions/ipd-billing-helpers';
 import MasterImportButton from '@/app/components/master/MasterImportButton';
@@ -19,7 +20,7 @@ const sanitizeText = (value: string) => value.replace(/[^a-zA-Z0-9\s./,+()%-]/g,
 const PAGE_LIMIT = 25;
 const SERVICE_CATEGORIES = ['OPD Consultation', 'ICU', 'Procedure', 'Room', 'Nursing', 'Diet', 'Consumable', 'Home Care', 'Visit Charges', 'Misc'] as const;
 
-type SubTab = 'services' | 'labtests' | 'packages';
+type SubTab = 'services' | 'labtests' | 'radiology' | 'packages';
 
 const EMPTY_SERVICE = {
   service_code: '', service_name: '',
@@ -36,6 +37,12 @@ const EMPTY_PACKAGE = {
   package_code: '', package_name: '', description: '',
   total_amount: 0, validity_days: 7, exclusions: '', is_active: true,
   inclusions: [{ name: '', qty: 1, amount: 0 }],
+};
+
+const EMPTY_RADIOLOGY = {
+  procedure_name: '', procedure_code: '', price: 0, category: '', description: '',
+  hsn_sac_code: '', tax_rate: 0, is_available: true, turnaround_time: '',
+  requires_prescription: false, modality: '', body_part: '',
 };
 
 export default function ServiceMasterPage() {
@@ -79,6 +86,19 @@ export default function ServiceMasterPage() {
   const [pkgEditingId, setPkgEditingId] = useState<number | null>(null);
   const [pkgForm, setPkgForm] = useState<any>(EMPTY_PACKAGE);
   const [pkgSubmitting, setPkgSubmitting] = useState(false);
+
+  // ---- Radiology/Imaging state ----
+  const [radRows, setRadRows] = useState<any[]>([]);
+  const [radLoading, setRadLoading] = useState(true);
+  const [radSearchInput, setRadSearchInput] = useState('');
+  const [radSearch, setRadSearch] = useState('');
+  const [radPage, setRadPage] = useState(1);
+  const [radTotal, setRadTotal] = useState(0);
+  const [radTotalPages, setRadTotalPages] = useState(0);
+  const [radMode, setRadMode] = useState<'idle' | 'create' | 'edit'>('idle');
+  const [radEditingId, setRadEditingId] = useState<number | null>(null);
+  const [radForm, setRadForm] = useState<any>(EMPTY_RADIOLOGY);
+  const [radSubmitting, setRadSubmitting] = useState(false);
 
   const [seeding, setSeeding] = useState(false);
   const handleSeedDemo = async () => {
@@ -143,9 +163,23 @@ export default function ServiceMasterPage() {
     setPkgLoading(false);
   }, [pkgSearch, pkgPage]);
 
+  const loadRadiology = useCallback(async () => {
+    setRadLoading(true);
+    const res = await listRadiologyImaging({ search: radSearch, page: radPage, limit: PAGE_LIMIT });
+    if (res.success) {
+      setRadRows(res.data.rows);
+      setRadTotal(res.data.total);
+      setRadTotalPages(res.data.totalPages);
+    } else {
+      toast.error(res.error || 'Failed to load radiology imaging');
+    }
+    setRadLoading(false);
+  }, [radSearch, radPage]);
+
   useEffect(() => { loadServices(); }, [loadServices]);
   useEffect(() => { loadLabTests(); }, [loadLabTests]);
   useEffect(() => { loadPackages(); }, [loadPackages]);
+  useEffect(() => { loadRadiology(); }, [loadRadiology]);
 
   useEffect(() => {
     const t = setTimeout(() => { setSvcSearch(svcSearchInput); setSvcPage(1); }, 350);
@@ -161,6 +195,11 @@ export default function ServiceMasterPage() {
     const t = setTimeout(() => { setPkgSearch(pkgSearchInput); setPkgPage(1); }, 350);
     return () => clearTimeout(t);
   }, [pkgSearchInput]);
+
+  useEffect(() => {
+    const t = setTimeout(() => { setRadSearch(radSearchInput); setRadPage(1); }, 350);
+    return () => clearTimeout(t);
+  }, [radSearchInput]);
 
   // ---- Services handlers ----
   const openCreateSvc = () => { setSvcForm(EMPTY_SERVICE); setSvcMode('create'); };
@@ -304,9 +343,51 @@ export default function ServiceMasterPage() {
     }
   };
 
+  // ---- Radiology/Imaging handlers ----
+  const openCreateRad = () => { setRadForm(EMPTY_RADIOLOGY); setRadMode('create'); };
+  const openEditRad = (row: any) => {
+    setRadEditingId(row.id);
+    setRadForm({
+      ...EMPTY_RADIOLOGY, ...row,
+      price: Number(row.price ?? 0),
+      tax_rate: Number(row.tax_rate ?? 0),
+    });
+    setRadMode('edit');
+  };
+  const closeRad = () => { setRadMode('idle'); setRadEditingId(null); };
+
+  const deleteRadHandler = async (id: number) => {
+    if (!confirm('Permanently delete this procedure? This cannot be undone.')) return;
+    const res = await deleteRadiologyImaging(id);
+    if (res.success) { toast.success('Procedure deleted'); loadRadiology(); }
+    else toast.error(res.error || 'Failed to delete');
+  };
+
+  const submitRad = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRadSubmitting(true);
+    const payload = {
+      ...radForm,
+      price: Number(radForm.price),
+      tax_rate: Number(radForm.tax_rate),
+    };
+    const res = radMode === 'create'
+      ? await createRadiologyImaging(payload)
+      : await updateRadiologyImaging(radEditingId!, payload);
+    if (res.success) {
+      toast.success(radMode === 'create' ? 'Procedure created' : 'Procedure updated');
+      closeRad();
+      loadRadiology();
+    } else {
+      toast.error(res.error || 'Failed');
+    }
+    setRadSubmitting(false);
+  };
+
   const TABS: { key: SubTab; label: string }[] = [
     { key: 'services', label: 'Services' },
     { key: 'labtests', label: 'Lab Tests' },
+    { key: 'radiology', label: 'Radiology/Imaging' },
     { key: 'packages', label: 'Packages' },
   ];
 
@@ -632,6 +713,165 @@ export default function ServiceMasterPage() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ===== RADIOLOGY/IMAGING TAB ===== */}
+      {activeSubTab === 'radiology' && (
+        <>
+          <div className="flex items-center justify-between">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text" value={radSearchInput}
+                onChange={e => setRadSearchInput(e.target.value)}
+                placeholder="Search by procedure or modality"
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <button onClick={openCreateRad}
+              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">
+              <Plus className="h-4 w-4" /> Add Procedure
+            </button>
+          </div>
+
+          {/* Create/Edit Modal */}
+          {radMode !== 'idle' && (
+            <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+              <form onSubmit={submitRad} className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
+                <h2 className="text-lg font-bold mb-4">{radMode === 'create' ? 'Add Radiology Procedure' : 'Edit Radiology Procedure'}</h2>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Procedure Name *</label>
+                    <input type="text" value={radForm.procedure_name} onChange={e => setRadForm({ ...radForm, procedure_name: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500" required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Procedure Code</label>
+                    <input type="text" value={radForm.procedure_code} onChange={e => setRadForm({ ...radForm, procedure_code: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Modality (X-Ray, MRI, CT, etc.)</label>
+                    <input type="text" value={radForm.modality} onChange={e => setRadForm({ ...radForm, modality: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500" placeholder="e.g., MRI, CT Scan, X-Ray" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Body Part</label>
+                    <input type="text" value={radForm.body_part} onChange={e => setRadForm({ ...radForm, body_part: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500" placeholder="e.g., Chest, Head, Abdomen" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Category</label>
+                    <input type="text" value={radForm.category} onChange={e => setRadForm({ ...radForm, category: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Price *</label>
+                    <input type="number" value={radForm.price} onChange={e => setRadForm({ ...radForm, price: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500" step="0.01" required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">HSN/SAC Code</label>
+                    <input type="text" value={radForm.hsn_sac_code} onChange={e => setRadForm({ ...radForm, hsn_sac_code: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Tax Rate (%)</label>
+                    <input type="number" value={radForm.tax_rate} onChange={e => setRadForm({ ...radForm, tax_rate: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500" step="0.01" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Description</label>
+                    <textarea value={radForm.description} onChange={e => setRadForm({ ...radForm, description: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500" rows={2} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Turnaround Time</label>
+                    <input type="text" value={radForm.turnaround_time} onChange={e => setRadForm({ ...radForm, turnaround_time: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500" placeholder="e.g., 2 hours, 1 day" />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 text-xs font-bold text-gray-600">
+                      <input type="checkbox" checked={radForm.is_available} onChange={e => setRadForm({ ...radForm, is_available: e.target.checked })} />
+                      Available
+                    </label>
+                    <label className="flex items-center gap-2 text-xs font-bold text-gray-600">
+                      <input type="checkbox" checked={radForm.requires_prescription} onChange={e => setRadForm({ ...radForm, requires_prescription: e.target.checked })} />
+                      Requires Rx
+                    </label>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-6">
+                  <button type="button" onClick={closeRad} className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={radSubmitting}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                    {radSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    {radMode === 'create' ? 'Create' : 'Update'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Table */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-4 py-3 text-left font-bold text-gray-700">Procedure</th>
+                  <th className="px-4 py-3 text-left font-bold text-gray-700">Modality</th>
+                  <th className="px-4 py-3 text-left font-bold text-gray-700">Body Part</th>
+                  <th className="px-4 py-3 text-right font-bold text-gray-700">Price</th>
+                  <th className="px-4 py-3 text-center font-bold text-gray-700">Tax %</th>
+                  <th className="px-4 py-3 text-center font-bold text-gray-700">Status</th>
+                  <th className="px-4 py-3 text-center font-bold text-gray-700">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {radLoading ? (
+                  <tr><td colSpan={7} className="text-center py-16"><Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" /></td></tr>
+                ) : radRows.length === 0 ? (
+                  <tr><td colSpan={7} className="text-center py-12 text-gray-400">No procedures found</td></tr>
+                ) : radRows.map(r => (
+                  <tr key={r.id} className="hover:bg-gray-50 border-b">
+                    <td className="px-4 py-3 font-medium text-gray-900">{r.procedure_name}</td>
+                    <td className="px-4 py-3 text-gray-600">{r.modality || '—'}</td>
+                    <td className="px-4 py-3 text-gray-600">{r.body_part || '—'}</td>
+                    <td className="px-4 py-3 text-right text-gray-900 font-semibold">₹{Number(r.price).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-center text-gray-600">{r.tax_rate}%</td>
+                    <td className="px-4 py-3 text-center">
+                      {r.is_available ? <span className="inline-block px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded">Available</span>
+                        : <span className="inline-block px-2 py-1 bg-gray-100 text-gray-700 text-xs font-bold rounded">Inactive</span>}
+                    </td>
+                    <td className="px-4 py-3 text-center flex justify-center gap-2">
+                      <button onClick={() => openEditRad(r)} className="text-blue-600 hover:text-blue-800"><Pencil className="h-4 w-4" /></button>
+                      <button onClick={() => deleteRadHandler(r.id)} className="text-red-600 hover:text-red-800"><Trash2 className="h-4 w-4" /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {radTotalPages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-sm text-gray-600">Showing {(radPage - 1) * PAGE_LIMIT + 1} to {Math.min(radPage * PAGE_LIMIT, radTotal)} of {radTotal}</div>
+              <div className="flex gap-2">
+                <button onClick={() => setRadPage(radPage - 1)} disabled={radPage === 1}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50 disabled:opacity-50">
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button onClick={() => setRadPage(radPage + 1)} disabled={radPage === radTotalPages}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50 disabled:opacity-50">
+                  <ChevronRight className="h-4 w-4" />
+                </button>
               </div>
             </div>
           )}
