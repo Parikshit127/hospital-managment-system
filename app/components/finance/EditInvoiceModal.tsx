@@ -16,6 +16,12 @@ import {
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 import { getAllBillableServices } from '@/app/actions/ipd-master-actions';
 
+// Numeric line-item inputs: hide the native number-spinner arrows (they eat the
+// cell width and clip the typed value) and use tabular figures + right align so
+// the entered amount is always readable.
+const NUM_INPUT =
+    "w-full px-2 py-1 border border-gray-200 rounded text-xs text-right tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+
 interface EditInvoiceModalProps {
     invoiceId: number;
     isOpen: boolean;
@@ -606,15 +612,15 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                             </Button>
                         </div>
                         <div className={activeSvcRow !== null ? '' : 'overflow-x-auto'}>
-                            <table className="w-full text-xs">
+                            <table className="w-full min-w-[960px] text-xs">
                                 <thead className="bg-gray-50 border-t border-b border-gray-200 text-gray-500">
                                     <tr>
-                                        <th className="px-2 py-2 text-left font-semibold">Category</th>
-                                        <th className="px-2 py-2 text-left font-semibold">Service / Description</th>
-                                        <th className="px-2 py-2 text-right font-semibold w-16">Qty</th>
-                                        <th className="px-2 py-2 text-right font-semibold w-24">Unit ₹</th>
-                                        <th className="px-2 py-2 text-right font-semibold w-24">Disc ₹</th>
-                                        <th className="px-2 py-2 text-right font-semibold w-16">Tax %</th>
+                                        <th className="px-2 py-2 text-left font-semibold min-w-[120px]">Category</th>
+                                        <th className="px-2 py-2 text-left font-semibold min-w-[160px]">Service / Description</th>
+                                        <th className="px-2 py-2 text-right font-semibold w-20">Qty</th>
+                                        <th className="px-2 py-2 text-right font-semibold w-28">Unit ₹</th>
+                                        <th className="px-2 py-2 text-right font-semibold w-28">Disc ₹</th>
+                                        <th className="px-2 py-2 text-right font-semibold w-20">Tax %</th>
                                         <th className="px-2 py-2 text-left font-semibold w-40" title="Backdate up to 1 year. Applies to newly-added rows only.">Service Date</th>
                                         <th className="px-2 py-2 text-right font-semibold w-24">Line Net</th>
                                         <th className="px-2 py-2 w-10"></th>
@@ -717,7 +723,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                         type="number"
                                                         min={0}
                                                         step="any"
-                                                        className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-right"
+                                                        className={NUM_INPUT}
                                                         value={it.quantity}
                                                         onChange={e => updateItem(idx, { quantity: Number(e.target.value) })}
                                                         disabled={readOnly || saving}
@@ -729,7 +735,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                             type="number"
                                                             min={0}
                                                             step="any"
-                                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-right"
+                                                            className={NUM_INPUT}
                                                             value={it.unit_price}
                                                             onChange={e => updateItem(idx, { unit_price: Number(e.target.value) })}
                                                             disabled={readOnly || saving}
@@ -738,7 +744,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                         <input
                                                             type="number"
                                                             step="any"
-                                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-right bg-gray-50 text-gray-500 cursor-not-allowed"
+                                                            className={`${NUM_INPUT} bg-gray-50 text-gray-500 cursor-not-allowed`}
                                                             value={it.unit_price}
                                                             readOnly
                                                             title="Item prices cannot be edited. To change the amount, apply a discount or cancel the service and add it again."
@@ -750,7 +756,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                         type="number"
                                                         min={0}
                                                         step="any"
-                                                        className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-right"
+                                                        className={NUM_INPUT}
                                                         value={it.discount}
                                                         onChange={e => updateItem(idx, { discount: Number(e.target.value) })}
                                                         disabled={readOnly || saving}
@@ -762,7 +768,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                         min={0}
                                                         max={100}
                                                         step="any"
-                                                        className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-right"
+                                                        className={NUM_INPUT}
                                                         value={it.tax_rate}
                                                         onChange={e => updateItem(idx, { tax_rate: Number(e.target.value) })}
                                                         disabled={readOnly || saving}
