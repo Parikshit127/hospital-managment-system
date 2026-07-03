@@ -24,6 +24,7 @@ const TYPE_LABELS: Record<ImportType, string> = {
     lab_test_master: 'Lab Test Master',
     package_master: 'Package Master',
     medicine_master: 'Medicine Master',
+    radiology_master: 'Radiology/Imaging Master',
 };
 
 export default function StepResults({ jobId, importType, onStartOver }: Props) {

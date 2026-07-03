@@ -17,6 +17,7 @@ const IMPORT_TYPES: { value: ImportType; label: string; icon: React.ElementType;
     { value: 'lab_test_master', label: 'Lab Test Master', icon: Database, description: 'Use the Master Data page to import lab tests', disabled: true },
     { value: 'package_master', label: 'Package Master', icon: Database, description: 'Use the Master Data page to import packages', disabled: true },
     { value: 'medicine_master', label: 'Medicine Master', icon: Database, description: 'Use the Master Data page to import medicines', disabled: true },
+    { value: 'radiology_master', label: 'Radiology/Imaging Master', icon: Database, description: 'Use the Master Data page to import radiology procedures', disabled: true },
 ];
 
 interface Props {
