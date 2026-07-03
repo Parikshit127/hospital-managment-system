@@ -493,6 +493,14 @@ export default function ServiceMasterPage() {
               />
             </div>
             <div className="flex items-center gap-2">
+              <MasterExportButton
+                filename="lab-tests"
+                sheetName="Lab Tests"
+                fetchRows={async () => {
+                  const res = await listLabTests({ search: labSearch, limit: 100000 });
+                  return res.success ? ((res.data?.rows as any[]) ?? []) : [];
+                }}
+              />
               <MasterImportButton type="lab_test_master" onImportComplete={loadLabTests} />
               <button onClick={openCreateLab}
                 className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">
@@ -644,6 +652,14 @@ export default function ServiceMasterPage() {
               />
             </div>
             <div className="flex items-center gap-2">
+              <MasterExportButton
+                filename="packages"
+                sheetName="Packages"
+                fetchRows={async () => {
+                  const res = await listPackages({ search: pkgSearch, limit: 100000 });
+                  return res.success ? ((res.data?.rows as any[]) ?? []) : [];
+                }}
+              />
               <MasterImportButton type="package_master" onImportComplete={loadPackages} />
               <button onClick={openCreatePkg}
                 className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">
