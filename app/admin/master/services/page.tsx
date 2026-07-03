@@ -426,6 +426,7 @@ export default function ServiceMasterPage() {
                 {seeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Seed Demo Data
               </button>
               <MasterExportButton
+                type="service_master"
                 filename="services"
                 sheetName="Services"
                 fetchRows={async () => {
@@ -576,6 +577,7 @@ export default function ServiceMasterPage() {
             </div>
             <div className="flex items-center gap-2">
               <MasterExportButton
+                type="lab_test_master"
                 filename="lab-tests"
                 sheetName="Lab Tests"
                 fetchRows={async () => {
@@ -735,6 +737,7 @@ export default function ServiceMasterPage() {
             </div>
             <div className="flex items-center gap-2">
               <MasterExportButton
+                type="radiology_master"
                 filename="radiology-imaging"
                 sheetName="Radiology"
                 fetchRows={async () => {
@@ -905,6 +908,7 @@ export default function ServiceMasterPage() {
             </div>
             <div className="flex items-center gap-2">
               <MasterExportButton
+                type="package_master"
                 filename="packages"
                 sheetName="Packages"
                 fetchRows={async () => {

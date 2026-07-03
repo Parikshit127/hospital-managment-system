@@ -4,49 +4,36 @@ import React, { useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { getTemplateHeaders } from '@/app/lib/import/templates';
+import type { MasterImportType } from '@/app/lib/import/master-validators';
 
-// Fields that are internal plumbing — never useful in an exported master sheet.
-const DEFAULT_EXCLUDE = [
-  'id', 'organizationId', 'password', 'password_hash',
-  'createdAt', 'updatedAt', 'created_at', 'updated_at',
-];
-
-// snake_case / camelCase field name -> readable column header.
-function prettify(key: string): string {
-  if (key === 'is_active') return 'Status';
-  return key
-    .replace(/_/g, ' ')
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/\b\w/g, c => c.toUpperCase())
-    .trim();
-}
-
-function cell(key: string, v: unknown): string | number {
-  if (key === 'is_active') return v ? 'Active' : 'Inactive';
+// Format a value for the sheet so the file round-trips through the importer:
+// booleans as the 'true'/'false' the validator's parseBool expects, blanks for
+// missing fields (e.g. password, which is never exported).
+function cell(v: unknown): string | number {
   if (v === null || v === undefined) return '';
-  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  if (typeof v === 'boolean') return v ? 'true' : 'false';
   if (typeof v === 'object') return JSON.stringify(v);
   return v as string | number;
 }
 
 interface Props {
+  /** Master type — drives the exact column set, matching the import template. */
+  type: MasterImportType;
   /** Base file name, e.g. "doctors" -> doctors-2026-07-03.xlsx */
   filename: string;
   sheetName?: string;
   /** Returns ALL rows to export (call the list action with a large limit). */
   fetchRows: () => Promise<Record<string, unknown>[]>;
-  /** Extra field keys to drop from the export, on top of DEFAULT_EXCLUDE. */
-  exclude?: string[];
 }
 
 /**
- * A drop-in "Export" button for the Master Data lists (Doctors / Services /
- * Medicines). Fetches every row, derives readable headers from the row fields
- * and downloads a .xlsx — matching the look of the existing Template/Import
- * buttons. Column layout mirrors the import template so an export can be edited
- * and re-imported.
+ * "Export" button for the Master Data lists. It writes exactly the same columns
+ * (and in the same order) as the import template for `type`, so an exported file
+ * can be edited and re-imported without column-mismatch errors. DB field names
+ * already match the template column names, so each cell is a direct lookup.
  */
-export default function MasterExportButton({ filename, sheetName = 'Data', fetchRows, exclude = [] }: Props) {
+export default function MasterExportButton({ type, filename, sheetName = 'Data', fetchRows }: Props) {
   const [busy, setBusy] = useState(false);
 
   async function handleExport() {
@@ -57,13 +44,12 @@ export default function MasterExportButton({ filename, sheetName = 'Data', fetch
         toast.error('Nothing to export.');
         return;
       }
-      const skip = new Set([...DEFAULT_EXCLUDE, ...exclude]);
-      const keys = Object.keys(rows[0]).filter(k => !skip.has(k));
-      const headers = keys.map(prettify);
 
+      // Use the import template's headers verbatim so export === import format.
+      const headers = getTemplateHeaders(type as any);
       const data = rows.map(r => {
         const o: Record<string, string | number> = {};
-        keys.forEach((k, i) => { o[headers[i]] = cell(k, r[k]); });
+        for (const h of headers) o[h] = cell((r as Record<string, unknown>)[h]);
         return o;
       });
 

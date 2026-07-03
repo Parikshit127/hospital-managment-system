@@ -181,6 +181,7 @@ export default function DoctorMasterPage() {
         </div>
         <div className="flex items-center gap-2">
           <MasterExportButton
+            type="doctor_master"
             filename="doctors"
             sheetName="Doctors"
             fetchRows={async () => {
