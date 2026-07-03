@@ -5689,3 +5689,35 @@ model stores {
   @@unique([store_code, organizationId])
   @@index([organizationId])
 }
+
+// ============================================================
+// EMAIL OUTBOX (v4 Addendum — event-driven emails)
+// Async email queue. Ticket actions enqueue PENDING rows (never blocking);
+// /api/cron/email-dispatch drains them with base Prisma across all orgs.
+// `organizationId` is a plain scalar (like system_audit_logs) so the
+// Organization model stays untouched and the migration is purely additive.
+// ============================================================
+
+enum EmailJobStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model EmailJob {
+  id              String         @id @default(uuid())
+  type            String // 'ticket.created' | 'ticket.assigned' | 'ticket.resolved'
+  recipient_email String
+  subject         String
+  body            String // pre-rendered HTML passed straight to sendEmail()
+  payload         Json           @default("{}") // structured context: { ticketId, actorId, ... }
+  status          EmailJobStatus @default(PENDING)
+  attempts        Int            @default(0)
+  error_message   String?
+  organizationId  String? // for per-org SMTP resolution + attribution (nullable = system-level)
+  created_at      DateTime       @default(now())
+  processed_at    DateTime?
+
+  @@index([status, created_at]) // drives the cron drain query (status=PENDING, oldest first)
+  @@map("email_jobs")
+}
