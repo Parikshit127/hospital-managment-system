@@ -5,9 +5,7 @@ import { AdminPage } from '@/app/admin/components/AdminPage';
 import { Megaphone, Send, CheckCheck, AlertCircle, Building2 } from 'lucide-react';
 import { Button } from '@/app/components/ui/Button';
 import { Input, Textarea } from '@/app/components/ui/Input';
-// TEMPORARY: stubbed action while Person B builds the real hospital broadcast
-// backend. Swap this import for the real action once it lands.
-import { sendLocalBroadcast } from '@/app/actions/local-broadcast-stub';
+import { sendLocalBroadcast } from '@/app/actions/broadcast-actions';
 
 export default function AdminBroadcastsPage() {
     const [title, setTitle] = useState('');

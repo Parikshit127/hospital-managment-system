@@ -5,8 +5,6 @@ import { AdminPage } from '@/app/admin/components/AdminPage';
 import { Settings, Mail, Save, CheckCheck, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/app/components/ui/Button';
 import { Input } from '@/app/components/ui/Input';
-// TEMPORARY: stubbed load/save while Person B builds the real dev-user email
-// persistence. Swap this import for the real actions once they land.
 import { getDevPortalEmail, saveDevPortalEmail } from './actions';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
