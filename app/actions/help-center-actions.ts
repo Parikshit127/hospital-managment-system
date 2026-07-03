@@ -1,6 +1,6 @@
 'use server';
 
-import { requireTenantContext } from '@/backend/tenant';
+import { requireTenantContext, requireAnyTenantContext } from '@/backend/tenant';
 import { requireDevAdmin, requireDeveloper } from '@/backend/dev-portal';
 import { TicketPriority, TicketStatus, TicketNoteVisibility } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
@@ -132,8 +132,9 @@ export async function saveTicketAttachment(input: SaveTicketAttachmentInput) {
 
 export async function getAttachmentSignedUrl(fileUrl: string) {
     try {
-        // Require an authenticated tenant session (admin support portal).
-        await requireTenantContext();
+        // Reachable from BOTH the hospital Help Center and the Dev Portal ticket
+        // command center — accept any authenticated session (incl. dev_portal_session).
+        await requireAnyTenantContext();
 
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
         // Service role bypasses storage RLS server-side (the app uses its own

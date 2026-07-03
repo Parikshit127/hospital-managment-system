@@ -1,6 +1,6 @@
 'use server';
 
-import { requireTenantContext } from '@/backend/tenant';
+import { requireTenantContext, requireAnyTenantContext } from '@/backend/tenant';
 
 // ============================================
 // BRANCH MANAGEMENT SERVER ACTIONS
@@ -20,10 +20,13 @@ export interface BranchInput {
     longitude?: number | null;
 }
 
-// List all branches for the current tenant
+// List all branches for the current tenant.
+// Read-only and reached from the Dev Portal (ticket filters + broadcast FACILITY
+// audience) as well as the hospital app, so it accepts any authenticated session.
+// The branch mutations below remain on requireTenantContext (hospital-only).
 export async function listBranches() {
     try {
-        const { db } = await requireTenantContext();
+        const { db } = await requireAnyTenantContext();
 
         const branches = await db.branch.findMany({
             orderBy: [
