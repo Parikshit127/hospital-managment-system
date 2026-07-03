@@ -300,7 +300,7 @@ const ASSIGNABLE_ROLES = ['admin', 'developer'];
  */
 export async function getAssignableUsers() {
     try {
-        const { db, organizationId } = await requireDevAdmin();
+        const { db, organizationId } = await requireDeveloper();
 
         const data = await db.user.findMany({
             where: {
