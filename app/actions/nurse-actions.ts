@@ -429,14 +429,21 @@ export async function getWardsList() {
 export async function searchMedicines(query: string) {
     try {
         const { db } = await requireTenantContext();
+        const cleanQuery = (query ?? '').trim();
+        const where: any = { is_active: true };
+        if (cleanQuery) {
+            const words = cleanQuery.split(/\s+/).filter(Boolean);
+            if (words.length > 0) {
+                where.AND = words.map(word => ({
+                    OR: [
+                        { brand_name: { contains: word, mode: 'insensitive' } },
+                        { generic_name: { contains: word, mode: 'insensitive' } },
+                    ]
+                }));
+            }
+        }
         const medicines = await db.pharmacy_medicine_master.findMany({
-            where: {
-                is_active: true,
-                OR: [
-                    { brand_name: { contains: query, mode: 'insensitive' } },
-                    { generic_name: { contains: query, mode: 'insensitive' } },
-                ],
-            },
+            where,
             select: { id: true, brand_name: true, generic_name: true, form: true, strength: true },
             take: 20,
         });

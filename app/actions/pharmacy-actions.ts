@@ -85,10 +85,15 @@ export async function getInventoryPage(opts?: {
 
         const medWhere: any = { is_active: true };
         if (search) {
-            medWhere.OR = [
-                { brand_name: { contains: search, mode: 'insensitive' } },
-                { generic_name: { contains: search, mode: 'insensitive' } },
-            ];
+            const words = search.split(/\s+/).filter(Boolean);
+            if (words.length > 0) {
+                medWhere.AND = words.map(word => ({
+                    OR: [
+                        { brand_name: { contains: word, mode: 'insensitive' } },
+                        { generic_name: { contains: word, mode: 'insensitive' } },
+                    ]
+                }));
+            }
         }
         if (opts?.cursor) medWhere.id = { gt: opts.cursor };
 
@@ -1269,10 +1274,15 @@ export async function searchMedicine(
         const where: any = {};
         if (activeOnly) where.is_active = true;
         if (query) {
-            where.OR = [
-                { brand_name: { contains: query, mode: 'insensitive' } },
-                { generic_name: { contains: query, mode: 'insensitive' } },
-            ];
+            const words = query.split(/\s+/).filter(Boolean);
+            if (words.length > 0) {
+                where.AND = words.map(word => ({
+                    OR: [
+                        { brand_name: { contains: word, mode: 'insensitive' } },
+                        { generic_name: { contains: word, mode: 'insensitive' } },
+                    ]
+                }));
+            }
         }
         if (opts.cursor) where.id = { gt: opts.cursor };
 

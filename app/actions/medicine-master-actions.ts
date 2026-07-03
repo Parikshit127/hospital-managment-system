@@ -49,11 +49,19 @@ export async function listMedicines(opts?: { search?: string; page?: number; lim
     const page = opts?.page ?? 1;
     const limit = opts?.limit ?? 25;
     const where: any = {};
-    if (opts?.search?.trim()) where.OR = [
-      { brand_name: { contains: opts.search, mode: 'insensitive' } },
-      { generic_name: { contains: opts.search, mode: 'insensitive' } },
-      { category: { contains: opts.search, mode: 'insensitive' } },
-    ];
+    const cleanSearch = (opts?.search ?? '').trim();
+    if (cleanSearch) {
+      const words = cleanSearch.split(/\s+/).filter(Boolean);
+      if (words.length > 0) {
+        where.AND = words.map(word => ({
+          OR: [
+            { brand_name: { contains: word, mode: 'insensitive' } },
+            { generic_name: { contains: word, mode: 'insensitive' } },
+            { category: { contains: word, mode: 'insensitive' } },
+          ]
+        }));
+      }
+    }
     const [rows, total] = await Promise.all([
       db.pharmacy_medicine_master.findMany({
         where,
