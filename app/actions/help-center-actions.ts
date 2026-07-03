@@ -301,10 +301,10 @@ export async function getAllTickets() {
 // ========================================
 
 /**
- * Fetch users who can be assigned tickets — strictly the internal Dev team
- * (Dev Admins or Developers), scoped to the caller's organization. Standard
- * hospital admins are matched on the boolean flags, NOT the free-form role
- * string, so they never appear here.
+ * Fetch users who can be assigned tickets — strictly standard Developers
+ * (is_developer = true AND is_dev_admin = false), scoped to the caller's org.
+ * Dev Admins and hospital admins are deliberately excluded: tickets are worked
+ * by Developers, not managed by Dev Admins as assignees.
  */
 export async function getAssignableUsers() {
     try {
@@ -314,7 +314,8 @@ export async function getAssignableUsers() {
             where: {
                 organizationId,
                 is_active: true,
-                OR: [{ is_dev_admin: true }, { is_developer: true }],
+                is_developer: true,
+                is_dev_admin: false,
             },
             select: { id: true, name: true, username: true, role: true },
             orderBy: { name: 'asc' },
