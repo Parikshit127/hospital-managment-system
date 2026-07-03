@@ -20,7 +20,7 @@ import { getAllBillableServices } from '@/app/actions/ipd-master-actions';
 // cell width and clip the typed value) and use tabular figures + right align so
 // the entered amount is always readable.
 const NUM_INPUT =
-    "w-full px-2 py-1 border border-gray-200 rounded text-xs text-right tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+    "w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-right tabular-nums font-medium [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 
 interface EditInvoiceModalProps {
     invoiceId: number;
@@ -527,7 +527,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
             onClose={saving ? () => {} : onClose}
             title={`Edit Invoice${invoiceMeta ? ` — ${invoiceMeta.invoice_number || 'Draft (unsaved)'}` : ''}`}
             icon={<Pencil className="h-4 w-4" />}
-            maxWidth="2xl"
+            maxWidth="6xl"
         >
             {loading ? (
                 <div className="py-12 text-center text-sm text-gray-500">Loading invoice…</div>
