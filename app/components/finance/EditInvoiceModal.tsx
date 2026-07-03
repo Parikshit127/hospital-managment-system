@@ -64,6 +64,7 @@ type HeaderState = {
     concession_reason: string;
     is_inter_state: boolean;
     bill_discount: number;
+    discount_remark: string;
     doctor_id: string;
     doctor_name: string;
 };
@@ -237,6 +238,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                 concession_reason: inv.concession_reason ?? '',
                 is_inter_state: !!inv.is_inter_state,
                 bill_discount: Number(inv.bill_discount ?? 0),
+                discount_remark: inv.discount_remark ?? '',
                 doctor_id: inv.doctor_id ?? '',
                 doctor_name: inv.doctor_name ?? '',
             };
@@ -395,7 +397,8 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
             Number(header.concession_amount) !== Number(headerOrig.concession_amount) ||
             header.concession_reason !== headerOrig.concession_reason ||
             header.is_inter_state !== headerOrig.is_inter_state ||
-            Number(header.bill_discount) !== Number(headerOrig.bill_discount)
+            Number(header.bill_discount) !== Number(headerOrig.bill_discount) ||
+            header.discount_remark !== headerOrig.discount_remark
         );
     }
 
@@ -460,6 +463,8 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                     header_diff.is_inter_state = header.is_inter_state;
                 if (Number(header.bill_discount) !== Number(headerOrig.bill_discount))
                     header_diff.bill_discount = Number(header.bill_discount);
+                if (header.discount_remark !== headerOrig.discount_remark)
+                    header_diff.discount_remark = header.discount_remark;
             }
 
             const nothingChanged =
@@ -855,25 +860,41 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                     </div>
 
                     {/* Final (whole-bill) discount — does NOT touch line/product prices */}
-                    <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-orange-200 bg-orange-50/60 px-3 py-2.5">
+                    <div className="rounded-xl border border-orange-200 bg-orange-50/60 px-3 py-2.5 space-y-2.5">
+                        <div className="flex flex-wrap items-end justify-between gap-3">
+                            <div>
+                                <label className="block text-[10px] font-bold uppercase tracking-wide text-orange-600 mb-1">
+                                    Final Bill Discount (₹)
+                                </label>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    step="any"
+                                    value={header.bill_discount || ''}
+                                    onChange={e => setHeader({ ...header, bill_discount: Math.max(0, Number(e.target.value) || 0) })}
+                                    disabled={readOnly || saving}
+                                    placeholder="0"
+                                    className="w-40 px-2 py-1.5 border border-orange-200 rounded text-xs text-right bg-white"
+                                />
+                            </div>
+                            <p className="text-[10px] text-gray-500 leading-snug max-w-[260px]">
+                                A flat discount on the final bill total. Line-item prices stay unchanged — it shows as a discount on the bill.
+                            </p>
+                        </div>
+                        {/* Discount Remark */}
                         <div>
                             <label className="block text-[10px] font-bold uppercase tracking-wide text-orange-600 mb-1">
-                                Final Bill Discount (₹)
+                                Discount Remark
                             </label>
                             <input
-                                type="number"
-                                min={0}
-                                step="any"
-                                value={header.bill_discount || ''}
-                                onChange={e => setHeader({ ...header, bill_discount: Math.max(0, Number(e.target.value) || 0) })}
+                                type="text"
+                                value={header.discount_remark || ''}
+                                onChange={e => setHeader({ ...header, discount_remark: e.target.value })}
                                 disabled={readOnly || saving}
-                                placeholder="0"
-                                className="w-40 px-2 py-1.5 border border-orange-200 rounded text-xs text-right bg-white"
+                                placeholder="Reason for discount (e.g. BPL patient, loyalty, staff)…"
+                                className="w-full px-2 py-1.5 border border-orange-200 rounded text-xs bg-white placeholder:text-gray-400"
                             />
                         </div>
-                        <p className="text-[10px] text-gray-500 leading-snug max-w-[260px]">
-                            A flat discount on the final bill total. Line-item prices stay unchanged — it shows as a discount on the bill.
-                        </p>
                     </div>
 
                     {/* Consulting Doctor — non-financial; admin/finance can change it even on a paid/locked OPD bill */}
