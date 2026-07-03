@@ -1,6 +1,7 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
+import { requireDevAdmin } from '@/backend/dev-portal';
 import { TicketPriority, TicketStatus, TicketNoteVisibility } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@supabase/supabase-js';
@@ -116,7 +117,7 @@ export async function saveTicketAttachment(input: SaveTicketAttachmentInput) {
         });
 
         revalidatePath('/help-center');
-        revalidatePath('/admin/support');
+        revalidatePath('/dev-portal/tickets');
         return { success: true, data: attachment };
     } catch (error) {
         console.error('Save Ticket Attachment Error:', error);
@@ -205,7 +206,7 @@ export async function getTicketsByFacility(branchId: string) {
 
 export async function updateTicketStatus(ticketId: string, status: TicketStatus) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId } = await requireDevAdmin();
 
         const ticket = await db.ticket.update({
             where: { id: ticketId, organizationId },
@@ -237,7 +238,7 @@ export async function updateTicketStatus(ticketId: string, status: TicketStatus)
         });
 
         revalidatePath('/help-center');
-        revalidatePath('/admin/support');
+        revalidatePath('/dev-portal/tickets');
         return { success: true, data: ticket };
     } catch (error) {
         console.error('Update Ticket Status Error:', error);
@@ -251,7 +252,7 @@ export async function updateTicketStatus(ticketId: string, status: TicketStatus)
 
 export async function getAllTickets() {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId } = await requireDevAdmin();
 
         const data = await db.ticket.findMany({
             where: { organizationId },
@@ -282,7 +283,7 @@ const ASSIGNABLE_ROLES = ['admin', 'developer'];
  */
 export async function getAssignableUsers() {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId } = await requireDevAdmin();
 
         const data = await db.user.findMany({
             where: {
@@ -307,7 +308,7 @@ export async function getAssignableUsers() {
  */
 export async function assignTicket(ticketId: string, userId: string | null) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId } = await requireDevAdmin();
 
         // When assigning, verify the assignee belongs to the caller's org.
         if (userId) {
@@ -334,7 +335,7 @@ export async function assignTicket(ticketId: string, userId: string | null) {
             details: userId ? `Assigned to user ${userId}` : 'Ticket unassigned',
         });
 
-        revalidatePath('/admin/support');
+        revalidatePath('/dev-portal/tickets');
         return { success: true, data: ticket };
     } catch (error) {
         console.error('Assign Ticket Error:', error);
@@ -358,7 +359,7 @@ interface CreateTicketNoteInput {
  */
 export async function createTicketNote(input: CreateTicketNoteInput) {
     try {
-        const { db, session, organizationId } = await requireTenantContext();
+        const { db, session, organizationId } = await requireDevAdmin();
 
         // Tenant safety: the ticket must belong to the caller's org.
         const ticket = await db.ticket.findFirst({
@@ -389,7 +390,7 @@ export async function createTicketNote(input: CreateTicketNoteInput) {
         });
 
         revalidatePath('/help-center');
-        revalidatePath('/admin/support');
+        revalidatePath('/dev-portal/tickets');
         return { success: true, data: note };
     } catch (error) {
         console.error('Create Ticket Note Error:', error);
@@ -434,7 +435,7 @@ export async function getHospitalVisibleNotes(ticketId: string) {
  */
 export async function getTicketNotes(ticketId: string) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId } = await requireDevAdmin();
 
         const data = await db.ticketNote.findMany({
             where: { ticket_id: ticketId, organizationId },

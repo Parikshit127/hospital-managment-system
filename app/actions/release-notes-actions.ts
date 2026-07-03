@@ -1,6 +1,7 @@
 'use server';
 
-import { requireTenantContext, requireRoleAndTenant, ForbiddenError, AuthError } from '@/backend/tenant';
+import { requireTenantContext, ForbiddenError, AuthError } from '@/backend/tenant';
+import { requireDevAdmin } from '@/backend/dev-portal';
 import { BroadcastAudience, BroadcastStatus } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@supabase/supabase-js';
@@ -37,7 +38,7 @@ interface CreateReleaseNoteInput {
  */
 export async function createReleaseNote(input: CreateReleaseNoteInput) {
     try {
-        const { db, session, organizationId } = await requireRoleAndTenant(['admin']);
+        const { db, session, organizationId } = await requireDevAdmin();
 
         if (!input.title?.trim() || !input.version?.trim()) {
             return { success: false, data: null, error: 'Title and version are required' };
@@ -64,7 +65,7 @@ export async function createReleaseNote(input: CreateReleaseNoteInput) {
             details: `Release ${note.version} "${note.title}" drafted`,
         });
 
-        revalidatePath('/admin/release-notes');
+        revalidatePath('/dev-portal/releases');
         return { success: true, data: note };
     } catch (error) {
         if (error instanceof ForbiddenError || error instanceof AuthError) {
@@ -81,7 +82,7 @@ export async function createReleaseNote(input: CreateReleaseNoteInput) {
  */
 export async function publishReleaseNote(releaseNoteId: string) {
     try {
-        const { db, session, organizationId } = await requireRoleAndTenant(['admin']);
+        const { db, session, organizationId } = await requireDevAdmin();
 
         const note = await db.releaseNote.findFirst({
             where: { id: releaseNoteId, organizationId },
@@ -121,7 +122,7 @@ export async function publishReleaseNote(releaseNoteId: string) {
             details: `Release ${note.version} published; broadcast to ${recipients} recipient(s)`,
         });
 
-        revalidatePath('/admin/release-notes');
+        revalidatePath('/dev-portal/releases');
         return { success: true, data: { id: note.id, broadcastId: broadcast.id, recipients } };
     } catch (error) {
         if (error instanceof ForbiddenError || error instanceof AuthError) {
@@ -154,7 +155,7 @@ export async function getReleaseNotes() {
  */
 export async function getAllReleaseNotes() {
     try {
-        const { db, organizationId } = await requireRoleAndTenant(['admin']);
+        const { db, organizationId } = await requireDevAdmin();
         const data = await db.releaseNote.findMany({
             where: { organizationId },
             orderBy: { created_at: 'desc' },

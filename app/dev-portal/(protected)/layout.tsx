@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { redirect } from 'next/navigation';
-import { requireDevPortalContext } from '@/backend/dev-portal';
+import { requireDevPortalContext, type DevPortalContext } from '@/backend/dev-portal';
+import { DevPortalNav } from './_components/DevPortalNav';
 
 export const metadata: Metadata = {
     title: 'Developer Portal — Hospital OS',
@@ -10,6 +11,16 @@ export const metadata: Metadata = {
 
 // Auth check must run on every request — never statically cached.
 export const dynamic = 'force-dynamic';
+
+// Give the shared <AdminPage> chrome an emerald accent inside the dev portal,
+// so its header renders correctly (the hospital admin layout normally sets these).
+const DEV_PORTAL_THEME = {
+    '--admin-primary': '#10b981',
+    '--admin-primary-dark': '#059669',
+    '--admin-primary-10': 'rgba(16, 185, 129, 0.1)',
+    '--admin-text': '#0f172a',
+    '--admin-text-muted': '#64748b',
+} as CSSProperties;
 
 /**
  * Route/layout guard — the FIRST of the two independent layers of the Dev Admin
@@ -26,11 +37,19 @@ export const dynamic = 'force-dynamic';
  * is not a substitute for the action-level check.
  */
 export default async function DevPortalProtectedLayout({ children }: { children: ReactNode }) {
+    let ctx: DevPortalContext;
     try {
-        await requireDevPortalContext();
+        ctx = await requireDevPortalContext();
     } catch {
         redirect('/dev-portal/login');
     }
 
-    return <>{children}</>;
+    const roleLabel = ctx!.user.is_dev_admin ? 'Dev Admin' : 'Developer';
+
+    return (
+        <div className="min-h-screen bg-slate-50" style={DEV_PORTAL_THEME}>
+            <DevPortalNav username={ctx!.session.username} roleLabel={roleLabel} />
+            <main className="mx-auto max-w-[1400px] px-6 py-6">{children}</main>
+        </div>
+    );
 }

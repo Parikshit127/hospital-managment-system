@@ -1,6 +1,7 @@
 'use server';
 
-import { requireRoleAndTenant, ForbiddenError, AuthError } from '@/backend/tenant';
+import { ForbiddenError, AuthError } from '@/backend/tenant';
+import { requireDevAdmin } from '@/backend/dev-portal';
 import { BroadcastAudience, BroadcastStatus } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { deliverBroadcast, audienceUserWhere } from '@/app/lib/broadcast-delivery';
@@ -23,7 +24,7 @@ interface SendBroadcastInput {
  */
 export async function sendBroadcast(input: SendBroadcastInput) {
     try {
-        const { db, session, organizationId } = await requireRoleAndTenant(['admin']);
+        const { db, session, organizationId } = await requireDevAdmin();
 
         if (!input.title?.trim() || !input.body?.trim()) {
             return { success: false, error: 'Title and body are required' };
@@ -68,7 +69,7 @@ export async function sendBroadcast(input: SendBroadcastInput) {
                 : `Sent ${input.audience} broadcast to ${recipients} recipient(s)`,
         });
 
-        revalidatePath('/admin/broadcasts');
+        revalidatePath('/dev-portal/broadcasts');
         return {
             success: true,
             data: { id: broadcast.id, status: broadcast.status, recipients },
@@ -91,7 +92,7 @@ export async function getBroadcastAudienceCount(
     targetRole?: string | null
 ) {
     try {
-        const { db, organizationId } = await requireRoleAndTenant(['admin']);
+        const { db, organizationId } = await requireDevAdmin();
 
         // Same source of truth as deliverBroadcast — preview cannot drift from delivery.
         const count = await db.user.count({
@@ -113,7 +114,7 @@ export async function getBroadcastAudienceCount(
  */
 export async function getBroadcasts() {
     try {
-        const { db, organizationId } = await requireRoleAndTenant(['admin']);
+        const { db, organizationId } = await requireDevAdmin();
 
         const data = await db.broadcast.findMany({
             where: { organizationId },
