@@ -330,7 +330,7 @@ export const revenueDoctorWiseSummaryReport: ReportDefinition = {
     // each invoice into the IPD-Cash / IPD-TPA / OPD column in a single pass.
     const raw = await prisma.$queryRaw<any[]>`
       SELECT
-        COALESCE(u.name, NULLIF(TRIM(i.doctor_name), ''), 'Unknown') as "doctor_name",
+        COALESCE(u.name, au.name, NULLIF(TRIM(i.doctor_name), ''), NULLIF(TRIM(adm.doctor_name), ''), 'Unknown') as "doctor_name",
         COUNT(*) FILTER (
           WHERE i.invoice_type = 'IPD' AND LOWER(i.billing_patient_type) = 'cash'
         ) as "ipd_cash_bills",
@@ -349,12 +349,14 @@ export const revenueDoctorWiseSummaryReport: ReportDefinition = {
         COALESCE(SUM(i.net_amount), 0) as "grand_total"
       FROM invoices i
       LEFT JOIN "users" u ON i.doctor_id = u.id
+      LEFT JOIN "admissions" adm ON i.admission_id = adm.admission_id
+      LEFT JOIN "users" au ON adm.attending_doctor_id = au.id
       WHERE i."organizationId" = ${orgId}
         AND LOWER(i.status) = 'final'
         AND i.invoice_type IN ('IPD', 'OPD')
         AND i.created_at >= ${toStartOfDay(date_start)}
         AND i.created_at <= ${toEndOfDay(date_end)}
-      GROUP BY COALESCE(u.name, NULLIF(TRIM(i.doctor_name), ''), 'Unknown')
+      GROUP BY COALESCE(u.name, au.name, NULLIF(TRIM(i.doctor_name), ''), NULLIF(TRIM(adm.doctor_name), ''), 'Unknown')
       ORDER BY "grand_total" DESC
     `;
 

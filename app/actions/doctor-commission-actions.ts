@@ -59,22 +59,30 @@ export async function getDoctorCommissionOverview() {
         // Bills & collected business come from the invoices themselves — independent
         // of whether a commission config exists — so doctors with no commission
         // setup still show their real bill volume instead of 0. Cancelled bills are
-        // excluded; org-scope and is_archived=false are applied by the tenant client.
-        const invoiceRows = await db.invoices.groupBy({
-            by: ['doctor_id'],
-            where: {
-                doctor_id: { not: null },
-                NOT: { status: { equals: 'cancelled', mode: 'insensitive' } },
-            },
-            _count: { _all: true },
-            _sum: { paid_amount: true },
-        });
+        // excluded. For IPD invoices where invoice.doctor_id is null, fall back to
+        // the admission's attending_doctor_id so those bills are not lost.
+        const invoiceRows = await (db as any).$queryRaw<Array<{
+            resolved_doctor_id: string | null;
+            bills: bigint;
+            business: any;
+        }>>`
+            SELECT
+                COALESCE(i.doctor_id, adm.attending_doctor_id) AS "resolved_doctor_id",
+                COUNT(*) AS "bills",
+                COALESCE(SUM(i.paid_amount), 0) AS "business"
+            FROM invoices i
+            LEFT JOIN "admissions" adm ON i.admission_id = adm.admission_id
+            WHERE i."organizationId" = ${organizationId}
+                AND LOWER(COALESCE(i.status, '')) <> 'cancelled'
+                AND COALESCE(i.doctor_id, adm.attending_doctor_id) IS NOT NULL
+            GROUP BY COALESCE(i.doctor_id, adm.attending_doctor_id)
+        `;
         const invoiceAggMap = new Map<string, { bills: number; business: number }>();
-        for (const row of invoiceRows as any[]) {
-            if (!row.doctor_id) continue;
-            invoiceAggMap.set(row.doctor_id, {
-                bills: row._count._all,
-                business: num(row._sum.paid_amount),
+        for (const row of invoiceRows) {
+            if (!row.resolved_doctor_id) continue;
+            invoiceAggMap.set(row.resolved_doctor_id, {
+                bills: Number(row.bills),
+                business: num(row.business),
             });
         }
 
