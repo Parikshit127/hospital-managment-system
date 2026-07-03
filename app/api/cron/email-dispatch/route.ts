@@ -23,7 +23,10 @@ export async function GET(request: Request) {
     try {
         const authHeader = request.headers.get('authorization');
         const cronSecret = process.env.CRON_SECRET;
-        if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+        // Fail-closed: refuse to run if CRON_SECRET is unset OR the bearer token
+        // does not match. An unconfigured secret must NEVER leave this
+        // state-mutating endpoint publicly callable.
+        if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
