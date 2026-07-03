@@ -13,7 +13,7 @@ import {
 import {
     getWardPatients, getWardsList, getNursingNotes, addNursingNote,
     recordVitals, getPatientVitals, searchMedicines, checkMedicineStock,
-    createMedicalIntent, getPatientIndentHistory, type MedicalIntentItem,
+    createPharmacyIndent, getPatientIndentHistory, type PharmacyIndentItem,
 } from '@/app/actions/nurse-actions';
 import { getNursesForDropdown } from '@/app/actions/admin-actions';
 import { formatDoctorName } from '@/app/lib/format-name';
@@ -67,9 +67,9 @@ function StockBadge({ stock, requested }: { stock: number; requested: number }) 
     );
 }
 
-// ─── Pharmacy Intent Line Item ─────────────────────────────────────────────
+// ─── Pharmacy Indent Line Item ─────────────────────────────────────────────
 
-interface IntentLine {
+interface IndentLine {
     medicineId: number;
     medicineName: string;
     genericName?: string;
@@ -127,10 +127,10 @@ export default function NursePatientsPage() {
     const [medSuggestions, setMedSuggestions] = useState<any[]>([]);
     const [searchingMed, setSearchingMed] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(false);
-    const [intentLines, setIntentLines] = useState<IntentLine[]>([]);
-    const [submittingIntent, setSubmittingIntent] = useState(false);
-    const [intentSuccess, setIntentSuccess] = useState<string | null>(null);
-    const [intentError, setIntentError] = useState<string | null>(null);
+    const [indentLines, setIndentLines] = useState<IndentLine[]>([]);
+    const [submittingIndent, setSubmittingIndent] = useState(false);
+    const [indentSuccess, setIndentSuccess] = useState<string | null>(null);
+    const [indentError, setIndentError] = useState<string | null>(null);
     const [indentHistory, setIndentHistory] = useState<any[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
     const medSearchRef = useRef<HTMLDivElement>(null);
@@ -181,11 +181,11 @@ export default function NursePatientsPage() {
         setVitalsForm({ bloodPressure: '', heartRate: '', temperature: '', oxygenSat: '', respiratoryRate: '', weight: '', height: '' });
         setNoteType('General');
         setNoteDetails('');
-        setIntentLines([]);
+        setIndentLines([]);
         setMedSearch('');
         setMedSuggestions([]);
-        setIntentSuccess(null);
-        setIntentError(null);
+        setIndentSuccess(null);
+        setIndentError(null);
         setIndentHistory([]);
 
         // preload vitals, notes & indent history in parallel
@@ -273,11 +273,11 @@ export default function NursePatientsPage() {
         }, 350);
     };
 
-    const addMedicineToIntent = async (med: any) => {
+    const addMedicineToIndent = async (med: any) => {
         setShowSuggestions(false);
         setMedSearch('');
         // Check stock immediately
-        const line: IntentLine = {
+        const line: IndentLine = {
             medicineId: med.id,
             medicineName: med.brand_name,
             genericName: med.generic_name,
@@ -289,10 +289,10 @@ export default function NursePatientsPage() {
             checkingStock: true,
             notes: '',
         };
-        setIntentLines((prev) => [...prev, line]);
-        const idx = intentLines.length; // current last index
+        setIndentLines((prev) => [...prev, line]);
+        const idx = indentLines.length; // current last index
         const stockRes = await checkMedicineStock(med.id);
-        setIntentLines((prev) =>
+        setIndentLines((prev) =>
             prev.map((l, i) =>
                 i === idx
                     ? {
@@ -306,17 +306,17 @@ export default function NursePatientsPage() {
         );
     };
 
-    const updateLine = (idx: number, field: keyof IntentLine, value: any) => {
-        setIntentLines((prev) =>
+    const updateLine = (idx: number, field: keyof IndentLine, value: any) => {
+        setIndentLines((prev) =>
             prev.map((l, i) => (i === idx ? { ...l, [field]: value } : l))
         );
     };
 
     const recheckStock = async (idx: number) => {
-        const line = intentLines[idx];
-        setIntentLines((prev) => prev.map((l, i) => (i === idx ? { ...l, checkingStock: true } : l)));
+        const line = indentLines[idx];
+        setIndentLines((prev) => prev.map((l, i) => (i === idx ? { ...l, checkingStock: true } : l)));
         const stockRes = await checkMedicineStock(line.medicineId);
-        setIntentLines((prev) =>
+        setIndentLines((prev) =>
             prev.map((l, i) =>
                 i === idx
                     ? {
@@ -330,23 +330,23 @@ export default function NursePatientsPage() {
         );
     };
 
-    const removeLine = (idx: number) => setIntentLines((prev) => prev.filter((_, i) => i !== idx));
+    const removeLine = (idx: number) => setIndentLines((prev) => prev.filter((_, i) => i !== idx));
 
-    // ── Submit intent ──
-    const handleSubmitIntent = async () => {
-        if (!selectedPatient || intentLines.length === 0 || !nurseId) return;
-        setSubmittingIntent(true);
-        setIntentSuccess(null);
-        setIntentError(null);
+    // ── Submit indent ──
+    const handleSubmitIndent = async () => {
+        if (!selectedPatient || indentLines.length === 0 || !nurseId) return;
+        setSubmittingIndent(true);
+        setIndentSuccess(null);
+        setIndentError(null);
         try {
-            const items: MedicalIntentItem[] = intentLines.map((l) => ({
+            const items: PharmacyIndentItem[] = indentLines.map((l) => ({
                 medicineId: l.medicineId,
                 medicineName: l.medicineName,
                 quantityRequested: l.quantityRequested,
                 quantityApproved: Math.min(l.quantityRequested, l.stockAvailable),
                 notes: l.notes,
             }));
-            const res = await createMedicalIntent({
+            const res = await createPharmacyIndent({
                 patientId: selectedPatient.patientId,
                 admissionId: selectedPatient.admissionId,
                 nurseId,
@@ -355,22 +355,22 @@ export default function NursePatientsPage() {
                 items,
             });
             if (res.success) {
-                const shortItems = intentLines.filter((l) => l.stockAvailable < l.quantityRequested);
-                setIntentLines([]);
-                setIntentSuccess(
+                const shortItems = indentLines.filter((l) => l.stockAvailable < l.quantityRequested);
+                setIndentLines([]);
+                setIndentSuccess(
                     shortItems.length > 0
-                        ? `Intent #${res.orderId} submitted. ⚠️ ${shortItems.map((l) => l.medicineName).join(', ')} had insufficient stock — pharmacy notified.`
-                        : `Intent #${res.orderId} submitted successfully to pharmacy.`
+                        ? `Indent #${res.orderId} submitted. ⚠️ ${shortItems.map((l) => l.medicineName).join(', ')} had insufficient stock — pharmacy notified.`
+                        : `Indent #${res.orderId} submitted successfully to pharmacy.`
                 );
                 // Refresh history
                 getPatientIndentHistory(selectedPatient.patientId).then(h => {
                     if (h.success) setIndentHistory(h.data || []);
                 });
             } else {
-                setIntentError('Failed to submit intent. Please try again.');
+                setIndentError('Failed to submit indent. Please try again.');
             }
         } finally {
-            setSubmittingIntent(false);
+            setSubmittingIndent(false);
         }
     };
 
@@ -446,7 +446,7 @@ export default function NursePatientsPage() {
                         <div className="px-6 pt-3 pb-0 flex items-center gap-2 border-b border-gray-100 bg-gray-50 shrink-0">
                             <Tab id="vitals" active={activeTab === 'vitals'} icon={<Activity className="h-3.5 w-3.5" />} label="Record Vitals" onClick={() => setActiveTab('vitals')} />
                             <Tab id="notes" active={activeTab === 'notes'} icon={<FileText className="h-3.5 w-3.5" />} label="Medical Notes" onClick={() => setActiveTab('notes')} />
-                            <Tab id="pharmacy" active={activeTab === 'pharmacy'} icon={<ShoppingCart className="h-3.5 w-3.5" />} label="Pharmacy Intent" onClick={() => setActiveTab('pharmacy')} />
+                            <Tab id="pharmacy" active={activeTab === 'pharmacy'} icon={<ShoppingCart className="h-3.5 w-3.5" />} label="Pharmacy Indent" onClick={() => setActiveTab('pharmacy')} />
                             <div className="ml-auto pb-2">
                                 <span className="text-[10px] text-gray-400 font-mono">{selectedPatient.admissionId}</span>
                             </div>
@@ -607,7 +607,7 @@ export default function NursePatientsPage() {
                                 </div>
                             )}
 
-                            {/* ═══════ PHARMACY INTENT TAB ═══════ */}
+                            {/* ═══════ PHARMACY INDENT TAB ═══════ */}
                             {activeTab === 'pharmacy' && (
                                 <div className="space-y-5">
                                     <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 rounded-2xl p-5">
@@ -635,7 +635,7 @@ export default function NursePatientsPage() {
                                                     {medSuggestions.map((med: any) => (
                                                         <button
                                                             key={med.id}
-                                                            onClick={() => addMedicineToIntent(med)}
+                                                            onClick={() => addMedicineToIndent(med)}
                                                             className="w-full text-left px-4 py-3 hover:bg-orange-50 border-b border-gray-100 last:border-0 transition-colors"
                                                         >
                                                             <p className="text-sm font-bold text-gray-800">{med.brand_name}</p>
@@ -647,13 +647,13 @@ export default function NursePatientsPage() {
                                         </div>
                                     </div>
 
-                                    {/* Intent Lines */}
-                                    {intentLines.length > 0 && (
+                                    {/* Indent Lines */}
+                                    {indentLines.length > 0 && (
                                         <div className="space-y-3">
                                             <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider flex items-center gap-2">
                                                 <FlaskConical className="h-3.5 w-3.5 text-orange-400" /> Medicine Request List
                                             </h4>
-                                            {intentLines.map((line, idx) => (
+                                            {indentLines.map((line, idx) => (
                                                 <div
                                                     key={idx}
                                                     className={`bg-white border rounded-xl p-4 transition-all ${
@@ -722,17 +722,17 @@ export default function NursePatientsPage() {
                                                 </div>
                                             ))}
 
-                                            {/* Intent success / error */}
-                                            {intentSuccess && (
+                                            {/* Indent success / error */}
+                                            {indentSuccess && (
                                                 <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-700 font-medium">
                                                     <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
-                                                    {intentSuccess}
+                                                    {indentSuccess}
                                                 </div>
                                             )}
-                                            {intentError && (
+                                            {indentError && (
                                                 <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 font-medium">
                                                     <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                                                    {intentError}
+                                                    {indentError}
                                                 </div>
                                             )}
 
@@ -756,28 +756,28 @@ export default function NursePatientsPage() {
                                                     </select>
                                                 </div>
                                                 <button
-                                                    onClick={handleSubmitIntent}
-                                                    disabled={submittingIntent || intentLines.some((l) => l.checkingStock) || !nurseId}
+                                                    onClick={handleSubmitIndent}
+                                                    disabled={submittingIndent || indentLines.some((l) => l.checkingStock) || !nurseId}
                                                     className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-orange-500/25 hover:from-orange-400 hover:to-amber-400 disabled:opacity-50 transition-all"
                                                 >
-                                                    {submittingIntent ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                                                    {submittingIndent ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                                                     Send to Pharmacy
                                                 </button>
                                             </div>
                                         </div>
                                     )}
 
-                                    {intentLines.length === 0 && !intentSuccess && (
+                                    {indentLines.length === 0 && !indentSuccess && (
                                         <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-10 text-center text-gray-400">
                                             <Package className="h-8 w-8 mx-auto mb-2 text-gray-300" />
                                             <p className="text-sm font-medium">Search and add medicines above to create a pharmacy request.</p>
                                         </div>
                                     )}
 
-                                    {intentSuccess && intentLines.length === 0 && (
+                                    {indentSuccess && indentLines.length === 0 && (
                                         <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-700 font-medium">
                                             <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
-                                            {intentSuccess}
+                                            {indentSuccess}
                                         </div>
                                     )}
 

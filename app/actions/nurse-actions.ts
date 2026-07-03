@@ -479,10 +479,10 @@ export async function checkMedicineStock(medicineId: number) {
 }
 
 // ========================================
-// PHARMACY — MEDICAL INTENT (NURSE ORDER)
+// PHARMACY — INDENT (NURSING ORDER)
 // ========================================
 
-export interface MedicalIntentItem {
+export interface PharmacyIndentItem {
     medicineId: number;
     medicineName: string;
     quantityRequested: number;
@@ -490,22 +490,22 @@ export interface MedicalIntentItem {
     notes?: string;
 }
 
-export async function createMedicalIntent(data: {
+export async function createPharmacyIndent(data: {
     patientId: string;
     admissionId: string;
     nurseId: string;
     nurseName?: string;    // display name shown on pharmacy portal
     doctorName: string;
-    items: MedicalIntentItem[];
+    items: PharmacyIndentItem[];
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
 
-        // Create the pharmacy order (intent) for IPD
+        // Create the pharmacy order (indent) for IPD
         const order = await db.pharmacy_orders.create({
             data: {
                 patient_id: data.patientId,
-                doctor_id: data.nurseId,           // nurse raising the intent
+                doctor_id: data.nurseId,           // nurse raising the indent
                 requested_by_name: data.nurseName || null,  // shown on pharmacy portal
                 admission_id: data.admissionId,
                 is_ipd_linked: true,
@@ -535,8 +535,8 @@ export async function createMedicalIntent(data: {
         revalidatePath('/pharmacy');
         return { success: true, orderId: order.id };
     } catch (error) {
-        console.error('Create Medical Intent Error:', error);
-        return { success: false, error: 'Failed to create medical intent' };
+        console.error('Create Pharmacy Indent Error:', error);
+        return { success: false, error: 'Failed to create pharmacy indent' };
     }
 }
 
