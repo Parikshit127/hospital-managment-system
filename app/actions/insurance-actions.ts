@@ -445,6 +445,22 @@ export async function submitInsuranceClaim(data: {
             return { success: false, error: `Claimed amount exceeds remaining coverage limit of ${remainingLimit}` };
         }
 
+        // Defense in depth: a claim may never exceed the invoice net. For package
+        // admissions the invoice nets to package + billable extras (two-ledger
+        // package billing), so this also prevents hand-keying an inflated
+        // package claim that includes absorbed services.
+        const claimInvoice = await db.invoices.findUnique({ where: { id: data.invoice_id } });
+        if (!claimInvoice) {
+            return { success: false, error: 'Invoice not found' };
+        }
+        const invoiceNet = Number(claimInvoice.net_amount || 0);
+        if (data.claimed_amount > invoiceNet) {
+            return {
+                success: false,
+                error: `Claimed amount (${data.claimed_amount}) exceeds the invoice net amount (${invoiceNet}). Package bills are claimed at the package amount.`,
+            };
+        }
+
         const claim = await db.insurance_claims.create({
             data: {
                 claim_number: generateClaimNumber(),

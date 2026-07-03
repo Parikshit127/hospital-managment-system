@@ -17,7 +17,11 @@ import {
     recordWardRound, assignDietPlan, addMedicalNote, getWardsWithBeds, transferPatient,
     updateAdmissionDiagnosis, updateAdmissionBasicDetails, undischargeAdmission
 } from '@/app/actions/ipd-actions';
-import { generateInterimBill, postChargeToIpdBill, settlePackageBilling } from '@/app/actions/ipd-finance-actions';
+import {
+    generateInterimBill, postChargeToIpdBill, applyPackageToAdmission,
+    getPackageUtilization, reconcilePackageBilling, reclassifyChargeDisposition,
+    breakOpenPackage,
+} from '@/app/actions/ipd-finance-actions';
 import { removeInvoiceItem } from '@/app/actions/finance-actions';
 import {
     searchDoctorsForIPD,
@@ -147,6 +151,11 @@ export default function AdmissionDetailPage() {
     const [pkgSearch, setPkgSearch] = useState('');
     const [showPkgDropdown, setShowPkgDropdown] = useState(false);
     const [selectedPkgId, setSelectedPkgId] = useState<number | null>(null);
+    // Two-ledger package billing
+    const [pkgUtil, setPkgUtil] = useState<any>(null);
+    const [chargeDisposition, setChargeDisposition] = useState<'auto' | 'package_consumed' | 'billable_extra'>('auto');
+    const [reclassifyingId, setReclassifyingId] = useState<number | null>(null);
+    const [showConsumption, setShowConsumption] = useState(true);
 
     // Transfer
     const [showTransfer, setShowTransfer] = useState(false);
@@ -216,9 +225,13 @@ export default function AdmissionDetailPage() {
         }
         // Auto-accrual disabled — room/nursing charges are added manually
         // const accrual = await ensureIPDRoomChargesAccrued(params.id as string);
-        const res = await generateInterimBill(params.id as string);
+        const [res, utilRes] = await Promise.all([
+            generateInterimBill(params.id as string),
+            getPackageUtilization(params.id as string),
+        ]);
         if (res.success) setBill(res.data);
         else toast.error('Failed to load bill');
+        setPkgUtil(utilRes.success ? utilRes.data : null);
         setLoadingBill(false);
     }, [params.id, bill, demoSeeded, toast]);
 
@@ -226,21 +239,53 @@ export default function AdmissionDetailPage() {
         if (activeTab === 'billing') loadBill();
     }, [activeTab, loadBill]);
 
-    // Package billing: keep only the package amount as revenue/claim and absorb
-    // every non-package charge as a hospital expense.
+    // Two-ledger package billing: charges posted while a package is active are
+    // absorbed automatically at posting time. Reconcile is an admin repair tool
+    // for admissions that predate this (stray billed service lines).
     const [settlingPackage, setSettlingPackage] = useState(false);
-    const handleSettlePackage = useCallback(async () => {
-        if (!confirm('Settle package billing? The package amount stays as the bill/claim; all non-package charges (room, pharmacy, services) will be absorbed as a hospital expense and removed from the patient/TPA balance. You can run this again after adding more charges.')) return;
+    const handleReconcilePackage = useCallback(async () => {
+        if (!confirm('Reconcile package billing? Billed service lines that belong inside the package will move to package consumption (hospital expense) and off the patient/TPA bill. Exclusions stay billed as extras. Admin/Finance only.')) return;
         setSettlingPackage(true);
-        const res = await settlePackageBilling(params.id as string);
+        const res = await reconcilePackageBilling(params.id as string);
         setSettlingPackage(false);
         if (res.success) {
-            toast.success(`Package settled — bill kept at ₹${Number(res.data?.packageGross || 0).toLocaleString('en-IN')}, ₹${Number(res.data?.absorbedGross || 0).toLocaleString('en-IN')} absorbed as expense.`);
+            const d: any = res.data;
+            toast.success(`Reconciled — ${d?.absorbedCount || 0} charge(s) (₹${Number(d?.absorbedAmount || 0).toLocaleString('en-IN')}) absorbed into the package.`);
             setBill(null); loadBill();
         } else {
-            toast.error(res.error || 'Failed to settle package billing');
+            toast.error(res.error || 'Failed to reconcile package billing');
         }
     }, [params.id, toast, loadBill]);
+
+    const [breakingOpen, setBreakingOpen] = useState(false);
+    const handleBreakOpenPackage = useCallback(async () => {
+        if (!pkgUtil?.admission_package_id) return;
+        if (!confirm('Break open the package? Billing reverts to itemized: every consumed service returns to the patient/TPA bill at its recorded rate and original date, the package line is removed, and the absorbed-cost expense is dissolved. This cannot be undone.')) return;
+        setBreakingOpen(true);
+        const res = await breakOpenPackage(pkgUtil.admission_package_id);
+        setBreakingOpen(false);
+        if (res.success) {
+            const d: any = res.data;
+            toast.success(`Package broken open — ${d?.restored_lines || 0} service(s) (₹${Number(d?.restored_amount || 0).toLocaleString('en-IN')}) restored to the bill.`);
+            setBill(null); loadBill();
+        } else {
+            toast.error(res.error || 'Failed to break open package');
+        }
+    }, [pkgUtil, toast, loadBill]);
+
+    const handleReclassify = useCallback(async (postingId: number, target: 'package_consumed' | 'billable_extra') => {
+        setReclassifyingId(postingId);
+        const res = await reclassifyChargeDisposition(postingId, target);
+        setReclassifyingId(null);
+        if (res.success) {
+            toast.success(target === 'billable_extra'
+                ? 'Charge is now billed over the package'
+                : 'Charge absorbed under the package');
+            setBill(null); loadBill();
+        } else {
+            toast.error(res.error || 'Failed to reclassify charge');
+        }
+    }, [toast, loadBill]);
 
     // Debounced doctor search
     useEffect(() => {
@@ -553,6 +598,27 @@ export default function AdmissionDetailPage() {
 
     const handlePostCharge = async (e: React.SyntheticEvent) => {
         e.preventDefault();
+
+        // Packages are APPLIED (creates the admission-package record that drives
+        // two-ledger routing), never posted as a plain charge line.
+        if (chargeMode === 'package') {
+            if (!selectedPkgId) { toast.error('Select a package from the list'); return; }
+            setPostingCharge(true);
+            const res = await applyPackageToAdmission(data.admission_id, selectedPkgId);
+            setPostingCharge(false);
+            if (res.success) {
+                const mig: any = (res.data as any)?.migration;
+                toast.success(mig?.absorbedCount > 0
+                    ? `Package applied — ${mig.absorbedCount} existing charge(s) (₹${Number(mig.absorbedAmount || 0).toLocaleString('en-IN')}) moved into the package`
+                    : 'Package applied — services added from now on are absorbed under it');
+                setChargeDesc(''); setChargeRate(''); setPkgSearch(''); setSelectedPkgId(null); setChargeCategory('Miscellaneous');
+                setBill(null); loadBill();
+            } else {
+                toast.error(res.error || 'Failed to apply package');
+            }
+            return;
+        }
+
         if (!chargeDesc.trim() || !chargeRate) { toast.error('Fill description and rate'); return; }
         setPostingCharge(true);
         const res = await postChargeToIpdBill({
@@ -563,11 +629,20 @@ export default function AdmissionDetailPage() {
             unit_price: Number(chargeRate),
             service_category: chargeCategory,
             posted_at: chargeDateTime ? new Date(chargeDateTime) : undefined,
+            disposition_override: pkgUtil?.status === 'active' && chargeDisposition !== 'auto'
+                ? chargeDisposition
+                : undefined,
         });
         setPostingCharge(false);
         if (res.success) {
-            toast.success('Charge posted');
+            const d: any = res.data;
+            toast.success(d?.disposition === 'package_consumed'
+                ? 'Charge absorbed under the package — not billed to patient/TPA'
+                : d?.disposition === 'billable_extra'
+                    ? 'Charge billed over the package (exclusion)'
+                    : 'Charge posted');
             setChargeDesc(''); setChargeQty('1'); setChargeRate(''); setChargeCategory('Miscellaneous'); setChargeDateTime('');
+            setChargeDisposition('auto');
             setBill(null); // reset bill cache so it reloads
             loadBill();
         } else {
@@ -645,6 +720,17 @@ export default function AdmissionDetailPage() {
             billItemsByCategory[cat].push(item);
         }
     }
+
+    // Two-ledger package billing: with an active package, plain billed service
+    // lines beyond the recorded billable extras are strays from the old flow —
+    // surface the admin reconcile tool for them.
+    const plainBilledServiceLines = (bill?.items || []).filter((i: any) => {
+        const cat = String(i.service_category || '');
+        const dept = String(i.department || '');
+        return cat !== 'Package' && cat !== 'Package Adjustment' && dept !== 'Discount' && dept !== 'Package';
+    });
+    const billHasStrayServiceLines =
+        plainBilledServiceLines.length > (pkgUtil?.extra_items?.length || 0);
 
     return (
         <AppShell
@@ -1792,14 +1878,23 @@ export default function AdmissionDetailPage() {
                                                 &nbsp;·&nbsp; Days: {bill.admission.days_admitted}
                                             </p>
                                             <div className="flex items-center gap-3">
-                                                {billItemsByCategory['Package'] && (
+                                                {pkgUtil?.status === 'active' && billHasStrayServiceLines && (
                                                     <button
-                                                        onClick={handleSettlePackage}
+                                                        onClick={handleReconcilePackage}
                                                         disabled={settlingPackage}
                                                         className="text-[10px] text-indigo-700 font-bold hover:underline disabled:opacity-50"
-                                                        title="Keep only the package amount as bill/claim; absorb non-package charges as a hospital expense"
+                                                        title="Admin/Finance: move billed service lines that belong inside the package to package consumption"
                                                     >
-                                                        {settlingPackage ? 'Settling…' : '📦 Settle Package (absorb extras)'}
+                                                        {settlingPackage ? 'Reconciling…' : '📦 Reconcile package billing'}
+                                                    </button>
+                                                )}
+                                                {pkgUtil && (
+                                                    <button
+                                                        onClick={() => window.open(`/api/ipd/${params.id}/package-annexure`, '_blank')}
+                                                        className="text-[10px] text-indigo-700 font-bold hover:underline"
+                                                        title="Package utilization annexure — internal breakup of services consumed under the package"
+                                                    >
+                                                        📊 Print Utilization Annexure
                                                     </button>
                                                 )}
                                                 <button
@@ -1816,6 +1911,54 @@ export default function AdmissionDetailPage() {
                                                 </button>
                                             </div>
                                         </div>
+
+                                        {/* Package banner — two-ledger billing status */}
+                                        {pkgUtil && pkgUtil.status === 'active' && (
+                                            <div className={`rounded-xl border p-4 ${pkgUtil.utilization_pct > 100 ? 'bg-rose-50 border-rose-200' : pkgUtil.utilization_pct >= 90 ? 'bg-amber-50 border-amber-200' : 'bg-indigo-50 border-indigo-100'}`}>
+                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                    <div>
+                                                        <p className="text-xs font-black text-gray-800">
+                                                            📦 {pkgUtil.package_name} — ₹{Number(pkgUtil.package_amount).toLocaleString('en-IN')}
+                                                        </p>
+                                                        <p className="text-[10px] text-gray-500 mt-0.5 font-medium">
+                                                            Bill & TPA claim carry the package amount only. Services consumed under it are absorbed as hospital expense.
+                                                        </p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className={`text-xs font-black ${pkgUtil.utilization_pct > 100 ? 'text-rose-700' : pkgUtil.utilization_pct >= 90 ? 'text-amber-700' : 'text-indigo-700'}`}>
+                                                            Consumed ₹{Number(pkgUtil.consumed).toLocaleString('en-IN')} ({pkgUtil.utilization_pct}%)
+                                                        </p>
+                                                        <p className="text-[10px] text-gray-500 font-bold">
+                                                            {Number(pkgUtil.extras_billed) > 0 && <>Extras billed: ₹{Number(pkgUtil.extras_billed).toLocaleString('en-IN')} · </>}
+                                                            Headroom: ₹{Number(pkgUtil.remaining).toLocaleString('en-IN')}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                {pkgUtil.utilization_pct > 100 && (
+                                                    <div className="flex items-center justify-between gap-2 mt-2">
+                                                        <p className="text-[10px] font-bold text-rose-700 flex items-center gap-1">
+                                                            <AlertTriangle className="h-3 w-3" /> Consumption exceeds the package amount — review whether some items are billable extras, or break open the package.
+                                                        </p>
+                                                        {data.status === 'Admitted' && (
+                                                            <button
+                                                                onClick={handleBreakOpenPackage}
+                                                                disabled={breakingOpen}
+                                                                className="shrink-0 text-[10px] font-bold text-rose-700 border border-rose-300 rounded-md px-2 py-1 hover:bg-rose-100 disabled:opacity-50"
+                                                            >
+                                                                {breakingOpen ? 'Breaking open…' : 'Break open package'}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {/* Utilization bar */}
+                                                <div className="mt-2 h-1.5 bg-white/70 rounded-full overflow-hidden">
+                                                    <div
+                                                        className={`h-full rounded-full ${pkgUtil.utilization_pct > 100 ? 'bg-rose-500' : pkgUtil.utilization_pct >= 90 ? 'bg-amber-500' : 'bg-indigo-500'}`}
+                                                        style={{ width: `${Math.min(100, pkgUtil.utilization_pct)}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
 
                                         {/* Line Items by Category */}
                                         {Object.keys(billItemsByCategory).length > 0 ? (
@@ -1854,6 +1997,86 @@ export default function AdmissionDetailPage() {
                                             </div>
                                         ) : (
                                             <p className="text-xs text-gray-400 text-center py-4">No charges posted yet.</p>
+                                        )}
+
+                                        {/* Package consumption ledger — absorbed services (expense side, NOT billed) */}
+                                        {pkgUtil && (pkgUtil.consumed_items?.length > 0 || pkgUtil.extra_items?.length > 0) && (
+                                            <div className="border border-indigo-100 rounded-xl overflow-hidden">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowConsumption(v => !v)}
+                                                    className="w-full bg-indigo-50/60 px-4 py-2 border-b border-indigo-100 flex items-center justify-between"
+                                                >
+                                                    <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">
+                                                        Consumed under package · ₹{Number(pkgUtil.consumed).toLocaleString('en-IN')} (hospital expense — not on patient/TPA bill)
+                                                    </p>
+                                                    <ChevronRight className={`h-3.5 w-3.5 text-indigo-400 transition-transform ${showConsumption ? 'rotate-90' : ''}`} />
+                                                </button>
+                                                {showConsumption && (
+                                                    <>
+                                                        {Object.entries(pkgUtil.consumed_by_category || {}).map(([cat, total]: [string, any]) => (
+                                                            <div key={cat}>
+                                                                <div className="bg-gray-50 px-4 py-1.5 border-b border-gray-100 flex items-center justify-between">
+                                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{cat}</p>
+                                                                    <p className="text-[10px] font-black text-gray-500">₹{Number(total).toLocaleString('en-IN')}</p>
+                                                                </div>
+                                                                <div className="divide-y divide-gray-50">
+                                                                    {pkgUtil.consumed_items
+                                                                        .filter((p: any) => (p.service_category || p.source_module) === cat)
+                                                                        .map((p: any) => (
+                                                                            <div key={p.id} className="px-4 py-2 flex items-center justify-between text-xs">
+                                                                                <div className="flex-1 min-w-0">
+                                                                                    <p className="font-medium text-gray-700 truncate">{p.description}</p>
+                                                                                    <p className="text-[10px] text-gray-400">{new Date(p.posted_at).toLocaleDateString('en-IN')} · {p.source_module}</p>
+                                                                                </div>
+                                                                                <p className="font-bold text-gray-700 ml-3">₹{Number(p.amount).toLocaleString('en-IN')}</p>
+                                                                                {data.status === 'Admitted' && pkgUtil.status === 'active' && (
+                                                                                    <button
+                                                                                        onClick={() => handleReclassify(p.id, 'billable_extra')}
+                                                                                        disabled={reclassifyingId === p.id}
+                                                                                        title="Move OUT of the package — bill this to the patient/TPA over the package (Admin/Finance)"
+                                                                                        className="ml-3 shrink-0 text-[10px] font-bold text-indigo-500 hover:text-indigo-700 hover:underline disabled:opacity-40"
+                                                                                    >
+                                                                                        {reclassifyingId === p.id ? '…' : 'Bill as extra'}
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        ))}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                        {pkgUtil.extra_items?.length > 0 && (
+                                                            <div>
+                                                                <div className="bg-amber-50 px-4 py-1.5 border-y border-amber-100 flex items-center justify-between">
+                                                                    <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Billed over the package (exclusions)</p>
+                                                                    <p className="text-[10px] font-black text-amber-700">₹{Number(pkgUtil.extras_billed).toLocaleString('en-IN')}</p>
+                                                                </div>
+                                                                <div className="divide-y divide-gray-50">
+                                                                    {pkgUtil.extra_items.map((p: any) => (
+                                                                        <div key={p.id} className="px-4 py-2 flex items-center justify-between text-xs">
+                                                                            <div className="flex-1 min-w-0">
+                                                                                <p className="font-medium text-gray-700 truncate">{p.description}</p>
+                                                                                <p className="text-[10px] text-gray-400">{new Date(p.posted_at).toLocaleDateString('en-IN')} · {p.source_module}</p>
+                                                                            </div>
+                                                                            <p className="font-bold text-amber-700 ml-3">₹{Number(p.amount).toLocaleString('en-IN')}</p>
+                                                                            {data.status === 'Admitted' && pkgUtil.status === 'active' && (
+                                                                                <button
+                                                                                    onClick={() => handleReclassify(p.id, 'package_consumed')}
+                                                                                    disabled={reclassifyingId === p.id}
+                                                                                    title="Move INTO the package — absorb as hospital expense, remove from the patient/TPA bill (Admin/Finance)"
+                                                                                    className="ml-3 shrink-0 text-[10px] font-bold text-indigo-500 hover:text-indigo-700 hover:underline disabled:opacity-40"
+                                                                                >
+                                                                                    {reclassifyingId === p.id ? '…' : 'Absorb in package'}
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </div>
                                         )}
 
                                         {/* Payments */}
@@ -2091,13 +2314,43 @@ export default function AdmissionDetailPage() {
                                                     <p className="text-[10px] text-gray-400 mt-1">Backdate up to 1 year. Cannot be before patient was admitted.</p>
                                                 </div>
                                             </div>
+
+                                            {/* Package routing — only when a package is active on this admission */}
+                                            {chargeMode === 'service' && pkgUtil?.status === 'active' && (
+                                                <div className="bg-indigo-50/60 border border-indigo-100 rounded-lg p-3 space-y-1.5">
+                                                    <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">
+                                                        Package routing — {pkgUtil.package_name}
+                                                    </p>
+                                                    <div className="flex flex-wrap gap-3 text-[11px] font-medium text-gray-700">
+                                                        <label className="flex items-center gap-1.5 cursor-pointer">
+                                                            <input type="radio" name="chargeDisposition" checked={chargeDisposition === 'auto'}
+                                                                onChange={() => setChargeDisposition('auto')} />
+                                                            Auto (exclusion-aware)
+                                                        </label>
+                                                        <label className="flex items-center gap-1.5 cursor-pointer">
+                                                            <input type="radio" name="chargeDisposition" checked={chargeDisposition === 'package_consumed'}
+                                                                onChange={() => setChargeDisposition('package_consumed')} />
+                                                            Within package (absorbed)
+                                                        </label>
+                                                        <label className="flex items-center gap-1.5 cursor-pointer">
+                                                            <input type="radio" name="chargeDisposition" checked={chargeDisposition === 'billable_extra'}
+                                                                onChange={() => setChargeDisposition('billable_extra')} />
+                                                            Billable over package
+                                                        </label>
+                                                    </div>
+                                                    <p className="text-[10px] text-gray-400">
+                                                        Auto absorbs the charge into the package unless it matches a package exclusion. Absorbed charges never appear on the patient/TPA bill.
+                                                    </p>
+                                                </div>
+                                            )}
+
                                             <button
                                                 type="submit"
                                                 disabled={postingCharge}
                                                 className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-orange-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors"
                                             >
                                                 {postingCharge ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <DollarSign className="h-3.5 w-3.5" />}
-                                                Post Charge
+                                                {chargeMode === 'package' ? 'Apply Package' : 'Post Charge'}
                                             </button>
                                         </form>
                                     </div>

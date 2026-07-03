@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pencil, Plus, Trash2, AlertTriangle, Info, Save, Unlock } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Pencil, Plus, Trash2, AlertTriangle, Info, Save, Unlock, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Modal } from '@/app/components/ui/Modal';
 import { Input, Textarea } from '@/app/components/ui/Input';
@@ -14,6 +14,7 @@ import {
     updateInvoiceDoctor,
 } from '@/app/actions/finance-actions';
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
+import { getAllBillableServices } from '@/app/actions/ipd-master-actions';
 
 interface EditInvoiceModalProps {
     invoiceId: number;
@@ -59,6 +60,12 @@ type HeaderState = {
     bill_discount: number;
     doctor_id: string;
     doctor_name: string;
+};
+
+type CatalogSvc = {
+    id: string; service_name: string; service_code: string;
+    default_rate: number; tax_rate: number; service_category: string;
+    hsn_sac_code: string; source: string;
 };
 
 const fmtINR = (n: number) =>
@@ -124,12 +131,23 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
     const [unlocking, setUnlocking] = useState(false);
     const [doctors, setDoctors] = useState<Array<{ id: string; name: string; specialty?: string | null }>>([]);
     const [savingDoctor, setSavingDoctor] = useState(false);
+
+    // ─── Service catalog for inline picker on new line items ───
+    const [catalogServices, setCatalogServices] = useState<CatalogSvc[]>([]);
+    const [activeSvcRow, setActiveSvcRow] = useState<number | null>(null);
+    const svcDropdownRef = useRef<HTMLDivElement | null>(null);
+
+    const serviceCategories = useMemo(() =>
+        Array.from(new Set(catalogServices.map(s => s.service_category))).sort()
+    , [catalogServices]);
+
     const canUnlock = ['admin', 'finance', 'superadmin'].includes(myRole || '');
 
     useEffect(() => {
         if (isOpen) {
             getMyRole().then(r => setMyRole(r.role));
             getDoctorsForDropdown().then(r => { if (r.success) setDoctors(r.data as any); });
+            getAllBillableServices().then(r => { if (r.success) setCatalogServices(r.data as any); });
         }
     }, [isOpen]);
 
@@ -229,6 +247,18 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
         if (isOpen) load();
     }, [isOpen, load]);
 
+    // Close service dropdown on click outside
+    useEffect(() => {
+        if (activeSvcRow === null) return;
+        function handleClickOutside(e: MouseEvent) {
+            if (svcDropdownRef.current && !svcDropdownRef.current.contains(e.target as Node)) {
+                setActiveSvcRow(null);
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [activeSvcRow]);
+
     // Live totals — match recalculateInvoice on the server (only visible items count)
     const totals = useMemo(() => {
         const visible = items.filter(i => !i._removed);
@@ -277,6 +307,36 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
 
     function addItem() {
         setItems(prev => [...prev, blankItem()]);
+    }
+
+    function getFilteredServices(idx: number) {
+        const item = items[idx];
+        if (!item) return [];
+        const q = (item.description || '').trim().toLowerCase();
+        const catFilter = item.service_category || item.department;
+        let list = catalogServices;
+        if (catFilter && catFilter !== 'General') {
+            list = list.filter(s => s.service_category === catFilter);
+        }
+        if (q) {
+            list = list.filter(s =>
+                s.service_name.toLowerCase().includes(q) ||
+                s.service_code.toLowerCase().includes(q)
+            );
+        }
+        return list.slice(0, 30);
+    }
+
+    function pickService(idx: number, svc: CatalogSvc) {
+        updateItem(idx, {
+            department: svc.service_category,
+            description: svc.service_name,
+            unit_price: svc.default_rate,
+            tax_rate: svc.tax_rate,
+            hsn_sac_code: svc.hsn_sac_code,
+            service_category: svc.service_category,
+        });
+        setActiveSvcRow(null);
     }
 
     // Spread a whole-bill discount (% or flat ₹) across line items by setting each
@@ -538,19 +598,19 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                     </div>
 
                     {/* Items table */}
-                    <div className="border border-gray-200 rounded-xl overflow-hidden">
-                        <div className="bg-gray-50 px-3 py-2 flex items-center justify-between">
+                    <div className="border border-gray-200 rounded-xl">
+                        <div className="bg-gray-50 px-3 py-2 flex items-center justify-between rounded-t-xl">
                             <p className="text-xs font-bold uppercase tracking-wide text-gray-600">Line Items</p>
                             <Button variant="secondary" size="sm" onClick={addItem} icon={<Plus className="h-3.5 w-3.5" />} disabled={readOnly || saving} title={tpaLocked ? 'Locked — TPA settlement in progress' : undefined}>
                                 Add Item
                             </Button>
                         </div>
-                        <div className="overflow-x-auto">
+                        <div className={activeSvcRow !== null ? '' : 'overflow-x-auto'}>
                             <table className="w-full text-xs">
                                 <thead className="bg-gray-50 border-t border-b border-gray-200 text-gray-500">
                                     <tr>
-                                        <th className="px-2 py-2 text-left font-semibold">Department</th>
-                                        <th className="px-2 py-2 text-left font-semibold">Description</th>
+                                        <th className="px-2 py-2 text-left font-semibold">Category</th>
+                                        <th className="px-2 py-2 text-left font-semibold">Service / Description</th>
                                         <th className="px-2 py-2 text-right font-semibold w-16">Qty</th>
                                         <th className="px-2 py-2 text-right font-semibold w-24">Unit ₹</th>
                                         <th className="px-2 py-2 text-right font-semibold w-24">Disc ₹</th>
@@ -565,23 +625,92 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                         if (it._removed) return null;
                                         const lineNet = Number(it.quantity) * Number(it.unit_price) - Number(it.discount);
                                         const lineTax = (lineNet * Number(it.tax_rate)) / 100;
+                                        const svcResults = !it.id && activeSvcRow === idx ? getFilteredServices(idx) : [];
                                         return (
                                             <tr key={it.id ?? `new-${idx}`} className="border-b border-gray-100 last:border-b-0">
+                                                {/* Department / Category */}
                                                 <td className="px-2 py-1.5">
-                                                    <input
-                                                        className="w-full px-2 py-1 border border-gray-200 rounded text-xs"
-                                                        value={it.department}
-                                                        onChange={e => updateItem(idx, { department: e.target.value })}
-                                                        disabled={readOnly || saving}
-                                                    />
+                                                    {!it.id ? (
+                                                        <select
+                                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs bg-white"
+                                                            value={it.service_category || it.department || 'General'}
+                                                            onChange={e => {
+                                                                const cat = e.target.value;
+                                                                updateItem(idx, {
+                                                                    department: cat === 'General' ? 'General' : cat,
+                                                                    service_category: cat === 'General' ? null : cat,
+                                                                });
+                                                            }}
+                                                            disabled={readOnly || saving}
+                                                        >
+                                                            <option value="General">All Categories</option>
+                                                            {serviceCategories.map(cat => (
+                                                                <option key={cat} value={cat}>{cat}</option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        <input
+                                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs"
+                                                            value={it.department}
+                                                            onChange={e => updateItem(idx, { department: e.target.value })}
+                                                            disabled={readOnly || saving}
+                                                        />
+                                                    )}
                                                 </td>
+                                                {/* Description / Service search */}
                                                 <td className="px-2 py-1.5">
-                                                    <input
-                                                        className="w-full px-2 py-1 border border-gray-200 rounded text-xs"
-                                                        value={it.description}
-                                                        onChange={e => updateItem(idx, { description: e.target.value })}
-                                                        disabled={readOnly || saving}
-                                                    />
+                                                    {!it.id ? (
+                                                        <div className="relative" ref={activeSvcRow === idx ? svcDropdownRef : undefined}>
+                                                            <div className="relative">
+                                                                <input
+                                                                    className="w-full pl-2 pr-6 py-1 border border-gray-200 rounded text-xs focus:border-orange-400 focus:ring-1 focus:ring-orange-400/20 outline-none"
+                                                                    value={it.description}
+                                                                    placeholder="Search services…"
+                                                                    onChange={e => {
+                                                                        updateItem(idx, { description: e.target.value });
+                                                                        if (activeSvcRow !== idx) setActiveSvcRow(idx);
+                                                                    }}
+                                                                    onFocus={() => setActiveSvcRow(idx)}
+                                                                    disabled={readOnly || saving}
+                                                                />
+                                                                <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                                                            </div>
+                                                            {activeSvcRow === idx && (
+                                                                <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto min-w-[280px]">
+                                                                    {svcResults.length === 0 ? (
+                                                                        <p className="px-3 py-4 text-xs text-gray-400 text-center italic">No services found</p>
+                                                                    ) : (
+                                                                        svcResults.map(svc => (
+                                                                            <button
+                                                                                key={svc.id}
+                                                                                type="button"
+                                                                                className="w-full text-left px-3 py-2 text-xs hover:bg-orange-50 border-b border-gray-50 last:border-b-0 transition-colors"
+                                                                                onMouseDown={e => e.preventDefault()}
+                                                                                onClick={() => pickService(idx, svc)}
+                                                                            >
+                                                                                <div className="flex items-center justify-between gap-2">
+                                                                                    <span className="font-semibold text-gray-900 truncate">{svc.service_name}</span>
+                                                                                    <span className="text-orange-600 font-bold shrink-0">₹{svc.default_rate.toLocaleString('en-IN')}</span>
+                                                                                </div>
+                                                                                <div className="text-[10px] text-gray-400 mt-0.5">
+                                                                                    {svc.service_code && <span>{svc.service_code} · </span>}
+                                                                                    {svc.service_category}
+                                                                                    {svc.tax_rate > 0 && <span> · {svc.tax_rate}% GST</span>}
+                                                                                </div>
+                                                                            </button>
+                                                                        ))
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <input
+                                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs"
+                                                            value={it.description}
+                                                            onChange={e => updateItem(idx, { description: e.target.value })}
+                                                            disabled={readOnly || saving}
+                                                        />
+                                                    )}
                                                 </td>
                                                 <td className="px-2 py-1.5 text-right">
                                                     <input

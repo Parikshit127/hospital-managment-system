@@ -2897,12 +2897,20 @@ model IpdAdmissionPackage {
   applied_by     String?
   organizationId String
   created_at     DateTime     @default(now())
+  // Two-ledger package billing: explicit lifecycle. 'active' | 'broken_open' | 'closed'.
+  // Supersedes is_broken_open (kept for backward compatibility).
+  status         String       @default("active")
+  closed_at      DateTime?
+  // Rolling "Package Absorbed Cost" expense for this admission package (if any).
+  expense_id     Int?
   admission      admissions   @relation(fields: [admission_id], references: [admission_id])
   organization   Organization @relation(fields: [organizationId], references: [id])
   package        IpdPackage   @relation(fields: [package_id], references: [id])
+  consumptions   IpdChargePosting[]
 
   @@index([admission_id])
   @@index([organizationId])
+  @@index([admission_id, status])
   @@map("ipd_admission_packages")
 }
 
@@ -2943,10 +2951,23 @@ model IpdChargePosting {
   posted_at       DateTime     @default(now())
   organizationId  String
   is_backdated    Boolean      @default(false)
-  organization    Organization @relation(fields: [organizationId], references: [id])
+  // Two-ledger package billing (all additive; existing rows keep semantics via defaults):
+  //   'billed'            → normal invoice line (invoice_item_id set)
+  //   'package_consumed'  → absorbed under an active package (invoice_item_id NULL, never claimed)
+  //   'billable_extra'    → package exclusion billed over the package (invoice_item_id set)
+  disposition          String   @default("billed")
+  admission_package_id Int?
+  service_category     String?
+  quantity             Float    @default(1)
+  unit_price           Decimal  @default(0)
+  tax_rate             Decimal  @default(0)
+  organization         Organization         @relation(fields: [organizationId], references: [id])
+  admission_package    IpdAdmissionPackage? @relation(fields: [admission_package_id], references: [id])
 
   @@index([admission_id])
   @@index([organizationId])
+  @@index([admission_package_id])
+  @@index([admission_id, disposition])
   @@map("ipd_charge_postings")
 }
 
