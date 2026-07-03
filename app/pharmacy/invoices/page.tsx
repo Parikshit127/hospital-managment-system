@@ -6,7 +6,8 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { FileText, Search, Eye, CreditCard, X, Pencil, Plus, Trash2, IndianRupee, Receipt, TrendingDown, ShoppingBag } from 'lucide-react';
 import { getInvoices, addInvoiceItem, recordPayment, getInvoiceDetail, updateInvoiceItem, removeInvoiceItem } from '@/app/actions/finance-actions';
 import { parseWalkinNote } from '@/app/lib/walkin-note';
-import { getInventory } from '@/app/actions/pharmacy-actions';
+import { getInventoryPage } from '@/app/actions/pharmacy-actions';
+import { useDebouncedValue } from '@/app/lib/hooks/useDebouncedValue';
 import Link from 'next/link';
 
 const fmt = (n: number) => Number(n || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -92,6 +93,28 @@ export default function PharmacyInvoicesPage() {
     const [saveError, setSaveError] = useState('');
     const [deletedItemIds, setDeletedItemIds] = useState<number[]>([]);
     const [editModalLoading, setEditModalLoading] = useState(false);
+
+    const debouncedMedSearch = useDebouncedValue(medSearch, 250);
+
+    useEffect(() => {
+        if (!editModal || debouncedMedSearch.length < 2) {
+            setInventory([]);
+            return;
+        }
+        let active = true;
+        async function fetchSearchInventory() {
+            try {
+                const res = await getInventoryPage({ search: debouncedMedSearch.trim(), limit: 50 });
+                if (active && res.success) {
+                    setInventory(res.data || []);
+                }
+            } catch (err) {
+                console.error('Failed to search inventory:', err);
+            }
+        }
+        fetchSearchInventory();
+        return () => { active = false; };
+    }, [debouncedMedSearch, editModal]);
 
     const load = async () => {
         setLoading(true);
@@ -225,20 +248,10 @@ export default function PharmacyInvoicesPage() {
             console.error('Failed to load invoice items:', err);
         }
 
-        try {
-            const res = await getInventory();
-            if (res.success) setInventory(res.data || []);
-        } catch (err: any) {
-            console.error('Failed to load inventory:', err);
-        }
         setEditModalLoading(false);
     }, []);
 
-    const filteredMeds = inventory.filter(m =>
-        !medSearch ||
-        m.medicine?.brand_name?.toLowerCase().includes(medSearch.toLowerCase()) ||
-        m.medicine?.generic_name?.toLowerCase().includes(medSearch.toLowerCase())
-    );
+    const filteredMeds = inventory;
 
     const addMedRow = (med: any) => {
         const existing = editRows.find(r => r.medicine_id === med.medicine_id && r.batch_no === med.batch_no);
