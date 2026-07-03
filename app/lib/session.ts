@@ -122,6 +122,78 @@ export async function getSuperAdminSession(): Promise<SuperAdminSessionData | nu
     }
 }
 
+// --------------- Dev Admin / Developer Portal Session ---------------
+// A DEDICATED, standalone session realm for the internal Developer / Dev Admin
+// portal (/dev-portal). It is intentionally separate from the hospital-facing
+// `session` cookie: a hospital session can NEVER satisfy this gate, and hitting
+// the portal always requires an explicit portal login (PRD Addendum v3 §6).
+// Short TTL — the portal is high-privilege (broadcasts, release publishing, audit).
+
+export interface DevPortalSessionData {
+    id: string;
+    username: string;
+    name: string;
+    role: string;
+    organization_id: string;
+    organization_slug: string;
+    organization_name: string;
+    is_dev_admin: boolean;
+    is_developer: boolean;
+}
+
+// Short-lived on purpose (1 hour). The DB flags are re-checked on every request
+// by the route/action guards, so a short cookie limits the trust window.
+const DEV_PORTAL_TTL_SECONDS = 60 * 60;
+const DEV_PORTAL_COOKIE = 'dev_portal_session';
+
+export async function createDevPortalSession(data: DevPortalSessionData): Promise<void> {
+    const token = await new SignJWT(data as unknown as Record<string, unknown>)
+        .setProtectedHeader({ alg: 'HS256' })
+        .setExpirationTime(`${DEV_PORTAL_TTL_SECONDS}s`)
+        .setIssuedAt()
+        .sign(JWT_SECRET);
+
+    const cookieStore = await cookies();
+    cookieStore.set(DEV_PORTAL_COOKIE, token, {
+        httpOnly: true,
+        secure: process.env.NEXT_PUBLIC_APP_URL?.startsWith('https') ?? false,
+        sameSite: 'lax',
+        maxAge: DEV_PORTAL_TTL_SECONDS,
+        path: '/',
+    });
+}
+
+export async function getDevPortalSession(): Promise<DevPortalSessionData | null> {
+    try {
+        const cookieStore = await cookies();
+        const token = cookieStore.get(DEV_PORTAL_COOKIE)?.value;
+        if (!token) return null;
+
+        const { payload } = await jwtVerify(token, JWT_SECRET);
+        // Reject anything that isn't flagged for the portal, even if the JWT verifies.
+        if (payload.is_dev_admin !== true && payload.is_developer !== true) return null;
+
+        return {
+            id: (payload.id as string) || '',
+            username: (payload.username as string) || '',
+            name: (payload.name as string) || '',
+            role: (payload.role as string) || '',
+            organization_id: (payload.organization_id as string) || '',
+            organization_slug: (payload.organization_slug as string) || '',
+            organization_name: (payload.organization_name as string) || '',
+            is_dev_admin: payload.is_dev_admin === true,
+            is_developer: payload.is_developer === true,
+        };
+    } catch {
+        return null;
+    }
+}
+
+export async function clearDevPortalSession(): Promise<void> {
+    const cookieStore = await cookies();
+    cookieStore.delete(DEV_PORTAL_COOKIE);
+}
+
 export async function createMfaPendingSession(data: SessionData): Promise<void> {
     const token = await new SignJWT(data as unknown as Record<string, unknown>)
         .setProtectedHeader({ alg: 'HS256' })

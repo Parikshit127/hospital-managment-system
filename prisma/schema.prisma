@@ -465,6 +465,8 @@ model User {
   username                                                String               @unique
   password                                                String
   role                                                    String
+  is_dev_admin                                            Boolean              @default(false)
+  is_developer                                            Boolean              @default(false)
   name                                                    String?
   specialty                                               String?
   email                                                   String?
