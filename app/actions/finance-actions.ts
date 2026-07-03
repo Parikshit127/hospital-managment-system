@@ -3438,6 +3438,7 @@ export async function getDrillDownData(type: DrillDownType, filters: Record<stri
                         balance: fmt(Number(inv.outstandingAmount)),
                         age: Math.floor((now.getTime() - new Date(inv.created_at).getTime()) / (1000 * 60 * 60 * 24)) + 'd',
                         invoiceId: inv.id,
+                        _payer: String(inv.billing_patient_type || '').toLowerCase() === 'tpa_insurance' ? 'TPA' : 'Cash',
                     })),
                 },
             };

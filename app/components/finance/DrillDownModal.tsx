@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { X, Loader2, ExternalLink } from 'lucide-react';
 import { getDrillDownData, DrillDownType } from '@/app/actions/finance-actions';
 import Link from 'next/link';
@@ -11,14 +11,23 @@ interface DrillDownModalProps {
     onClose: () => void;
 }
 
+const OUTSTANDING_TYPES = new Set(['outstanding', 'outstanding-ipd-cash', 'outstanding-ipd-tpa', 'outstanding-opd']);
+const HIDDEN_KEYS = new Set(['invoiceId', '_payer']);
+
 export function DrillDownModal({ type, filters, onClose }: DrillDownModalProps) {
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<{ title: string; columns: string[]; rows: Record<string, any>[] } | null>(null);
     const [error, setError] = useState('');
+    const [typeFilter, setTypeFilter] = useState<'all' | 'OPD' | 'IPD'>('all');
+    const [payerFilter, setPayerFilter] = useState<'all' | 'Cash' | 'TPA'>('all');
+
+    const isOutstanding = OUTSTANDING_TYPES.has(type);
 
     useEffect(() => {
         setLoading(true);
         setError('');
+        setTypeFilter('all');
+        setPayerFilter('all');
         getDrillDownData(type, filters)
             .then(res => {
                 if (res.success) setData((res as any).data);
@@ -27,6 +36,16 @@ export function DrillDownModal({ type, filters, onClose }: DrillDownModalProps) 
             .catch(() => setError('Network error — please try again'))
             .finally(() => setLoading(false));
     }, [type, JSON.stringify(filters)]);
+
+    const filteredRows = useMemo(() => {
+        if (!data) return [];
+        if (!isOutstanding) return data.rows;
+        return data.rows.filter(row => {
+            if (typeFilter !== 'all' && row.type !== typeFilter) return false;
+            if (payerFilter !== 'all' && row._payer !== payerFilter) return false;
+            return true;
+        });
+    }, [data, typeFilter, payerFilter, isOutstanding]);
 
     useEffect(() => {
         const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -67,6 +86,37 @@ export function DrillDownModal({ type, filters, onClose }: DrillDownModalProps) 
                     </div>
                 </div>
 
+                {/* Outstanding filters */}
+                {isOutstanding && !loading && data && (
+                    <div className="px-6 py-3 border-b border-gray-100 flex flex-wrap items-center gap-3 flex-shrink-0 bg-gray-50">
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Type</span>
+                            {(['all', 'IPD', 'OPD'] as const).map(v => (
+                                <button key={v} onClick={() => setTypeFilter(v)}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${typeFilter === v ? 'bg-blue-500/20 text-blue-700 border border-blue-500/30' : 'bg-white text-gray-500 border border-gray-200 hover:text-gray-800'}`}>
+                                    {v === 'all' ? 'All' : v}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="w-px h-4 bg-gray-200" />
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Payer</span>
+                            {(['all', 'Cash', 'TPA'] as const).map(v => (
+                                <button key={v} onClick={() => setPayerFilter(v)}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${payerFilter === v ? 'bg-amber-500/20 text-amber-700 border border-amber-500/30' : 'bg-white text-gray-500 border border-gray-200 hover:text-gray-800'}`}>
+                                    {v === 'all' ? 'All' : v}
+                                </button>
+                            ))}
+                        </div>
+                        {(typeFilter !== 'all' || payerFilter !== 'all') && (
+                            <button onClick={() => { setTypeFilter('all'); setPayerFilter('all'); }}
+                                className="ml-auto text-[10px] font-bold text-gray-400 hover:text-gray-600 underline">
+                                Clear filters
+                            </button>
+                        )}
+                    </div>
+                )}
+
                 {/* Body */}
                 <div className="flex-1 overflow-auto">
                     {loading && (
@@ -78,10 +128,10 @@ export function DrillDownModal({ type, filters, onClose }: DrillDownModalProps) 
                     {!loading && error && (
                         <div className="p-6 text-center text-rose-500 text-sm font-medium">{error}</div>
                     )}
-                    {!loading && data && data.rows.length === 0 && (
+                    {!loading && data && filteredRows.length === 0 && (
                         <div className="p-12 text-center text-gray-400 text-sm">No data found.</div>
                     )}
-                    {!loading && data && data.rows.length > 0 && (
+                    {!loading && data && filteredRows.length > 0 && (
                         <table className="w-full text-xs">
                             <thead className="sticky top-0 bg-gray-50 border-b border-gray-200 z-10">
                                 <tr>
@@ -93,8 +143,8 @@ export function DrillDownModal({ type, filters, onClose }: DrillDownModalProps) 
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {data.rows.map((row, i) => {
-                                    const rowKeys = Object.keys(row).filter(k => k !== 'invoiceId');
+                                {filteredRows.map((row, i) => {
+                                    const rowKeys = Object.keys(row).filter(k => !HIDDEN_KEYS.has(k));
                                     return (
                                         <tr key={i} className="hover:bg-gray-50 transition-colors">
                                             {rowKeys.map((key, j) => (
@@ -121,8 +171,10 @@ export function DrillDownModal({ type, filters, onClose }: DrillDownModalProps) 
 
                 {/* Footer */}
                 {data && (
-                    <div className="px-6 py-3 border-t border-gray-100 flex-shrink-0">
-                        <p className="text-[10px] font-bold text-gray-400">{data.rows.length} record{data.rows.length !== 1 ? 's' : ''}</p>
+                    <div className="px-6 py-3 border-t border-gray-100 flex-shrink-0 flex items-center justify-between">
+                        <p className="text-[10px] font-bold text-gray-400">
+                            {filteredRows.length}{filteredRows.length !== data.rows.length ? ` of ${data.rows.length}` : ''} record{filteredRows.length !== 1 ? 's' : ''}
+                        </p>
                     </div>
                 )}
             </div>
