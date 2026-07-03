@@ -4,7 +4,7 @@ import {
     Users, UserCog, Building2, ShieldCheck, UserRound,
     Settings, Palette, FileText, Bell, Plug, Clock, BarChart3, Lock,
     Workflow, Scissors, GitBranch, DatabaseBackup, BookOpen, Database,
-    ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck, LifeBuoy, Megaphone,
+    ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck,
     type LucideIcon,
 } from 'lucide-react';
 
@@ -83,8 +83,10 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
             { label: 'Integrations', href: '/admin/integrations', icon: Plug },
             { label: 'Tally Integration', href: '/admin/integrations/tally', icon: Plug },
             { label: 'Audit Logs', href: '/admin/audit-logs', icon: Clock },
-            { label: 'Broadcasts', href: '/admin/broadcasts', icon: Megaphone },
-            { label: 'Release Notes', href: '/admin/release-notes', icon: BookOpen },
+            // Broadcasts (create), Release Notes (manage), and Support Portal removed
+            // from the Hospital Admin sidebar per PRD v3 Addendum §3 — these are
+            // developer/Dev-Admin-only capabilities and now live only inside the
+            // Dev Admin portal (Person B's scope). The pages themselves are untouched.
             { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
             { label: 'Workflows', href: '/admin/workflows', icon: Workflow },
             { label: 'Data Import', href: '/admin/data-import', icon: DatabaseBackup },
@@ -92,7 +94,6 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
             { label: 'API Documentation', href: '/admin/api-docs', icon: BookOpen },
             { label: 'MFA Setup', href: '/admin/mfa-setup', icon: Lock },
             { label: 'Registration Config', href: '/admin/registration-config', icon: SlidersHorizontal },
-            { label: 'Support Portal', href: '/admin/support', icon: LifeBuoy },
         ],
     },
 ];

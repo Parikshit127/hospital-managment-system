@@ -4,8 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { TicketStatus } from '@prisma/client';
 import { Plus, TicketCheck, RefreshCw, ChevronDown, ChevronRight, Loader2, MessageSquare, AlertTriangle } from 'lucide-react';
-import { getTicketsByFacility, getHospitalVisibleNotes } from '@/app/actions/help-center-actions';
-import { listBranches } from '@/app/actions/branch-actions';
+import { getMyTickets, getHospitalVisibleNotes } from '@/app/actions/help-center-actions';
 import { Table, TableHeader, TableBody, TableRow, TableCell } from '@/app/components/ui/Table';
 import { Badge } from '@/app/components/ui/Badge';
 import { Button } from '@/app/components/ui/Button';
@@ -40,11 +39,6 @@ interface NoteData {
 }
 
 type NotesFetchState = 'idle' | 'loading' | 'loaded' | 'error';
-
-interface BranchOption {
-    id: string;
-    branch_name: string;
-}
 
 type LoadState = 'loading' | 'loaded' | 'error' | 'security-error';
 
@@ -90,8 +84,6 @@ export function TicketTable({ userId }: { userId: string }) {
     const router = useRouter();
 
     const [tickets, setTickets] = useState<TicketRow[]>([]);
-    const [branches, setBranches] = useState<BranchOption[]>([]);
-    const [selectedBranch, setSelectedBranch] = useState('');
     const [loadState, setLoadState] = useState<LoadState>('loading');
     const [refreshing, setRefreshing] = useState(false);
 
@@ -153,36 +145,16 @@ export function TicketTable({ userId }: { userId: string }) {
         fetchNotesForTicket(ticketId);
     }, [fetchNotesForTicket]);
 
-    // Load branches
+    // Load the current user's own tickets on mount. Per PRD v3 Addendum §5 the
+    // Track Status view is scoped strictly to createdById = current user, with no
+    // facility/branch dimension, so there is no branch selection to load or track.
     useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            const result = await listBranches();
-            if (cancelled) return;
-            if (result.success && result.data.length > 0) {
-                const mapped = result.data.map((b: any) => ({ id: b.id, branch_name: b.branch_name }));
-                setBranches(mapped);
-                // Auto-select first branch
-                if (mapped.length >= 1) {
-                    setSelectedBranch(mapped[0].id);
-                }
-            } else {
-                // No branches found or call failed — stop loading
-                setLoadState('loaded');
-            }
-        })();
-        return () => { cancelled = true; };
-    }, []);
-
-    // Load tickets when branch changes
-    useEffect(() => {
-        if (!selectedBranch) return;
         let cancelled = false;
 
         const load = async () => {
             setLoadState('loading');
             try {
-                const result = await getTicketsByFacility(selectedBranch);
+                const result = await getMyTickets();
                 if (cancelled) return;
                 if (result.success) {
                     const data = result.data as TicketRow[];
@@ -203,13 +175,13 @@ export function TicketTable({ userId }: { userId: string }) {
 
         load();
         return () => { cancelled = true; };
-    }, [selectedBranch, userId]);
+    }, [userId]);
 
     const handleRefresh = async () => {
-        if (!selectedBranch || refreshing) return;
+        if (refreshing) return;
         setRefreshing(true);
         try {
-            const result = await getTicketsByFacility(selectedBranch);
+            const result = await getMyTickets();
             if (result.success) {
                 const data = result.data as TicketRow[];
                 const hasLeak = data.some((t) => t.user_id !== userId);
@@ -267,7 +239,7 @@ export function TicketTable({ userId }: { userId: string }) {
                             variant="primary"
                             size="md"
                             icon={<Plus className="h-4 w-4" />}
-                            onClick={() => router.push('/help-center/raise')}
+                            onClick={() => router.push('/help-center?tab=raise')}
                         >
                             Raise Ticket
                         </Button>
@@ -277,17 +249,6 @@ export function TicketTable({ userId }: { userId: string }) {
 
             {/* Filters */}
             <div className="flex flex-col sm:flex-row gap-4">
-                {branches.length > 1 && (
-                    <div className="flex-1 min-w-[200px]">
-                        <Select
-                            id="help-center-branch-filter"
-                            label="Facility"
-                            options={branches.map((b) => ({ value: b.id, label: b.branch_name }))}
-                            value={selectedBranch}
-                            onChange={(e) => setSelectedBranch(e.target.value)}
-                        />
-                    </div>
-                )}
                 <div className="flex-1 min-w-[150px]">
                     <Select
                         id="help-center-status-filter"
@@ -348,7 +309,7 @@ export function TicketTable({ userId }: { userId: string }) {
                         </div>
                         <p className="text-sm font-bold text-rose-700 mb-1">Security Warning: Backend Gap Detected</p>
                         <p className="text-sm text-rose-600 mb-4 max-w-lg">
-                            The server action <code>getTicketsByFacility</code> is returning tickets that belong to other users.
+                            The server action <code>getMyTickets</code> is returning tickets that belong to other users.
                             To prevent data leakage, the UI has been blocked. Please fix the server action to scope queries securely by <code>user_id</code>.
                         </p>
                     </div>
@@ -366,7 +327,7 @@ export function TicketTable({ userId }: { userId: string }) {
                                 variant="primary"
                                 size="md"
                                 icon={<Plus className="h-4 w-4" />}
-                                onClick={() => router.push('/help-center/raise')}
+                                onClick={() => router.push('/help-center?tab=raise')}
                             >
                                 Raise Your First Ticket
                             </Button>

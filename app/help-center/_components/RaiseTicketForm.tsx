@@ -245,7 +245,7 @@ export function RaiseTicketForm() {
                         <Button
                             variant="secondary"
                             size="md"
-                            onClick={() => router.push('/help-center/track')}
+                            onClick={() => router.push('/help-center?tab=track')}
                         >
                             View My Tickets
                         </Button>
@@ -432,7 +432,7 @@ export function RaiseTicketForm() {
                             variant="ghost"
                             size="md"
                             icon={<ArrowLeft className="h-4 w-4" />}
-                            onClick={() => router.push('/help-center/track')}
+                            onClick={() => router.push('/help-center?tab=track')}
                         >
                             Back to Tickets
                         </Button>
