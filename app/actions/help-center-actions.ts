@@ -7,6 +7,16 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@supabase/supabase-js';
 import { logAudit } from '@/app/lib/audit';
 
+// Minimal HTML escape for user-supplied text embedded into outbox email bodies.
+function escHtml(s: string): string {
+    return s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // Bucket the ticket attachments are uploaded to (see RaiseTicketForm.tsx).
 const ATTACHMENTS_BUCKET = 'ticket_attachments';
 
@@ -70,6 +80,29 @@ export async function createTicket(input: CreateTicketInput) {
             entity_id: ticket.id,
             details: `Ticket "${ticket.title}" created with ${ticket.priority} priority`,
         });
+
+        // Enqueue "ticket created" emails to every Dev Admin with an email
+        // (async outbox — never blocks ticket creation; drained by the cron).
+        try {
+            const devAdmins = await db.user.findMany({
+                where: { organizationId, is_dev_admin: true, email: { not: null } },
+                select: { email: true },
+            });
+            if (devAdmins.length > 0) {
+                await db.emailJob.createMany({
+                    data: devAdmins.map((a: { email: string | null }) => ({
+                        type: 'ticket.created',
+                        recipient_email: a.email as string,
+                        subject: `New support ticket: ${ticket.title}`,
+                        body: `<p>A new <strong>${ticket.priority}</strong> priority ticket has been raised.</p><p><strong>${escHtml(ticket.title)}</strong></p><p>${escHtml(ticket.description)}</p>`,
+                        payload: { ticketId: ticket.id },
+                        organizationId,
+                    })),
+                });
+            }
+        } catch (emailErr) {
+            console.error('Ticket Created Email Enqueue Error:', emailErr);
+        }
 
         revalidatePath('/help-center');
         return { success: true, data: ticket };
@@ -256,6 +289,30 @@ export async function updateTicketStatus(ticketId: string, status: TicketStatus)
             details: `Status changed to ${status}`,
         });
 
+        // On resolution, enqueue a "ticket resolved" email to the original issuer.
+        if (status === TicketStatus.Resolved) {
+            try {
+                const creator = await db.user.findUnique({
+                    where: { id: ticket.user_id },
+                    select: { email: true },
+                });
+                if (creator?.email) {
+                    await db.emailJob.create({
+                        data: {
+                            type: 'ticket.resolved',
+                            recipient_email: creator.email,
+                            subject: `Your ticket has been resolved: ${ticket.title}`,
+                            body: `<p>Your support ticket has been marked <strong>Resolved</strong>.</p><p><strong>${escHtml(ticket.title)}</strong></p>`,
+                            payload: { ticketId: ticket.id },
+                            organizationId,
+                        },
+                    });
+                }
+            } catch (emailErr) {
+                console.error('Ticket Resolved Email Enqueue Error:', emailErr);
+            }
+        }
+
         revalidatePath('/help-center');
         revalidatePath('/dev-portal/tickets');
         return { success: true, data: ticket };
@@ -360,6 +417,30 @@ export async function assignTicket(ticketId: string, userId: string | null) {
             entity_id: ticketId,
             details: userId ? `Assigned to user ${userId}` : 'Ticket unassigned',
         });
+
+        // Enqueue "ticket assigned" email to the new assignee (async outbox).
+        if (userId) {
+            try {
+                const assignee = await db.user.findUnique({
+                    where: { id: userId },
+                    select: { email: true },
+                });
+                if (assignee?.email) {
+                    await db.emailJob.create({
+                        data: {
+                            type: 'ticket.assigned',
+                            recipient_email: assignee.email,
+                            subject: `Ticket assigned to you: ${ticket.title}`,
+                            body: `<p>You have been assigned a support ticket.</p><p><strong>${escHtml(ticket.title)}</strong></p>`,
+                            payload: { ticketId: ticket.id, assigneeId: userId },
+                            organizationId,
+                        },
+                    });
+                }
+            } catch (emailErr) {
+                console.error('Ticket Assigned Email Enqueue Error:', emailErr);
+            }
+        }
 
         revalidatePath('/dev-portal/tickets');
         return { success: true, data: ticket };
