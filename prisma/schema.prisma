@@ -1225,6 +1225,7 @@ model invoices {
 
   // Discounts and TPA
   bill_discount Decimal @default(0)
+  discount_remark String?
 
   // Hard edit-lock
   is_locked Boolean   @default(false)

@@ -2849,6 +2849,7 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
     bill_discount?: number;
     doctor_id?: string | null;
     doctor_name?: string | null;
+    discount_remark?: string | null;
 }) {
     try {
         const { db, organizationId, session } = await requireTenantContext();
@@ -2876,6 +2877,7 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
         if (patch.bill_discount !== undefined) data.bill_discount = Math.max(0, Number(patch.bill_discount) || 0);
         if (patch.doctor_id !== undefined) data.doctor_id = patch.doctor_id || null;
         if (patch.doctor_name !== undefined) data.doctor_name = (patch.doctor_name || '').trim() || null;
+        if (patch.discount_remark !== undefined) data.discount_remark = patch.discount_remark;
         data.version = { increment: 1 };
 
         await db.invoices.update({ where: { id: invoiceId }, data });
@@ -3129,7 +3131,7 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
             await tx.invoice_snapshots.create({
                 data: {
                     invoice_id: invoiceId,
-                    invoice_number: (invoice as any).invoice_number,
+                    invoice_number: (invoice as any).invoice_number || 'Draft',
                     version_number: Number(invoice.version),
                     snapshot_data: _snapshotData,
                     changed_by: session?.username || (session as any)?.email || null,
@@ -3235,6 +3237,7 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
                 if (p.concession_reason !== undefined) h.concession_reason = p.concession_reason;
                 if (p.is_inter_state !== undefined) h.is_inter_state = p.is_inter_state;
                 if ((p as any).bill_discount !== undefined) h.bill_discount = Math.max(0, Number((p as any).bill_discount) || 0);
+                if (p.discount_remark !== undefined) h.discount_remark = p.discount_remark;
                 if (Object.keys(h).length) {
                     await tx.invoices.update({ where: { id: invoiceId }, data: h });
                 }

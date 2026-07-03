@@ -155,7 +155,7 @@ async function createInvoiceSnapshotTx(
     await tx.invoice_snapshots.create({
         data: {
             invoice_id: invoice.id,
-            invoice_number: invoice.invoice_number,
+            invoice_number: invoice.invoice_number || 'Draft',
             version_number: Number(invoice.version || 0),
             snapshot_data: {
                 invoice: {
