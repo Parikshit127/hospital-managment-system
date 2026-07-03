@@ -10,19 +10,14 @@ export const metadata: Metadata = {
 
 export const dynamic = 'force-dynamic';
 
-import { HelpCenterNav } from './_components/HelpCenterNav';
-
 export default async function HelpCenterLayout({ children }: { children: ReactNode }) {
+    // Auth guard only. Tab navigation now lives inside the page (HelpCenterTabs);
+    // the old top-nav was removed with the sub-route consolidation (Addendum §4).
     try {
         await requireTenantContext();
     } catch {
         redirect('/login');
     }
 
-    return (
-        <div className="flex flex-col min-h-screen bg-[var(--background)]">
-            <HelpCenterNav />
-            {children}
-        </div>
-    );
+    return <>{children}</>;
 }

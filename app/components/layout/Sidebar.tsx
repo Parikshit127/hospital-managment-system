@@ -84,7 +84,6 @@ import {
   BookOpen,
   Landmark,
   TrendingUp,
-  LifeBuoy,
 } from "lucide-react";
 
 interface NavItem {
@@ -678,16 +677,11 @@ export function Sidebar({ session }: SidebarProps) {
     ? (isAdmin ? (roleForPath(pathname) ?? "admin") : session.role)
     : "";
   const baseSections = effectiveRole ? NAV_BY_ROLE[effectiveRole] || [] : [];
-  const sections = [
-    ...baseSections,
-    ...(effectiveRole ? [{
-      title: "Support",
-      items: [
-        { label: "Raise Ticket", href: "/help-center/raise", icon: LifeBuoy },
-        { label: "Track Tickets", href: "/help-center/track", icon: LayoutList },
-      ],
-    }] : [])
-  ];
+  // Help Center (Raise Ticket / Track Tickets) is intentionally NOT linked from
+  // any sidebar per PRD v3 Addendum §4 — it is reachable only via the notification
+  // bell's "Help Center" link or a direct URL. Its functionality now lives as tabs
+  // inside the /help-center page.
+  const sections = [...baseSections];
   const orgName = session?.organization_name || "Hospital OS";
 
   const allHrefs = sections.flatMap((s) => s.items.map((i) => i.href));

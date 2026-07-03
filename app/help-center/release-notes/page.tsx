@@ -1,123 +1,15 @@
-'use client';
+import { redirect } from 'next/navigation';
+import { helpCenterAliasTarget } from '../routes';
 
-import React, { useState, useEffect } from 'react';
-import { getReleaseNotes, getReleaseNoteSignedUrl } from '@/app/actions/release-notes-actions';
-import { Card, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/Card';
-import { BookOpen, Calendar, FileText, Download, ExternalLink } from 'lucide-react';
-import { Button } from '@/app/components/ui/Button';
-import { LoadingState } from '@/app/components/ui/LoadingState';
-import { EmptyState } from '@/app/components/ui/EmptyState';
+export const dynamic = 'force-dynamic';
 
-interface ReleaseNote {
-    id: string;
-    version: string;
-    title: string;
-    content: string;
-    file_url: string | null;
-    file_name: string | null;
-    published_at: string;
-}
-
-export default function ReleaseNotesPage() {
-    const [notes, setNotes] = useState<ReleaseNote[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        let isMounted = true;
-        getReleaseNotes().then((res) => {
-            if (isMounted) {
-                if (res.success && res.data) {
-                    setNotes(res.data);
-                }
-                setLoading(false);
-            }
-        });
-        return () => { isMounted = false; };
-    }, []);
-
-    const handleDownload = async (fileUrl: string, fileName: string) => {
-        const res = await getReleaseNoteSignedUrl(fileUrl);
-        if (res.success && res.signedUrl) {
-            window.open(res.signedUrl, '_blank');
-        } else {
-            alert('Could not open file.');
-        }
-    };
-
-    const formatDate = (dateStr: string) => {
-        try {
-            return new Date(dateStr).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-            });
-        } catch {
-            return dateStr;
-        }
-    };
-
-    if (loading) {
-        return <LoadingState message="Loading release notes..." />;
-    }
-
-    return (
-        <div className="px-4 py-8 sm:px-6 lg:px-8">
-            <div className="max-w-4xl mx-auto space-y-6">
-                <div className="flex items-center gap-3 mb-8">
-                <div className="p-3 bg-primary-100 text-primary-600 rounded-xl">
-                    <BookOpen className="h-6 w-6" />
-                </div>
-                <div>
-                    <h1 className="text-2xl font-black text-gray-900">Release Notes</h1>
-                    <p className="text-gray-500">What's new in HospitalOS</p>
-                </div>
-            </div>
-
-            {notes.length === 0 ? (
-                <EmptyState
-                    icon={<BookOpen className="h-8 w-8" />}
-                    title="No release notes"
-                    description="There are no published release notes yet."
-                />
-            ) : (
-                <div className="space-y-6">
-                    {notes.map((note) => (
-                        <div key={note.id} className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-                            <div className="border-b border-gray-100 bg-gray-50 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                <div>
-                                    <div className="flex items-center gap-3 mb-1">
-                                        <span className="px-2.5 py-1 bg-primary-100 text-primary-700 text-xs font-bold rounded-lg uppercase tracking-wider">
-                                            v{note.version}
-                                        </span>
-                                        <h2 className="text-lg font-bold text-gray-900">{note.title}</h2>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-sm text-gray-500 font-medium">
-                                        <Calendar className="h-4 w-4" />
-                                        {formatDate(note.published_at)}
-                                    </div>
-                                </div>
-                                {note.file_url && note.file_name && (
-                                    <Button
-                                        variant="secondary"
-                                        size="sm"
-                                        icon={<Download className="h-4 w-4" />}
-                                        onClick={() => handleDownload(note.file_url!, note.file_name!)}
-                                    >
-                                        {note.file_name}
-                                    </Button>
-                                )}
-                            </div>
-                            
-                            <div className="p-6">
-                                <div className="prose prose-sm max-w-none text-gray-600 whitespace-pre-wrap">
-                                    {note.content}
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-        </div>
-    );
+// Legacy sub-route kept alive as a thin redirect into the consolidated Help
+// Center's Release Notes tab (PRD v3 Addendum §4). Forwards any query params —
+// notably the ?id carried by the notification bell's release-note deep link.
+export default async function ReleaseNotesRedirect({
+    searchParams,
+}: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+    redirect(helpCenterAliasTarget('release-notes', await searchParams));
 }

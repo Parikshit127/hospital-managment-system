@@ -176,15 +176,22 @@ export async function getAttachmentSignedUrl(fileUrl: string) {
 }
 
 // ========================================
-// FETCH TICKETS SCOPED TO A FACILITY (Branch)
+// FETCH THE CURRENT USER'S OWN TICKETS (Track Status)
 // ========================================
 
-export async function getTicketsByFacility(branchId: string) {
+/**
+ * Track Status tab data source. Per PRD v3 Addendum §5, a hospital-side user's
+ * Track Status view is strictly scoped to the tickets they personally raised
+ * (createdById = current user), with NO facility/branch dimension — a Hospital
+ * Admin has no elevated, facility-wide ticket visibility here. The org-wide
+ * "all tickets" view lives only in the Dev Admin portal (separate query).
+ */
+export async function getMyTickets() {
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
         const data = await db.ticket.findMany({
-            where: { branch_id: branchId, organizationId, user_id: session.id },
+            where: { organizationId, user_id: session.id },
             orderBy: { created_at: 'desc' },
             include: {
                 user: { select: { id: true, name: true, username: true } },
@@ -195,7 +202,7 @@ export async function getTicketsByFacility(branchId: string) {
 
         return { success: true, data };
     } catch (error) {
-        console.error('Get Tickets By Facility Error:', error);
+        console.error('Get My Tickets Error:', error);
         return { success: false, data: [] };
     }
 }
