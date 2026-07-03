@@ -166,7 +166,6 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       items: [
         { label: "Settings", href: "/admin/settings", icon: Settings },
         { label: "Reports", href: "/admin/reports", icon: BarChart3 },
-        { label: "Audit Trail", href: "/admin/audit", icon: Activity },
         { label: "Data Import", href: "/admin/data-import", icon: Package },
         { label: "Print Center", href: "/print-center", icon: Printer },
       ],

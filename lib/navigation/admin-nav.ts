@@ -2,7 +2,7 @@ import {
     LayoutDashboard, LineChart,
     Stethoscope, Bed, BedDouble, FlaskConical, Pill, DollarSign, Receipt, CreditCard, Briefcase,
     Users, UserCog, Building2, ShieldCheck, UserRound,
-    Settings, Palette, FileText, Bell, Plug, Clock, BarChart3, Lock,
+    Settings, Palette, FileText, Bell, Plug, BarChart3, Lock,
     Workflow, Scissors, GitBranch, DatabaseBackup, BookOpen, Database,
     ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck,
     type LucideIcon,
@@ -82,11 +82,10 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
             { label: 'Notifications', href: '/admin/notifications', icon: Bell },
             { label: 'Integrations', href: '/admin/integrations', icon: Plug },
             { label: 'Tally Integration', href: '/admin/integrations/tally', icon: Plug },
-            { label: 'Audit Logs', href: '/admin/audit-logs', icon: Clock },
-            // Broadcasts (create), Release Notes (manage), and Support Portal removed
-            // from the Hospital Admin sidebar per PRD v3 Addendum §3 — these are
-            // developer/Dev-Admin-only capabilities and now live only inside the
-            // Dev Admin portal (Person B's scope). The pages themselves are untouched.
+            // Audit Logs, Broadcasts (create), Release Notes (manage), and Support
+            // Portal removed from the Hospital Admin sidebar per PRD v3 Addendum §3 —
+            // these are developer/Dev-Admin-only capabilities and now live only inside
+            // the Dev Admin portal (Person B's scope). The pages themselves are untouched.
             { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
             { label: 'Workflows', href: '/admin/workflows', icon: Workflow },
             { label: 'Data Import', href: '/admin/data-import', icon: DatabaseBackup },
