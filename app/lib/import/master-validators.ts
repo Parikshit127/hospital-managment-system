@@ -110,7 +110,9 @@ export function validateDoctorRows(rows: Record<string, unknown>[]): ValidateRes
     const errs: string[] = [];
     const name = str(r.name); if (name.length < 2) errs.push('name is required (min 2 chars)');
     const username = str(r.username); if (username.length < 3) errs.push('username is required (min 3 chars)');
-    const password = str(r.password); if (password.length < 8) errs.push('password is required (min 8 chars)');
+    // Password optional: blank means "keep existing" on update (re-imported export).
+    // A brand-new doctor with no password is rejected at import time with a clear message.
+    const password = str(r.password); if (password && password.length < 8) errs.push('password must be at least 8 characters');
     const specialty = str(r.specialty); if (!specialty) errs.push('specialty is required');
     const cfRaw = toNum(r.consultation_fee, 'consultation_fee');
     if (typeof cfRaw === 'string') errs.push(cfRaw);

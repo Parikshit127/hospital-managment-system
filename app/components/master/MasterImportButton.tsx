@@ -30,7 +30,7 @@ export default function MasterImportButton({ type, onImportComplete }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [stage, setStage] = useState<Stage>('idle');
   const [preview, setPreview] = useState<PreviewState | null>(null);
-  const [importResult, setImportResult] = useState<{ imported: number; failed: ImportRowFailure[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ imported: number; updated?: number; failed: ImportRowFailure[] } | null>(null);
   const [validationErrors, setValidationErrors] = useState<RowError[]>([]);
 
   function handleTemplateDownload() {
@@ -84,8 +84,11 @@ export default function MasterImportButton({ type, onImportComplete }: Props) {
     }
     setImportResult(res.data!);
     setStage('done');
-    if (res.data!.imported > 0) {
-      toast.success(`Imported ${res.data!.imported} rows successfully`);
+    const created = res.data!.imported;
+    const updated = res.data!.updated ?? 0;
+    if (created + updated > 0) {
+      const parts = [created > 0 ? `${created} added` : '', updated > 0 ? `${updated} updated` : ''].filter(Boolean);
+      toast.success(parts.join(', '));
       onImportComplete();
     }
   }
@@ -232,7 +235,8 @@ export default function MasterImportButton({ type, onImportComplete }: Props) {
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className={`h-4 w-4 ${importResult.failed.length > 0 ? 'text-amber-600' : 'text-green-600'}`} />
                   <p className="text-sm font-semibold text-green-800">
-                    {importResult.imported} row{importResult.imported !== 1 ? 's' : ''} imported
+                    {importResult.imported} added
+                    {(importResult.updated ?? 0) > 0 && `, ${importResult.updated} updated`}
                     {importResult.failed.length > 0 && `, ${importResult.failed.length} failed`}
                   </p>
                 </div>
