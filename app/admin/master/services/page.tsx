@@ -10,6 +10,7 @@ import {
 } from '@/app/actions/service-master-actions';
 import { ensureIPDDemoMasterData } from '@/app/actions/ipd-billing-helpers';
 import MasterImportButton from '@/app/components/master/MasterImportButton';
+import MasterExportButton from '@/app/components/master/MasterExportButton';
 
 const sanitizeMoney = (value: string) => value.replace(/[^\d.]/g, '');
 const sanitizeInteger = (value: string) => value.replace(/\D/g, '');
@@ -342,6 +343,14 @@ export default function ServiceMasterPage() {
                 className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 text-white text-sm font-semibold rounded-xl hover:bg-amber-600 disabled:opacity-50">
                 {seeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Seed Demo Data
               </button>
+              <MasterExportButton
+                filename="services"
+                sheetName="Services"
+                fetchRows={async () => {
+                  const res = await listServices({ search: svcSearch, limit: 100000 });
+                  return res.success ? ((res.data?.rows as any[]) ?? []) : [];
+                }}
+              />
               <MasterImportButton type="service_master" onImportComplete={loadServices} />
               <button onClick={openCreateSvc}
                 className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">

@@ -7,6 +7,7 @@ import {
   listDoctors, createDoctor, updateDoctor, deactivateDoctor,
 } from '@/app/actions/doctor-master-actions';
 import MasterImportButton from '@/app/components/master/MasterImportButton';
+import MasterExportButton from '@/app/components/master/MasterExportButton';
 
 const onlyDigits = (v: string) => v.replace(/\D/g, '');
 const normalizeName = (v: string) => v.replace(/[^a-zA-Z\s.'-]/g, '');
@@ -179,6 +180,14 @@ export default function DoctorMasterPage() {
           />
         </div>
         <div className="flex items-center gap-2">
+          <MasterExportButton
+            filename="doctors"
+            sheetName="Doctors"
+            fetchRows={async () => {
+              const res = await listDoctors({ search, limit: 100000 });
+              return res.success ? ((res.data?.doctors as any[]) ?? []) : [];
+            }}
+          />
           <MasterImportButton type="doctor_master" onImportComplete={load} />
           <button onClick={openCreate}
             className="flex items-center gap-2 px-4 py-2.5 bg-orange-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-xl transition">

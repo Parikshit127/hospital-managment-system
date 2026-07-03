@@ -8,6 +8,7 @@ import {
   listBatches, addBatch, updateBatch,
 } from '@/app/actions/medicine-master-actions';
 import MasterImportButton from '@/app/components/master/MasterImportButton';
+import MasterExportButton from '@/app/components/master/MasterExportButton';
 import { useDebouncedValue } from '@/app/lib/hooks/useDebouncedValue';
 
 const sanitizeMoney = (value: string) => value.replace(/[^\d.]/g, '');
@@ -200,6 +201,14 @@ export default function MedicineMasterPage() {
           />
         </div>
         <div className="flex items-center gap-2">
+          <MasterExportButton
+            filename="medicines"
+            sheetName="Medicines"
+            fetchRows={async () => {
+              const res = await listMedicines({ search, limit: 100000 });
+              return res.success ? ((res.data?.medicines as any[]) ?? []) : [];
+            }}
+          />
           <MasterImportButton type="medicine_master" onImportComplete={load} />
           <button onClick={openCreate}
             className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">
