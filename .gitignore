@@ -57,3 +57,7 @@ prisma/dev.db
 .gemini/
 .claude/
 scratch/
+
+# temporary dev-portal test helpers (throwaway seed/grant scripts)
+seed-test-devs.js
+make-dev-admin.js

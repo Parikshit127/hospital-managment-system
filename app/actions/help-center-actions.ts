@@ -1,7 +1,7 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
-import { requireDevAdmin } from '@/backend/dev-portal';
+import { requireDevAdmin, requireDeveloper } from '@/backend/dev-portal';
 import { TicketPriority, TicketStatus, TicketNoteVisibility } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@supabase/supabase-js';
@@ -206,7 +206,7 @@ export async function getTicketsByFacility(branchId: string) {
 
 export async function updateTicketStatus(ticketId: string, status: TicketStatus) {
     try {
-        const { db, organizationId } = await requireDevAdmin();
+        const { db, organizationId } = await requireDeveloper();
 
         const ticket = await db.ticket.update({
             where: { id: ticketId, organizationId },
@@ -252,10 +252,16 @@ export async function updateTicketStatus(ticketId: string, status: TicketStatus)
 
 export async function getAllTickets() {
     try {
-        const { db, organizationId } = await requireDevAdmin();
+        const { db, organizationId, user } = await requireDeveloper();
+
+        // Dev Admins see every ticket; plain Developers see only tickets
+        // assigned to them.
+        const where = user.is_dev_admin
+            ? { organizationId }
+            : { organizationId, assigned_to_id: user.id };
 
         const data = await db.ticket.findMany({
-            where: { organizationId },
+            where,
             orderBy: { created_at: 'desc' },
             include: {
                 user: { select: { id: true, name: true, username: true } },
@@ -359,7 +365,7 @@ interface CreateTicketNoteInput {
  */
 export async function createTicketNote(input: CreateTicketNoteInput) {
     try {
-        const { db, session, organizationId } = await requireDevAdmin();
+        const { db, session, organizationId } = await requireDeveloper();
 
         // Tenant safety: the ticket must belong to the caller's org.
         const ticket = await db.ticket.findFirst({
@@ -435,7 +441,7 @@ export async function getHospitalVisibleNotes(ticketId: string) {
  */
 export async function getTicketNotes(ticketId: string) {
     try {
-        const { db, organizationId } = await requireDevAdmin();
+        const { db, organizationId } = await requireDeveloper();
 
         const data = await db.ticketNote.findMany({
             where: { ticket_id: ticketId, organizationId },
