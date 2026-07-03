@@ -12,6 +12,7 @@ import {
     getAssignableUsers, assignTicket, createTicketNote, getTicketNotes
 } from '@/app/actions/help-center-actions';
 import { listBranches } from '@/app/actions/branch-actions';
+import { getDevPortalIdentity } from '../actions';
 import { TicketPriority, TicketStatus, TicketNoteVisibility } from '@prisma/client';
 
 /* ─── Interfaces ─── */
@@ -97,6 +98,11 @@ export default function SupportPortalPage() {
     const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
+    /* ─── Current dev-portal identity (Dev Admin vs Developer) ─── */
+    // UI hint only — only Dev Admins may reassign tickets. The server-side
+    // assignTicket action is still guarded by requireDevAdmin().
+    const [isDevAdmin, setIsDevAdmin] = useState(false);
+
     /* ─── Filter States ─── */
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -163,6 +169,10 @@ export default function SupportPortalPage() {
     useEffect(() => {
         loadData();
     }, [loadData]);
+
+    useEffect(() => {
+        getDevPortalIdentity().then((id) => setIsDevAdmin(id.isDevAdmin));
+    }, []);
 
     /* ─── Status Update Handler ─── */
     const handleStatusUpdate = async (ticketId: string, newStatus: TicketStatus) => {
@@ -925,8 +935,9 @@ export default function SupportPortalPage() {
                                                 <select
                                                     value={ticket.assigned_to_id || ''}
                                                     onChange={(e) => handleAssignTicket(ticket.id, e.target.value || null)}
-                                                    disabled={assigningTicketId === ticket.id}
-                                                    className="w-full pl-7 pr-2 py-1 border border-slate-200 rounded-lg text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)] hover:border-slate-300 transition-colors disabled:opacity-50 cursor-pointer"
+                                                    disabled={!isDevAdmin || assigningTicketId === ticket.id}
+                                                    title={!isDevAdmin ? 'Only Dev Admins can reassign tickets' : undefined}
+                                                    className="w-full pl-7 pr-2 py-1 border border-slate-200 rounded-lg text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)] hover:border-slate-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                                                 >
                                                     <option value="">Unassigned</option>
                                                     {developers.map((dev) => (

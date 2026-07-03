@@ -1,6 +1,6 @@
 'use server';
 
-import { requireTenantContext } from '@/backend/tenant';
+import { requireTenantContext, requireAnyTenantContext } from '@/backend/tenant';
 import { requireDevAdmin, requireDeveloper } from '@/backend/dev-portal';
 import { TicketPriority, TicketStatus, TicketNoteVisibility } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
@@ -132,8 +132,9 @@ export async function saveTicketAttachment(input: SaveTicketAttachmentInput) {
 
 export async function getAttachmentSignedUrl(fileUrl: string) {
     try {
-        // Require an authenticated tenant session (admin support portal).
-        await requireTenantContext();
+        // Reachable from BOTH the hospital Help Center and the Dev Portal ticket
+        // command center — accept any authenticated session (incl. dev_portal_session).
+        await requireAnyTenantContext();
 
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
         // Service role bypasses storage RLS server-side (the app uses its own
@@ -299,11 +300,11 @@ export async function getAllTickets() {
 // TICKET ASSIGNMENT
 // ========================================
 
-const ASSIGNABLE_ROLES = ['admin', 'developer'];
-
 /**
- * Fetch users who can be assigned tickets (Admin / Developer roles),
- * scoped to the caller's organization.
+ * Fetch users who can be assigned tickets — strictly the internal Dev team
+ * (Dev Admins or Developers), scoped to the caller's organization. Standard
+ * hospital admins are matched on the boolean flags, NOT the free-form role
+ * string, so they never appear here.
  */
 export async function getAssignableUsers() {
     try {
@@ -313,7 +314,7 @@ export async function getAssignableUsers() {
             where: {
                 organizationId,
                 is_active: true,
-                role: { in: ASSIGNABLE_ROLES },
+                OR: [{ is_dev_admin: true }, { is_developer: true }],
             },
             select: { id: true, name: true, username: true, role: true },
             orderBy: { name: 'asc' },
