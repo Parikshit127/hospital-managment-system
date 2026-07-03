@@ -39,7 +39,7 @@ export function BottomNavBar({ role = 'patient' }: BottomNavBarProps) {
                 {navItems.map(item => {
                     const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                     return (
-                        <Link key={item.href} href={item.href}
+                        <Link key={item.href} href={item.href} prefetch={false}
                             className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-colors min-w-[56px] ${
                                 isActive
                                     ? 'text-orange-600'

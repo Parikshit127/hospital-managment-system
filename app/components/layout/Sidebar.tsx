@@ -852,6 +852,11 @@ export function Sidebar({ session }: SidebarProps) {
                   <Link
                     key={item.href}
                     href={item.href}
+                    // Prefetch off: the sidebar links to every route, and Next's
+                    // default prefetch was firing a full server render (+ that
+                    // page's DB queries) for all of them on every nav render —
+                    // ~90% of server load. Routes now render only when clicked.
+                    prefetch={false}
                     onClick={() => setMobileOpen(false)}
                     title={collapsed ? item.label : undefined}
                     className={`flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-all duration-150 ${active
