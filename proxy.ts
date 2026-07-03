@@ -81,6 +81,10 @@ export async function proxy(request: NextRequest) {
 
   // Route handlers apply their own auth checks for these endpoints.
   if (
+    // Cron jobs authenticate via CRON_SECRET bearer token in the route handler
+    // itself — bypassing the session-cookie gate here is safe and necessary so
+    // the scheduler (Vercel cron / external) is not redirected to /login.
+    pathname.startsWith("/api/cron/") ||
     pathname.startsWith("/api/reports/") ||
     pathname.startsWith("/api/invoice/") ||
     pathname.startsWith("/api/discharge/") ||
