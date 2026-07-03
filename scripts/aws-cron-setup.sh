@@ -54,6 +54,9 @@ NEW_CRONTAB="$EXISTING
 
 # Broadcast dispatch — every 5 minutes
 */5 * * * *  $RUNNER /api/cron/broadcast-dispatch
+
+# Email outbox dispatch — every 2 minutes (v4 Addendum)
+*/2 * * * *  $RUNNER /api/cron/email-dispatch
 "
 
 echo "$NEW_CRONTAB" | crontab -

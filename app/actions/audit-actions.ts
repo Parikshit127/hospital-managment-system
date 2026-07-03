@@ -1,6 +1,7 @@
 'use server';
 
-import { requireTenantContext, requireRoleAndTenant, ForbiddenError, AuthError } from '@/backend/tenant';
+import { requireTenantContext, ForbiddenError, AuthError } from '@/backend/tenant';
+import { requireDevAdmin } from '@/backend/dev-portal';
 
 // Log an audit event
 export async function logAuditEvent(params: {
@@ -48,7 +49,7 @@ export async function getAuditLogs(page: number = 1, limit: number = 50, filters
     try {
         // Admin-only. system_audit_logs is not auto-tenant-scoped, so we must
         // filter organizationId explicitly to prevent cross-org leakage.
-        const { db, organizationId } = await requireRoleAndTenant(['admin']);
+        const { db, organizationId } = await requireDevAdmin();
 
         const where: any = { organizationId };
         if (filters?.module) where.module = filters.module;
@@ -102,7 +103,7 @@ export async function getAuditLogs(page: number = 1, limit: number = 50, filters
 export async function getAuditStats() {
     try {
         // Admin-only + org-scoped (see getAuditLogs).
-        const { db, organizationId } = await requireRoleAndTenant(['admin']);
+        const { db, organizationId } = await requireDevAdmin();
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);

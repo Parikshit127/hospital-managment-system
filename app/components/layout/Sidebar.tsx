@@ -84,7 +84,6 @@ import {
   BookOpen,
   Landmark,
   TrendingUp,
-  LifeBuoy,
 } from "lucide-react";
 
 interface NavItem {
@@ -137,6 +136,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Workflows", href: "/admin/workflows", icon: Workflow },
         { label: "Templates", href: "/admin/templates", icon: FileStack },
         { label: "Notifications", href: "/admin/notifications", icon: Bell },
+        { label: "Broadcasts", href: "/admin/broadcasts", icon: Megaphone },
         { label: "Integrations", href: "/admin/integrations", icon: Plug },
         { label: "Registration Config", href: "/admin/registration-config", icon: Settings },
         { label: "Billing Order Sets", href: "/admin/billing-ordersets", icon: LayoutList },
@@ -167,7 +167,6 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       items: [
         { label: "Settings", href: "/admin/settings", icon: Settings },
         { label: "Reports", href: "/admin/reports", icon: BarChart3 },
-        { label: "Audit Trail", href: "/admin/audit", icon: Activity },
         { label: "Data Import", href: "/admin/data-import", icon: Package },
         { label: "Print Center", href: "/print-center", icon: Printer },
       ],
@@ -678,16 +677,11 @@ export function Sidebar({ session }: SidebarProps) {
     ? (isAdmin ? (roleForPath(pathname) ?? "admin") : session.role)
     : "";
   const baseSections = effectiveRole ? NAV_BY_ROLE[effectiveRole] || [] : [];
-  const sections = [
-    ...baseSections,
-    ...(effectiveRole ? [{
-      title: "Support",
-      items: [
-        { label: "Raise Ticket", href: "/help-center/raise", icon: LifeBuoy },
-        { label: "Track Tickets", href: "/help-center/track", icon: LayoutList },
-      ],
-    }] : [])
-  ];
+  // Help Center (Raise Ticket / Track Tickets) is intentionally NOT linked from
+  // any sidebar per PRD v3 Addendum §4 — it is reachable only via the notification
+  // bell's "Help Center" link or a direct URL. Its functionality now lives as tabs
+  // inside the /help-center page.
+  const sections = [...baseSections];
   const orgName = session?.organization_name || "Hospital OS";
 
   const allHrefs = sections.flatMap((s) => s.items.map((i) => i.href));

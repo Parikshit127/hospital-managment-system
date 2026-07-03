@@ -5,6 +5,7 @@ import { Bell, Check, CheckCheck, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
+import { HELP_CENTER_ROUTE } from '@/app/help-center/routes';
 
 const supabase = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
@@ -186,9 +187,13 @@ export function NotificationBell({ userId, organizationId }: NotificationBellPro
 
                     {/* Footer */}
                     <div className="px-4 py-2.5 border-t border-gray-100 text-center">
-                        <Link href="/notifications" onClick={() => setOpen(false)}
+                        {/* Opens the consolidated Help Center (Raise Ticket / Track Status /
+                            Release Notes / Notifications), not a bare notifications list — PRD v3 Addendum §4. */}
+                        {/* TODO: confirm final copy — OQ-3 (candidates: "Help Center",
+                            "Notifications & Support", "View All Notifications & Support") */}
+                        <Link href={HELP_CENTER_ROUTE} onClick={() => setOpen(false)}
                             className="text-xs font-bold text-orange-600 hover:text-orange-700">
-                            View all notifications
+                            Help Center
                         </Link>
                     </div>
                 </div>

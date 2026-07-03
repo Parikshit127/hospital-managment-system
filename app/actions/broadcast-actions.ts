@@ -1,6 +1,7 @@
 'use server';
 
-import { requireRoleAndTenant, ForbiddenError, AuthError } from '@/backend/tenant';
+import { ForbiddenError, AuthError, requireRoleAndTenant } from '@/backend/tenant';
+import { requireDevAdmin } from '@/backend/dev-portal';
 import { BroadcastAudience, BroadcastStatus } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { deliverBroadcast, audienceUserWhere } from '@/app/lib/broadcast-delivery';
@@ -23,7 +24,7 @@ interface SendBroadcastInput {
  */
 export async function sendBroadcast(input: SendBroadcastInput) {
     try {
-        const { db, session, organizationId } = await requireRoleAndTenant(['admin']);
+        const { db, session, organizationId } = await requireDevAdmin();
 
         if (!input.title?.trim() || !input.body?.trim()) {
             return { success: false, error: 'Title and body are required' };
@@ -68,7 +69,7 @@ export async function sendBroadcast(input: SendBroadcastInput) {
                 : `Sent ${input.audience} broadcast to ${recipients} recipient(s)`,
         });
 
-        revalidatePath('/admin/broadcasts');
+        revalidatePath('/dev-portal/broadcasts');
         return {
             success: true,
             data: { id: broadcast.id, status: broadcast.status, recipients },
@@ -91,7 +92,7 @@ export async function getBroadcastAudienceCount(
     targetRole?: string | null
 ) {
     try {
-        const { db, organizationId } = await requireRoleAndTenant(['admin']);
+        const { db, organizationId } = await requireDevAdmin();
 
         // Same source of truth as deliverBroadcast — preview cannot drift from delivery.
         const count = await db.user.count({
@@ -113,7 +114,7 @@ export async function getBroadcastAudienceCount(
  */
 export async function getBroadcasts() {
     try {
-        const { db, organizationId } = await requireRoleAndTenant(['admin']);
+        const { db, organizationId } = await requireDevAdmin();
 
         const data = await db.broadcast.findMany({
             where: { organizationId },
@@ -132,5 +133,57 @@ export async function getBroadcasts() {
         }
         console.error('Get Broadcasts Error:', error);
         return { success: false, data: [] };
+    }
+}
+
+/**
+ * Hospital Admin "local" broadcast (v4 Addendum, decision #3).
+ *
+ * Distinct from the Dev-Admin sendBroadcast: a Hospital Admin may only send an
+ * ORG-WIDE broadcast within their OWN organization. The audience is FORCED to
+ * ALL_FACILITIES and organizationId is taken from the session — any client
+ * attempt to choose a facility, role, other org, or cross-tenant scope is
+ * ignored. Guarded by requireRoleAndTenant(['admin']), NOT requireDevAdmin.
+ */
+export async function sendLocalBroadcast(input: { title: string; body: string }) {
+    try {
+        const { db, session, organizationId } = await requireRoleAndTenant(['admin']);
+
+        if (!input.title?.trim() || !input.body?.trim()) {
+            return { success: false, error: 'Title and body are required' };
+        }
+
+        const broadcast = await db.broadcast.create({
+            data: {
+                title: input.title.trim(),
+                body: input.body.trim(),
+                audience: BroadcastAudience.ALL_FACILITIES, // forced org-wide
+                facility_id: null,                          // no facility scoping
+                target_role: null,                          // no role scoping
+                status: BroadcastStatus.SENT,
+                sent_at: new Date(),
+                created_by: session.id,
+                organizationId,                             // hardcoded to caller's org
+            },
+        });
+
+        const recipients = await deliverBroadcast(db, broadcast);
+
+        await logAudit({
+            action: 'broadcast.sent',
+            module: 'Notifications',
+            entity_type: 'Broadcast',
+            entity_id: broadcast.id,
+            details: `Sent local (org-wide) broadcast to ${recipients} recipient(s)`,
+        });
+
+        revalidatePath('/admin/broadcasts');
+        return { success: true, data: { id: broadcast.id, recipients } };
+    } catch (error) {
+        if (error instanceof ForbiddenError || error instanceof AuthError) {
+            return { success: false, error: 'Not authorized' };
+        }
+        console.error('Send Local Broadcast Error:', error);
+        return { success: false, error: 'Internal error' };
     }
 }

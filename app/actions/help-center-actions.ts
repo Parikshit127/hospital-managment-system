@@ -1,10 +1,21 @@
 'use server';
 
-import { requireTenantContext } from '@/backend/tenant';
+import { requireTenantContext, requireAnyTenantContext } from '@/backend/tenant';
+import { requireDevAdmin, requireDeveloper } from '@/backend/dev-portal';
 import { TicketPriority, TicketStatus, TicketNoteVisibility } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@supabase/supabase-js';
 import { logAudit } from '@/app/lib/audit';
+
+// Minimal HTML escape for user-supplied text embedded into outbox email bodies.
+function escHtml(s: string): string {
+    return s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 // Bucket the ticket attachments are uploaded to (see RaiseTicketForm.tsx).
 const ATTACHMENTS_BUCKET = 'ticket_attachments';
@@ -70,6 +81,29 @@ export async function createTicket(input: CreateTicketInput) {
             details: `Ticket "${ticket.title}" created with ${ticket.priority} priority`,
         });
 
+        // Enqueue "ticket created" emails to every Dev Admin with an email
+        // (async outbox — never blocks ticket creation; drained by the cron).
+        try {
+            const devAdmins = await db.user.findMany({
+                where: { organizationId, is_dev_admin: true, email: { not: null } },
+                select: { email: true },
+            });
+            if (devAdmins.length > 0) {
+                await db.emailJob.createMany({
+                    data: devAdmins.map((a: { email: string | null }) => ({
+                        type: 'ticket.created',
+                        recipient_email: a.email as string,
+                        subject: `New support ticket: ${ticket.title}`,
+                        body: `<p>A new <strong>${ticket.priority}</strong> priority ticket has been raised.</p><p><strong>${escHtml(ticket.title)}</strong></p><p>${escHtml(ticket.description)}</p>`,
+                        payload: { ticketId: ticket.id },
+                        organizationId,
+                    })),
+                });
+            }
+        } catch (emailErr) {
+            console.error('Ticket Created Email Enqueue Error:', emailErr);
+        }
+
         revalidatePath('/help-center');
         return { success: true, data: ticket };
     } catch (error) {
@@ -116,7 +150,7 @@ export async function saveTicketAttachment(input: SaveTicketAttachmentInput) {
         });
 
         revalidatePath('/help-center');
-        revalidatePath('/admin/support');
+        revalidatePath('/dev-portal/tickets');
         return { success: true, data: attachment };
     } catch (error) {
         console.error('Save Ticket Attachment Error:', error);
@@ -131,8 +165,9 @@ export async function saveTicketAttachment(input: SaveTicketAttachmentInput) {
 
 export async function getAttachmentSignedUrl(fileUrl: string) {
     try {
-        // Require an authenticated tenant session (admin support portal).
-        await requireTenantContext();
+        // Reachable from BOTH the hospital Help Center and the Dev Portal ticket
+        // command center — accept any authenticated session (incl. dev_portal_session).
+        await requireAnyTenantContext();
 
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
         // Service role bypasses storage RLS server-side (the app uses its own
@@ -175,15 +210,22 @@ export async function getAttachmentSignedUrl(fileUrl: string) {
 }
 
 // ========================================
-// FETCH TICKETS SCOPED TO A FACILITY (Branch)
+// FETCH THE CURRENT USER'S OWN TICKETS (Track Status)
 // ========================================
 
-export async function getTicketsByFacility(branchId: string) {
+/**
+ * Track Status tab data source. Per PRD v3 Addendum §5, a hospital-side user's
+ * Track Status view is strictly scoped to the tickets they personally raised
+ * (createdById = current user), with NO facility/branch dimension — a Hospital
+ * Admin has no elevated, facility-wide ticket visibility here. The org-wide
+ * "all tickets" view lives only in the Dev Admin portal (separate query).
+ */
+export async function getMyTickets() {
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
         const data = await db.ticket.findMany({
-            where: { branch_id: branchId, organizationId, user_id: session.id },
+            where: { organizationId, user_id: session.id },
             orderBy: { created_at: 'desc' },
             include: {
                 user: { select: { id: true, name: true, username: true } },
@@ -194,7 +236,7 @@ export async function getTicketsByFacility(branchId: string) {
 
         return { success: true, data };
     } catch (error) {
-        console.error('Get Tickets By Facility Error:', error);
+        console.error('Get My Tickets Error:', error);
         return { success: false, data: [] };
     }
 }
@@ -205,7 +247,18 @@ export async function getTicketsByFacility(branchId: string) {
 
 export async function updateTicketStatus(ticketId: string, status: TicketStatus) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, user } = await requireDeveloper();
+
+        // Plain Developers may only act on tickets assigned to them.
+        if (!user.is_dev_admin) {
+            const owned = await db.ticket.findFirst({
+                where: { id: ticketId, organizationId, assigned_to_id: user.id },
+                select: { id: true },
+            });
+            if (!owned) {
+                throw new Error('Unauthorized: Ticket not assigned to you');
+            }
+        }
 
         const ticket = await db.ticket.update({
             where: { id: ticketId, organizationId },
@@ -236,8 +289,32 @@ export async function updateTicketStatus(ticketId: string, status: TicketStatus)
             details: `Status changed to ${status}`,
         });
 
+        // On resolution, enqueue a "ticket resolved" email to the original issuer.
+        if (status === TicketStatus.Resolved) {
+            try {
+                const creator = await db.user.findUnique({
+                    where: { id: ticket.user_id },
+                    select: { email: true },
+                });
+                if (creator?.email) {
+                    await db.emailJob.create({
+                        data: {
+                            type: 'ticket.resolved',
+                            recipient_email: creator.email,
+                            subject: `Your ticket has been resolved: ${ticket.title}`,
+                            body: `<p>Your support ticket has been marked <strong>Resolved</strong>.</p><p><strong>${escHtml(ticket.title)}</strong></p>`,
+                            payload: { ticketId: ticket.id },
+                            organizationId,
+                        },
+                    });
+                }
+            } catch (emailErr) {
+                console.error('Ticket Resolved Email Enqueue Error:', emailErr);
+            }
+        }
+
         revalidatePath('/help-center');
-        revalidatePath('/admin/support');
+        revalidatePath('/dev-portal/tickets');
         return { success: true, data: ticket };
     } catch (error) {
         console.error('Update Ticket Status Error:', error);
@@ -251,10 +328,16 @@ export async function updateTicketStatus(ticketId: string, status: TicketStatus)
 
 export async function getAllTickets() {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, user } = await requireDeveloper();
+
+        // Dev Admins see every ticket; plain Developers see only tickets
+        // assigned to them.
+        const where = user.is_dev_admin
+            ? { organizationId }
+            : { organizationId, assigned_to_id: user.id };
 
         const data = await db.ticket.findMany({
-            where: { organizationId },
+            where,
             orderBy: { created_at: 'desc' },
             include: {
                 user: { select: { id: true, name: true, username: true } },
@@ -274,21 +357,22 @@ export async function getAllTickets() {
 // TICKET ASSIGNMENT
 // ========================================
 
-const ASSIGNABLE_ROLES = ['admin', 'developer'];
-
 /**
- * Fetch users who can be assigned tickets (Admin / Developer roles),
- * scoped to the caller's organization.
+ * Fetch users who can be assigned tickets — strictly standard Developers
+ * (is_developer = true AND is_dev_admin = false), scoped to the caller's org.
+ * Dev Admins and hospital admins are deliberately excluded: tickets are worked
+ * by Developers, not managed by Dev Admins as assignees.
  */
 export async function getAssignableUsers() {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId } = await requireDeveloper();
 
         const data = await db.user.findMany({
             where: {
                 organizationId,
                 is_active: true,
-                role: { in: ASSIGNABLE_ROLES },
+                is_developer: true,
+                is_dev_admin: false,
             },
             select: { id: true, name: true, username: true, role: true },
             orderBy: { name: 'asc' },
@@ -307,7 +391,7 @@ export async function getAssignableUsers() {
  */
 export async function assignTicket(ticketId: string, userId: string | null) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId } = await requireDevAdmin();
 
         // When assigning, verify the assignee belongs to the caller's org.
         if (userId) {
@@ -334,7 +418,31 @@ export async function assignTicket(ticketId: string, userId: string | null) {
             details: userId ? `Assigned to user ${userId}` : 'Ticket unassigned',
         });
 
-        revalidatePath('/admin/support');
+        // Enqueue "ticket assigned" email to the new assignee (async outbox).
+        if (userId) {
+            try {
+                const assignee = await db.user.findUnique({
+                    where: { id: userId },
+                    select: { email: true },
+                });
+                if (assignee?.email) {
+                    await db.emailJob.create({
+                        data: {
+                            type: 'ticket.assigned',
+                            recipient_email: assignee.email,
+                            subject: `Ticket assigned to you: ${ticket.title}`,
+                            body: `<p>You have been assigned a support ticket.</p><p><strong>${escHtml(ticket.title)}</strong></p>`,
+                            payload: { ticketId: ticket.id, assigneeId: userId },
+                            organizationId,
+                        },
+                    });
+                }
+            } catch (emailErr) {
+                console.error('Ticket Assigned Email Enqueue Error:', emailErr);
+            }
+        }
+
+        revalidatePath('/dev-portal/tickets');
         return { success: true, data: ticket };
     } catch (error) {
         console.error('Assign Ticket Error:', error);
@@ -358,16 +466,21 @@ interface CreateTicketNoteInput {
  */
 export async function createTicketNote(input: CreateTicketNoteInput) {
     try {
-        const { db, session, organizationId } = await requireTenantContext();
+        const { db, session, organizationId, user } = await requireDeveloper();
 
         // Tenant safety: the ticket must belong to the caller's org.
         const ticket = await db.ticket.findFirst({
             where: { id: input.ticketId, organizationId },
-            select: { id: true },
+            select: { id: true, assigned_to_id: true },
         });
 
         if (!ticket) {
             return { success: false, data: null };
+        }
+
+        // Plain Developers may only add notes to tickets assigned to them.
+        if (!user.is_dev_admin && ticket.assigned_to_id !== user.id) {
+            throw new Error('Unauthorized: Ticket not assigned to you');
         }
 
         const note = await db.ticketNote.create({
@@ -389,7 +502,7 @@ export async function createTicketNote(input: CreateTicketNoteInput) {
         });
 
         revalidatePath('/help-center');
-        revalidatePath('/admin/support');
+        revalidatePath('/dev-portal/tickets');
         return { success: true, data: note };
     } catch (error) {
         console.error('Create Ticket Note Error:', error);
@@ -434,7 +547,18 @@ export async function getHospitalVisibleNotes(ticketId: string) {
  */
 export async function getTicketNotes(ticketId: string) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, user } = await requireDeveloper();
+
+        // Plain Developers may only read notes on tickets assigned to them.
+        if (!user.is_dev_admin) {
+            const owned = await db.ticket.findFirst({
+                where: { id: ticketId, organizationId, assigned_to_id: user.id },
+                select: { id: true },
+            });
+            if (!owned) {
+                throw new Error('Unauthorized: Ticket not assigned to you');
+            }
+        }
 
         const data = await db.ticketNote.findMany({
             where: { ticket_id: ticketId, organizationId },
