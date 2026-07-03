@@ -1880,104 +1880,104 @@ export async function settleAndDischarge(data: {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function requestDiscount(data: {
-  invoice_id: number;
-  discount_amount: number;
-  discount_percentage: number;
-  reason: string;
+    invoice_id: number;
+    discount_amount: number;
+    discount_percentage: number;
+    reason: string;
 }) {
-  try {
-    const { db } = await requireTenantContext();
+    try {
+        const { db } = await requireTenantContext();
 
-    const invoice = await db.invoices.findUnique({
-      where: { id: data.invoice_id },
-      select: { net_amount: true, total_discount: true },
-    });
-    if (!invoice) return { success: false, error: 'Invoice not found' };
+        const invoice = await db.invoices.findUnique({
+            where: { id: data.invoice_id },
+            select: { net_amount: true, total_discount: true },
+        });
+        if (!invoice) return { success: false, error: 'Invoice not found' };
 
-    // Determine required approval level
-    const pct = data.discount_percentage;
-    let approval_level = 'auto';
-    if (pct > 15) approval_level = 'cfo';
-    else if (pct > 5) approval_level = 'manager';
+        // Determine required approval level
+        const pct = data.discount_percentage;
+        let approval_level = 'auto';
+        if (pct > 15) approval_level = 'cfo';
+        else if (pct > 5) approval_level = 'manager';
 
-    // For auto-approved discounts (≤5%), apply immediately
-    if (approval_level === 'auto') {
-      await db.invoices.update({
-        where: { id: data.invoice_id },
-        data: {
-          total_discount: (Number(invoice.total_discount) || 0) + data.discount_amount,
-          net_amount: Number(invoice.net_amount) - data.discount_amount,
-        },
-      });
-      await logAudit({
-        action: 'discount_applied',
-        module: 'ipd',
-        entity_type: 'invoice',
-        entity_id: String(data.invoice_id),
-        details: JSON.stringify({ amount: data.discount_amount, percentage: data.discount_percentage, reason: data.reason, auto_approved: true }),
-      });
-      return { success: true, data: { status: 'auto_approved' } };
+        // For auto-approved discounts (≤5%), apply immediately
+        if (approval_level === 'auto') {
+            await db.invoices.update({
+                where: { id: data.invoice_id },
+                data: {
+                    total_discount: (Number(invoice.total_discount) || 0) + data.discount_amount,
+                    net_amount: Number(invoice.net_amount) - data.discount_amount,
+                },
+            });
+            await logAudit({
+                action: 'discount_applied',
+                module: 'ipd',
+                entity_type: 'invoice',
+                entity_id: String(data.invoice_id),
+                details: JSON.stringify({ amount: data.discount_amount, percentage: data.discount_percentage, reason: data.reason, auto_approved: true }),
+            });
+            return { success: true, data: { status: 'auto_approved' } };
+        }
+
+        // For manager/CFO, create a pending approval note in invoice notes
+        await logAudit({
+            action: 'discount_requested',
+            module: 'ipd',
+            entity_type: 'invoice',
+            entity_id: String(data.invoice_id),
+            details: JSON.stringify({ amount: data.discount_amount, percentage: data.discount_percentage, reason: data.reason, approval_level }),
+        });
+
+        return {
+            success: true,
+            data: {
+                status: 'pending_approval',
+                approval_level,
+                message: approval_level === 'cfo'
+                    ? 'Discount >15% requires CFO approval'
+                    : 'Discount >5% requires manager approval',
+            },
+        };
+    } catch (error: any) {
+        return { success: false, error: error.message };
     }
-
-    // For manager/CFO, create a pending approval note in invoice notes
-    await logAudit({
-      action: 'discount_requested',
-      module: 'ipd',
-      entity_type: 'invoice',
-      entity_id: String(data.invoice_id),
-      details: JSON.stringify({ amount: data.discount_amount, percentage: data.discount_percentage, reason: data.reason, approval_level }),
-    });
-
-    return {
-      success: true,
-      data: {
-        status: 'pending_approval',
-        approval_level,
-        message: approval_level === 'cfo'
-          ? 'Discount >15% requires CFO approval'
-          : 'Discount >5% requires manager approval',
-      },
-    };
-  } catch (error: any) {
-    return { success: false, error: error.message };
-  }
 }
 
 export async function applyApprovedDiscount(data: {
-  invoice_id: number;
-  discount_amount: number;
-  approved_by: string;
-  approval_notes?: string;
+    invoice_id: number;
+    discount_amount: number;
+    approved_by: string;
+    approval_notes?: string;
 }) {
-  try {
-    const { db } = await requireTenantContext();
+    try {
+        const { db } = await requireTenantContext();
 
-    const invoice = await db.invoices.findUnique({
-      where: { id: data.invoice_id },
-      select: { net_amount: true, total_discount: true },
-    });
-    if (!invoice) return { success: false, error: 'Invoice not found' };
+        const invoice = await db.invoices.findUnique({
+            where: { id: data.invoice_id },
+            select: { net_amount: true, total_discount: true },
+        });
+        if (!invoice) return { success: false, error: 'Invoice not found' };
 
-    await db.invoices.update({
-      where: { id: data.invoice_id },
-      data: {
-        total_discount: (Number(invoice.total_discount) || 0) + data.discount_amount,
-        net_amount: Number(invoice.net_amount) - data.discount_amount,
-      },
-    });
+        await db.invoices.update({
+            where: { id: data.invoice_id },
+            data: {
+                total_discount: (Number(invoice.total_discount) || 0) + data.discount_amount,
+                net_amount: Number(invoice.net_amount) - data.discount_amount,
+            },
+        });
 
-    await logAudit({
-      action: 'discount_approved_applied',
-      module: 'ipd',
-      entity_type: 'invoice',
-      entity_id: String(data.invoice_id),
-      details: JSON.stringify({ amount: data.discount_amount, approved_by: data.approved_by, notes: data.approval_notes }),
-    });
+        await logAudit({
+            action: 'discount_approved_applied',
+            module: 'ipd',
+            entity_type: 'invoice',
+            entity_id: String(data.invoice_id),
+            details: JSON.stringify({ amount: data.discount_amount, approved_by: data.approved_by, notes: data.approval_notes }),
+        });
 
-    return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
-  }
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1985,87 +1985,87 @@ export async function applyApprovedDiscount(data: {
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface GLEntry {
-  account_code: string;
-  account_name: string;
-  debit: number;
-  credit: number;
-  narration: string;
-  reference_id: string;
-  reference_type: string;
+    account_code: string;
+    account_name: string;
+    debit: number;
+    credit: number;
+    narration: string;
+    reference_id: string;
+    reference_type: string;
 }
-  // TODO: Replace audit log approach with createJournalEntry from gl-actions.ts
-  // Requires account code mapping to GL account IDs
+// TODO: Replace audit log approach with createJournalEntry from gl-actions.ts
+// Requires account code mapping to GL account IDs
 
 
 export async function postToGL(entries: GLEntry[]) {
-  // Validate double-entry: total debits must equal total credits
-  const totalDebit = entries.reduce((s, e) => s + e.debit, 0);
-  const totalCredit = entries.reduce((s, e) => s + e.credit, 0);
+    // Validate double-entry: total debits must equal total credits
+    const totalDebit = entries.reduce((s, e) => s + e.debit, 0);
+    const totalCredit = entries.reduce((s, e) => s + e.credit, 0);
 
-  if (Math.abs(totalDebit - totalCredit) > 0.01) {
-    return { success: false, error: `GL imbalance: debits ${totalDebit} ≠ credits ${totalCredit}` };
-  }
-
-  try {
-    // Store as audit log entries until a full GL model is built
-    for (const entry of entries) {
-      await logAudit({
-        action: 'gl_journal_entry',
-        module: 'gl',
-        entity_type: entry.reference_type,
-        entity_id: entry.reference_id,
-        details: JSON.stringify({
-          account_code: entry.account_code,
-          account_name: entry.account_name,
-          debit: entry.debit,
-          credit: entry.credit,
-          narration: entry.narration,
-        }),
-      });
+    if (Math.abs(totalDebit - totalCredit) > 0.01) {
+        return { success: false, error: `GL imbalance: debits ${totalDebit} ≠ credits ${totalCredit}` };
     }
 
-    return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
-  }
+    try {
+        // Store as audit log entries until a full GL model is built
+        for (const entry of entries) {
+            await logAudit({
+                action: 'gl_journal_entry',
+                module: 'gl',
+                entity_type: entry.reference_type,
+                entity_id: entry.reference_id,
+                details: JSON.stringify({
+                    account_code: entry.account_code,
+                    account_name: entry.account_name,
+                    debit: entry.debit,
+                    credit: entry.credit,
+                    narration: entry.narration,
+                }),
+            });
+        }
+
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
 }
 
 // Hook: auto-post GL when a charge is posted to IPD bill
 export async function postChargeToGL(data: {
-  admission_id: string;
-  amount: number;
-  tax_amount: number;
-  description: string;
-  source_module: string;
-  ref_id: string;
+    admission_id: string;
+    amount: number;
+    tax_amount: number;
+    description: string;
+    source_module: string;
+    ref_id: string;
 }) {
-  return postToGL([
-    {
-      account_code: '1100',
-      account_name: 'Patient Receivables',
-      debit: data.amount + data.tax_amount,
-      credit: 0,
-      narration: `IPD Charge: ${data.description}`,
-      reference_id: data.ref_id,
-      reference_type: `ipd_charge_${data.source_module}`,
-    },
-    {
-      account_code: data.source_module === 'room' ? '4100' : data.source_module === 'lab' ? '4200' : data.source_module === 'pharmacy' ? '4300' : '4900',
-      account_name: data.source_module === 'room' ? 'Room Revenue' : data.source_module === 'lab' ? 'Lab Revenue' : data.source_module === 'pharmacy' ? 'Pharmacy Revenue' : 'Other Revenue',
-      debit: 0,
-      credit: data.amount,
-      narration: `IPD Revenue: ${data.description}`,
-      reference_id: data.ref_id,
-      reference_type: `ipd_charge_${data.source_module}`,
-    },
-    ...(data.tax_amount > 0 ? [{
-      account_code: '2200',
-      account_name: 'GST Payable',
-      debit: 0,
-      credit: data.tax_amount,
-      narration: `GST on ${data.description}`,
-      reference_id: data.ref_id,
-      reference_type: `ipd_gst_${data.source_module}`,
-    }] : []),
-  ]);
+    return postToGL([
+        {
+            account_code: '1100',
+            account_name: 'Patient Receivables',
+            debit: data.amount + data.tax_amount,
+            credit: 0,
+            narration: `IPD Charge: ${data.description}`,
+            reference_id: data.ref_id,
+            reference_type: `ipd_charge_${data.source_module}`,
+        },
+        {
+            account_code: data.source_module === 'room' ? '4100' : data.source_module === 'lab' ? '4200' : data.source_module === 'pharmacy' ? '4300' : '4900',
+            account_name: data.source_module === 'room' ? 'Room Revenue' : data.source_module === 'lab' ? 'Lab Revenue' : data.source_module === 'pharmacy' ? 'Pharmacy Revenue' : 'Other Revenue',
+            debit: 0,
+            credit: data.amount,
+            narration: `IPD Revenue: ${data.description}`,
+            reference_id: data.ref_id,
+            reference_type: `ipd_charge_${data.source_module}`,
+        },
+        ...(data.tax_amount > 0 ? [{
+            account_code: '2200',
+            account_name: 'GST Payable',
+            debit: 0,
+            credit: data.tax_amount,
+            narration: `GST on ${data.description}`,
+            reference_id: data.ref_id,
+            reference_type: `ipd_gst_${data.source_module}`,
+        }] : []),
+    ]);
 }
