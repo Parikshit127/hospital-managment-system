@@ -61,3 +61,7 @@ scratch/
 # temporary dev-portal test helpers (throwaway seed/grant scripts)
 seed-test-devs.js
 make-dev-admin.js
+
+# local handover notes and internal docs
+Claude_Handover.md
+docs/help-centre/
