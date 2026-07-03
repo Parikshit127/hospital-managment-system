@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Ticket, Radio, FileText, ShieldCheck, LogOut } from 'lucide-react';
+import { Ticket, Radio, FileText, ShieldCheck, Settings, LogOut } from 'lucide-react';
 import { devPortalLogout } from '../actions';
 
 const NAV_ITEMS = [
@@ -10,6 +10,8 @@ const NAV_ITEMS = [
     { href: '/dev-portal/broadcasts', label: 'Broadcasts', icon: Radio, devAdminOnly: true },
     { href: '/dev-portal/releases', label: 'Releases', icon: FileText, devAdminOnly: true },
     { href: '/dev-portal/audit', label: 'Audit', icon: ShieldCheck, devAdminOnly: true },
+    // Available to all Dev Portal users (Dev Admin + Developer) — email capture.
+    { href: '/dev-portal/settings', label: 'Settings', icon: Settings, devAdminOnly: false },
 ];
 
 export function DevPortalNav({

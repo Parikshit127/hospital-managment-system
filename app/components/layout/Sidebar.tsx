@@ -136,6 +136,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Workflows", href: "/admin/workflows", icon: Workflow },
         { label: "Templates", href: "/admin/templates", icon: FileStack },
         { label: "Notifications", href: "/admin/notifications", icon: Bell },
+        { label: "Broadcasts", href: "/admin/broadcasts", icon: Megaphone },
         { label: "Integrations", href: "/admin/integrations", icon: Plug },
         { label: "Registration Config", href: "/admin/registration-config", icon: Settings },
         { label: "Billing Order Sets", href: "/admin/billing-ordersets", icon: LayoutList },

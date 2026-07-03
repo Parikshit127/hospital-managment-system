@@ -4,7 +4,7 @@ import {
     Users, UserCog, Building2, ShieldCheck, UserRound,
     Settings, Palette, FileText, Bell, Plug, BarChart3, Lock,
     Workflow, Scissors, GitBranch, DatabaseBackup, BookOpen, Database,
-    ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck,
+    ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck, Megaphone,
     type LucideIcon,
 } from 'lucide-react';
 
@@ -82,10 +82,11 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
             { label: 'Notifications', href: '/admin/notifications', icon: Bell },
             { label: 'Integrations', href: '/admin/integrations', icon: Plug },
             { label: 'Tally Integration', href: '/admin/integrations/tally', icon: Plug },
-            // Audit Logs, Broadcasts (create), Release Notes (manage), and Support
-            // Portal removed from the Hospital Admin sidebar per PRD v3 Addendum §3 —
-            // these are developer/Dev-Admin-only capabilities and now live only inside
-            // the Dev Admin portal (Person B's scope). The pages themselves are untouched.
+            // Hospital-scoped broadcast (Title + Body, sends to the admin's own
+            // hospital). Distinct from the full cross-facility composer, which is
+            // Dev-Admin-only and lives in the Dev Admin portal. Audit Logs, Release
+            // Notes (manage), and Support Portal remain removed per PRD v3 Addendum §3.
+            { label: 'Broadcasts', href: '/admin/broadcasts', icon: Megaphone },
             { label: 'Reports', href: '/admin/reports', icon: BarChart3 },
             { label: 'Workflows', href: '/admin/workflows', icon: Workflow },
             { label: 'Data Import', href: '/admin/data-import', icon: DatabaseBackup },
