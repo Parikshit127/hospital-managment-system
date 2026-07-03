@@ -225,7 +225,17 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // 3. Public pages (no auth required)
+  // 3. Dev Admin / Developer portal — standalone auth realm.
+  // This realm authenticates against its OWN `dev_portal_session` cookie and is
+  // fully guarded by app/dev-portal/(protected)/layout.tsx plus the action-level
+  // requireDevAdmin()/requireDeveloper() checks. The global staff guard below must
+  // NOT touch it — otherwise /dev-portal/login (which has no staff `session`
+  // cookie and isn't the exact "/login" path) gets bounced to /login.
+  if (pathname.startsWith("/dev-portal")) {
+    return NextResponse.next();
+  }
+
+  // 4. Public pages (no auth required)
   if (pathname === "/opd/display" || pathname.startsWith("/hospital")) {
     return NextResponse.next();
   }
