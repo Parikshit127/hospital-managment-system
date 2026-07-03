@@ -441,6 +441,10 @@ export async function getIPDAdmissions(statusFilter?: string) {
         medical_notes: { orderBy: { created_at: "desc" }, take: 3 },
       },
       orderBy: { admission_date: "desc" },
+      // Safety bound: 'Admitted' is naturally small, but 'All'/'Discharged' grows
+      // without limit. Cap at the 1000 most-recent admissions so this list can
+      // never load the entire history into memory (a cause of slow loads / restarts).
+      take: 1000,
     });
 
     const patientIds = Array.from(new Set(admissions.map((a: any) => a.patient_id).filter(Boolean))) as string[];
