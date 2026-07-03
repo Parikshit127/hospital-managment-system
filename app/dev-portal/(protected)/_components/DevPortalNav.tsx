@@ -6,14 +6,26 @@ import { Ticket, Radio, FileText, ShieldCheck, LogOut } from 'lucide-react';
 import { devPortalLogout } from '../actions';
 
 const NAV_ITEMS = [
-    { href: '/dev-portal/tickets', label: 'Tickets', icon: Ticket },
-    { href: '/dev-portal/broadcasts', label: 'Broadcasts', icon: Radio },
-    { href: '/dev-portal/releases', label: 'Releases', icon: FileText },
-    { href: '/dev-portal/audit', label: 'Audit', icon: ShieldCheck },
+    { href: '/dev-portal/tickets', label: 'Tickets', icon: Ticket, devAdminOnly: false },
+    { href: '/dev-portal/broadcasts', label: 'Broadcasts', icon: Radio, devAdminOnly: true },
+    { href: '/dev-portal/releases', label: 'Releases', icon: FileText, devAdminOnly: true },
+    { href: '/dev-portal/audit', label: 'Audit', icon: ShieldCheck, devAdminOnly: true },
 ];
 
-export function DevPortalNav({ username, roleLabel }: { username: string; roleLabel: string }) {
+export function DevPortalNav({
+    username,
+    roleLabel,
+    isDevAdmin,
+}: {
+    username: string;
+    roleLabel: string;
+    isDevAdmin: boolean;
+}) {
     const pathname = usePathname();
+
+    // Developers (non-Dev-Admins) only get the Tickets link; the restricted
+    // tools are hidden from the nav (server-side redirects back them up).
+    const navItems = NAV_ITEMS.filter((item) => isDevAdmin || !item.devAdminOnly);
 
     return (
         <header className="sticky top-0 z-30 border-b border-slate-800 bg-[#0b1120] text-slate-200">
@@ -31,7 +43,7 @@ export function DevPortalNav({ username, roleLabel }: { username: string; roleLa
 
                 {/* Nav */}
                 <nav className="flex items-center gap-1">
-                    {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+                    {navItems.map(({ href, label, icon: Icon }) => {
                         const active = pathname === href || pathname.startsWith(href + '/');
                         return (
                             <Link

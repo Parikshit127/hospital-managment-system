@@ -44,11 +44,12 @@ export default async function DevPortalProtectedLayout({ children }: { children:
         redirect('/dev-portal/login');
     }
 
-    const roleLabel = ctx!.user.is_dev_admin ? 'Dev Admin' : 'Developer';
+    const isDevAdmin = ctx!.user.is_dev_admin;
+    const roleLabel = isDevAdmin ? 'Dev Admin' : 'Developer';
 
     return (
         <div className="min-h-screen bg-slate-50" style={DEV_PORTAL_THEME}>
-            <DevPortalNav username={ctx!.session.username} roleLabel={roleLabel} />
+            <DevPortalNav username={ctx!.session.username} roleLabel={roleLabel} isDevAdmin={isDevAdmin} />
             <main className="mx-auto max-w-[1400px] px-6 py-6">{children}</main>
         </div>
     );

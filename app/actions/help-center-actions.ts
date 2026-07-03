@@ -206,7 +206,18 @@ export async function getTicketsByFacility(branchId: string) {
 
 export async function updateTicketStatus(ticketId: string, status: TicketStatus) {
     try {
-        const { db, organizationId } = await requireDeveloper();
+        const { db, organizationId, user } = await requireDeveloper();
+
+        // Plain Developers may only act on tickets assigned to them.
+        if (!user.is_dev_admin) {
+            const owned = await db.ticket.findFirst({
+                where: { id: ticketId, organizationId, assigned_to_id: user.id },
+                select: { id: true },
+            });
+            if (!owned) {
+                throw new Error('Unauthorized: Ticket not assigned to you');
+            }
+        }
 
         const ticket = await db.ticket.update({
             where: { id: ticketId, organizationId },
@@ -365,16 +376,21 @@ interface CreateTicketNoteInput {
  */
 export async function createTicketNote(input: CreateTicketNoteInput) {
     try {
-        const { db, session, organizationId } = await requireDeveloper();
+        const { db, session, organizationId, user } = await requireDeveloper();
 
         // Tenant safety: the ticket must belong to the caller's org.
         const ticket = await db.ticket.findFirst({
             where: { id: input.ticketId, organizationId },
-            select: { id: true },
+            select: { id: true, assigned_to_id: true },
         });
 
         if (!ticket) {
             return { success: false, data: null };
+        }
+
+        // Plain Developers may only add notes to tickets assigned to them.
+        if (!user.is_dev_admin && ticket.assigned_to_id !== user.id) {
+            throw new Error('Unauthorized: Ticket not assigned to you');
         }
 
         const note = await db.ticketNote.create({
@@ -441,7 +457,18 @@ export async function getHospitalVisibleNotes(ticketId: string) {
  */
 export async function getTicketNotes(ticketId: string) {
     try {
-        const { db, organizationId } = await requireDeveloper();
+        const { db, organizationId, user } = await requireDeveloper();
+
+        // Plain Developers may only read notes on tickets assigned to them.
+        if (!user.is_dev_admin) {
+            const owned = await db.ticket.findFirst({
+                where: { id: ticketId, organizationId, assigned_to_id: user.id },
+                select: { id: true },
+            });
+            if (!owned) {
+                throw new Error('Unauthorized: Ticket not assigned to you');
+            }
+        }
 
         const data = await db.ticketNote.findMany({
             where: { ticket_id: ticketId, organizationId },
