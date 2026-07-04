@@ -971,8 +971,8 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                             Header Details
                         </summary>
                         <div className="p-3 space-y-3">
-                            {/* Bill Date — admin/finance only; changing it reposts the GL journal */}
-                            {canEditPaid && (
+                            {/* Bill Date — all staff on Draft bills; admin/finance on Final */}
+                            {(canEditPaid || invoiceMeta?.status === 'Draft') && (
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-[11px] font-bold text-gray-600 mb-1">Bill Date</label>
