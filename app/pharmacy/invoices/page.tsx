@@ -282,6 +282,8 @@ export default function PharmacyInvoicesPage() {
     const handleSaveMedicines = async () => {
         if (!editInvoice) return;
         if (editRows.length === 0 && deletedItemIds.length === 0) { setSaveError('No changes to save'); return; }
+        const badQty = editRows.find(r => !(Number(r.qty) > 0));
+        if (badQty) { setSaveError(`Enter a valid quantity for ${badQty.name || 'the item'}`); return; }
         setSaving(true); setSaveError('');
         try {
             // 1. Delete removed items
@@ -696,13 +698,13 @@ export default function PharmacyInvoicesPage() {
                                                                     <span className="block text-[10px] text-gray-400 mt-0.5">Batch: {row.batch_no}</span>
                                                                 </td>
                                                                 <td className="px-3 py-2 text-center">
-                                                                    <input type="number" min={1} value={row.qty}
-                                                                        onChange={e => setEditRows(rows => rows.map((r, ri) => ri === i ? { ...r, qty: Math.max(1, parseInt(e.target.value) || 1) } : r))}
+                                                                    <input type="number" min={0} step="any" value={row.qty}
+                                                                        onChange={e => { const v = e.target.value; setEditRows(rows => rows.map((r, ri) => ri === i ? { ...r, qty: v === '' ? 0 : Number(v) } : r)); }}
                                                                         className="w-16 text-center px-2 py-1 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
                                                                 </td>
                                                                 <td className="px-3 py-2 text-right">
-                                                                    <input type="number" min={0} value={row.unit_price}
-                                                                        onChange={e => setEditRows(rows => rows.map((r, ri) => ri === i ? { ...r, unit_price: parseFloat(e.target.value) || 0 } : r))}
+                                                                    <input type="number" min={0} step="any" value={row.unit_price}
+                                                                        onChange={e => { const v = e.target.value; setEditRows(rows => rows.map((r, ri) => ri === i ? { ...r, unit_price: v === '' ? 0 : Number(v) } : r)); }}
                                                                         className="w-24 text-right px-2 py-1 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
                                                                 </td>
                                                                 <td className="px-3 py-2 text-right font-bold text-gray-900">
