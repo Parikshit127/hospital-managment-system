@@ -2850,6 +2850,7 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
     doctor_id?: string | null;
     doctor_name?: string | null;
     discount_remark?: string | null;
+    invoice_date?: string | null;
 }) {
     try {
         const { db, organizationId, session } = await requireTenantContext();
@@ -2878,12 +2879,14 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
         if (patch.doctor_id !== undefined) data.doctor_id = patch.doctor_id || null;
         if (patch.doctor_name !== undefined) data.doctor_name = (patch.doctor_name || '').trim() || null;
         if (patch.discount_remark !== undefined) data.discount_remark = patch.discount_remark;
+        if (patch.invoice_date !== undefined && patch.invoice_date) data.invoice_date = new Date(patch.invoice_date);
         data.version = { increment: 1 };
 
         await db.invoices.update({ where: { id: invoiceId }, data });
 
         // Tax-split toggle or the bill-level discount changing both require a totals refresh.
-        if (patch.is_inter_state !== undefined || patch.bill_discount !== undefined) {
+        // invoice_date change requires a GL repost so journal entries carry the correct date.
+        if (patch.is_inter_state !== undefined || patch.bill_discount !== undefined || patch.invoice_date !== undefined) {
             await recalculateInvoice(invoiceId);
             await handleGLRepost(invoiceId, invoice.status);
         }

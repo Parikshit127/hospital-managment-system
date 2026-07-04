@@ -67,6 +67,7 @@ type HeaderState = {
     discount_remark: string;
     doctor_id: string;
     doctor_name: string;
+    invoice_date: string;
 };
 
 type CatalogSvc = {
@@ -241,6 +242,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                 discount_remark: inv.discount_remark ?? '',
                 doctor_id: inv.doctor_id ?? '',
                 doctor_name: inv.doctor_name ?? '',
+                invoice_date: inv.invoice_date ? new Date(inv.invoice_date).toISOString().slice(0, 10) : '',
             };
             setHeader(h);
             setHeaderOrig(h);
@@ -398,7 +400,8 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
             header.concession_reason !== headerOrig.concession_reason ||
             header.is_inter_state !== headerOrig.is_inter_state ||
             Number(header.bill_discount) !== Number(headerOrig.bill_discount) ||
-            header.discount_remark !== headerOrig.discount_remark
+            header.discount_remark !== headerOrig.discount_remark ||
+            header.invoice_date !== headerOrig.invoice_date
         );
     }
 
@@ -465,6 +468,8 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                     header_diff.bill_discount = Number(header.bill_discount);
                 if (header.discount_remark !== headerOrig.discount_remark)
                     header_diff.discount_remark = header.discount_remark;
+                if (header.invoice_date && header.invoice_date !== headerOrig.invoice_date)
+                    header_diff.invoice_date = header.invoice_date;
             }
 
             const nothingChanged =
@@ -966,6 +971,23 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                             Header Details
                         </summary>
                         <div className="p-3 space-y-3">
+                            {/* Bill Date — admin/finance only; changing it reposts the GL journal */}
+                            {canEditPaid && (
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-gray-600 mb-1">Bill Date</label>
+                                        <input
+                                            type="date"
+                                            className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs"
+                                            value={header.invoice_date}
+                                            max={new Date().toISOString().slice(0, 10)}
+                                            onChange={e => setHeader({ ...header, invoice_date: e.target.value })}
+                                            disabled={readOnly || saving}
+                                        />
+                                        <p className="text-[10px] text-gray-400 mt-1">Changing this reposts the GL journal entry to the new date.</p>
+                                    </div>
+                                </div>
+                            )}
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-[11px] font-bold text-gray-600 mb-1">Billing Type</label>
