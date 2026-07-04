@@ -242,7 +242,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                 discount_remark: inv.discount_remark ?? '',
                 doctor_id: inv.doctor_id ?? '',
                 doctor_name: inv.doctor_name ?? '',
-                invoice_date: inv.invoice_date ? new Date(inv.invoice_date).toISOString().slice(0, 10) : '',
+                invoice_date: inv.created_at ? new Date(inv.created_at).toISOString().slice(0, 10) : '',
             };
             setHeader(h);
             setHeaderOrig(h);

@@ -2879,7 +2879,7 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
         if (patch.doctor_id !== undefined) data.doctor_id = patch.doctor_id || null;
         if (patch.doctor_name !== undefined) data.doctor_name = (patch.doctor_name || '').trim() || null;
         if (patch.discount_remark !== undefined) data.discount_remark = patch.discount_remark;
-        if (patch.invoice_date !== undefined && patch.invoice_date) data.invoice_date = new Date(patch.invoice_date);
+        if (patch.invoice_date !== undefined && patch.invoice_date) data.created_at = new Date(patch.invoice_date);
         data.version = { increment: 1 };
 
         await db.invoices.update({ where: { id: invoiceId }, data });
@@ -3241,6 +3241,7 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
                 if (p.is_inter_state !== undefined) h.is_inter_state = p.is_inter_state;
                 if ((p as any).bill_discount !== undefined) h.bill_discount = Math.max(0, Number((p as any).bill_discount) || 0);
                 if (p.discount_remark !== undefined) h.discount_remark = p.discount_remark;
+                if (p.invoice_date !== undefined && p.invoice_date) h.created_at = new Date(p.invoice_date);
                 if (Object.keys(h).length) {
                     await tx.invoices.update({ where: { id: invoiceId }, data: h });
                 }
