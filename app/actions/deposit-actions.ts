@@ -116,6 +116,7 @@ export async function collectDeposit(data: {
                 entity_type: 'deposit',
                 entity_id: deposit.deposit_number,
                 details: JSON.stringify({ patient_id: patientId, amount: data.amount }),
+                user_id: session?.id,
                 organizationId,
             },
         });

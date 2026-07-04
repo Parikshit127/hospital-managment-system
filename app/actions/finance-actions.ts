@@ -86,7 +86,7 @@ export async function createInvoice(data: {
     service_date?: string;
 }) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
         if (data.require_doctor && !data.doctor_id && !(data.doctor_name || '').trim()) {
             return { success: false, error: 'Consulting doctor is required for this bill.' };
@@ -155,6 +155,7 @@ export async function createInvoice(data: {
                 entity_type: 'invoice',
                 entity_id: String(invoice.id),
                 details: JSON.stringify({ patient_id: data.patient_id, type: data.invoice_type }),
+                user_id: session?.id,
                 organizationId,
             },
         });
