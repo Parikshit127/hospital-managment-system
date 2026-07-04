@@ -36,7 +36,7 @@ const TABS: { key: Tab; label: string }[] = [
     { key: 'tax', label: 'Tax/GST Config' },
 ];
 
-const CATEGORIES = ['Room', 'Nursing', 'Consultation', 'Procedure', 'Consumable', 'Lab', 'Pharmacy', 'Diet', 'Misc'];
+const CATEGORIES = ['Room', 'Nursing', 'Consultation', 'Procedure', 'Consumable', 'Lab', 'Pharmacy', 'Diet', 'Observation Ward/Bed Charges', 'Misc'];
 
 export default function FinanceMasterPage() {
     const [activeTab, setActiveTab] = useState<Tab>('catalog');

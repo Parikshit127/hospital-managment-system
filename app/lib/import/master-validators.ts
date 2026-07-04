@@ -99,7 +99,7 @@ export interface RadiologyRow {
   is_available: boolean;
 }
 
-export const SERVICE_CATEGORIES = ['OPD Consultation', 'ICU', 'Procedure', 'Room', 'Nursing', 'Diet', 'Consumable', 'Home Care', 'Visit Charges', 'Misc'] as const;
+export const SERVICE_CATEGORIES = ['OPD Consultation', 'ICU', 'Procedure', 'Room', 'Nursing', 'Diet', 'Consumable', 'Home Care', 'Visit Charges', 'Observation Ward/Bed Charges', 'Misc'] as const;
 
 export function validateDoctorRows(rows: Record<string, unknown>[]): ValidateResult<DoctorRow> {
   const valid: DoctorRow[] = [];
