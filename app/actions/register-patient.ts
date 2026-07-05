@@ -220,8 +220,9 @@ export async function registerPatient(formData: FormData) {
             if (rawData.patient_type === 'tpa_insurance' && rawData.tpa_provider_id && rawData.insurance_policy_number) {
                 const providerId = parseInt(rawData.tpa_provider_id, 10);
                 if (!isNaN(providerId)) {
-                    await db.insurance_policies.create({
-                        data: {
+                    await db.insurance_policies.upsert({
+                        where: { policy_number: rawData.insurance_policy_number },
+                        create: {
                             patient_id: agentPatientId,
                             provider_id: providerId,
                             policy_number: rawData.insurance_policy_number,
@@ -230,7 +231,13 @@ export async function registerPatient(formData: FormData) {
                             status: 'Active',
                             organizationId,
                         },
-                    }).catch((err: unknown) => console.error('Insurance policy create error:', err));
+                        update: {
+                            provider_id: providerId,
+                            valid_from: rawData.insurance_validity_start ? new Date(rawData.insurance_validity_start) : null,
+                            valid_until: rawData.insurance_validity_end ? new Date(rawData.insurance_validity_end) : null,
+                            status: 'Active',
+                        },
+                    }).catch((err: unknown) => console.error('Insurance policy upsert error:', err));
                 }
             }
 

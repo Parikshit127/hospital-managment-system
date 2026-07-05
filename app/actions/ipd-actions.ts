@@ -340,8 +340,9 @@ export async function admitPatientIPD(data: {
                 if (data.tpa_provider_id && data.insurance_policy_number) {
                     const providerId = parseInt(data.tpa_provider_id, 10);
                     if (!isNaN(providerId)) {
-                        await tx.insurance_policies.create({
-                            data: {
+                        await tx.insurance_policies.upsert({
+                            where: { policy_number: data.insurance_policy_number },
+                            create: {
                                 patient_id: data.patient_id,
                                 provider_id: providerId,
                                 policy_number: data.insurance_policy_number,
@@ -349,6 +350,12 @@ export async function admitPatientIPD(data: {
                                 valid_until: data.insurance_validity_end ? new Date(data.insurance_validity_end) : null,
                                 status: 'Active',
                                 organizationId,
+                            },
+                            update: {
+                                provider_id: providerId,
+                                valid_from: data.insurance_validity_start ? new Date(data.insurance_validity_start) : null,
+                                valid_until: data.insurance_validity_end ? new Date(data.insurance_validity_end) : null,
+                                status: 'Active',
                             },
                         });
                     }

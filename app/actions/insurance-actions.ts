@@ -276,25 +276,43 @@ export async function addPatientPolicy(data: {
             ? Number(data.copay_fixed)
             : null;
         const policyNumber = data.policy_number?.trim() || null;
-        const policy = await db.insurance_policies.create({
-            data: {
-                patient_id: data.patient_id,
-                provider_id: data.provider_id,
-                policy_number: policyNumber,
-                policy_holder: data.policy_holder || null,
-                plan_name: data.plan_name || null,
-                member_id: data.member_id?.trim() || null,
-                policy_type: data.policy_type || null,
-                coverage_limit: coverage,
-                remaining_limit: coverage,
-                copay_percent: copayPct,
-                copay_fixed: copayFixed,
-                valid_from: data.valid_from ? new Date(data.valid_from) : null,
-                valid_until: data.valid_until ? new Date(data.valid_until) : null,
-                status: 'Active',
-                organizationId,
-            },
-        });
+        const policyData = {
+            patient_id: data.patient_id,
+            provider_id: data.provider_id,
+            policy_number: policyNumber,
+            policy_holder: data.policy_holder || null,
+            plan_name: data.plan_name || null,
+            member_id: data.member_id?.trim() || null,
+            policy_type: data.policy_type || null,
+            coverage_limit: coverage,
+            remaining_limit: coverage,
+            copay_percent: copayPct,
+            copay_fixed: copayFixed,
+            valid_from: data.valid_from ? new Date(data.valid_from) : null,
+            valid_until: data.valid_until ? new Date(data.valid_until) : null,
+            status: 'Active' as const,
+            organizationId,
+        };
+        const policy = policyNumber
+            ? await db.insurance_policies.upsert({
+                where: { policy_number: policyNumber },
+                create: policyData,
+                update: {
+                    provider_id: data.provider_id,
+                    policy_holder: data.policy_holder || null,
+                    plan_name: data.plan_name || null,
+                    member_id: data.member_id?.trim() || null,
+                    policy_type: data.policy_type || null,
+                    coverage_limit: coverage,
+                    remaining_limit: coverage,
+                    copay_percent: copayPct,
+                    copay_fixed: copayFixed,
+                    valid_from: data.valid_from ? new Date(data.valid_from) : null,
+                    valid_until: data.valid_until ? new Date(data.valid_until) : null,
+                    status: 'Active',
+                },
+            })
+            : await db.insurance_policies.create({ data: policyData });
 
         await db.system_audit_logs.create({
             data: {
