@@ -296,6 +296,38 @@ export async function refundDeposit(depositId: number, amount: number) {
     }
 }
 
+export async function cancelDeposit(depositId: number, reason?: string) {
+    try {
+        const { db, organizationId, session } = await requireTenantContext();
+
+        const deposit = await db.patientDeposit.findFirst({ where: { id: depositId } });
+        if (!deposit) return { success: false, error: 'Deposit not found' };
+        if (deposit.status !== 'Active') return { success: false, error: 'Only Active deposits can be cancelled' };
+        if (Number(deposit.applied_amount) > 0) return { success: false, error: 'Cannot cancel — deposit has already been applied to an invoice' };
+
+        await db.patientDeposit.update({
+            where: { id: depositId },
+            data: { status: 'Cancelled' },
+        });
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'CANCEL_DEPOSIT',
+                module: 'finance',
+                entity_type: 'deposit',
+                entity_id: deposit.deposit_number,
+                details: JSON.stringify({ reason: reason || null }),
+                user_id: session?.id,
+                organizationId,
+            },
+        });
+
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
 export async function getDepositStats() {
     try {
         const { db } = await requireTenantContext();

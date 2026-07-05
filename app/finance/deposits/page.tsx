@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import {
     collectDeposit, getPatientDeposits, getActiveDeposits,
-    applyDepositToInvoice, refundDeposit, getDepositStats,
+    applyDepositToInvoice, refundDeposit, getDepositStats, cancelDeposit,
 } from '@/app/actions/deposit-actions';
 import { getInvoices, searchPatientsForBilling } from '@/app/actions/finance-actions';
 import { getRegisteredPanForPatient } from '@/app/actions/deposit-actions';
@@ -12,7 +12,7 @@ import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan } from '@/app/lib/ca
 import {
     Loader2, Search, Plus, Wallet, ArrowUpRight, ArrowDownRight,
     CheckCircle, XCircle, IndianRupee, Receipt, CreditCard, RefreshCw,
-    ChevronDown, X, Printer, AlertTriangle,
+    ChevronDown, X, Printer, AlertTriangle, Ban,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useToast } from '@/app/components/ui/Toast';
@@ -53,6 +53,7 @@ export default function DepositsPage() {
     const [refundModal, setRefundModal] = useState<any>(null);
     const [refundAmount, setRefundAmount] = useState('');
     const [refundLoading, setRefundLoading] = useState(false);
+    const [cancelLoading, setCancelLoading] = useState<number | null>(null);
 
     useEffect(() => { loadData(); }, []);
 
@@ -186,6 +187,18 @@ export default function DepositsPage() {
         setRefundLoading(false);
     }
 
+    async function handleCancel(depositId: number) {
+        if (!window.confirm('Cancel this deposit? This action cannot be undone.')) return;
+        setCancelLoading(depositId);
+        const res = await cancelDeposit(depositId);
+        if (res.success) {
+            loadData();
+        } else {
+            toast.error(res.error || 'Failed to cancel deposit');
+        }
+        setCancelLoading(null);
+    }
+
     const fmt = (n: number) => n.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 
     const getAvailable = (d: any) => Number(d.amount) - Number(d.applied_amount || 0) - Number(d.refunded_amount || 0);
@@ -195,6 +208,7 @@ export default function DepositsPage() {
             Active: 'text-emerald-600 bg-emerald-50 border-emerald-200',
             Applied: 'text-blue-600 bg-blue-50 border-blue-200',
             Refunded: 'text-amber-600 bg-amber-50 border-amber-200',
+            Cancelled: 'text-red-600 bg-red-50 border-red-200',
         };
         return map[status] || 'text-gray-600 bg-gray-50 border-gray-200';
     };
@@ -274,6 +288,7 @@ export default function DepositsPage() {
                             <option value="Active">Active</option>
                             <option value="Applied">Applied</option>
                             <option value="Refunded">Refunded</option>
+                            <option value="Cancelled">Cancelled</option>
                         </select>
                     </div>
 
@@ -340,6 +355,14 @@ export default function DepositsPage() {
                                                                     Refund
                                                                 </button>
                                                             </>
+                                                        )}
+                                                        {d.status === 'Active' && Number(d.applied_amount || 0) === 0 && (
+                                                            <button onClick={() => handleCancel(d.id)}
+                                                                disabled={cancelLoading === d.id}
+                                                                className="px-2.5 py-1 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition flex items-center gap-1 disabled:opacity-50">
+                                                                {cancelLoading === d.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Ban className="h-3 w-3" />}
+                                                                Cancel
+                                                            </button>
                                                         )}
                                                     </div>
                                                 </td>
