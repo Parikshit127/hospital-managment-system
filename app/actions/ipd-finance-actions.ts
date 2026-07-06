@@ -1015,6 +1015,79 @@ export async function getPackageUtilization(admissionId: string) {
 }
 
 /**
+ * Change the applied package amount for an active admission package.
+ * Updates both the `ipdAdmissionPackage.applied_amount` and the corresponding
+ * invoice line item, then recalculates invoice totals.
+ */
+export async function updateAdmissionPackageAmount(admissionPackageId: number, newAmount: number) {
+    try {
+        const { db, session, organizationId } = await requireTenantContext();
+
+        if (newAmount <= 0) return { success: false, error: 'Amount must be greater than zero' };
+
+        const admPkg = await db.ipdAdmissionPackage.findUnique({
+            where: { id: admissionPackageId },
+            include: { package: true },
+        });
+        if (!admPkg || admPkg.organizationId !== organizationId) {
+            return { success: false, error: 'Admission package not found' };
+        }
+        if (admPkg.status !== ADMISSION_PACKAGE_STATUS.ACTIVE) {
+            return { success: false, error: 'Can only edit an active package' };
+        }
+
+        // Find the invoice line item posted for this package
+        const packageItem = await db.invoice_items.findFirst({
+            where: { source_module: 'package', ref_id: String(admissionPackageId) },
+        });
+
+        if (packageItem) {
+            const taxRate = Number(packageItem.tax_rate || 0);
+            const taxAmount = Math.round(newAmount * taxRate) / 100;
+            await db.$transaction(async (tx: any) => {
+                await tx.ipdAdmissionPackage.update({
+                    where: { id: admissionPackageId },
+                    data: { applied_amount: newAmount },
+                });
+                await tx.invoice_items.update({
+                    where: { id: packageItem.id },
+                    data: {
+                        unit_price: newAmount,
+                        total_price: newAmount,
+                        net_price: newAmount,
+                        tax_amount: taxAmount,
+                    },
+                });
+                await recalculateInvoiceWithGstTx(tx, packageItem.invoice_id);
+            });
+        } else {
+            // No invoice item (edge case) — update only the admission package record
+            await db.ipdAdmissionPackage.update({
+                where: { id: admissionPackageId },
+                data: { applied_amount: newAmount },
+            });
+        }
+
+        await logAudit({
+            action: 'UPDATE_ADMISSION_PACKAGE_AMOUNT',
+            module: 'ipd',
+            entity_type: 'ipd_admission_package',
+            entity_id: String(admissionPackageId),
+            details: JSON.stringify({
+                package_name: admPkg.package?.package_name,
+                old_amount: Number(admPkg.applied_amount),
+                new_amount: newAmount,
+                updated_by: session.id,
+            }),
+        });
+
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
  * Reclassify a charge between "consumed under the package" and "billable over
  * the package". Billing-supervisor action (admin/finance): ward staff pick the
  * disposition at posting time; corrections afterwards are privileged + audited.

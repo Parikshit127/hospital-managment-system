@@ -389,6 +389,11 @@ export default function MasterBillingPage() {
                       {r.patient_phone && (
                         <div className="text-[10px] text-gray-400">{r.patient_phone}</div>
                       )}
+                      {r.package_name && (
+                        <div className="text-[10px] text-indigo-700 font-semibold mt-0.5">
+                          📦 {r.package_name} · ₹{Number(r.package_amount).toLocaleString('en-IN')}
+                        </div>
+                      )}
                     </Td>
                     <Td>
                       <span className="whitespace-nowrap text-gray-700">

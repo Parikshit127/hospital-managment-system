@@ -266,6 +266,24 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
       depositMap.set(d.patient_id, (depositMap.get(d.patient_id) || 0) + remaining);
     }
 
+    // Batch-resolve active admission packages for IPD invoices
+    const admissionIds = invoices
+      .map((i: any) => i.admission_id)
+      .filter((id: any): id is string => typeof id === 'string');
+    const admissionPackages = admissionIds.length
+      ? await db.ipdAdmissionPackage.findMany({
+          where: { admission_id: { in: admissionIds }, status: 'active', organizationId },
+          select: { admission_id: true, applied_amount: true, package: { select: { package_name: true } } },
+        })
+      : [];
+    const packageMap = new Map<string, { package_name: string; applied_amount: number }>();
+    for (const ap of admissionPackages) {
+      packageMap.set(ap.admission_id, {
+        package_name: ap.package?.package_name ?? '',
+        applied_amount: decToNum(ap.applied_amount),
+      });
+    }
+
     // Batch-resolve TPA provider names for the page's invoices in one query.
     const tpaProviderIds = Array.from(
       new Set(
@@ -331,6 +349,8 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
         // surface it to users as plain "OPD".
         admission_type: normalizeInvoiceTypeLabel(inv.invoice_type), // OPD | IPD | LAB | PHARMACY
         admission_id: inv.admission_id,
+        package_name: inv.admission_id ? (packageMap.get(inv.admission_id)?.package_name ?? null) : null,
+        package_amount: inv.admission_id ? (packageMap.get(inv.admission_id)?.applied_amount ?? null) : null,
         billing_category: inv.admission?.patient_class ?? normalizeInvoiceTypeLabel(inv.invoice_type),
         corporate_name: inv.patient?.corporate?.company_name ?? null,
         invoice_status: inv.status,

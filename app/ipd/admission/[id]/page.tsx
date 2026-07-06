@@ -20,7 +20,7 @@ import {
 import {
     generateInterimBill, postChargeToIpdBill, applyPackageToAdmission,
     getPackageUtilization, reconcilePackageBilling, reclassifyChargeDisposition,
-    breakOpenPackage,
+    breakOpenPackage, updateAdmissionPackageAmount,
 } from '@/app/actions/ipd-finance-actions';
 import { removeInvoiceItem } from '@/app/actions/finance-actions';
 import {
@@ -243,6 +243,25 @@ export default function AdmissionDetailPage() {
     // absorbed automatically at posting time. Reconcile is an admin repair tool
     // for admissions that predate this (stray billed service lines).
     const [settlingPackage, setSettlingPackage] = useState(false);
+    const [editingPkgAmount, setEditingPkgAmount] = useState(false);
+    const [pkgAmountInput, setPkgAmountInput] = useState('');
+    const [savingPkgAmount, setSavingPkgAmount] = useState(false);
+    const handleSavePkgAmount = useCallback(async () => {
+        if (!pkgUtil?.admission_package_id) return;
+        const val = parseFloat(pkgAmountInput);
+        if (!val || val <= 0) { toast.error('Enter a valid amount'); return; }
+        setSavingPkgAmount(true);
+        const res = await updateAdmissionPackageAmount(pkgUtil.admission_package_id, val);
+        setSavingPkgAmount(false);
+        if (res.success) {
+            toast.success('Package amount updated');
+            setEditingPkgAmount(false);
+            setPkgAmountInput('');
+            setBill(null); loadBill();
+        } else {
+            toast.error(res.error || 'Failed to update package amount');
+        }
+    }, [pkgUtil, pkgAmountInput, loadBill]);
     const handleReconcilePackage = useCallback(async () => {
         if (!confirm('Reconcile package billing? Billed service lines that belong inside the package will move to package consumption (hospital expense) and off the patient/TPA bill. Exclusions stay billed as extras. Admin/Finance only.')) return;
         setSettlingPackage(true);
@@ -1917,8 +1936,41 @@ export default function AdmissionDetailPage() {
                                             <div className={`rounded-xl border p-4 ${pkgUtil.utilization_pct > 100 ? 'bg-rose-50 border-rose-200' : pkgUtil.utilization_pct >= 90 ? 'bg-amber-50 border-amber-200' : 'bg-indigo-50 border-indigo-100'}`}>
                                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                                     <div>
-                                                        <p className="text-xs font-black text-gray-800">
-                                                            📦 {pkgUtil.package_name} — ₹{Number(pkgUtil.package_amount).toLocaleString('en-IN')}
+                                                        <p className="text-xs font-black text-gray-800 flex items-center gap-2">
+                                                            <span>📦 {pkgUtil.package_name} —{' '}
+                                                            {editingPkgAmount ? (
+                                                                <span className="inline-flex items-center gap-1">
+                                                                    <span className="text-gray-500">₹</span>
+                                                                    <input
+                                                                        type="number"
+                                                                        className="w-24 px-1.5 py-0.5 text-xs border border-indigo-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400 font-normal"
+                                                                        value={pkgAmountInput}
+                                                                        onChange={e => setPkgAmountInput(e.target.value)}
+                                                                        autoFocus
+                                                                        min={1}
+                                                                    />
+                                                                    <button
+                                                                        onClick={handleSavePkgAmount}
+                                                                        disabled={savingPkgAmount}
+                                                                        className="px-2 py-0.5 bg-indigo-600 text-white text-[10px] font-bold rounded disabled:opacity-50"
+                                                                    >{savingPkgAmount ? '…' : 'Save'}</button>
+                                                                    <button
+                                                                        onClick={() => { setEditingPkgAmount(false); setPkgAmountInput(''); }}
+                                                                        className="px-2 py-0.5 text-gray-500 text-[10px] font-bold rounded hover:text-gray-800"
+                                                                    >Cancel</button>
+                                                                </span>
+                                                            ) : (
+                                                                <span>
+                                                                    ₹{Number(pkgUtil.package_amount).toLocaleString('en-IN')}
+                                                                    {data.status === 'Admitted' && (
+                                                                        <button
+                                                                            onClick={() => { setEditingPkgAmount(true); setPkgAmountInput(String(pkgUtil.package_amount)); }}
+                                                                            className="ml-1.5 text-[10px] font-normal text-indigo-500 hover:text-indigo-700 underline"
+                                                                            title="Edit package amount for this patient"
+                                                                        >Edit</button>
+                                                                    )}
+                                                                </span>
+                                                            )}</span>
                                                         </p>
                                                         <p className="text-[10px] text-gray-500 mt-0.5 font-medium">
                                                             Bill & TPA claim carry the package amount only. Services consumed under it are absorbed as hospital expense.
