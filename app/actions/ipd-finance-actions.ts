@@ -1197,6 +1197,55 @@ export async function reconcilePackageBilling(admissionId: string) {
     }
 }
 
+// Read-only view of the CONSUMPTION ledger for a package admission: every
+// charge that was absorbed under the package (disposition = package_consumed)
+// and therefore NOT put on the patient/TPA bill. Used by the billing counter to
+// let staff see what the hospital absorbed, with a category breakup. Never
+// mutates anything.
+export async function getAbsorbedCharges(admissionId: string) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const admPkg = await db.ipdAdmissionPackage.findFirst({
+            where: { admission_id: admissionId },
+            include: { package: true },
+        });
+
+        const postings = await db.ipdChargePosting.findMany({
+            where: { admission_id: admissionId, disposition: CHARGE_DISPOSITION.PACKAGE_CONSUMED },
+            orderBy: { posted_at: 'desc' },
+        });
+
+        const items = postings.map((p: any) => ({
+            id: p.id,
+            description: p.description,
+            category: p.service_category || p.source_module || 'Other',
+            quantity: Number(p.quantity || 1),
+            unit_price: Number(p.unit_price || 0),
+            amount: Number(p.amount || 0),
+            posted_at: p.posted_at,
+        }));
+
+        const total = items.reduce((s: number, i: any) => s + i.amount, 0);
+        const byCategory: Record<string, number> = {};
+        for (const i of items) byCategory[i.category] = (byCategory[i.category] || 0) + i.amount;
+
+        return {
+            success: true,
+            data: serialize({
+                package_name: admPkg?.package?.package_name || null,
+                package_amount: admPkg ? Number(admPkg.applied_amount) : 0,
+                total,
+                byCategory,
+                items,
+                count: items.length,
+            }),
+        };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
 /** @deprecated Superseded by automatic posting-time routing; kept for compatibility. Calls reconcilePackageBilling. */
 export async function settlePackageBilling(admissionId: string) {
     return reconcilePackageBilling(admissionId);

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { getIPDAdmissions } from '@/app/actions/ipd-actions';
-import { generateInterimBill, postChargeToIpdBill, getGstSummary } from '@/app/actions/ipd-finance-actions';
+import { generateInterimBill, postChargeToIpdBill, getGstSummary, getAbsorbedCharges } from '@/app/actions/ipd-finance-actions';
 import { recordPayment, recordSplitPayment, removeInvoiceItem } from '@/app/actions/finance-actions';
 import { getCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan, resolveRegisteredPan } from '@/app/lib/cash-compliance';
@@ -68,6 +68,21 @@ export default function IpdBillingPage() {
     const [depositPanName, setDepositPanName] = useState('');
     const [deposits, setDeposits] = useState<any[]>([]);
     const [branding, setBranding] = useState<BillBranding | null>(null);
+
+    // Absorbed (package_consumed) charges viewer — read-only, never on the bill.
+    const [showAbsorbedModal, setShowAbsorbedModal] = useState(false);
+    const [absorbedData, setAbsorbedData] = useState<any>(null);
+    const [absorbedLoading, setAbsorbedLoading] = useState(false);
+    const openAbsorbedModal = async () => {
+        if (!selectedAdmission) return;
+        setShowAbsorbedModal(true);
+        setAbsorbedLoading(true);
+        setAbsorbedData(null);
+        const res = await getAbsorbedCharges(selectedAdmission.admission_id);
+        setAbsorbedLoading(false);
+        if (res.success) setAbsorbedData(res.data);
+        else setToast({ message: res.error || 'Failed to load absorbed charges', type: 'error' });
+    };
 
     // Deposit cash compliance — same rules apply to a cash deposit (reuses registered PAN).
     const depositAmt = parseFloat(depositAmount) || 0;
@@ -737,6 +752,14 @@ export default function IpdBillingPage() {
                                     {billData?.admission?.discharge_date ? 'Print Final Bill' : 'Print Interim Bill'}
                                 </button>
                                 <button
+                                    onClick={openAbsorbedModal}
+                                    disabled={!selectedAdmission}
+                                    className="w-full px-3 py-2 border border-indigo-300 text-indigo-700 bg-indigo-50 rounded-md text-sm hover:bg-indigo-100 disabled:opacity-50"
+                                    title="Charges absorbed under the package (not on the patient/TPA bill)"
+                                >
+                                    View Absorbed Charges
+                                </button>
+                                <button
                                     onClick={refreshBill}
                                     disabled={!selectedAdmission}
                                     className="w-full px-3 py-2 border border-gray-300 text-gray-700 rounded-md text-sm hover:bg-gray-50 disabled:opacity-50"
@@ -1087,6 +1110,84 @@ export default function IpdBillingPage() {
                                     Cancel
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Absorbed Charges Modal (read-only — package-consumed, not on the bill) */}
+            {showAbsorbedModal && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl">
+                        <div className="p-4 border-b flex justify-between items-start">
+                            <div>
+                                <h3 className="font-bold text-gray-900">Absorbed Charges (under package)</h3>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                    {selectedAdmission?.patient?.full_name} · {selectedAdmission?.admission_id}
+                                    {absorbedData?.package_name ? ` · ${absorbedData.package_name}` : ''}
+                                </p>
+                                <p className="text-[11px] text-indigo-600 mt-1">These are NOT on the patient/TPA bill — the hospital absorbs them (booked as expense).</p>
+                            </div>
+                            <button onClick={() => setShowAbsorbedModal(false)} className="text-gray-400 hover:text-gray-800 text-xl font-bold leading-none">&times;</button>
+                        </div>
+
+                        <div className="p-4 overflow-y-auto flex-1">
+                            {absorbedLoading ? (
+                                <p className="text-center text-sm text-gray-400 py-10">Loading…</p>
+                            ) : !absorbedData || absorbedData.count === 0 ? (
+                                <p className="text-center text-sm text-gray-400 py-10">No absorbed charges yet for this admission.</p>
+                            ) : (
+                                <>
+                                    {/* Category breakup */}
+                                    <div className="flex flex-wrap gap-2 mb-3">
+                                        {Object.entries(absorbedData.byCategory || {}).map(([cat, amt]: any) => (
+                                            <span key={cat} className="text-[11px] font-semibold bg-gray-100 text-gray-700 rounded-full px-2.5 py-1">
+                                                {cat}: ₹{Number(amt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <div className="border border-gray-200 rounded-xl overflow-hidden">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-gray-50 text-[10px] text-gray-500 uppercase font-bold">
+                                                <tr>
+                                                    <th className="px-3 py-2 text-left">Date</th>
+                                                    <th className="px-3 py-2 text-left">Description</th>
+                                                    <th className="px-3 py-2 text-left">Category</th>
+                                                    <th className="px-3 py-2 text-center">Qty</th>
+                                                    <th className="px-3 py-2 text-right">Amount</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {absorbedData.items.map((it: any) => (
+                                                    <tr key={it.id}>
+                                                        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{new Date(it.posted_at).toLocaleDateString('en-GB')}</td>
+                                                        <td className="px-3 py-2 text-gray-800">{it.description}</td>
+                                                        <td className="px-3 py-2 text-xs text-gray-500">{it.category}</td>
+                                                        <td className="px-3 py-2 text-center text-gray-600">{it.quantity}</td>
+                                                        <td className="px-3 py-2 text-right font-semibold text-gray-900">₹{Number(it.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot className="bg-gray-50">
+                                                <tr>
+                                                    <td colSpan={4} className="px-3 py-2 text-right font-bold text-gray-600 text-xs">Total absorbed:</td>
+                                                    <td className="px-3 py-2 text-right font-black text-gray-900">₹{Number(absorbedData.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                                </tr>
+                                                {absorbedData.package_amount > 0 && (
+                                                    <tr>
+                                                        <td colSpan={4} className="px-3 py-1.5 text-right text-[11px] text-gray-500">Package amount (billed):</td>
+                                                        <td className="px-3 py-1.5 text-right text-[11px] font-bold text-emerald-700">₹{Number(absorbedData.package_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                                    </tr>
+                                                )}
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        <div className="p-3 border-t flex justify-end">
+                            <button onClick={() => setShowAbsorbedModal(false)} className="px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-xl">Close</button>
                         </div>
                     </div>
                 </div>
