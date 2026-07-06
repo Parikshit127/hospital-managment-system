@@ -4,7 +4,7 @@ import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getBillBranding } from '@/app/lib/bill-branding';
 import { canonicalTender, tenderVariants } from '@/app/lib/payment-tender';
 
-const ALLOWED_STAFF_ROLES = ['admin', 'finance'];
+const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist'];
 
 export async function GET(req: NextRequest) {
     try {
