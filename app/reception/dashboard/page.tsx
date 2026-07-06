@@ -437,13 +437,12 @@ export default function ReceptionDashboard() {
                 <Bed className="h-3.5 w-3.5" /> Enter IPD Portal
             </Link>
             <div className="flex items-center gap-1.5 pl-1 border-l border-gray-200">
-                <input
-                    type="date"
+                <DateField
                     value={reportDate}
                     max={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`}
                     onChange={(e) => setReportDate(e.target.value)}
-                    title="Collection report date"
-                    className="px-2 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-teal-400"
+                    title="Collection report date (dd/mm/yyyy)"
+                    className="w-28 px-2 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-teal-400"
                 />
                 <button
                     onClick={() => {
