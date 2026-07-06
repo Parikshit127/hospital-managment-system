@@ -1171,6 +1171,18 @@ function InvoicesTab({
                       Discharge Bill
                     </button>
                   )}
+                  {inv.admission_id && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(`/api/ipd/${inv.admission_id}/absorbed-charges`, '_blank');
+                      }}
+                      className="px-2.5 py-1 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-xs font-bold text-indigo-700 rounded"
+                      title="View / print charges absorbed under the package (not on this bill)"
+                    >
+                      Absorbed
+                    </button>
+                  )}
                   <ActionLink href="/finance/credit-notes">Credit Note</ActionLink>
                   <button
                     onClick={(e) => {
