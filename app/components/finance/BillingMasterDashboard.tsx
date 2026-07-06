@@ -774,6 +774,14 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                                                                             className="flex-1 py-1.5 bg-orange-50 text-orange-700 text-xs font-bold rounded-md hover:bg-orange-100">
                                                                                             Accept Payment
                                                                                         </button>
+                                                                                        {inv.invoice_type === 'IPD' && inv.admission_id && (
+                                                                                            <button
+                                                                                                onClick={() => window.open(`/api/ipd/${inv.admission_id}/absorbed-charges`, '_blank')}
+                                                                                                className="px-2 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-md hover:bg-indigo-100"
+                                                                                                title="View / print charges absorbed under the package (not on this bill)">
+                                                                                                Absorbed
+                                                                                            </button>
+                                                                                        )}
                                                                                         {(inv.tpa_claim_status === 'approved' || inv.tpa_claim_status === 'partially_settled') && (
                                                                                             <button
                                                                                                 onClick={() => {

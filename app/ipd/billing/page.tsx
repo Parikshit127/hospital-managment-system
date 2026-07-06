@@ -1186,7 +1186,15 @@ export default function IpdBillingPage() {
                             )}
                         </div>
 
-                        <div className="p-3 border-t flex justify-end">
+                        <div className="p-3 border-t flex justify-end gap-2">
+                            {selectedAdmission && absorbedData && absorbedData.count > 0 && (
+                                <button
+                                    onClick={() => window.open(`/api/ipd/${selectedAdmission.admission_id}/absorbed-charges`, '_blank')}
+                                    className="px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl"
+                                >
+                                    Print
+                                </button>
+                            )}
                             <button onClick={() => setShowAbsorbedModal(false)} className="px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-xl">Close</button>
                         </div>
                     </div>
