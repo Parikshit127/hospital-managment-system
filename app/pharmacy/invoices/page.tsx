@@ -16,10 +16,11 @@ const STATUS_COLOR: Record<string, string> = {
     Draft: 'bg-gray-100 text-gray-700',
     Final: 'bg-emerald-100 text-emerald-700',
     Cancelled: 'bg-red-100 text-red-700',
+    Package: 'bg-purple-100 text-purple-700',
 };
 
 type DatePreset = 'today' | 'week' | 'month' | 'custom';
-type CategoryFilter = 'all' | 'counter' | 'ipd-admitted' | 'ipd-discharged';
+type CategoryFilter = 'all' | 'counter' | 'ipd-admitted' | 'ipd-discharged' | 'ipd-package';
 
 type MedRow = { medicine_id?: number; id?: number; name: string; qty: number; unit_price: number; tax_rate: number; hsn: string; batch_no: string; description?: string };
 
@@ -160,11 +161,12 @@ export default function PharmacyInvoicesPage() {
 
             // Category
             if (categoryFilter !== 'all') {
-                const isIpd = inv.source === 'IPD-PHARMACY';
+                const isIpd = inv.source === 'IPD-PHARMACY' || inv.source === 'IPD-PKG-PHARMACY';
                 const isAdmitted = inv.admission_status === 'Admitted';
                 if (categoryFilter === 'counter' && isIpd) return false;
                 if (categoryFilter === 'ipd-admitted' && (!isIpd || !isAdmitted)) return false;
                 if (categoryFilter === 'ipd-discharged' && (!isIpd || isAdmitted)) return false;
+                if (categoryFilter === 'ipd-package' && inv.source !== 'IPD-PKG-PHARMACY') return false;
             }
 
             return true;
@@ -416,6 +418,7 @@ export default function PharmacyInvoicesPage() {
                             <option value="counter">Counter (OPD)</option>
                             <option value="ipd-admitted">IPD · Admitted</option>
                             <option value="ipd-discharged">IPD · Discharged</option>
+                            <option value="ipd-package">IPD · Package</option>
                         </select>
 
                         {/* Status filter */}
@@ -425,6 +428,7 @@ export default function PharmacyInvoicesPage() {
                             <option value="Draft">Draft</option>
                             <option value="Final">Final</option>
                             <option value="Cancelled">Cancelled</option>
+                            <option value="Package">Package (Consumed)</option>
                         </select>
                     </div>
 
@@ -461,7 +465,8 @@ export default function PharmacyInvoicesPage() {
                                 ) : filtered.length === 0 ? (
                                     <tr><td colSpan={10} className="px-5 py-16 text-center text-gray-400 text-sm">No pharmacy invoices found</td></tr>
                                 ) : filtered.map((inv: any, idx: number) => {
-                                    const isIpd = inv.source === 'IPD-PHARMACY';
+                                    const isIpd = inv.source === 'IPD-PHARMACY' || inv.source === 'IPD-PKG-PHARMACY';
+                                    const isPackageConsumed = inv.source === 'IPD-PKG-PHARMACY';
                                     const isAdmitted = inv.admission_status === 'Admitted';
                                     const isDischarged = !isAdmitted;
                                     const hasBalance = Number(inv.balance_due) > 0;
@@ -498,7 +503,11 @@ export default function PharmacyInvoicesPage() {
 
                                             {/* Category */}
                                             <td className="px-4 py-3">
-                                                {isIpd ? (
+                                                {isPackageConsumed ? (
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">
+                                                        IPD · Package
+                                                    </span>
+                                                ) : isIpd ? (
                                                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${isAdmitted ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                                         IPD · {isAdmitted ? 'Admitted' : 'Discharged'}
                                                     </span>
@@ -545,13 +554,13 @@ export default function PharmacyInvoicesPage() {
                                                         className="inline-flex items-center gap-1 px-2 py-1 bg-orange-50 text-orange-700 border border-orange-200 text-[10px] font-bold rounded-lg hover:bg-orange-100 transition-colors">
                                                         <Eye className="h-3 w-3" /> View
                                                     </Link>
-                                                    {isIpd && isAdmitted && notCancelled && (
+                                                    {isIpd && isAdmitted && notCancelled && !isPackageConsumed && (
                                                         <button onClick={() => openEditModal(inv)}
                                                             className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold rounded-lg hover:bg-blue-100 transition-colors">
                                                             <Pencil className="h-3 w-3" /> Edit Meds
                                                         </button>
                                                     )}
-                                                    {hasBalance && notCancelled && (!isIpd || isDischarged) && (
+                                                    {hasBalance && notCancelled && !isPackageConsumed && (!isIpd || isDischarged) && (
                                                         <button onClick={() => openPayModal(inv)}
                                                             className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold rounded-lg hover:bg-emerald-100 transition-colors">
                                                             <CreditCard className="h-3 w-3" /> Collect

@@ -321,7 +321,7 @@ export async function getInvoices(filters?: {
     date_to?: Date;
 }) {
     try {
-        const { db, session } = await requireTenantContext();
+        const { db, session, organizationId } = await requireTenantContext();
 
         const limit = filters?.limit || 100;
 
@@ -493,7 +493,95 @@ export async function getInvoices(filters?: {
                 }
             }
 
-            pharmacyOrders = [...opdPharmInvoices, ...ipdPharmBills];
+            // 3c. IPD package-consumed pharmacy charges — these never create
+            // invoice_items, so 3b misses them. Query ipdChargePosting directly.
+            // Skip if a non-Package status filter is set (consumed items always map to 'Package').
+            const skipPkgConsumed = filters?.status && filters.status !== 'Package';
+            const pkgConsumedWhere: any = {
+                source_module: 'pharmacy',
+                disposition: 'package_consumed',
+            };
+            if (filters?.patient_id) {
+                const admIds = await db.admissions.findMany({
+                    where: { patient_id: filters.patient_id, organizationId },
+                    select: { admission_id: true },
+                });
+                pkgConsumedWhere.admission_id = { in: admIds.map((a: any) => a.admission_id) };
+            }
+            if (filters?.date_from || filters?.date_to) {
+                pkgConsumedWhere.posted_at = {};
+                if (filters?.date_from) pkgConsumedWhere.posted_at.gte = filters.date_from;
+                if (filters?.date_to) pkgConsumedWhere.posted_at.lte = filters.date_to;
+            }
+            pkgConsumedWhere.organizationId = organizationId;
+
+            const consumedPostings = skipPkgConsumed ? [] : await db.ipdChargePosting.findMany({
+                where: pkgConsumedWhere,
+                orderBy: { posted_at: 'desc' },
+                take: limit,
+            });
+
+            // Group by admission + dispensing event (same posted_at minute)
+            const consumedByAdmission = new Map<string, any[]>();
+            for (const p of consumedPostings) {
+                const key = p.admission_id;
+                if (!consumedByAdmission.has(key)) consumedByAdmission.set(key, []);
+                consumedByAdmission.get(key)!.push(p);
+            }
+
+            const pkgPharmBills: any[] = [];
+            if (consumedByAdmission.size > 0) {
+                // Resolve admissions + patients in one batch
+                const admissionIds = Array.from(consumedByAdmission.keys());
+                const admissions = await db.admissions.findMany({
+                    where: { admission_id: { in: admissionIds } },
+                    select: { admission_id: true, patient_id: true, status: true },
+                });
+                const admMap = new Map<string, any>(admissions.map((a: any) => [a.admission_id, a]));
+                const pIds = Array.from(new Set(admissions.map((a: any) => a.patient_id)));
+                const pkgPatients = await db.oPD_REG.findMany({
+                    where: { patient_id: { in: pIds } },
+                    select: { patient_id: true, full_name: true, phone: true },
+                });
+                const pkgPatientMap = new Map(pkgPatients.map((p: any) => [p.patient_id, p]));
+
+                for (const [admId, postings] of consumedByAdmission) {
+                    const adm = admMap.get(admId);
+                    if (!adm) continue;
+                    const pt = pkgPatientMap.get(adm.patient_id);
+
+                    // Sub-group by dispensing event
+                    const billMap = new Map<string, any[]>();
+                    for (const p of postings) {
+                        const key = dispensingKey(p.posted_at);
+                        if (!billMap.has(key)) billMap.set(key, []);
+                        billMap.get(key)!.push(p);
+                    }
+
+                    for (const [bKey, items] of billMap) {
+                        const gross = items.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+                        pkgPharmBills.push({
+                            id: `pkg-${admId}-${bKey}`,
+                            invoice_number: null,
+                            patient_id: adm.patient_id,
+                            patient: pt || { full_name: 'Unknown', phone: '' },
+                            admission_id: admId,
+                            status: 'Package',
+                            created_at: items[0].posted_at,
+                            _isIpdPharmacy: true,
+                            _isPackageConsumed: true,
+                            _pharmTotal: gross,
+                            _pharmBalance: 0,
+                            _pharmDate: new Date(Math.max(...items.map((i: any) => new Date(i.posted_at).getTime()))),
+                            _pharmItemCount: items.length,
+                            _billKey: bKey,
+                            _admissionStatus: adm.status,
+                        });
+                    }
+                }
+            }
+
+            pharmacyOrders = [...opdPharmInvoices, ...ipdPharmBills, ...pkgPharmBills];
         }
 
         // 4. Enrich Lab/Pharmacy with Patient Names & Lab pricing
@@ -562,13 +650,14 @@ export async function getInvoices(filters?: {
                 net_amount: pharm._isIpdPharmacy ? pharm._pharmTotal : pharm.net_amount,
                 total_amount: pharm._isIpdPharmacy ? pharm._pharmTotal : pharm.total_amount,
                 balance_due: pharm._isIpdPharmacy ? pharm._pharmBalance : pharm.balance_due,
-                status: pharm.status,
+                status: pharm._isPackageConsumed ? 'Package' : pharm.status,
                 created_at: pharm._isIpdPharmacy ? pharm._pharmDate : pharm.created_at,
-                source: pharm._isIpdPharmacy ? 'IPD-PHARMACY' : 'PHARMACY',
+                source: pharm._isPackageConsumed ? 'IPD-PKG-PHARMACY' : pharm._isIpdPharmacy ? 'IPD-PHARMACY' : 'PHARMACY',
                 admission_id: pharm.admission_id || null,
                 admission_status: pharm._admissionStatus || null,
                 doctor_name: pharm.doctor_name || null,
                 _billKey: pharm._billKey || null,
+                _isPackageConsumed: pharm._isPackageConsumed || false,
             }))
         ];
 
