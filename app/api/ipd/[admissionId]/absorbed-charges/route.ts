@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getBillBranding } from '@/app/lib/bill-branding';
+import { removeAbsorbedCharge } from '@/app/actions/ipd-finance-actions';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'ipd_manager', 'doctor'];
 
@@ -34,6 +35,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
         ]);
 
         const items = postings.map((p: any) => ({
+            id: p.id,
             date: new Date(p.posted_at).toLocaleDateString('en-GB'),
             description: p.description,
             category: p.service_category || p.source_module || 'Other',
@@ -54,6 +56,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
                 <td>${esc(i.category)}</td>
                 <td class="c">${i.quantity}</td>
                 <td class="r">${money(i.amount)}</td>
+                <td class="c noprint"><button class="rm" data-id="${i.id}" title="Remove (added by mistake)">✕</button></td>
             </tr>`).join('');
 
         const catChips = Object.entries(byCategory)
@@ -81,17 +84,37 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
   tbody tr:nth-child(even){ background:#fafbfc; }
   tfoot td { font-weight:800; }
   .totrow td { background:#eef2ff; }
+  .rm { background:#fee2e2; color:#b91c1c; border:none; border-radius:4px; padding:2px 8px; font-weight:700; cursor:pointer; font-size:11px; }
+  .rm:hover { background:#fecaca; }
+  .rm[disabled] { opacity:.5; cursor:default; }
   @media print {
     @page { size:A4; margin:10mm; }
     body { background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     .toolbar { display:none !important; }
+    .noprint { display:none !important; }
     .page { margin:0; box-shadow:none; max-width:none; padding:0; }
     th { background:#1e3a6e !important; color:#fff !important; }
     .totrow td { background:#eef2ff !important; }
   }
 </style></head><body>
 <div class="toolbar">
-  <script>document.addEventListener('DOMContentLoaded',function(){var b=document.getElementById('p');if(b)b.onclick=function(){window.print();};var k=document.getElementById('bk');if(k)k.onclick=function(){window.history.back();};});</script>
+  <script>
+    document.addEventListener('DOMContentLoaded',function(){
+      var b=document.getElementById('p');if(b)b.onclick=function(){window.print();};
+      var k=document.getElementById('bk');if(k)k.onclick=function(){window.history.back();};
+    });
+    // Remove a wrongly-added absorbed charge (admin/finance only).
+    document.addEventListener('click',function(e){
+      var btn=e.target && e.target.closest ? e.target.closest('.rm') : null;
+      if(!btn) return;
+      if(!confirm('Remove this absorbed charge? This deletes it from the absorbed list and the hospital expense.')) return;
+      btn.disabled=true; btn.textContent='…';
+      fetch(window.location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chargeId:Number(btn.getAttribute('data-id'))})})
+        .then(function(r){return r.json();})
+        .then(function(res){ if(res&&res.success){ window.location.reload(); } else { alert((res&&res.error)||'Failed to remove'); btn.disabled=false; btn.textContent='✕'; } })
+        .catch(function(){ alert('Failed to remove'); btn.disabled=false; btn.textContent='✕'; });
+    });
+  </script>
   <button id="bk" style="background:transparent;color:#cbd5e1;border:1px solid #475569;">Back</button>
   <button id="p">Print / Download PDF</button>
 </div>
@@ -110,11 +133,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
   ${items.length === 0 ? '<p style="text-align:center;color:#9ca3af;padding:30px;">No absorbed charges for this admission.</p>' : `
   <div class="chips">${catChips}</div>
   <table>
-    <thead><tr><th>Sr</th><th>Date</th><th>Description</th><th>Category</th><th>Qty</th><th>Amount</th></tr></thead>
+    <thead><tr><th>Sr</th><th>Date</th><th>Description</th><th>Category</th><th>Qty</th><th>Amount</th><th class="noprint"></th></tr></thead>
     <tbody>${rows}</tbody>
     <tfoot>
-      <tr class="totrow"><td colspan="5" class="r">Total Absorbed (hospital expense)</td><td class="r">₹${money(total)}</td></tr>
-      ${packageAmount > 0 ? `<tr><td colspan="5" class="r" style="font-weight:600;color:#065f46;">Package amount (billed to patient/TPA)</td><td class="r" style="color:#065f46;">₹${money(packageAmount)}</td></tr>` : ''}
+      <tr class="totrow"><td colspan="5" class="r">Total Absorbed (hospital expense)</td><td class="r">₹${money(total)}</td><td class="noprint"></td></tr>
+      ${packageAmount > 0 ? `<tr><td colspan="5" class="r" style="font-weight:600;color:#065f46;">Package amount (billed to patient/TPA)</td><td class="r" style="color:#065f46;">₹${money(packageAmount)}</td><td class="noprint"></td></tr>` : ''}
     </tfoot>
   </table>`}
 
@@ -126,5 +149,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
     } catch (error: any) {
         console.error('absorbed-charges route error:', error?.message || error);
         return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
+// Remove a wrongly-added absorbed charge. Called from the × buttons on the page.
+export async function POST(req: NextRequest) {
+    try {
+        const auth = await resolveRouteAuth({ allowedStaffRoles: ['admin', 'finance'] });
+        if (!auth.ok) return auth.response;
+        const body = await req.json().catch(() => ({}));
+        const chargeId = Number(body?.chargeId);
+        if (!chargeId) return NextResponse.json({ success: false, error: 'chargeId required' }, { status: 400 });
+        const res = await removeAbsorbedCharge(chargeId);
+        return NextResponse.json(res, { status: res.success ? 200 : 400 });
+    } catch (error: any) {
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }

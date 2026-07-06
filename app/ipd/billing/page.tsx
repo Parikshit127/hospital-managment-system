@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { getIPDAdmissions } from '@/app/actions/ipd-actions';
-import { generateInterimBill, postChargeToIpdBill, getGstSummary, getAbsorbedCharges } from '@/app/actions/ipd-finance-actions';
+import { generateInterimBill, postChargeToIpdBill, getGstSummary, getAbsorbedCharges, removeAbsorbedCharge } from '@/app/actions/ipd-finance-actions';
 import { recordPayment, recordSplitPayment, removeInvoiceItem } from '@/app/actions/finance-actions';
 import { getCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan, resolveRegisteredPan } from '@/app/lib/cash-compliance';
@@ -82,6 +82,20 @@ export default function IpdBillingPage() {
         setAbsorbedLoading(false);
         if (res.success) setAbsorbedData(res.data);
         else setToast({ message: res.error || 'Failed to load absorbed charges', type: 'error' });
+    };
+    const [removingAbsorbedId, setRemovingAbsorbedId] = useState<number | null>(null);
+    const handleRemoveAbsorbed = async (chargeId: number) => {
+        if (!confirm('Remove this absorbed charge? This deletes it from the absorbed list and the hospital expense.')) return;
+        setRemovingAbsorbedId(chargeId);
+        const res = await removeAbsorbedCharge(chargeId);
+        setRemovingAbsorbedId(null);
+        if (res.success) {
+            const r = await getAbsorbedCharges(selectedAdmission.admission_id);
+            if (r.success) setAbsorbedData(r.data);
+            setBill(null); loadBill();
+        } else {
+            setToast({ message: res.error || 'Failed to remove charge', type: 'error' });
+        }
     };
 
     // Deposit cash compliance — same rules apply to a cash deposit (reuses registered PAN).
@@ -1155,6 +1169,7 @@ export default function IpdBillingPage() {
                                                     <th className="px-3 py-2 text-left">Category</th>
                                                     <th className="px-3 py-2 text-center">Qty</th>
                                                     <th className="px-3 py-2 text-right">Amount</th>
+                                                    <th className="px-3 py-2 text-center"></th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100">
@@ -1165,6 +1180,16 @@ export default function IpdBillingPage() {
                                                         <td className="px-3 py-2 text-xs text-gray-500">{it.category}</td>
                                                         <td className="px-3 py-2 text-center text-gray-600">{it.quantity}</td>
                                                         <td className="px-3 py-2 text-right font-semibold text-gray-900">₹{Number(it.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                                        <td className="px-3 py-2 text-center">
+                                                            <button
+                                                                onClick={() => handleRemoveAbsorbed(it.id)}
+                                                                disabled={removingAbsorbedId === it.id}
+                                                                title="Remove (added by mistake)"
+                                                                className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded px-1.5 py-0.5 text-sm font-bold disabled:opacity-40"
+                                                            >
+                                                                {removingAbsorbedId === it.id ? '…' : '✕'}
+                                                            </button>
+                                                        </td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -1172,11 +1197,13 @@ export default function IpdBillingPage() {
                                                 <tr>
                                                     <td colSpan={4} className="px-3 py-2 text-right font-bold text-gray-600 text-xs">Total absorbed:</td>
                                                     <td className="px-3 py-2 text-right font-black text-gray-900">₹{Number(absorbedData.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                                    <td></td>
                                                 </tr>
                                                 {absorbedData.package_amount > 0 && (
                                                     <tr>
                                                         <td colSpan={4} className="px-3 py-1.5 text-right text-[11px] text-gray-500">Package amount (billed):</td>
                                                         <td className="px-3 py-1.5 text-right text-[11px] font-bold text-emerald-700">₹{Number(absorbedData.package_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                                        <td></td>
                                                     </tr>
                                                 )}
                                             </tfoot>

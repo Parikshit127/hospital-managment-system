@@ -1380,6 +1380,61 @@ export async function reclassifyChargeDisposition(
     }
 }
 
+// Delete an absorbed (package-consumed) charge — for entries added by mistake.
+// Removes the consumption-ledger posting (and any linked invoice line) and
+// rebuilds the absorbed-cost expense. Does not touch inventory/stock.
+export async function removeAbsorbedCharge(postingId: number) {
+    try {
+        const { db, session, organizationId } = await requireTenantContext();
+        if (!isPrivilegedBillingRole(session?.role)) {
+            return { success: false, error: 'Only admin/finance can remove absorbed charges.' };
+        }
+
+        const posting = await db.ipdChargePosting.findUnique({ where: { id: postingId } });
+        if (!posting) return { success: false, error: 'Charge posting not found' };
+        if (posting.disposition !== CHARGE_DISPOSITION.PACKAGE_CONSUMED) {
+            return { success: false, error: 'Only absorbed (package-consumed) charges can be removed here' };
+        }
+        if (!posting.admission_package_id) return { success: false, error: 'This charge is not linked to a package' };
+
+        const admPkg = await db.ipdAdmissionPackage.findUnique({
+            where: { id: posting.admission_package_id },
+            include: { package: true },
+        });
+        if (!admPkg || admPkg.status !== ADMISSION_PACKAGE_STATUS.ACTIVE) {
+            return { success: false, error: 'The package is no longer active' };
+        }
+
+        const invoice = await db.invoices.findFirst({
+            where: { admission_id: posting.admission_id, status: { not: 'Cancelled' } },
+        });
+        if (invoice && (invoice.is_locked || invoice.status !== 'Draft')) {
+            return { success: false, error: 'The bill is finalized/locked — charges can no longer be removed.' };
+        }
+
+        await db.$transaction(async (tx: any) => {
+            if (posting.invoice_item_id) {
+                await tx.invoice_items.deleteMany({ where: { id: posting.invoice_item_id } });
+            }
+            await tx.ipdChargePosting.delete({ where: { id: posting.id } });
+            if (invoice) await recalculateInvoiceWithGstTx(tx, invoice.id);
+            await upsertPackageAbsorbedExpenseTx(tx, organizationId, posting.admission_id, admPkg);
+        });
+
+        await logAudit({
+            action: 'REMOVE_ABSORBED_CHARGE',
+            module: 'ipd',
+            entity_type: 'ipd_charge_posting',
+            entity_id: String(postingId),
+            details: JSON.stringify({ description: posting.description, amount: Number(posting.amount) }),
+        });
+
+        return { success: true, data: serialize({ posting_id: postingId }) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
 // Reconcile a package admission's billing (repair / legacy-migration tool).
 //
 // With the two-ledger model, charges posted while a package is active go
