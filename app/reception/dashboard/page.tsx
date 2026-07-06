@@ -99,6 +99,11 @@ export default function ReceptionDashboard() {
     const [paymentType, setPaymentType] = useState('');
     const [fromDate, setFromDate] = useState('');
     const [toDate, setToDate] = useState('');
+    // Daily collection report — date to print (defaults to today, IST local date).
+    const [reportDate, setReportDate] = useState(() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    });
     const [doctorFilter, setDoctorFilter] = useState('');
     const [doctorsList, setDoctorsList] = useState<any[]>([]);
     const [page, setPage] = useState(1);
@@ -431,16 +436,25 @@ export default function ReceptionDashboard() {
                 className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md transition-all whitespace-nowrap">
                 <Bed className="h-3.5 w-3.5" /> Enter IPD Portal
             </Link>
-            <button
-                onClick={() => {
-                    const d = new Date();
-                    const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                    window.open(`/api/reports/collections/pdf?from=${ymd}&to=${ymd}`, '_blank');
-                }}
-                title="Print today's collection report"
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all whitespace-nowrap">
-                <Printer className="h-3.5 w-3.5" /> Daily Collection Report
-            </button>
+            <div className="flex items-center gap-1.5 pl-1 border-l border-gray-200">
+                <input
+                    type="date"
+                    value={reportDate}
+                    max={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`}
+                    onChange={(e) => setReportDate(e.target.value)}
+                    title="Collection report date"
+                    className="px-2 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-teal-400"
+                />
+                <button
+                    onClick={() => {
+                        if (!reportDate) return;
+                        window.open(`/api/reports/collections/pdf?from=${reportDate}&to=${reportDate}`, '_blank');
+                    }}
+                    title="Print the collection report for the selected date"
+                    className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all whitespace-nowrap">
+                    <Printer className="h-3.5 w-3.5" /> Collection Report
+                </button>
+            </div>
         </div>
     );
 
