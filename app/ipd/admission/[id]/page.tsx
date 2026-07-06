@@ -20,7 +20,7 @@ import {
 import {
     generateInterimBill, postChargeToIpdBill, applyPackageToAdmission,
     getPackageUtilization, reconcilePackageBilling, reclassifyChargeDisposition,
-    breakOpenPackage, updateAdmissionPackageAmount,
+    breakOpenPackage, updateAdmissionPackageAmount, removeAdmissionPackage,
 } from '@/app/actions/ipd-finance-actions';
 import { removeInvoiceItem } from '@/app/actions/finance-actions';
 import {
@@ -671,6 +671,24 @@ export default function AdmissionDetailPage() {
 
     const handleRemoveBillCharge = async (item: any) => {
         if (!bill?.invoice?.id) return;
+        // The package line is re-created by the posting-time reconciler while the
+        // package is active, so deleting the line alone does nothing (it reappears).
+        // Removing the package must "break it open" — the package is removed and every
+        // service consumed under it returns to the bill as an itemized charge.
+        const isPackageLine = String(item.service_category || item.department || '') === 'Package';
+        if (isPackageLine) {
+            if (!confirm('Remove the package from this bill? All services consumed under it will be added back to the bill as itemized charges.')) return;
+            setRemovingItemId(item.id);
+            const res = await removeAdmissionPackage(data.admission_id);
+            setRemovingItemId(null);
+            if (res.success) {
+                toast.success('Package removed — consumed services moved to itemized billing');
+                setBill(null); loadBill();
+            } else {
+                toast.error(res.error || 'Failed to remove package');
+            }
+            return;
+        }
         if (!confirm(`Remove "${item.description || 'this charge'}" from the bill?`)) return;
         setRemovingItemId(item.id);
         const res = await removeInvoiceItem(item.id, bill.invoice.id);

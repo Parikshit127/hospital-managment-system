@@ -958,6 +958,23 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
     }
 }
 
+// Remove the package from an admission's bill. Because the package line is
+// re-created by the posting-time reconciler while the package is ACTIVE, simply
+// deleting the invoice line does nothing — the package must be broken open.
+// This finds the active package and breaks it open (reverts to itemized billing).
+export async function removeAdmissionPackage(admissionId: string) {
+    try {
+        const { db } = await requireTenantContext();
+        const admPkg = await db.ipdAdmissionPackage.findFirst({
+            where: { admission_id: admissionId, status: ADMISSION_PACKAGE_STATUS.ACTIVE },
+        });
+        if (!admPkg) return { success: false, error: 'No active package on this admission' };
+        return await breakOpenPackage(admPkg.id);
+    } catch (error: any) {
+        return { success: false, error: error?.message || 'Failed to remove package' };
+    }
+}
+
 // Break open = the patient exits the package and billing reverts to itemized:
 // every consumed service returns to the bill as a real line item (at its
 // original recorded qty/rate/tax and original posting date), the package line
