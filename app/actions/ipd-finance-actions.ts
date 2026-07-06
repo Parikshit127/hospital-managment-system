@@ -188,6 +188,148 @@ async function createInvoiceSnapshotTx(
     });
 }
 
+function getPackageTaxRate(pkg: { description?: string | null }) {
+    let packageCategory: string | null = null;
+    try {
+        const meta = pkg.description ? JSON.parse(pkg.description) : null;
+        if (meta && typeof meta === 'object' && 'category' in meta) {
+            packageCategory = String(meta.category);
+        }
+    } catch {
+        packageCategory = null;
+    }
+    return getPackageGSTRate(packageCategory);
+}
+
+async function findPackageInvoiceItem(client: any, admissionPackageId: number, invoiceId?: number | null) {
+    const where: any = {
+        ref_id: String(admissionPackageId),
+        OR: [
+            { service_category: PACKAGE_SERVICE_CATEGORY },
+            { department: PACKAGE_SERVICE_CATEGORY },
+        ],
+    };
+    if (invoiceId) where.invoice_id = invoiceId;
+
+    let item = await client.invoice_items.findFirst({ where, orderBy: { id: 'desc' } });
+    if (item) return item;
+
+    const posting = await client.ipdChargePosting.findFirst({
+        where: {
+            source_module: 'package',
+            source_ref_id: String(admissionPackageId),
+            invoice_item_id: { not: null },
+        },
+        orderBy: { id: 'desc' },
+    });
+    if (!posting?.invoice_item_id) return null;
+    return client.invoice_items.findUnique({ where: { id: posting.invoice_item_id } });
+}
+
+async function ensurePackageInvoiceLineTx(
+    client: any,
+    organizationId: string,
+    session: any,
+    admissionId: string,
+    admPkg: { id: number; applied_amount: any; package?: any },
+) {
+    let invoice = await client.invoices.findFirst({
+        where: { admission_id: admissionId, status: { not: 'Cancelled' } },
+    });
+
+    if (invoice && isBillClosedForCharges(invoice)) {
+        return { success: false as const, error: BILL_FINALIZED_INTENT_MSG };
+    }
+
+    if (!invoice) {
+        const admission = await client.admissions.findUnique({
+            where: { admission_id: admissionId },
+            select: { patient_id: true },
+        });
+        if (!admission) return { success: false as const, error: 'Admission not found' };
+
+        invoice = await client.invoices.create({
+            data: {
+                invoice_number: null,
+                patient_id: admission.patient_id,
+                admission_id: admissionId,
+                invoice_type: 'IPD',
+                status: 'Draft',
+                organizationId,
+            },
+        });
+    }
+
+    const existing = await findPackageInvoiceItem(client, admPkg.id, invoice.id);
+    if (existing) return { success: true as const, invoice, item: existing, created: false };
+
+    const amount = Number(admPkg.applied_amount || 0);
+    const taxRate = getPackageTaxRate(admPkg.package || {});
+    const taxAmount = roundMoney(amount * taxRate / 100);
+
+    const item = await client.invoice_items.create({
+        data: {
+            invoice_id: invoice.id,
+            department: PACKAGE_SERVICE_CATEGORY,
+            description: `Package: ${admPkg.package?.package_name || 'IPD Package'}`,
+            quantity: 1,
+            unit_price: amount,
+            total_price: amount,
+            discount: 0,
+            net_price: amount,
+            tax_rate: taxRate,
+            tax_amount: taxAmount,
+            hsn_sac_code: null,
+            service_category: PACKAGE_SERVICE_CATEGORY,
+            ref_id: String(admPkg.id),
+            organizationId,
+        },
+    });
+
+    const postingAmount = roundMoney(amount + taxAmount);
+    const updated = await client.ipdChargePosting.updateMany({
+        where: {
+            admission_id: admissionId,
+            source_module: 'package',
+            source_ref_id: String(admPkg.id),
+        },
+        data: {
+            invoice_item_id: item.id,
+            description: item.description,
+            amount: postingAmount,
+            disposition: CHARGE_DISPOSITION.BILLED,
+            service_category: PACKAGE_SERVICE_CATEGORY,
+            quantity: 1,
+            unit_price: amount,
+            tax_rate: taxRate,
+        },
+    });
+
+    if (updated.count === 0) {
+        await client.ipdChargePosting.create({
+            data: {
+                admission_id: admissionId,
+                invoice_item_id: item.id,
+                source_module: 'package',
+                source_ref_id: String(admPkg.id),
+                description: item.description,
+                amount: postingAmount,
+                posted_by: session?.id || null,
+                posted_at: new Date(),
+                organizationId,
+                disposition: CHARGE_DISPOSITION.BILLED,
+                service_category: PACKAGE_SERVICE_CATEGORY,
+                quantity: 1,
+                unit_price: amount,
+                tax_rate: taxRate,
+            },
+        });
+    }
+
+    await recalculateInvoiceWithGstTx(client, invoice.id);
+    return { success: true as const, invoice, item, created: true };
+}
+
 /**
  * Move every plain billed service line of a Draft invoice into the package
  * consumption ledger (exclusion-matched lines stay billed as extras), and drop
@@ -751,16 +893,7 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
 
         // Determine GST rate from package category. Cosmetic / plastic surgery = 18%,
         // all other clinical packages are exempt under healthcare exemption.
-        let packageCategory: string | null = null;
-        try {
-            const meta = pkg.description ? JSON.parse(pkg.description) : null;
-            if (meta && typeof meta === 'object' && 'category' in meta) {
-                packageCategory = String(meta.category);
-            }
-        } catch {
-            packageCategory = null;
-        }
-        const packageTaxRate = getPackageGSTRate(packageCategory);
+        const packageTaxRate = getPackageTaxRate(pkg);
 
         // Post as a single line item to the IPD bill
         const packageLine = await postChargeToIpdBill({
@@ -1036,14 +1169,36 @@ export async function updateAdmissionPackageAmount(admissionPackageId: number, n
             return { success: false, error: 'Can only edit an active package' };
         }
 
-        // Find the invoice line item posted for this package
-        const packageItem = await db.invoice_items.findFirst({
-            where: { source_module: 'package', ref_id: String(admissionPackageId) },
+        const invoice = await db.invoices.findFirst({
+            where: { admission_id: admPkg.admission_id, status: { not: 'Cancelled' } },
         });
+        if (isBillClosedForCharges(invoice)) {
+            return { success: false, error: BILL_FINALIZED_INTENT_MSG };
+        }
+
+        // Find the invoice line item posted for this package. invoice_items has
+        // no source_module column; the package marker is service_category/ref_id.
+        let packageItem = await findPackageInvoiceItem(db, admissionPackageId, invoice?.id);
+
+        if (!packageItem) {
+            const repaired = await db.$transaction(async (tx: any) => {
+                const result = await ensurePackageInvoiceLineTx(
+                    tx,
+                    organizationId,
+                    session,
+                    admPkg.admission_id,
+                    admPkg,
+                );
+                if (!result.success) return result;
+                return { success: true as const, item: result.item };
+            });
+            if (!repaired.success) return { success: false, error: repaired.error };
+            packageItem = repaired.item;
+        }
 
         if (packageItem) {
             const taxRate = Number(packageItem.tax_rate || 0);
-            const taxAmount = Math.round(newAmount * taxRate) / 100;
+            const taxAmount = roundMoney(newAmount * taxRate / 100);
             await db.$transaction(async (tx: any) => {
                 await tx.ipdAdmissionPackage.update({
                     where: { id: admissionPackageId },
@@ -1058,13 +1213,23 @@ export async function updateAdmissionPackageAmount(admissionPackageId: number, n
                         tax_amount: taxAmount,
                     },
                 });
+                await tx.ipdChargePosting.updateMany({
+                    where: {
+                        admission_id: admPkg.admission_id,
+                        source_module: 'package',
+                        source_ref_id: String(admissionPackageId),
+                    },
+                    data: {
+                        invoice_item_id: packageItem.id,
+                        amount: roundMoney(newAmount + taxAmount),
+                        unit_price: newAmount,
+                        tax_rate: taxRate,
+                        service_category: PACKAGE_SERVICE_CATEGORY,
+                        quantity: 1,
+                        disposition: CHARGE_DISPOSITION.BILLED,
+                    },
+                });
                 await recalculateInvoiceWithGstTx(tx, packageItem.invoice_id);
-            });
-        } else {
-            // No invoice item (edge case) — update only the admission package record
-            await db.ipdAdmissionPackage.update({
-                where: { id: admissionPackageId },
-                data: { applied_amount: newAmount },
             });
         }
 
@@ -1219,6 +1384,11 @@ async function reconcilePackageBillingInternal(
     const admPkg = await getActiveAdmissionPackage(db, admissionId);
     if (!admPkg) return { success: false as const, error: 'No active package on this admission' };
 
+    const ensured = await db.$transaction(async (tx: any) => (
+        ensurePackageInvoiceLineTx(tx, organizationId, session, admissionId, admPkg)
+    ));
+    if (!ensured.success) return ensured;
+
     const invoice = await db.invoices.findFirst({
         where: { admission_id: admissionId, status: { not: 'Cancelled' } },
         include: { items: true },
@@ -1330,7 +1500,7 @@ export async function settlePackageBilling(admissionId: string) {
 
 export async function generateInterimBill(admissionId: string) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
         const admission = await db.admissions.findUnique({
             where: { admission_id: admissionId },
@@ -1346,6 +1516,14 @@ export async function generateInterimBill(admissionId: string) {
         // if (admission.status === 'Admitted') {
         //     await accrueIPDDailyCharges(admissionId);
         // }
+
+        const activeAdmPkg = await getActiveAdmissionPackage(db, admissionId);
+        if (activeAdmPkg && admission.status === 'Admitted') {
+            const ensured = await db.$transaction(async (tx: any) => (
+                ensurePackageInvoiceLineTx(tx, organizationId, session, admissionId, activeAdmPkg)
+            ));
+            if (!ensured.success) return ensured;
+        }
 
         // Find the IPD invoice
         const invoice = await db.invoices.findFirst({
@@ -1711,6 +1889,15 @@ export async function settleAndDischarge(data: {
         // already locked and dirty, block instead of silently altering it.
         const activeAdmPkg = await getActiveAdmissionPackage(db, data.admission_id);
         if (activeAdmPkg) {
+            const ensured = await db.$transaction(async (tx: any) => (
+                ensurePackageInvoiceLineTx(tx, organizationId, session, data.admission_id, activeAdmPkg)
+            ));
+            if (!ensured.success) return ensured;
+            invoice = await db.invoices.findFirst({
+                where: { admission_id: data.admission_id, status: { not: 'Cancelled' } },
+            });
+            if (!invoice) return { success: false, error: 'No active invoice found after package bill repair' };
+
             const invItems = await db.invoice_items.findMany({ where: { invoice_id: invoice.id } });
             const extraItemIds = new Set(
                 (await db.ipdChargePosting.findMany({
