@@ -1245,6 +1245,7 @@ export async function recordPayment(data: {
                 payer_pan_name: isCash ? effectivePanName : null,
                 status: 'Completed',
                 notes: data.notes || null,
+                received_by: session?.username || session?.name || null,
                 organizationId,
             },
         });
@@ -1407,6 +1408,7 @@ export async function recordSplitPayment(data: {
                     payer_pan_name: splitIsCash ? panName : null,
                     status: 'Completed',
                     notes: data.notes || null,
+                    received_by: session?.username || session?.name || null,
                     organizationId,
                 },
             });

@@ -210,7 +210,8 @@ export async function GET(req: NextRequest) {
         payments.forEach(p => {
             if (p.payment_method === 'Deposit') return; // Skip deposits applied to bills to avoid double counting
 
-            const cashierUser = paymentCashierMap.get(p.receipt_number) || 'system';
+            // Prefer the cashier stored on the payment; fall back to the audit log; then 'system'.
+            const cashierUser = (p as any).received_by || paymentCashierMap.get(p.receipt_number) || 'system';
             const cashierName = userMap.get(cashierUser.toLowerCase()) || cashierUser;
             const patientName = p.invoice?.patient?.full_name || '-';
             const patientId = p.invoice?.patient?.patient_id || '-';

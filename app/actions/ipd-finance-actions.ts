@@ -2148,6 +2148,7 @@ export async function settleAndDischarge(data: {
                         reference: split.reference || null,
                         status: 'Completed',
                         notes: 'Discharge settlement',
+                        received_by: session?.username || session?.name || null,
                         organizationId,
                     },
                 });

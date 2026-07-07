@@ -238,7 +238,7 @@ export async function generateInvoice(
     optionsOrWalkInName?: string | { walkInName?: string; walkInContact?: string; billDateTime?: string; doctorId?: string; doctorName?: string; paymentMethod?: string; discount?: number; discountPct?: number }
 ) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
         const rawOptions = typeof optionsOrWalkInName === 'string'
             ? { walkInName: optionsOrWalkInName }
             : (optionsOrWalkInName || {});
@@ -568,6 +568,7 @@ export async function generateInvoice(
                     payment_method: paymentMethod,
                     payment_type: 'Full',
                     status: 'Completed',
+                    received_by: session?.username || session?.name || null,
                     organizationId,
                     ...(backdatedAt ? { created_at: backdatedAt } : {}),
                 }
@@ -772,7 +773,7 @@ export async function getPharmacyQueue() {
 
 export async function markOrderAsPaid(orderId: number, paymentMethod: string = 'Cash') {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
         const order = await db.pharmacy_orders.findUnique({ where: { id: orderId } });
         if (!order) return { success: false, error: 'Order not found' };
@@ -790,6 +791,7 @@ export async function markOrderAsPaid(orderId: number, paymentMethod: string = '
                         payment_method: paymentMethod,
                         payment_type: 'Full',
                         status: 'Completed',
+                        received_by: session?.username || session?.name || null,
                     }
                 });
 

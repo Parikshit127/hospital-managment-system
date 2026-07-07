@@ -126,7 +126,7 @@ export interface SaveFeeReceiptInput {
 
 export async function saveFeeReceipt(payload: SaveFeeReceiptInput) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
         const name = (payload.patient_name || "").trim();
         if (!name) return { success: false, error: "Patient name is required." };
@@ -262,6 +262,7 @@ export async function saveFeeReceipt(payload: SaveFeeReceiptInput) {
                         payment_type: "Full",
                         status: "Completed",
                         notes: payload.notes?.trim() || null,
+                        received_by: session?.username || session?.name || null,
                         organizationId,
                         ...(createdAt ? { created_at: createdAt } : {}),
                     }
@@ -521,7 +522,7 @@ export interface UpdateFeeReceiptInput {
 
 export async function updateFeeReceipt(invoiceId: number, payload: UpdateFeeReceiptInput) {
     try {
-        const { db, organizationId } = await requireRoleAndTenant(['admin', 'finance']);
+        const { db, organizationId, session } = await requireRoleAndTenant(['admin', 'finance']);
 
         const existing = await db.invoices.findFirst({
             where: { id: invoiceId, organizationId, OR: [{ is_fee_receipt: true }, { invoice_type: 'OPD_FEE' }] },
@@ -623,6 +624,7 @@ export async function updateFeeReceipt(invoiceId: number, payload: UpdateFeeRece
                         payment_type: 'Full',
                         status: 'Completed',
                         notes: payload.notes?.trim() || null,
+                        received_by: session?.username || session?.name || null,
                         organizationId,
                         ...(createdAt ? { created_at: createdAt } : {}),
                     },

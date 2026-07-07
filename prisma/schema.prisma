@@ -1315,6 +1315,9 @@ model payments {
   notes                String?
   payer_pan_number     String?
   payer_pan_name       String?
+  // Who collected this payment (staff username). Drives the cashier column on the
+  // collection report so receipts are attributed to the actual user, not "system".
+  received_by          String?
   organizationId       String
   created_at           DateTime     @default(now())
   version              Int          @default(1)
