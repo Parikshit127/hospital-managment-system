@@ -4,7 +4,7 @@ import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getBillBranding } from '@/app/lib/bill-branding';
 import { removeAbsorbedCharge } from '@/app/actions/ipd-finance-actions';
 
-const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'ipd_manager', 'doctor'];
+const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'ipd_manager', 'doctor', 'pharmacist', 'nurse', 'store_manager'];
 
 const esc = (s: any) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
 const money = (n: number) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
