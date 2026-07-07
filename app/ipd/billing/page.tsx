@@ -92,7 +92,7 @@ export default function IpdBillingPage() {
         if (res.success) {
             const r = await getAbsorbedCharges(selectedAdmission.admission_id);
             if (r.success) setAbsorbedData(r.data);
-            setBill(null); loadBill();
+            setBillData(null); refreshBill();
         } else {
             setToast({ message: res.error || 'Failed to remove charge', type: 'error' });
         }

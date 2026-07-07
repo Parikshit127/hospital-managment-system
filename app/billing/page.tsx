@@ -268,6 +268,7 @@ export default function MasterBillingPage() {
         "Invoice #": r.invoice_number,
         Patient: r.patient_name,
         UHID: r.patient_id,
+        Doctor: r.doctor_name,
         "Patient Type": r.patient_type,
         Type: r.admission_type,
         "Invoice Status": r.invoice_status,
@@ -357,6 +358,7 @@ export default function MasterBillingPage() {
               <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500 font-bold sticky top-0">
                 <tr>
                   <Th>Patient</Th>
+                  <Th>Doctor</Th>
                   <Th>Bill Date</Th>
                   <Th>Type</Th>
                   <Th>Adm. Type</Th>
@@ -395,6 +397,7 @@ export default function MasterBillingPage() {
                         </div>
                       )}
                     </Td>
+                    <Td>{r.doctor_name ?? "-"}</Td>
                     <Td>
                       <span className="whitespace-nowrap text-gray-700">
                         {r.created_at ? new Date(r.created_at).toLocaleDateString("en-IN") : "—"}
@@ -951,7 +954,7 @@ function FinanceSearchModal({ onClose }: { onClose: () => void }) {
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search invoices, receipts, claims, deposits, refunds, patient phone…"
+            placeholder="Search invoices, doctors, receipts, claims, deposits, refunds, patient phone..."
             className="flex-1 outline-none text-sm font-medium text-gray-800 placeholder:text-gray-400 bg-transparent"
           />
           {loading && <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />}
@@ -962,7 +965,7 @@ function FinanceSearchModal({ onClose }: { onClose: () => void }) {
         <div className="max-h-[60vh] overflow-y-auto">
           {!loading && query.length < 2 && (
             <div className="px-4 py-6 text-center text-xs text-gray-400 font-medium">
-              Type at least 2 characters · search across patients, invoices, receipts, claims, deposits, refunds.
+              Type at least 2 characters - search across patients, doctors, invoices, receipts, claims, deposits, refunds.
             </div>
           )}
           {!loading && query.length >= 2 && hits.length === 0 && (

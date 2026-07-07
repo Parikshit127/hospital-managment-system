@@ -200,6 +200,8 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
         { admission_id: { contains: q, mode: "insensitive" } },
         { tpa_claim_number: { contains: q, mode: "insensitive" } },
         { corporate_invoice_number: { contains: q, mode: "insensitive" } },
+        { doctor_name: { contains: q, mode: "insensitive" } },
+        { admission: { doctor_name: { contains: q, mode: "insensitive" } } },
         {
           patient: {
             OR: [
@@ -232,6 +234,7 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
               admission_category: true,
               patient_class: true,
               status: true,
+              doctor_name: true,
             },
           },
           payments: {
@@ -345,6 +348,7 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
         patient_name: inv.patient?.full_name ?? "—",
         patient_phone: inv.patient?.phone ?? null,
         patient_type: inv.billing_patient_type,
+        doctor_name: inv.doctor_name || inv.admission?.doctor_name || "—",
         // OPD_FEE is an internal sub-type of OPD (fee receipts / quick OPD bills);
         // surface it to users as plain "OPD".
         admission_type: normalizeInvoiceTypeLabel(inv.invoice_type), // OPD | IPD | LAB | PHARMACY
