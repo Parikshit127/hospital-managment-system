@@ -552,7 +552,7 @@ export default function PharmacyInvoicesPage() {
                                                 <div className="flex items-center justify-center gap-1 flex-wrap">
                                                     <Link
                                                         href={isPackageConsumed
-                                                            ? `/api/ipd/${inv.admission_id}/absorbed-charges`
+                                                            ? `/api/ipd/${inv.admission_id}/pharmacy-bill${inv._billKey ? `?bill=${encodeURIComponent(inv._billKey)}` : ''}`
                                                             : `/pharmacy/invoices/${inv.id}/view${inv._billKey ? `?bill=${encodeURIComponent(inv._billKey)}` : ''}`}
                                                         target="_blank"
                                                         className="inline-flex items-center gap-1 px-2 py-1 bg-orange-50 text-orange-700 border border-orange-200 text-[10px] font-bold rounded-lg hover:bg-orange-100 transition-colors">
