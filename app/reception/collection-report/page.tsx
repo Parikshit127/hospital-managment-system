@@ -27,7 +27,9 @@ export default function CollectionReportPage() {
         getUsersList({ is_active: true, limit: 500 }).then((res: any) => {
             if (res?.success && res.data?.users) {
                 setCashierUsers(res.data.users
-                    .filter((u: any) => u.username)
+                    // Doctors (role === 'doctor') are never cash-counter cashiers — exclude them
+                    // so they cannot populate this dropdown. Case-insensitive for safety.
+                    .filter((u: any) => u.username && String(u.role).toLowerCase() !== 'doctor')
                     .map((u: any) => ({ username: u.username, name: u.name || u.username })));
             }
         });
