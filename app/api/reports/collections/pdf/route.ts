@@ -364,6 +364,15 @@ export async function GET(req: NextRequest) {
             return { receipts, refunds };
         }
 
+        // User-wise cash counter: narrow the whole report to a single cashier when
+        // ?cashier=<username> is passed (every downstream section reads itemsList).
+        const cashierFilter = searchParams.get('cashier');
+        if (cashierFilter && cashierFilter !== 'all') {
+            const kept = itemsList.filter(it => (it.cashierUsername || '').toLowerCase() === cashierFilter.toLowerCase());
+            itemsList.length = 0;
+            itemsList.push(...kept);
+        }
+
         const overallMatrix = buildSummaryMatrix(itemsList);
 
         // Helper to format matrix row
