@@ -434,7 +434,10 @@ export async function getInvoices(filters?: {
                 include: {
                     patient: { select: { full_name: true, phone: true } },
                     items: { where: { service_category: 'Pharmacy' } },
-                    admission: { select: { status: true, admission_id: true } },
+                    // admission.patient is a fallback for the invoice name — some IPD
+                    // invoices don't resolve their own patient relation, but the
+                    // admission always carries the registered patient.
+                    admission: { select: { status: true, admission_id: true, patient: { select: { full_name: true, phone: true } } } },
                 },
                 orderBy: { created_at: 'desc' },
                 take: limit,
@@ -488,6 +491,7 @@ export async function getInvoices(filters?: {
                         _pharmItemCount: b.items.length,
                         _billKey: b.key,
                         _admissionStatus: inv.admission?.status || null,
+                        _admPatient: inv.admission?.patient || null,
                         items: undefined, // don't carry heavy items array
                     });
                 }
@@ -644,7 +648,7 @@ export async function getInvoices(filters?: {
                 id: pharm.id,
                 invoice_number: pharm.invoice_number,
                 patient_id: pharm.patient_id,
-                patient: pharm.patient,
+                patient: pharm.patient || pharm._admPatient || null,
                 notes: pharm.notes,
                 invoice_type: 'PHARMACY',
                 net_amount: pharm._isIpdPharmacy ? pharm._pharmTotal : pharm.net_amount,

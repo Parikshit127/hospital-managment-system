@@ -65,9 +65,19 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
 
     const isWalkIn = invoice.patient_id === 'WALKIN';
     const walkin = parseWalkinNote(invoice.notes);
-    const patientName = isWalkIn ? (walkin.name || 'WALK-IN / OTC') : (invoice.patient?.full_name || 'Walk-in Patient');
+    // IPD invoices occasionally don't resolve their own patient relation; fall
+    // back to the admission's registered patient so the name is never blank.
+    let ipdPatientFallback: any = null;
+    if (!isWalkIn && !invoice.patient?.full_name && (invoice as any).admission_id) {
+        const adm = await prisma.admissions.findFirst({
+            where: { admission_id: (invoice as any).admission_id, organizationId: session.organization_id },
+            select: { patient: { select: { full_name: true, phone: true } } },
+        });
+        ipdPatientFallback = adm?.patient || null;
+    }
+    const patientName = isWalkIn ? (walkin.name || 'WALK-IN / OTC') : (invoice.patient?.full_name || ipdPatientFallback?.full_name || 'Walk-in Patient');
     const patientAddress = isWalkIn ? '' : ((invoice.patient as any)?.address || '');
-    const patientContact = (isWalkIn ? walkin.contact : invoice.patient?.phone) || '';
+    const patientContact = (isWalkIn ? walkin.contact : (invoice.patient?.phone || ipdPatientFallback?.phone)) || '';
 
     const isIpd = invoice.invoice_type === 'IPD';
     const allItems = invoice.items as any[];
