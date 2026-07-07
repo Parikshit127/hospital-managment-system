@@ -26,10 +26,16 @@ export default function CollectionReportPage() {
     useEffect(() => {
         getUsersList({ is_active: true, limit: 500 }).then((res: any) => {
             if (res?.success && res.data?.users) {
+                // Test-only accounts that must never appear as selectable cashiers.
+                const EXCLUDED_USERNAMES = new Set(['test.devadmin', 'test.developer']);
                 setCashierUsers(res.data.users
                     // Doctors (role === 'doctor') are never cash-counter cashiers — exclude them
                     // so they cannot populate this dropdown. Case-insensitive for safety.
-                    .filter((u: any) => u.username && String(u.role).toLowerCase() !== 'doctor')
+                    // Also drop the seeded dev/test accounts by username.
+                    .filter((u: any) =>
+                        u.username &&
+                        String(u.role).toLowerCase() !== 'doctor' &&
+                        !EXCLUDED_USERNAMES.has(String(u.username).toLowerCase()))
                     .map((u: any) => ({ username: u.username, name: u.name || u.username })));
             }
         });
