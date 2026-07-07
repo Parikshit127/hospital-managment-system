@@ -21,7 +21,7 @@ import {
 } from '@/app/actions/reception-actions';
 import { finalizePatientLatestDraft } from '@/app/actions/finance-actions';
 import { getIPDAdmissions } from '@/app/actions/ipd-actions';
-import { getDoctorsForDropdown, getUsersList } from '@/app/actions/admin-actions';
+import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 
@@ -99,23 +99,6 @@ export default function ReceptionDashboard() {
     const [paymentType, setPaymentType] = useState('');
     const [fromDate, setFromDate] = useState('');
     const [toDate, setToDate] = useState('');
-    // Daily collection report — date to print (defaults to today, IST local date).
-    const [reportDate, setReportDate] = useState(() => {
-        const d = new Date();
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    });
-    // User-wise cash counter: pick a cashier (or All) for the collection report.
-    const [cashierUsers, setCashierUsers] = useState<{ username: string; name: string }[]>([]);
-    const [reportCashier, setReportCashier] = useState('all');
-    useEffect(() => {
-        getUsersList({ is_active: true, limit: 500 }).then((res: any) => {
-            if (res?.success && res.data?.users) {
-                setCashierUsers(res.data.users
-                    .filter((u: any) => u.username)
-                    .map((u: any) => ({ username: u.username, name: u.name || u.username })));
-            }
-        });
-    }, []);
     const [doctorFilter, setDoctorFilter] = useState('');
     const [doctorsList, setDoctorsList] = useState<any[]>([]);
     const [page, setPage] = useState(1);
@@ -453,35 +436,11 @@ export default function ReceptionDashboard() {
                 className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all whitespace-nowrap">
                 <Sparkles className="h-3.5 w-3.5 text-amber-500" /> Bed Cleaning
             </Link>
-            <div className="flex items-center gap-1.5 pl-1 border-l border-gray-200">
-                <DateField
-                    value={reportDate}
-                    max={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`}
-                    onChange={(e) => setReportDate(e.target.value)}
-                    title="Collection report date (dd/mm/yyyy)"
-                    className="w-28 px-2 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-teal-400"
-                />
-                <select
-                    value={reportCashier}
-                    onChange={(e) => setReportCashier(e.target.value)}
-                    title="Cashier (user-wise cash counter)"
-                    className="w-36 px-2 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-teal-400">
-                    <option value="all">All cashiers</option>
-                    {cashierUsers.map((u) => (
-                        <option key={u.username} value={u.username}>{u.name}</option>
-                    ))}
-                </select>
-                <button
-                    onClick={() => {
-                        if (!reportDate) return;
-                        const cashierParam = reportCashier && reportCashier !== 'all' ? `&cashier=${encodeURIComponent(reportCashier)}` : '';
-                        window.open(`/api/reports/collections/pdf?from=${reportDate}&to=${reportDate}${cashierParam}`, '_blank');
-                    }}
-                    title="Print the collection report for the selected date (and cashier)"
-                    className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all whitespace-nowrap">
-                    <Printer className="h-3.5 w-3.5" /> Collection Report
-                </button>
-            </div>
+            <Link href="/reception/collection-report"
+                title="Daily / date-range collection report"
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all whitespace-nowrap">
+                <Printer className="h-3.5 w-3.5" /> Collection Report
+            </Link>
         </div>
     );
 

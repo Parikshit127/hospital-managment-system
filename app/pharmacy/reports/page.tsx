@@ -330,6 +330,40 @@ export default function PharmacyReportsPage() {
 
     const inr = (n: number) => `₹${Math.round(n || 0).toLocaleString('en-IN')}`;
 
+    // Print the bill-wise list in a clean, self-contained window (avoids printing the
+    // whole dashboard/sidebar, which is why the plain window.print() looked broken).
+    function printBills() {
+        const bills = (rev?.bills || []) as any[];
+        if (bills.length === 0) { alert('No bills to print for this period / channel.'); return; }
+        const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const chLabel = channel === 'all' ? 'All Channels' : channel === 'counter' ? 'Cash / Counter' : channel.toUpperCase();
+        const rows = bills.map((b, i) => `<tr>
+            <td>${i + 1}</td><td>${esc(b.billNo)}</td><td>${esc(b.date)}</td><td>${esc(b.patient)}</td>
+            <td>${b.channel === 'counter' ? 'CASH' : esc(String(b.channel).toUpperCase())}</td>
+            <td>${esc(b.doctor || '-')}</td>
+            <td style="text-align:right">${esc(b.items)}</td>
+            <td style="text-align:right">${Number(b.revenue || 0).toLocaleString('en-IN')}</td></tr>`).join('');
+        const totalItems = bills.reduce((s, b) => s + (b.items || 0), 0);
+        const totalRev = bills.reduce((s, b) => s + (b.revenue || 0), 0);
+        const html = `<!doctype html><html><head><meta charset="utf-8"><title>Pharmacy Bills — ${esc(chLabel)}</title>
+            <style>body{font-family:Arial,sans-serif;padding:24px;color:#111}h1{font-size:18px;margin:0}
+            .meta{font-size:12px;color:#555;margin:4px 0 16px}table{width:100%;border-collapse:collapse;font-size:12px}
+            th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}thead th{background:#f3f4f6}
+            tfoot td{font-weight:bold;background:#f9fafb}</style></head><body>
+            <h1>Pharmacy Bills — ${esc(chLabel)}</h1>
+            <div class="meta">Period: ${esc(dateRange.from)} to ${esc(dateRange.to)} · ${bills.length} bills</div>
+            <table><thead><tr><th>#</th><th>Bill No</th><th>Date</th><th>Patient</th><th>Type</th><th>Doctor</th>
+            <th style="text-align:right">Items</th><th style="text-align:right">Amount (₹)</th></tr></thead>
+            <tbody>${rows}</tbody>
+            <tfoot><tr><td colspan="6">Total — ${bills.length} bills</td>
+            <td style="text-align:right">${totalItems}</td><td style="text-align:right">${totalRev.toLocaleString('en-IN')}</td></tr></tfoot>
+            </table><script>window.onload=function(){window.print();}</script></body></html>`;
+        const w = window.open('', '_blank');
+        if (!w) { alert('Please allow pop-ups to print the report.'); return; }
+        w.document.write(html);
+        w.document.close();
+    }
+
     const CHANNEL_META: Record<'counter' | 'opd' | 'ipd', { label: string; bar: string; chip: string; icon: any }> = {
         counter: { label: 'Counter', bar: 'bg-emerald-500', chip: 'bg-emerald-100 text-emerald-700', icon: Store },
         opd: { label: 'OPD', bar: 'bg-blue-500', chip: 'bg-blue-100 text-blue-700', icon: UserRound },
@@ -717,7 +751,7 @@ export default function PharmacyReportsPage() {
                                 <p className="text-sm font-bold text-gray-700">
                                     Bill-wise Pharmacy Sales — {channel === 'all' ? 'All channels' : channel === 'counter' ? 'Cash / Counter' : channel.toUpperCase()}
                                 </p>
-                                <button onClick={() => window.print()} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-50">
+                                <button onClick={printBills} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-50">
                                     <FileText className="h-3.5 w-3.5" /> Print
                                 </button>
                             </div>
