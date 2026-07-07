@@ -35,7 +35,7 @@ export default function PharmacyReportsPage() {
     const [expiringBatches, setExpiringBatches] = useState<any[]>([]);
     const [lowStock, setLowStock] = useState<any[]>([]);
     const [refreshing, setRefreshing] = useState(false);
-    const [activeTab, setActiveTab] = useState<'overview' | 'expiry' | 'stock' | 'movements' | 'narcotics'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'bills' | 'expiry' | 'stock' | 'movements' | 'narcotics'>('overview');
     const [movements, setMovements] = useState<any[]>([]);
     const [movementFilter, setMovementFilter] = useState('');
     const [narcotics, setNarcotics] = useState<any[]>([]);
@@ -464,6 +464,7 @@ export default function PharmacyReportsPage() {
                     <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl border border-gray-200 w-fit">
                         {[
                             { id: 'overview', label: 'Revenue & Movers' },
+                            { id: 'bills', label: `Bills — Cash / IPD (${(rev?.bills || []).length})` },
                             { id: 'expiry', label: `Expiry Alerts (${(data?.expiring30Count || 0) + (data?.expiring60Count || 0) + (data?.expiring90Count || 0) + (data?.expiredCount || 0)})` },
                             { id: 'stock', label: `Stock Alerts (${(data?.lowStockCount || 0) + (data?.outOfStockCount || 0)})` },
                             { id: 'movements', label: 'Movement Ledger' },
@@ -706,6 +707,62 @@ export default function PharmacyReportsPage() {
                                         })}
                                     </div>
                                 )}
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'bills' && (
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm font-bold text-gray-700">
+                                    Bill-wise Pharmacy Sales — {channel === 'all' ? 'All channels' : channel === 'counter' ? 'Cash / Counter' : channel.toUpperCase()}
+                                </p>
+                                <button onClick={() => window.print()} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-50">
+                                    <FileText className="h-3.5 w-3.5" /> Print
+                                </button>
+                            </div>
+                            <div className="overflow-x-auto border border-gray-200 rounded-2xl bg-white">
+                                <table className="w-full text-xs">
+                                    <thead className="bg-gray-50">
+                                        <tr className="text-gray-500">
+                                            <th className="px-4 py-2 text-left">Bill No</th>
+                                            <th className="px-4 py-2 text-left">Date</th>
+                                            <th className="px-4 py-2 text-left">Patient</th>
+                                            <th className="px-4 py-2 text-left">Type</th>
+                                            <th className="px-4 py-2 text-left">Doctor</th>
+                                            <th className="px-4 py-2 text-right">Items</th>
+                                            <th className="px-4 py-2 text-right">Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {(rev?.bills || []).length === 0 ? (
+                                            <tr><td colSpan={7} className="text-center py-10 text-gray-400">No bills for this period / channel</td></tr>
+                                        ) : (rev.bills as any[]).map((b, i) => (
+                                            <tr key={i} className="hover:bg-gray-50">
+                                                <td className="px-4 py-2 font-mono text-gray-800">{b.billNo}</td>
+                                                <td className="px-4 py-2 text-gray-500">{b.date}</td>
+                                                <td className="px-4 py-2 text-gray-800">{b.patient}</td>
+                                                <td className="px-4 py-2">
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${b.channel === 'ipd' ? 'bg-blue-50 text-blue-700' : b.channel === 'opd' ? 'bg-indigo-50 text-indigo-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                                                        {b.channel === 'counter' ? 'CASH' : String(b.channel).toUpperCase()}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-2 text-gray-500">{b.doctor || '—'}</td>
+                                                <td className="px-4 py-2 text-right">{b.items}</td>
+                                                <td className="px-4 py-2 text-right font-bold text-gray-900">{inr(b.revenue)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    {(rev?.bills || []).length > 0 && (
+                                        <tfoot className="bg-gray-50 font-black text-gray-800">
+                                            <tr>
+                                                <td className="px-4 py-2" colSpan={5}>Total — {(rev.bills as any[]).length} bills</td>
+                                                <td className="px-4 py-2 text-right">{(rev.bills as any[]).reduce((s, b) => s + (b.items || 0), 0)}</td>
+                                                <td className="px-4 py-2 text-right">{inr((rev.bills as any[]).reduce((s, b) => s + (b.revenue || 0), 0))}</td>
+                                            </tr>
+                                        </tfoot>
+                                    )}
+                                </table>
                             </div>
                         </div>
                     )}
