@@ -336,7 +336,7 @@ export default function DepositsPage() {
                                                 </td>
                                                 <td className="px-5 py-3 text-sm text-gray-500">{new Date(d.created_at).toLocaleDateString('en-GB')}</td>
                                                 <td className="px-5 py-3 text-center">
-                                                    <div className="flex items-center justify-center gap-1">
+                                                    <div className="flex flex-wrap items-center justify-center gap-1">
                                                         <button
                                                             onClick={() => window.open(`/api/deposit/${d.id}/receipt`, '_blank')}
                                                             className="px-2.5 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition flex items-center gap-1"

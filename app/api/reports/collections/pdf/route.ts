@@ -211,7 +211,7 @@ export async function GET(req: NextRequest) {
             if (p.payment_method === 'Deposit') return; // Skip deposits applied to bills to avoid double counting
 
             // Prefer the cashier stored on the payment; fall back to the audit log; then 'system'.
-            const cashierUser = (p as any).received_by || paymentCashierMap.get(p.receipt_number) || 'system';
+            const cashierUser = (p as any).received_by || paymentCashierMap.get(p.receipt_number) || 'Not recorded';
             const cashierName = userMap.get(cashierUser.toLowerCase()) || cashierUser;
             const patientName = p.invoice?.patient?.full_name || '-';
             const patientId = p.invoice?.patient?.patient_id || '-';
@@ -263,7 +263,7 @@ export async function GET(req: NextRequest) {
 
         // Process deposits collected (Advances)
         deposits.forEach(d => {
-            const cashierUser = d.collected_by || 'system';
+            const cashierUser = d.collected_by || 'Not recorded';
             const cashierName = userMap.get(cashierUser.toLowerCase()) || cashierUser;
             const patientName = depositPatientMap.get(d.patient_id) || '-';
             const patientId = d.patient_id;
@@ -295,7 +295,7 @@ export async function GET(req: NextRequest) {
 
         // Process refunds table
         refunds.forEach(r => {
-            const cashierUser = r.processed_by || 'system';
+            const cashierUser = r.processed_by || 'Not recorded';
             const cashierName = userMap.get(cashierUser.toLowerCase()) || cashierUser;
             const linkedPayment = refundPaymentMap.get(String(r.payment_id)) || null;
             const linkedInvoice = linkedPayment?.invoice || refundInvoiceMap.get(String(r.invoice_id)) || null;
