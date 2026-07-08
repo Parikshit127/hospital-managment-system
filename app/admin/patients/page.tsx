@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { DateField } from '@/app/components/ui/DateField';
 import Link from "next/link";
@@ -38,7 +38,7 @@ type PatientStateFilter =
   | "appointment"
   | "registered";
 
-export default function AdminPatientsPage() {
+function AdminPatientsPageContent() {
   const searchParams = useSearchParams();
   const [patients, setPatients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -525,5 +525,17 @@ export default function AdminPatientsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AdminPatientsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+      </div>
+    }>
+      <AdminPatientsPageContent />
+    </Suspense>
   );
 }
