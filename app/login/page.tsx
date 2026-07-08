@@ -90,7 +90,7 @@ function LandingPage() {
             }} />
 
             {/* Top Navigation */}
-            <nav className="relative z-10 flex items-center justify-between px-6 md:px-12 py-5 border-b border-gray-100 bg-white/80 backdrop-blur-md">
+            <nav className="relative z-10 flex items-center justify-between px-8 md:px-16 lg:px-20 py-5 border-b border-gray-100 bg-white/80 backdrop-blur-md">
                 <div className="flex items-center gap-2">
                     {/* Axten Logo */}
                     <div className="flex items-center text-2xl font-black tracking-tight select-none" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -112,7 +112,7 @@ function LandingPage() {
             </nav>
 
             {/* Main Content */}
-            <main className="relative z-10 w-full max-w-[1400px] mx-auto px-6 md:px-12 py-12 lg:py-0 flex-1 grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-12 lg:gap-20 items-center">
+            <main className="relative z-10 w-full max-w-[1400px] mx-auto px-10 md:px-20 py-12 lg:py-0 flex-1 grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-12 lg:gap-20 items-center">
                 {/* Left Side: Copy */}
                 <div className="max-w-2xl">
                     <div className="inline-flex items-center gap-3 px-1 py-1 pr-4 bg-white border border-gray-200 rounded-full mb-8 shadow-sm">
@@ -121,10 +121,10 @@ function LandingPage() {
                     </div>
 
                     <h1 className="text-[56px] lg:text-[72px] leading-[1.05] font-extrabold text-[#0a1e42] tracking-[-0.03em] mb-8" style={{ fontFamily: 'var(--font-sans), sans-serif' }}>
-                        Welcome to<br />The AxtenOS<br />
+                        Welcome to<br />The <span className="text-[#1b305b]">Axten</span> <span className="text-[#f2782e] inline-flex items-start">OS<sup className="text-[0.55em] font-bold relative -top-[0.2em] ml-0.5">+</sup></span>
                     </h1>
 
-                    <div className="w-2.5 h-2.5 bg-[#0a1e42] rounded-full mb-8" />
+                    {/* <div className="w-2.5 h-2.5 bg-[#0a1e42] rounded-full mb-8" /> */}
 
                     <p className="text-[19px] text-gray-600 leading-[1.6] font-medium max-w-[500px]">
                         Access your personalized dashboard to manage patient records, appointments, billing, and clinical operations efficiently and securely.
@@ -132,7 +132,7 @@ function LandingPage() {
                 </div>
 
                 {/* Right Side: Login Form */}
-                <div className="relative flex justify-center lg:justify-end w-full">
+                <div className="relative flex justify-center lg:justify-center w-full">
                     {/* Floating shadow behind form for extra depth */}
                     <div className="absolute inset-0 bg-[#0f172a]/5 blur-[60px] transform rotate-2 scale-105 rounded-[3rem] pointer-events-none" />
                     
@@ -141,6 +141,17 @@ function LandingPage() {
                     </div>
                 </div>
             </main>
+
+            {/* Footer */}
+            <footer className="relative z-10 w-full max-w-[1400px] mx-auto px-10 md:px-20 py-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-400">
+                <div className="flex gap-6">
+                    <a href="#" className="hover:text-[#f97316] transition-colors">Terms & Conditions</a>
+                    <a href="#" className="hover:text-[#f97316] transition-colors">Privacy Policy</a>
+                </div>
+                <div>
+                    © 2026 Axten. All rights reserved.
+                </div>
+            </footer>
         </div>
     );
 }
