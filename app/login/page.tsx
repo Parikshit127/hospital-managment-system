@@ -62,14 +62,14 @@ function LoginForm({ isTimeout }: { isTimeout: boolean }) {
                     </button>
                 </form>
                 
-                <div className="mt-8 pt-6 border-t border-gray-100">
+                {/* <div className="mt-8 pt-6 border-t border-gray-100">
                     <p className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Authorized Roles</p>
                     <div className="flex flex-wrap justify-center gap-2">
                         {['Admin', 'Doctor', 'Receptionist', 'Lab Tech'].map(role => (
                             <span key={role} className="px-3 py-1.5 bg-gray-50 border border-gray-200 text-gray-500 text-[11px] font-bold rounded-full">{role}</span>
                         ))}
                     </div>
-                </div>
+                </div> */}
             </div>
         </div>
     );
@@ -101,11 +101,11 @@ function LandingPage() {
                     </div>
                 </div>
 
-                <div className="hidden lg:flex items-center gap-8 text-sm font-semibold text-[#1e3a6e]">
+                {/* <div className="hidden lg:flex items-center gap-8 text-sm font-semibold text-[#1e3a6e]">
                     <a href="#" className="hover:text-[#f97316] transition-colors">Staff Directory</a>
                     <a href="#" className="hover:text-[#f97316] transition-colors">Departments</a>
                     <a href="#" className="hover:text-[#f97316] transition-colors">Help Desk</a>
-                </div>
+                </div> */}
                 
                 {/* Empty div to maintain space-between flex layout since we removed the button */}
                 <div className="w-[120px] hidden lg:block"></div>
@@ -121,7 +121,7 @@ function LandingPage() {
                     </div>
 
                     <h1 className="text-[56px] lg:text-[72px] leading-[1.05] font-extrabold text-[#0a1e42] tracking-[-0.03em] mb-8" style={{ fontFamily: 'var(--font-sans), sans-serif' }}>
-                        Welcome to<br />the Hospital<br />Staff Portal
+                        Welcome to<br />The AxtenOS<br />
                     </h1>
 
                     <div className="w-2.5 h-2.5 bg-[#0a1e42] rounded-full mb-8" />
