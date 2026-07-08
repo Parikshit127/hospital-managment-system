@@ -93,12 +93,11 @@ function LandingPage() {
             <nav className="relative z-10 flex items-center justify-between px-6 md:px-12 py-5 border-b border-gray-100 bg-white/80 backdrop-blur-md">
                 <div className="flex items-center gap-2">
                     {/* Axten Logo */}
-                    <div className="flex items-center">
-                        <span className="text-2xl font-black text-[#1e3a6e] tracking-tight mr-1">Axten</span>
-                        <div className="flex flex-col gap-[2px]">
-                            <div className="w-4 h-1 bg-[#f97316] rounded-full" />
-                            <div className="w-6 h-1 bg-[#f97316] rounded-full" />
-                        </div>
+                    <div className="flex items-center text-2xl font-black tracking-tight select-none" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                        <span className="text-[#1b305b]">Axten</span>
+                        <span className="text-[#f2782e] ml-1.5 flex items-start">
+                            OS<span className="text-sm font-bold relative -top-1.5 ml-0.5">+</span>
+                        </span>
                     </div>
                 </div>
 
