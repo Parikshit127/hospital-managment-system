@@ -846,19 +846,46 @@ export async function getMISReport(filters: { from: string; to: string; billType
 
         const fromDate = new Date(filters.from + 'T00:00:00+05:30');
         const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
-        const where: any = {
-            created_at: { gte: fromDate, lte: toDate },
+        const reportDateRange = { gte: fromDate, lte: toDate };
+        const baseWhere: any = {
             status: { notIn: ['Cancelled'] },
             is_archived: false,
         };
+        let where: any = { ...baseWhere };
+
         if (filters.billType && filters.billType !== 'all') {
-            where.invoice_type = filters.billType;
+            if (filters.billType === 'IPD') {
+                where = {
+                    ...baseWhere,
+                    OR: [
+                        { invoice_type: 'IPD' },
+                        { admission_id: { not: null } },
+                    ],
+                    admission: { discharge_date: reportDateRange },
+                };
+            } else {
+                where.invoice_type = filters.billType;
+                where.created_at = reportDateRange;
+            }
         } else {
-            // Default ("all"): exclude standalone pharmacy counter / OTC bills — they
-            // belong to the Pharmacy → Invoices module, not the hospital MIS report.
-            // (Pharmacy charges inside IPD/OPD bills still count via their line items.)
-            // Selecting "Pharmacy Only" (billType='Pharmacy') still shows them.
-            where.invoice_type = { notIn: ['Pharmacy', 'PHARMACY'] };
+            // Default ("all"): exclude standalone pharmacy counter / OTC bills; they
+            // belong to the Pharmacy -> Invoices module, not the hospital MIS report.
+            // IPD/admission-linked revenue is recognized on discharge date, so a bill
+            // raised on admission appears in the MIS for the discharge date.
+            where.OR = [
+                {
+                    OR: [
+                        { invoice_type: 'IPD' },
+                        { admission_id: { not: null } },
+                    ],
+                    admission: { discharge_date: reportDateRange },
+                },
+                {
+                    admission_id: null,
+                    invoice_type: { notIn: ['IPD', 'Pharmacy', 'PHARMACY'] },
+                    created_at: reportDateRange,
+                },
+            ];
         }
 
         const invoices = await db.invoices.findMany({
@@ -1063,6 +1090,9 @@ export async function getMISReport(filters: { from: string; to: string; billType
             // patient master's IPD admission type or patient-level corporate/insurance
             // links, or a TPA-admitted patient's unrelated OPD visit would show as TPA.
             const isIPD = !!inv.admission_id || (inv.invoice_type || '').toUpperCase() === 'IPD';
+            const recognizedDate = isIPD
+                ? (inv.admission?.discharge_date || inv.created_at)
+                : inv.created_at;
             let effectiveType = normType(inv.billing_patient_type);
             if (effectiveType === 'cash') {
                 if (inv.corporate_id) effectiveType = 'corporate';
@@ -1186,7 +1216,7 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 admission_category: admCat,
                 bill_no: inv.invoice_number,
                 uhid: inv.patient?.patient_id || '',
-                bill_date: inv.created_at,
+                bill_date: recognizedDate,
                 admission_date: inv.admission?.admission_date || null,
                 discharge_date: inv.admission?.discharge_date || null,
                 doctor_name: doctorName,
