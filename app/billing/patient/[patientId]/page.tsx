@@ -44,14 +44,14 @@ import {
   getPatientLedger,
   getPatientTimeline,
 } from "@/app/actions/master-billing-actions";
-import { recordPayment, getMyRole, updatePayment, reversePayment, getInvoiceHistory, finalizeAndLockInvoice, revertInvoiceToDraft } from "@/app/actions/finance-actions";
+import { recordPayment, getMyRole, updatePayment, reversePayment, getInvoiceHistory, finalizeAndLockInvoice, revertInvoiceToDraft, reconcilePatientOverpayments } from "@/app/actions/finance-actions";
 import { collectDeposit } from "@/app/actions/deposit-actions";
 import { getCashComplianceConfig } from "@/app/actions/cash-compliance-actions";
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan, resolveRegisteredPan } from "@/app/lib/cash-compliance";
 import { EditInvoiceModal } from "@/app/components/finance/EditInvoiceModal";
 import { RefundModal } from "@/app/components/finance/RefundModal";
 import { CancelInvoiceModal } from "@/app/components/finance/CancelInvoiceModal";
-import { Pencil, Lock, Unlock } from "lucide-react";
+import { Pencil, Lock, Unlock, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 
 const InlineBillBuilder = dynamic(
@@ -115,6 +115,7 @@ export default function PatientFinancialProfilePage() {
   const [reversingPayment, setReversingPayment] = useState<any | null>(null);
   const [refundOpen, setRefundOpen] = useState(false);
   const [showNewBill, setShowNewBill] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
   const [finalizingInvoice, setFinalizingInvoice] = useState<any | null>(null);
   const [finalizeSubmitting, setFinalizeSubmitting] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<any | null>(null);
@@ -214,6 +215,23 @@ export default function PatientFinancialProfilePage() {
     }
   }, [unlockTarget, load]);
 
+  const handleReconcile = useCallback(async () => {
+    setReconciling(true);
+    try {
+      const res = await reconcilePatientOverpayments(patientId);
+      if (res.success) {
+        toast.success(res.message || 'Reconciliation completed.');
+        await load();
+      } else {
+        toast.error(res.error || 'Failed to reconcile.');
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Error occurred during reconciliation.');
+    } finally {
+      setReconciling(false);
+    }
+  }, [patientId, load]);
+
   return (
     <AppShell
       pageTitle="Patient Financial Profile"
@@ -228,6 +246,13 @@ export default function PatientFinancialProfilePage() {
             className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-400 hover:to-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg shadow-sm"
           >
             <Plus className="h-3.5 w-3.5" /> New Bill
+          </button>
+          <button
+            onClick={handleReconcile}
+            disabled={reconciling || !profile}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-200 hover:bg-blue-50 text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-bold rounded-lg shadow-sm"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${reconciling ? 'animate-spin' : ''}`} /> Reconcile Overpayments
           </button>
           <button
             onClick={() => window.open(`/api/patient/${patientId}/stickers`, '_blank')}
@@ -285,6 +310,48 @@ export default function PatientFinancialProfilePage() {
 
             <div className="p-5">
               {tab === "invoices" && (
+                <>
+                {/* Overpayment reconciliation banner */}
+                {(() => {
+                  const activeInvs = profile.invoices.filter((i: any) => i.status !== 'Cancelled');
+                  const totalExcess = activeInvs.reduce((s: number, inv: any) => {
+                    const paid = (inv.payments || [])
+                      .filter((p: any) => p.status !== 'Reversed')
+                      .reduce((ps: number, p: any) => ps + Number(p.amount || 0), 0);
+                    const net = Number(inv.net_amount || 0);
+                    return s + Math.max(0, paid - net);
+                  }, 0);
+                  const hasOutstanding = activeInvs.some((i: any) => Number(i.balance_due) > 0);
+                  if (totalExcess < 1 || !hasOutstanding) return null;
+                  return (
+                    <div className="mb-3 flex items-center justify-between gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+                      <div className="flex items-center gap-2 text-xs text-amber-800">
+                        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                        <span>
+                          <strong>₹{fmtMoney(totalExcess)}</strong> overpaid on one or more invoices while other bills have outstanding balance.
+                          Reconcile to auto-adjust the excess.
+                        </span>
+                      </div>
+                      <button
+                        disabled={reconciling}
+                        onClick={async () => {
+                          setReconciling(true);
+                          const res = await reconcilePatientOverpayments(patientId);
+                          setReconciling(false);
+                          if (res.success) {
+                            toast.success(res.message || 'Reconciled');
+                            load();
+                          } else {
+                            toast.error(res.error || 'Reconciliation failed');
+                          }
+                        }}
+                        className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg"
+                      >
+                        {reconciling ? 'Reconciling...' : 'Reconcile'}
+                      </button>
+                    </div>
+                  );
+                })()}
                 <InvoicesTab
                   invoices={profile.invoices}
                   expandedInvoice={expandedInvoice}
@@ -299,6 +366,7 @@ export default function PatientFinancialProfilePage() {
                   setEditingPayment={setEditingPayment}
                   setReversingPayment={setReversingPayment}
                 />
+                </>
               )}
               {tab === "payments" && <PaymentsTab invoices={profile.invoices} setEditingPayment={setEditingPayment} setReversingPayment={setReversingPayment} />}
               {tab === "deposits" && <DepositsTab deposits={profile.deposits} patient={profile.patient} onSaved={load} />}

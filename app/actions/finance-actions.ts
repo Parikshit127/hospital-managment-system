@@ -1273,6 +1273,56 @@ export async function recordPayment(data: {
             },
         });
 
+        // ── Overpayment spillover ────────────────────────────────────────
+        // When totalPaid exceeds netAmount, automatically apply the excess
+        // to other outstanding invoices for the same patient (oldest first).
+        if (balance < 0 && invoice?.patient_id) {
+            let excess = Math.abs(balance);
+            const otherInvoices = await db.invoices.findMany({
+                where: {
+                    patient_id: invoice.patient_id,
+                    organizationId,
+                    id: { not: data.invoice_id },
+                    status: { not: 'Cancelled' },
+                    balance_due: { gt: 0 },
+                },
+                orderBy: { created_at: 'asc' },
+            });
+
+            for (const other of otherInvoices) {
+                if (excess <= 0) break;
+                const apply = Math.min(excess, Number(other.balance_due));
+
+                await db.payments.create({
+                    data: {
+                        receipt_number: await genRcpNum(organizationId, db),
+                        invoice_id: other.id,
+                        amount: apply,
+                        payment_method: 'Adjustment',
+                        payment_type: 'adjustment',
+                        status: 'Completed',
+                        notes: `Auto-adjusted: ₹${apply.toLocaleString('en-IN')} excess from ${invoice.invoice_number}`,
+                        received_by: session?.username || session?.name || null,
+                        organizationId,
+                    },
+                });
+
+                const otherPaid = Number(other.paid_amount || 0) + apply;
+                const otherNet = Number(other.net_amount || 0);
+                const otherBal = otherNet - otherPaid;
+                await db.invoices.update({
+                    where: { id: other.id },
+                    data: {
+                        paid_amount: otherPaid,
+                        balance_due: otherBal > 0 ? otherBal : 0,
+                        version: { increment: 1 },
+                    },
+                });
+
+                excess -= apply;
+            }
+        }
+
         // Referral commission accrues on collected amount (best-effort, never blocks billing)
         try {
             await recomputeInvoiceCommission(db, organizationId, data.invoice_id);
@@ -3712,6 +3762,120 @@ export async function getInvoiceHistory(invoiceId: number) {
         return { success: true, data: serialize(snapshots) };
     } catch (error: any) {
         console.error('getInvoiceHistory error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Reconcile Patient Overpayments
+// Redistributes excess payments from overpaid invoices to those with balance.
+// Used retroactively when receipts were already verified by accounts and
+// the overpayment wasn't spilled over at collection time.
+// ──────────────────────────────────────────────────────────────────────────
+export async function reconcilePatientOverpayments(patientId: string) {
+    try {
+        const { db, session, organizationId } = await requireTenantContext();
+
+        const invoices = await db.invoices.findMany({
+            where: { patient_id: patientId, organizationId, status: { not: 'Cancelled' } },
+            include: { payments: { where: { status: 'Completed' } } },
+            orderBy: { created_at: 'asc' },
+        });
+
+        // Find invoices with excess payment (paid > net)
+        type InvSummary = { id: number; invoice_number: string; net: number; paid: number; excess: number };
+        const overpaid: InvSummary[] = [];
+        const underpaid: { id: number; net: number; paid: number; shortfall: number }[] = [];
+
+        for (const inv of invoices) {
+            const net = Number(inv.net_amount || 0);
+            const paid = (inv.payments as any[]).reduce((s: number, p: any) => s + Number(p.amount), 0);
+            const diff = paid - net;
+            if (diff > 0.5) { // > 50 paise tolerance
+                overpaid.push({ id: inv.id, invoice_number: inv.invoice_number || '', net, paid, excess: diff });
+            } else if (diff < -0.5 && Number(inv.balance_due) > 0) {
+                underpaid.push({ id: inv.id, net, paid, shortfall: Math.abs(diff) });
+            }
+        }
+
+        if (overpaid.length === 0) {
+            return { success: true, message: 'No overpayments found', adjustments: 0 };
+        }
+
+        let totalAdjusted = 0;
+        const adjustments: { from: string; to_id: number; amount: number }[] = [];
+
+        for (const source of overpaid) {
+            let remaining = source.excess;
+
+            for (const target of underpaid) {
+                if (remaining <= 0.5) break;
+                if (target.shortfall <= 0.5) continue;
+
+                const apply = Math.min(remaining, target.shortfall);
+
+                // Create adjustment payment on the target invoice
+                await db.payments.create({
+                    data: {
+                        receipt_number: await genRcpNum(organizationId, db),
+                        invoice_id: target.id,
+                        amount: apply,
+                        payment_method: 'Adjustment',
+                        payment_type: 'adjustment',
+                        status: 'Completed',
+                        notes: `Reconciliation: ₹${apply.toLocaleString('en-IN')} excess from ${source.invoice_number}`,
+                        received_by: session?.username || session?.name || null,
+                        organizationId,
+                    },
+                });
+
+                // Update the target invoice balances
+                const newPaid = target.paid + apply;
+                const newBal = target.net - newPaid;
+                await db.invoices.update({
+                    where: { id: target.id },
+                    data: {
+                        paid_amount: newPaid,
+                        balance_due: newBal > 0 ? newBal : 0,
+                        version: { increment: 1 },
+                    },
+                });
+                target.paid = newPaid;
+                target.shortfall -= apply;
+
+                remaining -= apply;
+                totalAdjusted += apply;
+                adjustments.push({ from: source.invoice_number, to_id: target.id, amount: apply });
+            }
+        }
+
+        // Audit log
+        if (totalAdjusted > 0) {
+            await db.system_audit_logs.create({
+                data: {
+                    user_id: session?.id,
+                    username: session?.username || session?.name,
+                    role: session?.role,
+                    action: 'RECONCILE_OVERPAYMENTS',
+                    module: 'finance',
+                    entity_type: 'patient',
+                    entity_id: patientId,
+                    details: JSON.stringify({ total_adjusted: totalAdjusted, adjustments }),
+                    organizationId,
+                },
+            });
+        }
+
+        return {
+            success: true,
+            message: totalAdjusted > 0
+                ? `₹${totalAdjusted.toLocaleString('en-IN')} adjusted across ${adjustments.length} invoice(s)`
+                : 'No adjustments needed',
+            adjustments: adjustments.length,
+            total_adjusted: totalAdjusted,
+        };
+    } catch (error: any) {
+        console.error('reconcilePatientOverpayments error:', error);
         return { success: false, error: error.message };
     }
 }
