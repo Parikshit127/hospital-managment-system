@@ -541,7 +541,7 @@ export default function DoctorDashboard() {
         phone,
         address: walkinFormData.address?.trim() || 'Walk-in patient',
         registration_consent: 'true',
-        skipAppointment: 'false',
+        bookAppointment: 'true',
       };
       Object.entries(dataToSubmit).forEach(([k, v]) => formData.append(k, v));
       const res = await registerPatient(formData);
@@ -649,12 +649,12 @@ export default function DoctorDashboard() {
       }
     });
 
-  const filteredQueue = queue.filter(
-    (p) =>
-      p.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.digital_id &&
-        p.digital_id.toLowerCase().includes(searchTerm.toLowerCase())),
-  );
+  const filteredQueue = queue.filter((p) => {
+    const term = (searchTerm || "").toLowerCase();
+    const name = (p.full_name || p.name || "").toLowerCase();
+    const id = (p.digital_id || p.patient_id || "").toLowerCase();
+    return name.includes(term) || id.includes(term);
+  });
 
   const getStatusStyle = (status?: string) => {
     switch (status?.toLowerCase()) {

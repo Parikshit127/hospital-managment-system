@@ -30,6 +30,8 @@ export default function PatientHistoryPage() {
     const [printingRecord, setPrintingRecord] = useState<any>(null);
     const [branding, setBranding] = useState<BillBranding | null>(null);
 
+    const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
+
     useEffect(() => {
         loadHistory();
         fetchBillBranding().then(res => { if (res.success && res.data) setBranding(res.data); });
@@ -47,8 +49,16 @@ export default function PatientHistoryPage() {
     const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value;
         setSearchQuery(val);
-        const timeoutId = setTimeout(() => loadHistory(val, dateFrom, dateTo), 500);
-        return () => clearTimeout(timeoutId);
+        
+        if (searchTimeout) {
+            clearTimeout(searchTimeout);
+        }
+        
+        const timeoutId = setTimeout(() => {
+            loadHistory(val, dateFrom, dateTo);
+        }, 300);
+        
+        setSearchTimeout(timeoutId);
     };
 
     const applyFilter = () => {

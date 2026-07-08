@@ -806,7 +806,7 @@ export async function getDoctorsForDropdown() {
     const { db, organizationId } = await requireTenantContext();
     const doctors = await db.user.findMany({
       where: { organizationId, role: 'doctor', is_active: true },
-      select: { id: true, name: true, specialty: true, doctor_registration_no: true },
+      select: { id: true, name: true, specialty: true, department: true, doctor_registration_no: true },
       orderBy: { name: 'asc' },
     });
     return { success: true, data: doctors };

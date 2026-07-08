@@ -18,6 +18,7 @@ import { logAudit } from '@/app/lib/audit';
 import { checkDrugInteractions } from '@/app/lib/drug-safety';
 import { getPatientBalances } from '@/app/actions/balance-actions';
 import { postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
+import { scheduleMedicationAdministrations } from '@/app/actions/ipd-emr-actions';
 import { postInvoiceToGL } from '@/app/actions/gl-actions';
 import { syncInvoiceToGSTRegister } from '@/app/actions/gst-compliance-actions';
 import { generateSequentialNumber, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
@@ -1170,6 +1171,49 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
                     hsn_sac_code: detail.hsn_sac_code,
                     service_category: 'Pharmacy',
                 });
+
+                // Generate Medication Administration records
+                try {
+                    let activeMed = await (db as any).activeMedication.findFirst({
+                        where: {
+                            admission_id: targetAdmissionId,
+                            medication_name: { contains: detail.medicine_name, mode: 'insensitive' },
+                            status: 'active',
+                            organizationId,
+                        }
+                    });
+
+                    if (!activeMed) {
+                        activeMed = await (db as any).activeMedication.create({
+                            data: {
+                                admission_id: targetAdmissionId,
+                                patient_id: order!.patient_id,
+                                medication_name: detail.medicine_name,
+                                dosage: "1",
+                                route: "Oral",
+                                frequency: "BD",
+                                prescribed_by: "Pharmacy Dispense",
+                                status: "active",
+                                organizationId,
+                            }
+                        });
+                    }
+
+                    const existingAdmin = await db.medicationAdministration.findFirst({
+                        where: {
+                            admission_id: targetAdmissionId,
+                            medication_name: { contains: detail.medicine_name, mode: 'insensitive' },
+                            status: 'Scheduled',
+                            organizationId,
+                        }
+                    });
+
+                    if (!existingAdmin) {
+                        await scheduleMedicationAdministrations(db, activeMed, organizationId);
+                    }
+                } catch (medErr) {
+                    console.error("Failed to generate medication administrations from pharmacy dispense:", medErr);
+                }
             }
         } else {
             // OPD path: create formal invoice with GST → GL → GST register

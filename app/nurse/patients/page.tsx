@@ -209,7 +209,7 @@ export default function NursePatientsPage() {
 
     // ── Save Vitals ──
     const handleSaveVitals = async () => {
-        if (!selectedPatient || !nurseId) return;
+        if (!selectedPatient || !nurseId || selectedPatient.status !== 'Admitted') return;
         const anyFilled = Object.values(vitalsForm).some((v) => v.trim() !== '');
         if (!anyFilled) return;
         setSavingVitals(true);
@@ -237,7 +237,7 @@ export default function NursePatientsPage() {
 
     // ── Save Note ──
     const handleSaveNote = async () => {
-        if (!selectedPatient || !noteDetails.trim() || !nurseId) return;
+        if (!selectedPatient || !noteDetails.trim() || !nurseId || selectedPatient.status !== 'Admitted') return;
         setSavingNote(true);
         try {
             const res = await addNursingNote({
@@ -444,9 +444,9 @@ export default function NursePatientsPage() {
 
                         {/* Tabs */}
                         <div className="px-6 pt-3 pb-0 flex items-center gap-2 border-b border-gray-100 bg-gray-50 shrink-0">
-                            <Tab id="vitals" active={activeTab === 'vitals'} icon={<Activity className="h-3.5 w-3.5" />} label="Record Vitals" onClick={() => setActiveTab('vitals')} />
-                            <Tab id="notes" active={activeTab === 'notes'} icon={<FileText className="h-3.5 w-3.5" />} label="Medical Notes" onClick={() => setActiveTab('notes')} />
-                            <Tab id="pharmacy" active={activeTab === 'pharmacy'} icon={<ShoppingCart className="h-3.5 w-3.5" />} label="Pharmacy Indent" onClick={() => setActiveTab('pharmacy')} />
+                            <Tab id="vitals" active={activeTab === 'vitals'} icon={<Activity className="h-3.5 w-3.5" />} label={selectedPatient.status === 'Admitted' ? "Record Vitals" : "Vitals History"} onClick={() => setActiveTab('vitals')} />
+                            <Tab id="notes" active={activeTab === 'notes'} icon={<FileText className="h-3.5 w-3.5" />} label={selectedPatient.status === 'Admitted' ? "Medical Notes" : "Notes History"} onClick={() => setActiveTab('notes')} />
+                            <Tab id="pharmacy" active={activeTab === 'pharmacy'} icon={<ShoppingCart className="h-3.5 w-3.5" />} label={selectedPatient.status === 'Admitted' ? "Pharmacy Indent" : "Indent History"} onClick={() => setActiveTab('pharmacy')} />
                             <div className="ml-auto pb-2">
                                 <span className="text-[10px] text-gray-400 font-mono">{selectedPatient.admissionId}</span>
                             </div>
@@ -458,47 +458,49 @@ export default function NursePatientsPage() {
                             {/* ═══════ VITALS TAB ═══════ */}
                             {activeTab === 'vitals' && (
                                 <div className="space-y-5">
-                                    <div className="bg-gradient-to-br from-teal-50 to-emerald-50 border border-teal-100 rounded-2xl p-5">
-                                        <h4 className="text-xs font-black text-teal-700 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                            <Activity className="h-3.5 w-3.5" /> Record Vitals
-                                        </h4>
-                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                            <div>
-                                                <label className={labelCls}><Heart className="inline h-3 w-3 mr-1 text-rose-400" />Blood Pressure</label>
-                                                <input className={inputCls} placeholder="120/80 mmHg" value={vitalsForm.bloodPressure} onChange={(e) => setVitalsForm((p) => ({ ...p, bloodPressure: e.target.value }))} />
+                                    {selectedPatient.status === 'Admitted' && (
+                                        <div className="bg-gradient-to-br from-teal-50 to-emerald-50 border border-teal-100 rounded-2xl p-5">
+                                            <h4 className="text-xs font-black text-teal-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                                <Activity className="h-3.5 w-3.5" /> Record Vitals
+                                            </h4>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                                <div>
+                                                    <label className={labelCls}><Heart className="inline h-3 w-3 mr-1 text-rose-400" />Blood Pressure</label>
+                                                    <input className={inputCls} placeholder="120/80 mmHg" value={vitalsForm.bloodPressure} onChange={(e) => setVitalsForm((p) => ({ ...p, bloodPressure: e.target.value }))} />
+                                                </div>
+                                                <div>
+                                                    <label className={labelCls}><Activity className="inline h-3 w-3 mr-1 text-rose-400" />Heart Rate</label>
+                                                    <input className={inputCls} type="number" placeholder="bpm" value={vitalsForm.heartRate} onChange={(e) => setVitalsForm((p) => ({ ...p, heartRate: e.target.value }))} />
+                                                </div>
+                                                <div>
+                                                    <label className={labelCls}><Thermometer className="inline h-3 w-3 mr-1 text-orange-400" />Temperature (°F)</label>
+                                                    <input className={inputCls} type="number" step="0.1" placeholder="98.6" value={vitalsForm.temperature} onChange={(e) => setVitalsForm((p) => ({ ...p, temperature: e.target.value }))} />
+                                                </div>
+                                                <div>
+                                                    <label className={labelCls}><Droplets className="inline h-3 w-3 mr-1 text-blue-400" />SpO₂ (%)</label>
+                                                    <input className={inputCls} type="number" placeholder="98" value={vitalsForm.oxygenSat} onChange={(e) => setVitalsForm((p) => ({ ...p, oxygenSat: e.target.value }))} />
+                                                </div>
+                                                <div>
+                                                    <label className={labelCls}><Wind className="inline h-3 w-3 mr-1 text-teal-400" />Resp. Rate / min</label>
+                                                    <input className={inputCls} type="number" placeholder="16" value={vitalsForm.respiratoryRate} onChange={(e) => setVitalsForm((p) => ({ ...p, respiratoryRate: e.target.value }))} />
+                                                </div>
+                                                <div>
+                                                    <label className={labelCls}><Weight className="inline h-3 w-3 mr-1 text-violet-400" />Weight (kg)</label>
+                                                    <input className={inputCls} type="number" step="0.1" placeholder="70" value={vitalsForm.weight} onChange={(e) => setVitalsForm((p) => ({ ...p, weight: e.target.value }))} />
+                                                </div>
                                             </div>
-                                            <div>
-                                                <label className={labelCls}><Activity className="inline h-3 w-3 mr-1 text-rose-400" />Heart Rate</label>
-                                                <input className={inputCls} type="number" placeholder="bpm" value={vitalsForm.heartRate} onChange={(e) => setVitalsForm((p) => ({ ...p, heartRate: e.target.value }))} />
-                                            </div>
-                                            <div>
-                                                <label className={labelCls}><Thermometer className="inline h-3 w-3 mr-1 text-orange-400" />Temperature (°F)</label>
-                                                <input className={inputCls} type="number" step="0.1" placeholder="98.6" value={vitalsForm.temperature} onChange={(e) => setVitalsForm((p) => ({ ...p, temperature: e.target.value }))} />
-                                            </div>
-                                            <div>
-                                                <label className={labelCls}><Droplets className="inline h-3 w-3 mr-1 text-blue-400" />SpO₂ (%)</label>
-                                                <input className={inputCls} type="number" placeholder="98" value={vitalsForm.oxygenSat} onChange={(e) => setVitalsForm((p) => ({ ...p, oxygenSat: e.target.value }))} />
-                                            </div>
-                                            <div>
-                                                <label className={labelCls}><Wind className="inline h-3 w-3 mr-1 text-teal-400" />Resp. Rate / min</label>
-                                                <input className={inputCls} type="number" placeholder="16" value={vitalsForm.respiratoryRate} onChange={(e) => setVitalsForm((p) => ({ ...p, respiratoryRate: e.target.value }))} />
-                                            </div>
-                                            <div>
-                                                <label className={labelCls}><Weight className="inline h-3 w-3 mr-1 text-violet-400" />Weight (kg)</label>
-                                                <input className={inputCls} type="number" step="0.1" placeholder="70" value={vitalsForm.weight} onChange={(e) => setVitalsForm((p) => ({ ...p, weight: e.target.value }))} />
+                                            <div className="flex justify-end mt-4">
+                                                <button
+                                                    onClick={handleSaveVitals}
+                                                    disabled={savingVitals || !Object.values(vitalsForm).some((v) => v.trim())}
+                                                    className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-teal-500/30 hover:from-teal-400 hover:to-emerald-400 disabled:opacity-50 transition-all"
+                                                >
+                                                    {savingVitals ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                                    Save Vitals
+                                                </button>
                                             </div>
                                         </div>
-                                        <div className="flex justify-end mt-4">
-                                            <button
-                                                onClick={handleSaveVitals}
-                                                disabled={savingVitals || !Object.values(vitalsForm).some((v) => v.trim())}
-                                                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-teal-500/30 hover:from-teal-400 hover:to-emerald-400 disabled:opacity-50 transition-all"
-                                            >
-                                                {savingVitals ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                                Save Vitals
-                                            </button>
-                                        </div>
-                                    </div>
+                                    )}
 
                                     {/* Vitals History */}
                                     <div>
@@ -538,45 +540,47 @@ export default function NursePatientsPage() {
                             {/* ═══════ NOTES TAB ═══════ */}
                             {activeTab === 'notes' && (
                                 <div className="space-y-5">
-                                    <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5 space-y-3">
-                                        <h4 className="text-xs font-black text-gray-600 uppercase tracking-wider flex items-center gap-2">
-                                            <Plus className="h-3.5 w-3.5 text-violet-400" /> Add Medical Note
-                                        </h4>
-                                        <div className="grid grid-cols-3 gap-3">
-                                            <div>
-                                                <label className={labelCls}>Note Type</label>
-                                                <select value={noteType} onChange={(e) => setNoteType(e.target.value)} className={inputCls}>
-                                                    <option>General</option>
-                                                    <option>Assessment</option>
-                                                    <option>Intervention</option>
-                                                    <option>Observation</option>
-                                                    <option>Medication</option>
-                                                    <option>Incident</option>
-                                                    <option>Discharge Note</option>
-                                                </select>
+                                    {selectedPatient.status === 'Admitted' && (
+                                        <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5 space-y-3">
+                                            <h4 className="text-xs font-black text-gray-600 uppercase tracking-wider flex items-center gap-2">
+                                                <Plus className="h-3.5 w-3.5 text-violet-400" /> Add Medical Note
+                                            </h4>
+                                            <div className="grid grid-cols-3 gap-3">
+                                                <div>
+                                                    <label className={labelCls}>Note Type</label>
+                                                    <select value={noteType} onChange={(e) => setNoteType(e.target.value)} className={inputCls}>
+                                                        <option>General</option>
+                                                        <option>Assessment</option>
+                                                        <option>Intervention</option>
+                                                        <option>Observation</option>
+                                                        <option>Medication</option>
+                                                        <option>Incident</option>
+                                                        <option>Discharge Note</option>
+                                                    </select>
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className={labelCls}>Details</label>
+                                                    <textarea
+                                                        value={noteDetails}
+                                                        onChange={(e) => setNoteDetails(e.target.value)}
+                                                        className={inputCls}
+                                                        placeholder="Enter medical note details..."
+                                                        rows={3}
+                                                    />
+                                                </div>
                                             </div>
-                                            <div className="col-span-2">
-                                                <label className={labelCls}>Details</label>
-                                                <textarea
-                                                    value={noteDetails}
-                                                    onChange={(e) => setNoteDetails(e.target.value)}
-                                                    className={inputCls}
-                                                    placeholder="Enter medical note details..."
-                                                    rows={3}
-                                                />
+                                            <div className="flex justify-end">
+                                                <button
+                                                    onClick={handleSaveNote}
+                                                    disabled={!noteDetails.trim() || savingNote}
+                                                    className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-violet-500/25 hover:from-violet-400 hover:to-purple-500 disabled:opacity-50 transition-all"
+                                                >
+                                                    {savingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                                    Save Note
+                                                </button>
                                             </div>
                                         </div>
-                                        <div className="flex justify-end">
-                                            <button
-                                                onClick={handleSaveNote}
-                                                disabled={!noteDetails.trim() || savingNote}
-                                                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-violet-500/25 hover:from-violet-400 hover:to-purple-500 disabled:opacity-50 transition-all"
-                                            >
-                                                {savingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                                Save Note
-                                            </button>
-                                        </div>
-                                    </div>
+                                    )}
 
                                     <div>
                                         <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -610,174 +614,183 @@ export default function NursePatientsPage() {
                             {/* ═══════ PHARMACY INDENT TAB ═══════ */}
                             {activeTab === 'pharmacy' && (
                                 <div className="space-y-5">
-                                    <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 rounded-2xl p-5">
-                                        <h4 className="text-xs font-black text-orange-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-                                            <Package className="h-3.5 w-3.5" /> Search & Add Medicines
-                                        </h4>
+                                    {selectedPatient.status === 'Admitted' ? (
+                                        <>
+                                            <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 rounded-2xl p-5">
+                                                <h4 className="text-xs font-black text-orange-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                                    <Package className="h-3.5 w-3.5" /> Search & Add Medicines
+                                                </h4>
 
-                                        {/* Medicine Search */}
-                                        <div ref={medSearchRef} className="relative">
-                                            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-400/20 transition-all">
-                                                <Search className="h-4 w-4 text-gray-400 shrink-0" />
-                                                <input
-                                                    type="text"
-                                                    value={medSearch}
-                                                    onChange={(e) => handleMedSearch(e.target.value)}
-                                                    onFocus={() => medSuggestions.length > 0 && setShowSuggestions(true)}
-                                                    placeholder="Search medicine by brand or generic name..."
-                                                    className="flex-1 text-sm font-medium text-gray-800 outline-none bg-transparent placeholder:text-gray-400"
-                                                />
-                                                {searchingMed && <Loader2 className="h-4 w-4 animate-spin text-orange-400 shrink-0" />}
+                                                {/* Medicine Search */}
+                                                <div ref={medSearchRef} className="relative">
+                                                    <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-400/20 transition-all">
+                                                        <Search className="h-4 w-4 text-gray-400 shrink-0" />
+                                                        <input
+                                                            type="text"
+                                                            value={medSearch}
+                                                            onChange={(e) => handleMedSearch(e.target.value)}
+                                                            onFocus={() => medSuggestions.length > 0 && setShowSuggestions(true)}
+                                                            placeholder="Search medicine by brand or generic name..."
+                                                            className="flex-1 text-sm font-medium text-gray-800 outline-none bg-transparent placeholder:text-gray-400"
+                                                        />
+                                                        {searchingMed && <Loader2 className="h-4 w-4 animate-spin text-orange-400 shrink-0" />}
+                                                    </div>
+
+                                                    {showSuggestions && medSuggestions.length > 0 && (
+                                                        <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+                                                            {medSuggestions.map((med: any) => (
+                                                                <button
+                                                                    key={med.id}
+                                                                    onClick={() => addMedicineToIndent(med)}
+                                                                    className="w-full text-left px-4 py-3 hover:bg-orange-50 border-b border-gray-100 last:border-0 transition-colors"
+                                                                >
+                                                                    <p className="text-sm font-bold text-gray-800">{med.brand_name}</p>
+                                                                    <p className="text-[10px] text-gray-500 font-medium">{med.generic_name} &middot; {med.strength} &middot; {med.form}</p>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
 
-                                            {showSuggestions && medSuggestions.length > 0 && (
-                                                <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
-                                                    {medSuggestions.map((med: any) => (
-                                                        <button
-                                                            key={med.id}
-                                                            onClick={() => addMedicineToIndent(med)}
-                                                            className="w-full text-left px-4 py-3 hover:bg-orange-50 border-b border-gray-100 last:border-0 transition-colors"
+                                            {/* Indent Lines */}
+                                            {indentLines.length > 0 && (
+                                                <div className="space-y-3">
+                                                    <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                                                        <FlaskConical className="h-3.5 w-3.5 text-orange-400" /> Medicine Request List
+                                                    </h4>
+                                                    {indentLines.map((line, idx) => (
+                                                        <div
+                                                            key={idx}
+                                                            className={`bg-white border rounded-xl p-4 transition-all ${
+                                                                line.stockChecked && line.stockAvailable === 0
+                                                                    ? 'border-red-200 bg-red-50/30'
+                                                                    : line.stockChecked && line.stockAvailable < line.quantityRequested
+                                                                    ? 'border-amber-200 bg-amber-50/30'
+                                                                    : 'border-gray-200'
+                                                            }`}
                                                         >
-                                                            <p className="text-sm font-bold text-gray-800">{med.brand_name}</p>
-                                                            <p className="text-[10px] text-gray-500 font-medium">{med.generic_name} &middot; {med.strength} &middot; {med.form}</p>
-                                                        </button>
+                                                            <div className="flex items-start justify-between gap-3">
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-sm font-black text-gray-800 truncate">{line.medicineName}</p>
+                                                                    <p className="text-[10px] text-gray-500 font-medium">{line.genericName} &middot; {line.strength} &middot; {line.form}</p>
+                                                                </div>
+                                                                <div className="flex items-center gap-2 shrink-0">
+                                                                    {line.checkingStock ? (
+                                                                        <span className="text-[10px] text-gray-400 flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" />Checking...</span>
+                                                                    ) : line.stockChecked ? (
+                                                                        <StockBadge stock={line.stockAvailable} requested={line.quantityRequested} />
+                                                                    ) : null}
+                                                                    <button onClick={() => removeLine(idx)} className="text-gray-300 hover:text-red-500 p-1 rounded-lg hover:bg-red-50 transition-all">
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                            <div className="mt-3 grid grid-cols-2 gap-3">
+                                                                <div>
+                                                                    <label className={labelCls}>Quantity Required</label>
+                                                                    <input
+                                                                        type="number"
+                                                                        min={1}
+                                                                        value={line.quantityRequested}
+                                                                        onChange={(e) => {
+                                                                            updateLine(idx, 'quantityRequested', Math.max(1, Number(e.target.value)));
+                                                                            updateLine(idx, 'stockChecked', false);
+                                                                            recheckStock(idx);
+                                                                        }}
+                                                                        className={inputCls}
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <label className={labelCls}>Notes (optional)</label>
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder="e.g. After meals"
+                                                                        value={line.notes}
+                                                                        onChange={(e) => updateLine(idx, 'notes', e.target.value)}
+                                                                        className={inputCls}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            {/* Partial stock warning */}
+                                                            {line.stockChecked && line.stockAvailable > 0 && line.stockAvailable < line.quantityRequested && (
+                                                                <div className="mt-2 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 font-medium">
+                                                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                                                    Only <strong>{line.stockAvailable}</strong> units available. Intent will be submitted for {line.stockAvailable} units; pharmacy will be notified of the shortfall of <strong>{line.quantityRequested - line.stockAvailable}</strong> units.
+                                                                </div>
+                                                            )}
+                                                            {line.stockChecked && line.stockAvailable === 0 && (
+                                                                <div className="mt-2 flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700 font-medium">
+                                                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                                                    <strong>Out of stock.</strong> Pharmacy will be notified to procure this medicine urgently.
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     ))}
+
+                                                    {/* Indent success / error */}
+                                                    {indentSuccess && (
+                                                        <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-700 font-medium">
+                                                            <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+                                                            {indentSuccess}
+                                                        </div>
+                                                    )}
+                                                    {indentError && (
+                                                        <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 font-medium">
+                                                            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                                                            {indentError}
+                                                        </div>
+                                                    )}
+
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        {/* Nurse selector */}
+                                                        <div className="flex items-center gap-2">
+                                                            <label className="text-xs font-bold text-gray-500 whitespace-nowrap">Requested by:</label>
+                                                            <select
+                                                                value={nurseId}
+                                                                onChange={e => {
+                                                                    const nurse = nursesList.find(n => n.id === e.target.value);
+                                                                    setNurseId(e.target.value);
+                                                                    setSelectedNurseName(nurse?.name || '');
+                                                                }}
+                                                                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-400 min-w-[160px]"
+                                                            >
+                                                                <option value="">— Select Nurse —</option>
+                                                                {nursesList.map(n => (
+                                                                    <option key={n.id} value={n.id}>{n.name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <button
+                                                            onClick={handleSubmitIndent}
+                                                            disabled={submittingIndent || indentLines.some((l) => l.checkingStock) || !nurseId}
+                                                            className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-orange-500/25 hover:from-orange-400 hover:to-amber-400 disabled:opacity-50 transition-all"
+                                                        >
+                                                            {submittingIndent ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                                                            Send to Pharmacy
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             )}
-                                        </div>
-                                    </div>
 
-                                    {/* Indent Lines */}
-                                    {indentLines.length > 0 && (
-                                        <div className="space-y-3">
-                                            <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider flex items-center gap-2">
-                                                <FlaskConical className="h-3.5 w-3.5 text-orange-400" /> Medicine Request List
-                                            </h4>
-                                            {indentLines.map((line, idx) => (
-                                                <div
-                                                    key={idx}
-                                                    className={`bg-white border rounded-xl p-4 transition-all ${
-                                                        line.stockChecked && line.stockAvailable === 0
-                                                            ? 'border-red-200 bg-red-50/30'
-                                                            : line.stockChecked && line.stockAvailable < line.quantityRequested
-                                                            ? 'border-amber-200 bg-amber-50/30'
-                                                            : 'border-gray-200'
-                                                    }`}
-                                                >
-                                                    <div className="flex items-start justify-between gap-3">
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-sm font-black text-gray-800 truncate">{line.medicineName}</p>
-                                                            <p className="text-[10px] text-gray-500 font-medium">{line.genericName} &middot; {line.strength} &middot; {line.form}</p>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 shrink-0">
-                                                            {line.checkingStock ? (
-                                                                <span className="text-[10px] text-gray-400 flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" />Checking...</span>
-                                                            ) : line.stockChecked ? (
-                                                                <StockBadge stock={line.stockAvailable} requested={line.quantityRequested} />
-                                                            ) : null}
-                                                            <button onClick={() => removeLine(idx)} className="text-gray-300 hover:text-red-500 p-1 rounded-lg hover:bg-red-50 transition-all">
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                    <div className="mt-3 grid grid-cols-2 gap-3">
-                                                        <div>
-                                                            <label className={labelCls}>Quantity Required</label>
-                                                            <input
-                                                                type="number"
-                                                                min={1}
-                                                                value={line.quantityRequested}
-                                                                onChange={(e) => {
-                                                                    updateLine(idx, 'quantityRequested', Math.max(1, Number(e.target.value)));
-                                                                    updateLine(idx, 'stockChecked', false);
-                                                                    recheckStock(idx);
-                                                                }}
-                                                                className={inputCls}
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className={labelCls}>Notes (optional)</label>
-                                                            <input
-                                                                type="text"
-                                                                placeholder="e.g. After meals"
-                                                                value={line.notes}
-                                                                onChange={(e) => updateLine(idx, 'notes', e.target.value)}
-                                                                className={inputCls}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    {/* Partial stock warning */}
-                                                    {line.stockChecked && line.stockAvailable > 0 && line.stockAvailable < line.quantityRequested && (
-                                                        <div className="mt-2 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 font-medium">
-                                                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                                                            Only <strong>{line.stockAvailable}</strong> units available. Intent will be submitted for {line.stockAvailable} units; pharmacy will be notified of the shortfall of <strong>{line.quantityRequested - line.stockAvailable}</strong> units.
-                                                        </div>
-                                                    )}
-                                                    {line.stockChecked && line.stockAvailable === 0 && (
-                                                        <div className="mt-2 flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700 font-medium">
-                                                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                                                            <strong>Out of stock.</strong> Pharmacy will be notified to procure this medicine urgently.
-                                                        </div>
-                                                    )}
+                                            {indentLines.length === 0 && !indentSuccess && (
+                                                <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-10 text-center text-gray-400">
+                                                    <Package className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                                                    <p className="text-sm font-medium">Search and add medicines above to create a pharmacy request.</p>
                                                 </div>
-                                            ))}
+                                            )}
 
-                                            {/* Indent success / error */}
-                                            {indentSuccess && (
+                                            {indentSuccess && indentLines.length === 0 && (
                                                 <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-700 font-medium">
                                                     <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
                                                     {indentSuccess}
                                                 </div>
                                             )}
-                                            {indentError && (
-                                                <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 font-medium">
-                                                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                                                    {indentError}
-                                                </div>
-                                            )}
-
-                                            <div className="flex items-center justify-between gap-3">
-                                                {/* Nurse selector */}
-                                                <div className="flex items-center gap-2">
-                                                    <label className="text-xs font-bold text-gray-500 whitespace-nowrap">Requested by:</label>
-                                                    <select
-                                                        value={nurseId}
-                                                        onChange={e => {
-                                                            const nurse = nursesList.find(n => n.id === e.target.value);
-                                                            setNurseId(e.target.value);
-                                                            setSelectedNurseName(nurse?.name || '');
-                                                        }}
-                                                        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-400 min-w-[160px]"
-                                                    >
-                                                        <option value="">— Select Nurse —</option>
-                                                        {nursesList.map(n => (
-                                                            <option key={n.id} value={n.id}>{n.name}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                                <button
-                                                    onClick={handleSubmitIndent}
-                                                    disabled={submittingIndent || indentLines.some((l) => l.checkingStock) || !nurseId}
-                                                    className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-orange-500/25 hover:from-orange-400 hover:to-amber-400 disabled:opacity-50 transition-all"
-                                                >
-                                                    {submittingIndent ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                                                    Send to Pharmacy
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {indentLines.length === 0 && !indentSuccess && (
-                                        <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-10 text-center text-gray-400">
-                                            <Package className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                                            <p className="text-sm font-medium">Search and add medicines above to create a pharmacy request.</p>
-                                        </div>
-                                    )}
-
-                                    {indentSuccess && indentLines.length === 0 && (
-                                        <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-700 font-medium">
-                                            <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
-                                            {indentSuccess}
+                                        </>
+                                    ) : (
+                                        <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6 text-center text-gray-500 font-medium text-xs flex flex-col items-center justify-center gap-2">
+                                            <AlertTriangle className="h-6 w-6 text-amber-400" />
+                                            <span>New pharmacy indents cannot be created for discharged patients.</span>
                                         </div>
                                     )}
 
@@ -973,9 +986,15 @@ export default function NursePatientsPage() {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <button className="inline-flex items-center gap-1.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm shadow-teal-500/20 transition-all">
-                                                <Activity className="h-3.5 w-3.5" /> Nursing Action
-                                            </button>
+                                            {p.status === 'Admitted' ? (
+                                                <button className="inline-flex items-center gap-1.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm shadow-teal-500/20 transition-all">
+                                                    <Activity className="h-3.5 w-3.5" /> Nursing Action
+                                                </button>
+                                            ) : (
+                                                <button className="inline-flex items-center gap-1.5 border border-gray-300 text-gray-500 hover:bg-gray-50 px-4 py-2 rounded-xl text-xs font-bold transition-all">
+                                                    <Clock className="h-3.5 w-3.5" /> View History
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))

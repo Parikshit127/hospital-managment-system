@@ -578,8 +578,17 @@ export default function PharmacyPage() {
                                             value={ipdSearch}
                                             onChange={e => setIpdSearch(e.target.value)}
                                             placeholder="Search patient, ID, phone..."
-                                            className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
+                                            className="w-full pl-9 pr-8 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300"
                                         />
+                                        {ipdSearch && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setIpdSearch('')}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                                            >
+                                                <X className="h-3.5 w-3.5" />
+                                            </button>
+                                        )}
                                     </div>
                                     <p className="text-[10px] font-bold text-blue-600 mt-2 uppercase tracking-wider">Admitted Patients Only</p>
                                 </div>
@@ -1124,7 +1133,7 @@ export default function PharmacyPage() {
                                                     className="w-full pl-9 pr-8 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400"
                                                     placeholder="Search by name, ID, phone..."
                                                 />
-                                                {selectedPatient && (
+                                                {(selectedPatient || patientSearch) && (
                                                     <button onClick={clearPatient} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                                                         <X className="h-3.5 w-3.5" />
                                                     </button>

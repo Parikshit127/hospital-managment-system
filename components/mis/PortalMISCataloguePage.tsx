@@ -20,6 +20,7 @@ import { LayoutGrid, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { listCatalogue } from '@/app/actions/mis-report-actions';
 import { CatalogueShell, type CatalogueEntry } from '@/components/mis/CatalogueShell';
+import { AppShell } from '@/app/components/layout/AppShell';
 
 // ─── Type narrowing (mirrors admin/mis-reports/page.tsx) ──────────────────────
 
@@ -73,37 +74,42 @@ export async function PortalMISCataloguePage({
     }
 
     return (
-        <div className="p-6 max-w-7xl mx-auto space-y-6">
-            {/* ── Breadcrumb ────────────────────────────────────────────── */}
-            <Link
-                href={backHref}
-                className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-indigo-600 transition-colors"
-            >
-                <ArrowLeft className="h-4 w-4" />
-                {backLabel}
-            </Link>
+        <AppShell
+            pageTitle="MIS Report Catalogue"
+            pageIcon={<LayoutGrid className="h-5 w-5" />}
+        >
+            <div className="p-6 max-w-7xl mx-auto space-y-6">
+                {/* ── Breadcrumb ────────────────────────────────────────────── */}
+                <Link
+                    href={backHref}
+                    className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-orange-600 transition-colors font-bold"
+                >
+                    <ArrowLeft className="h-4 w-4" />
+                    {backLabel}
+                </Link>
 
-            {/* ── Page header ───────────────────────────────────────────── */}
-            <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-indigo-100 rounded-xl">
-                    <LayoutGrid className="h-5 w-5 text-indigo-600" />
+                {/* ── Page header ───────────────────────────────────────────── */}
+                <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-orange-100 rounded-xl">
+                        <LayoutGrid className="h-5 w-5 text-orange-600" />
+                    </div>
+                    <div>
+                        <h1 className="text-lg font-black text-stone-900">
+                            MIS Report Catalogue
+                        </h1>
+                        <p className="text-sm text-gray-500 font-medium">
+                            {portalName} Portal — Browse and run management reports
+                        </p>
+                    </div>
                 </div>
-                <div>
-                    <h1 className="text-lg font-black text-stone-900">
-                        MIS Report Catalogue
-                    </h1>
-                    <p className="text-sm text-gray-500 font-medium">
-                        {portalName} Portal — Browse and run management reports
-                    </p>
-                </div>
+
+                {/* ── Catalogue grid ────────────────────────────────────────── */}
+                <CatalogueShell
+                    catalogue={safeCatalogue}
+                    totalCount={totalCount}
+                    basePath={basePath}
+                />
             </div>
-
-            {/* ── Catalogue grid ────────────────────────────────────────── */}
-            <CatalogueShell
-                catalogue={safeCatalogue}
-                totalCount={totalCount}
-                basePath={basePath}
-            />
-        </div>
+        </AppShell>
     );
 }

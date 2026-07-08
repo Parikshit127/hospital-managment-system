@@ -755,7 +755,7 @@ export async function updateDoctorAvailability(data: {
     const { db } = await requireTenantContext();
 
     if (!data.isAvailable) {
-      // Block time: mark existing slots as blocked
+      // Block time: mark existing slots as blocked within the specified time range
       const dayStart = new Date(data.date);
       dayStart.setHours(0, 0, 0, 0);
       const dayEnd = new Date(data.date);
@@ -765,6 +765,8 @@ export async function updateDoctorAvailability(data: {
         where: {
           doctor_id: data.doctorId,
           date: { gte: dayStart, lte: dayEnd },
+          start_time: { gte: data.startTime },
+          end_time: { lte: data.endTime },
           is_booked: false,
         },
         data: { is_available: false, slot_type: "blocked" },

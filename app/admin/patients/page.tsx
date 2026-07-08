@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { DateField } from '@/app/components/ui/DateField';
 import Link from "next/link";
 import {
@@ -38,10 +39,11 @@ type PatientStateFilter =
   | "registered";
 
 export default function AdminPatientsPage() {
+  const searchParams = useSearchParams();
   const [patients, setPatients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState(() => searchParams?.get("q") || "");
+  const [search, setSearch] = useState(() => searchParams?.get("q") || "");
   const [department, setDepartment] = useState("");
   const [bloodGroup, setBloodGroup] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
@@ -58,6 +60,15 @@ export default function AdminPatientsPage() {
     appointmentsToday: number;
     newThisMonth: number;
   } | null>(null);
+
+  // Sync search state if search query parameter changes
+  useEffect(() => {
+    const q = searchParams?.get("q");
+    if (q) {
+      setSearchInput(q);
+      setSearch(q);
+    }
+  }, [searchParams]);
 
   // Load departments and stats once on mount
   useEffect(() => {

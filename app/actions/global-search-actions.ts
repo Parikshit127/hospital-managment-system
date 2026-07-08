@@ -10,6 +10,7 @@ export interface GlobalPatientResult {
   age: string | null;
   gender: string | null;
   last_visit: string | null; // ISO string of last appointment date, or null
+  active_admission_id?: string | null;
 }
 
 // Roles allowed to use global patient search.
@@ -63,6 +64,16 @@ export async function globalSearchPatients(query: string): Promise<{
           orderBy: { appointment_date: 'desc' },
           take: 1,
         },
+        admissions: {
+          where: {
+            status: 'Admitted',
+            is_archived: false,
+          },
+          select: {
+            admission_id: true,
+          },
+          take: 1,
+        },
       },
       orderBy: { created_at: 'desc' },
       take: 10,
@@ -76,6 +87,7 @@ export async function globalSearchPatients(query: string): Promise<{
       age: string | null;
       gender: string | null;
       appointments: { appointment_date: Date }[];
+      admissions: { admission_id: string }[];
     }) => ({
       patient_id: p.patient_id,
       full_name: p.full_name,
@@ -86,6 +98,7 @@ export async function globalSearchPatients(query: string): Promise<{
       last_visit: p.appointments[0]?.appointment_date
         ? new Date(p.appointments[0].appointment_date).toISOString()
         : null,
+      active_admission_id: p.admissions[0]?.admission_id || null,
     }));
 
     return { success: true, data: results };
@@ -99,6 +112,7 @@ export async function globalSearchPatients(query: string): Promise<{
 export async function getPatientRouteForRole(
   role: string,
   patientId: string,
+  activeAdmissionId?: string | null,
 ): Promise<string> {
   switch (role) {
     case 'receptionist':
@@ -106,15 +120,16 @@ export async function getPatientRouteForRole(
     case 'doctor':
       return `/doctor/patient/${patientId}`;
     case 'nurse':
-      return `/ipd/admissions-hub?q=${encodeURIComponent(patientId)}`;
     case 'ipd_manager':
-      return `/ipd/admissions-hub?q=${encodeURIComponent(patientId)}`;
+      return activeAdmissionId
+        ? `/ipd/admission/${activeAdmissionId}`
+        : `/ipd/admissions-hub?q=${encodeURIComponent(patientId)}`;
     case 'finance':
       return `/finance/invoices?patient=${encodeURIComponent(patientId)}`;
     case 'opd_manager':
       return `/opd-manager/appointments?patient=${encodeURIComponent(patientId)}`;
     case 'admin':
     default:
-      return `/admin/patients?q=${encodeURIComponent(patientId)}`;
+      return `/admin/patients/${patientId}`;
   }
 }

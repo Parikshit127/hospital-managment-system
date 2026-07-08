@@ -25,6 +25,7 @@ import {
   UserPlus,
   Thermometer,
   XCircle,
+  X,
   LogOut,
   ArrowLeftRight,
   Siren,
@@ -461,19 +462,34 @@ export default function IPDDashboard() {
             Patient/Doctor Mobile
           </h3>
           <div className="flex flex-col sm:flex-row gap-2">
-            <input
-              type="text"
-              value={doctorLookupPhone}
-              onChange={(e) => setDoctorLookupPhone(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleDoctorLookup();
-                }
-              }}
-              placeholder="Enter patient or doctor mobile / doctor name"
-              className="flex-1 px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-500/50 focus:outline-none"
-            />
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={doctorLookupPhone}
+                onChange={(e) => setDoctorLookupPhone(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleDoctorLookup();
+                  }
+                }}
+                placeholder="Enter patient or doctor mobile / doctor name"
+                className="w-full pl-4 pr-10 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 placeholder:text-gray-400 focus:border-violet-500/50 focus:outline-none"
+              />
+              {doctorLookupPhone && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDoctorLookupPhone("");
+                    setDoctorLookupResults({ admissions: [], patients: [], doctors: [] });
+                    setDoctorLookupError("");
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
             <button
               onClick={handleDoctorLookup}
               disabled={doctorLookupLoading}

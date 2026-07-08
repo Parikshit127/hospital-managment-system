@@ -13,7 +13,8 @@ import {
     Calendar, Clock, Loader2, Plus, AlertTriangle
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { get24HourCaseSheet, getClinicalOrders, getPhysicianOrders, getActiveMedications, getReferralOrders } from '@/app/actions/ipd-emr-actions';
+import { get24HourCaseSheet, getClinicalOrders, getPhysicianOrders, getActiveMedications, getReferralOrders, addActiveMedication } from '@/app/actions/ipd-emr-actions';
+import { createNursingTask } from '@/app/actions/ipd-actions';
 
 const TABS = [
     { id: 'treatment', label: 'Treatment Sheet', icon: Pill },
@@ -29,7 +30,7 @@ const TABS = [
     { id: 'lab_results', label: 'Lab Results', icon: FlaskConical },
     { id: 'adhoc', label: 'Ad Hoc Services', icon: Plus },
     { id: 'dietary', label: 'Dietary', icon: Utensils },
-    { id: 'other', label: 'Other Activities', icon: Activity },
+    { id: 'nursing_tasks', label: 'Nursing Tasks', icon: ClipboardList },
 ];
 
 type CaseSheetData = {
@@ -39,6 +40,7 @@ type CaseSheetData = {
     };
     date: string;
     timeline: Array<{ time: string; type: string; data: unknown }>;
+    nursingTasks?: any[];
     summary: {
         vitals_count: number;
         ward_rounds_count: number;
@@ -67,6 +69,84 @@ export default function CaseSheetPage() {
     const [referrals, setReferrals] = useState<unknown[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState(initialDate);
+
+    const [doctorName, setDoctorName] = useState('Doctor');
+    useEffect(() => {
+        fetch('/api/session')
+            .then(r => r.json())
+            .then(data => {
+                if (data?.name || data?.username) {
+                    setDoctorName(data.name || data.username);
+                }
+            })
+            .catch(() => {});
+    }, []);
+
+    // Prescribe form states
+    const [showPrescribeForm, setShowPrescribeForm] = useState(false);
+    const [medName, setMedName] = useState('');
+    const [medDosage, setMedDosage] = useState('');
+    const [medRoute, setMedRoute] = useState('Oral');
+    const [medFreq, setMedFreq] = useState('OD');
+    const [medEndDate, setMedEndDate] = useState('');
+    const [savingMed, setSavingMed] = useState(false);
+
+    // Nursing Task form states
+    const [showTaskForm, setShowTaskForm] = useState(false);
+    const [taskType, setTaskType] = useState('Vitals');
+    const [taskDesc, setTaskDesc] = useState('');
+    const [taskTime, setTaskTime] = useState('');
+    const [savingTask, setSavingTask] = useState(false);
+
+    const handlePrescribeMed = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!medName.trim() || !medDosage.trim()) return;
+        setSavingMed(true);
+        const res = await addActiveMedication({
+            admission_id: admissionId,
+            patient_id: caseSheet?.admission.patient.patient_id || '',
+            medication_name: medName.trim(),
+            dosage: medDosage.trim(),
+            route: medRoute,
+            frequency: medFreq,
+            prescribed_by: doctorName,
+            end_date: medEndDate || undefined
+        });
+        setSavingMed(false);
+        if (res.success) {
+            setMedName('');
+            setMedDosage('');
+            setMedRoute('Oral');
+            setMedFreq('OD');
+            setMedEndDate('');
+            setShowPrescribeForm(false);
+            loadData();
+        } else {
+            alert(res.error || 'Failed to prescribe medication');
+        }
+    };
+
+    const handleCreateTask = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!taskDesc.trim() || !taskTime) return;
+        setSavingTask(true);
+        const res = await createNursingTask({
+            admission_id: admissionId,
+            task_type: taskType,
+            description: taskDesc.trim(),
+            scheduled_at: taskTime
+        });
+        setSavingTask(false);
+        if (res.success) {
+            setTaskDesc('');
+            setTaskTime('');
+            setTaskType('Vitals');
+            setShowTaskForm(false);
+            loadData();
+        } else {
+            alert(res.error || 'Failed to create nursing task');
+        }
+    };
 
     const loadData = useCallback(async () => {
         if (!admissionId) return;
@@ -251,23 +331,206 @@ export default function CaseSheetPage() {
 
                             {activeTab === 'active_meds' && (
                                 <div className="space-y-4">
-                                    <h2 className="font-semibold text-gray-800">Active Medications</h2>
+                                    <div className="flex items-center justify-between">
+                                        <h2 className="font-semibold text-gray-800">Active Medications</h2>
+                                        <button
+                                            onClick={() => setShowPrescribeForm(!showPrescribeForm)}
+                                            className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                                        >
+                                            {showPrescribeForm ? "Cancel" : "Prescribe Medication"}
+                                        </button>
+                                    </div>
+
+                                    {showPrescribeForm && (
+                                        <form onSubmit={handlePrescribeMed} className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3 shadow-sm max-w-xl">
+                                            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-600">Prescribe New Medication</h3>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Medication Name</label>
+                                                    <input
+                                                        required
+                                                        type="text"
+                                                        value={medName}
+                                                        onChange={e => setMedName(e.target.value)}
+                                                        placeholder="e.g. Paracetamol"
+                                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Dosage</label>
+                                                    <input
+                                                        required
+                                                        type="text"
+                                                        value={medDosage}
+                                                        onChange={e => setMedDosage(e.target.value)}
+                                                        placeholder="e.g. 500mg or 1 Tab"
+                                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Route</label>
+                                                    <select
+                                                        value={medRoute}
+                                                        onChange={e => setMedRoute(e.target.value)}
+                                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white"
+                                                    >
+                                                        <option value="Oral">Oral</option>
+                                                        <option value="IV">IV</option>
+                                                        <option value="IM">IM</option>
+                                                        <option value="Subcutaneous">Subcutaneous</option>
+                                                        <option value="Topical">Topical</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Frequency</label>
+                                                    <select
+                                                        value={medFreq}
+                                                        onChange={e => setMedFreq(e.target.value)}
+                                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white"
+                                                    >
+                                                        <option value="OD">OD (Once Daily)</option>
+                                                        <option value="BD">BD (Twice Daily)</option>
+                                                        <option value="TDS">TDS (Three Times Daily)</option>
+                                                        <option value="QID">QID (Four Times Daily)</option>
+                                                        <option value="PRN">PRN (As Needed)</option>
+                                                    </select>
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">End Date (Optional)</label>
+                                                    <input
+                                                        type="date"
+                                                        value={medEndDate}
+                                                        onChange={e => setMedEndDate(e.target.value)}
+                                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-end gap-2 pt-1">
+                                                <button
+                                                    type="submit"
+                                                    disabled={savingMed}
+                                                    className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                                >
+                                                    {savingMed ? "Prescribing..." : "Prescribe"}
+                                                </button>
+                                            </div>
+                                        </form>
+                                    )}
+
                                     {activeMeds.length === 0 ? (
                                         <p className="text-gray-500 text-sm">No active medications</p>
                                     ) : (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             {(activeMeds as Array<Record<string, unknown>>).map((med, i) => (
-                                                <div key={i} className="bg-white border border-gray-200 rounded-lg p-4">
+                                                <div key={i} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                                                     <div className="flex items-start justify-between">
                                                         <div>
-                                                            <p className="font-medium text-sm text-gray-900">{med.medication_name as string}</p>
-                                                            <p className="text-xs text-gray-500">{med.dosage as string} · {med.route as string} · {med.frequency as string}</p>
+                                                            <p className="font-semibold text-sm text-gray-900">{med.medication_name as string}</p>
+                                                            <p className="text-xs text-gray-500 mt-0.5">{med.dosage as string} · {med.route as string} · {med.frequency as string}</p>
                                                         </div>
-                                                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{med.status as string}</span>
+                                                        <span className="text-xs bg-green-100 text-green-700 px-2.5 py-0.5 rounded-full font-bold">{med.status as string}</span>
                                                     </div>
-                                                    <p className="text-xs text-gray-400 mt-2">Started: {new Date(med.start_date as string).toLocaleDateString('en-GB')}</p>
+                                                    <div className="text-[10px] text-gray-400 mt-3 pt-2 border-t border-gray-100 flex items-center justify-between">
+                                                        <span>Started: {new Date(med.start_date as string).toLocaleDateString('en-GB')}</span>
+                                                        <span className="font-semibold text-gray-500">Dr. {med.prescribed_by as string}</span>
+                                                    </div>
                                                 </div>
                                             ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {activeTab === 'nursing_tasks' && (
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h2 className="font-semibold text-gray-800">Nursing Tasks</h2>
+                                        <button
+                                            onClick={() => setShowTaskForm(!showTaskForm)}
+                                            className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                                        >
+                                            {showTaskForm ? "Cancel" : "Create & Assign Task"}
+                                        </button>
+                                    </div>
+
+                                    {showTaskForm && (
+                                        <form onSubmit={handleCreateTask} className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3 shadow-sm max-w-xl">
+                                            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-600">Assign New Nursing Task</h3>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Task Type</label>
+                                                    <select
+                                                        value={taskType}
+                                                        onChange={e => setTaskType(e.target.value)}
+                                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white"
+                                                    >
+                                                        <option value="Vitals">Vitals (BP, Temp, etc.)</option>
+                                                        <option value="Medication">Medication Administration</option>
+                                                        <option value="Dressing">Wound Dressing / Care</option>
+                                                        <option value="Sample Collection">Lab Sample Collection</option>
+                                                        <option value="General">General / Other Care</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Scheduled Date & Time</label>
+                                                    <input
+                                                        required
+                                                        type="datetime-local"
+                                                        value={taskTime}
+                                                        onChange={e => setTaskTime(e.target.value)}
+                                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white"
+                                                    />
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Description / Instructions</label>
+                                                    <textarea
+                                                        required
+                                                        rows={2}
+                                                        value={taskDesc}
+                                                        onChange={e => setTaskDesc(e.target.value)}
+                                                        placeholder="e.g. Check temperature every 4 hours or administer nebulizer"
+                                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 resize-none font-sans bg-white"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-end gap-2 pt-1">
+                                                <button
+                                                    type="submit"
+                                                    disabled={savingTask}
+                                                    className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                                >
+                                                    {savingTask ? "Assigning..." : "Assign Task"}
+                                                </button>
+                                            </div>
+                                        </form>
+                                    )}
+
+                                    {!caseSheet?.nursingTasks || caseSheet.nursingTasks.length === 0 ? (
+                                        <p className="text-gray-500 text-sm">No nursing tasks scheduled for this day</p>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            {(caseSheet.nursingTasks as Array<Record<string, any>>).map((task, i) => {
+                                                const isCompleted = task.status === 'completed' || task.status === 'Completed';
+                                                return (
+                                                    <div key={i} className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col justify-between gap-2 shadow-sm">
+                                                        <div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                                                    {task.task_type || 'General'}
+                                                                </span>
+                                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isCompleted ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                                                    {task.status || 'Pending'}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-sm text-gray-800 mt-2 font-semibold">{task.description}</p>
+                                                        </div>
+                                                        <div className="text-[10px] text-gray-400 mt-2 pt-2 border-t border-gray-100 flex items-center justify-between">
+                                                            <span>Scheduled: {new Date(task.scheduled_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                            {task.completed_at && <span>Completed: {new Date(task.completed_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>
@@ -337,7 +600,7 @@ export default function CaseSheetPage() {
                                 </div>
                             )}
 
-                            {!['treatment', 'clinical_order', 'physician_order', 'active_meds', 'referral', 'charts', 'dietary'].includes(activeTab) && (
+                            {!['treatment', 'clinical_order', 'physician_order', 'active_meds', 'referral', 'charts', 'dietary', 'nursing_tasks'].includes(activeTab) && (
                                 <div className="flex flex-col items-center justify-center h-48 text-gray-400">
                                     <Heart className="w-10 h-10 mb-3 opacity-30" />
                                     <p className="text-sm">{TABS.find(t => t.id === activeTab)?.label} — content loads from respective modules</p>

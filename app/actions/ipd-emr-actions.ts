@@ -136,6 +136,61 @@ export async function discontinuePhysicianOrder(orderId: string, reason?: string
 
 // ── GAP 6: Active Medications ──────────────────────────────────────────────
 
+export async function scheduleMedicationAdministrations(dbOrTx: any, activeMed: any, organizationId: string) {
+    const frequency = (activeMed.frequency || 'OD').toUpperCase();
+    const dosage = activeMed.dosage || '1';
+    const route = activeMed.route || 'Oral';
+    const admissionId = activeMed.admission_id;
+    const name = activeMed.medication_name;
+
+    const startDate = new Date(activeMed.start_date || new Date());
+    const endDate = activeMed.end_date ? new Date(activeMed.end_date) : new Date(startDate.getTime() + 3 * 24 * 60 * 60 * 1000);
+
+    const maxEndDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const finalEndDate = endDate > maxEndDate ? maxEndDate : endDate;
+
+    let hours: number[] = [9];
+    let isPrn = false;
+    
+    if (frequency === 'BD' || frequency === 'BID' || frequency === '1-0-1') {
+        hours = [9, 21];
+    } else if (frequency === 'TDS' || frequency === 'TID' || frequency === '1-1-1') {
+        hours = [9, 14, 21];
+    } else if (frequency === 'QID' || frequency === '1-1-1-1') {
+        hours = [9, 13, 17, 21];
+    } else if (frequency === 'PRN') {
+        hours = [9];
+        isPrn = true;
+    }
+
+    const current = new Date(startDate);
+    while (current <= finalEndDate) {
+        for (const hr of hours) {
+            const scheduledTime = new Date(current);
+            scheduledTime.setHours(hr, 0, 0, 0);
+
+            if (scheduledTime < new Date()) {
+                continue;
+            }
+
+            await dbOrTx.medicationAdministration.create({
+                data: {
+                    admission_id: admissionId,
+                    medication_name: name,
+                    dose: dosage,
+                    route: route,
+                    scheduled_time: scheduledTime,
+                    status: 'Scheduled',
+                    organizationId,
+                    frequency,
+                    is_prn: isPrn,
+                }
+            });
+        }
+        current.setDate(current.getDate() + 1);
+    }
+}
+
 export async function addActiveMedication(data: {
     admission_id: string;
     patient_id: string;
@@ -149,19 +204,23 @@ export async function addActiveMedication(data: {
     const { db, organizationId } = await requireTenantContext();
 
     try {
-        const med = await (db as any).activeMedication.create({
-            data: {
-                admission_id: data.admission_id,
-                patient_id: data.patient_id,
-                medication_name: data.medication_name,
-                dosage: data.dosage,
-                route: data.route,
-                frequency: data.frequency,
-                prescribed_by: data.prescribed_by,
-                end_date: data.end_date ? new Date(data.end_date) : null,
-                status: 'active',
-                organizationId,
-            },
+        const med = await db.$transaction(async (tx: any) => {
+            const m = await (tx as any).activeMedication.create({
+                data: {
+                    admission_id: data.admission_id,
+                    patient_id: data.patient_id,
+                    medication_name: data.medication_name,
+                    dosage: data.dosage,
+                    route: data.route,
+                    frequency: data.frequency,
+                    prescribed_by: data.prescribed_by,
+                    end_date: data.end_date ? new Date(data.end_date) : null,
+                    status: 'active',
+                    organizationId,
+                },
+            });
+            await scheduleMedicationAdministrations(tx, m, organizationId);
+            return m;
         });
 
         return { success: true, data: JSON.parse(JSON.stringify(med)) };
@@ -298,6 +357,7 @@ export async function get24HourCaseSheet(admissionId: string, date?: string) {
                 admission: JSON.parse(JSON.stringify(admission)),
                 date: targetDate.toISOString().split('T')[0],
                 timeline: JSON.parse(JSON.stringify(timeline)),
+                nursingTasks: JSON.parse(JSON.stringify(nursingTasks)),
                 summary: {
                     vitals_count: vitals.length,
                     ward_rounds_count: wardRounds.length,

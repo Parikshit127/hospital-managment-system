@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Search, Loader2, User, Phone, X, Command } from "lucide-react";
 import {
   globalSearchPatients,
@@ -39,6 +39,7 @@ function formatLastVisit(iso: string | null): string {
 
 export function GlobalPatientSearch({ role, patientBasePath }: GlobalPatientSearchProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GlobalPatientResult[]>([]);
@@ -98,13 +99,21 @@ export function GlobalPatientSearch({ role, patientBasePath }: GlobalPatientSear
 
   const navigateTo = useCallback(
     async (patient: GlobalPatientResult) => {
-      const href = patientBasePath
-        ? `${patientBasePath}/${patient.patient_id}`
-        : await getPatientRouteForRole(role, patient.patient_id);
+      let href = "";
+      if (pathname?.startsWith("/ipd") || pathname?.startsWith("/nurse")) {
+        // Stay in IPD context
+        href = patient.active_admission_id
+          ? `/ipd/admission/${patient.active_admission_id}`
+          : `/ipd/admissions-hub?q=${encodeURIComponent(patient.patient_id)}`;
+      } else if (patientBasePath) {
+        href = `${patientBasePath}/${patient.patient_id}`;
+      } else {
+        href = await getPatientRouteForRole(role, patient.patient_id, patient.active_admission_id);
+      }
       setOpen(false);
       router.push(href);
     },
-    [role, router, patientBasePath],
+    [role, router, patientBasePath, pathname],
   );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

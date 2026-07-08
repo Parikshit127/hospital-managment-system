@@ -20,6 +20,7 @@ import { generateReport } from '@/app/actions/mis-report-actions';
 import { REGISTRY } from '@/lib/mis/runner';
 import { UniversalReportShell } from '@/components/mis/UniversalReportShell';
 import type { UniversalPayload } from '@/components/mis/UniversalReportShell';
+import { AppShell } from '@/app/components/layout/AppShell';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -95,44 +96,49 @@ export async function PortalMISViewerPage({
     const { name: reportName, columns } = reportDef;
 
     return (
-        <div className="p-6 max-w-7xl mx-auto space-y-6">
-            {/* ── Breadcrumb ────────────────────────────────────────────── */}
-            <Link
-                href={backHref}
-                className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-indigo-600 transition-colors"
-            >
-                <ArrowLeft className="h-4 w-4" />
-                {backLabel}
-            </Link>
+        <AppShell
+            pageTitle={reportName}
+            pageIcon={<FileBarChart2 className="h-5 w-5" />}
+        >
+            <div className="p-6 max-w-7xl mx-auto space-y-6">
+                {/* ── Breadcrumb ────────────────────────────────────────────── */}
+                <Link
+                    href={backHref}
+                    className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-orange-600 transition-colors font-bold"
+                >
+                    <ArrowLeft className="h-4 w-4" />
+                    {backLabel}
+                </Link>
 
-            {/* ── Page header ───────────────────────────────────────────── */}
-            <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-indigo-100 rounded-xl">
-                    <FileBarChart2 className="h-5 w-5 text-indigo-600" />
+                {/* ── Page header ───────────────────────────────────────────── */}
+                <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-orange-100 rounded-xl">
+                        <FileBarChart2 className="h-5 w-5 text-orange-600" />
+                    </div>
+                    <div>
+                        <h1 className="text-lg font-black text-stone-900">
+                            {reportName}
+                        </h1>
+                        <p className="text-sm text-gray-500 font-medium">
+                            {portalName} Portal — MIS Report
+                        </p>
+                    </div>
                 </div>
-                <div>
-                    <h1 className="text-lg font-black text-stone-900">
-                        {reportName}
-                    </h1>
-                    <p className="text-sm text-gray-500 font-medium">
-                        {portalName} Portal — MIS Report
-                    </p>
-                </div>
+
+                {/* ── Report shell ──────────────────────────────────────────── */}
+                <Suspense fallback={<ViewerSkeleton columnCount={columns.length} />}>
+                    <UniversalReportShell
+                        reportId={reportId}
+                        reportName={reportName}
+                        columns={columns}
+                        payload={payload}
+                        drillDownTo={reportDef.drillDownTo}
+                        drillDownKey={reportDef.drillDownKey}
+                        filterSpec={reportDef.filterSpec}
+                    />
+                </Suspense>
             </div>
-
-            {/* ── Report shell ──────────────────────────────────────────── */}
-            <Suspense fallback={<ViewerSkeleton columnCount={columns.length} />}>
-                <UniversalReportShell
-                    reportId={reportId}
-                    reportName={reportName}
-                    columns={columns}
-                    payload={payload}
-                    drillDownTo={reportDef.drillDownTo}
-                    drillDownKey={reportDef.drillDownKey}
-                    filterSpec={reportDef.filterSpec}
-                />
-            </Suspense>
-        </div>
+        </AppShell>
     );
 }
 

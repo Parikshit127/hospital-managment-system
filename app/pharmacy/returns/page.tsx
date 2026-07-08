@@ -117,7 +117,7 @@ export default function ReturnsPage() {
 
         if (res.success) {
             setResult(res);
-            setForm({ medicine_id: '', medicine_name: '', batch_id: '', quantity: '', reason: '', invoice_id: '' });
+            setForm({ medicine_id: '', medicine_name: '', batch_id: '', quantity: '', reason: '', invoice_id: '', available_batches: [] } as any);
             setSearchQuery('');
             handleClearPatient();
         } else {
@@ -189,7 +189,7 @@ export default function ReturnsPage() {
                                 <input
                                     type="text"
                                     value={form.medicine_name || searchQuery}
-                                    onChange={(e) => { setSearchQuery(e.target.value); setForm({ ...form, medicine_name: '', medicine_id: '' }); }}
+                                    onChange={(e) => { setSearchQuery(e.target.value); setForm({ ...form, medicine_name: '', medicine_id: '', batch_id: '', available_batches: [] } as any); }}
                                     className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 font-bold text-gray-900 placeholder:text-gray-400 placeholder:font-medium"
                                     placeholder="Search by medicine name..."
                                 />
@@ -227,19 +227,30 @@ export default function ReturnsPage() {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.12em] mb-1.5 ml-1">Batch Number *</label>
-                                <select 
-                                    required
-                                    value={form.batch_id} 
-                                    onChange={e => setForm({ ...form, batch_id: e.target.value })}
-                                    className="w-full py-3 px-4 bg-white border border-gray-300 rounded-xl text-sm font-mono font-bold focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none text-gray-900"
-                                >
-                                    <option value="">Select Batch...</option>
-                                    {(form as any).available_batches?.map((b: any) => (
-                                        <option key={b.id} value={b.batch_no}>
-                                            {b.batch_no} (Exp: {new Date(b.expiry_date).toLocaleDateString('en-GB')}) - {b.current_stock} units
-                                        </option>
-                                    ))}
-                                </select>
+                                {(form as any).available_batches && (form as any).available_batches.length > 0 ? (
+                                    <select 
+                                        required
+                                        value={form.batch_id} 
+                                        onChange={e => setForm({ ...form, batch_id: e.target.value })}
+                                        className="w-full py-3 px-4 bg-white border border-gray-300 rounded-xl text-sm font-mono font-bold focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none text-gray-900"
+                                    >
+                                        <option value="">Select Batch...</option>
+                                        {(form as any).available_batches.map((b: any) => (
+                                            <option key={b.id} value={b.batch_no}>
+                                                {b.batch_no} (Exp: {new Date(b.expiry_date).toLocaleDateString('en-GB')}) - {b.current_stock} units
+                                            </option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <input 
+                                        required
+                                        type="text"
+                                        placeholder="Enter batch number..."
+                                        value={form.batch_id}
+                                        onChange={e => setForm({ ...form, batch_id: e.target.value })}
+                                        className="w-full py-3 px-4 bg-white border border-gray-300 rounded-xl text-sm font-mono font-bold focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none text-gray-900 placeholder:text-gray-400 placeholder:font-sans placeholder:font-medium"
+                                    />
+                                )}
                             </div>
                             <div>
                                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.12em] mb-1.5 ml-1">Quantity *</label>

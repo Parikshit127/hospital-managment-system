@@ -72,25 +72,27 @@ export const dailyRevenueReport: ReportDefinition = {
         ORDER BY r.report_date DESC, r.department, r.payer_type
       `;
 
-      const totals = rows.reduce(
-        (acc, row) => {
-          acc.billed_amount += Number(row.billed_amount || 0);
-          acc.collected_amount += Number(row.collected_amount || 0);
-          acc.invoice_count += Number(row.invoice_count || 0);
-          return acc;
-        },
-        { billed_amount: 0, collected_amount: 0, invoice_count: 0 }
-      );
+      if (rows.length > 0) {
+        const totals = rows.reduce(
+          (acc, row) => {
+            acc.billed_amount += Number(row.billed_amount || 0);
+            acc.collected_amount += Number(row.collected_amount || 0);
+            acc.invoice_count += Number(row.invoice_count || 0);
+            return acc;
+          },
+          { billed_amount: 0, collected_amount: 0, invoice_count: 0 }
+        );
 
-      return {
-        rows: rows.map(row => ({
-          ...row,
-          billed_amount: Number(row.billed_amount),
-          collected_amount: Number(row.collected_amount),
-          invoice_count: Number(row.invoice_count),
-        })),
-        totals,
-      };
+        return {
+          rows: rows.map(row => ({
+            ...row,
+            billed_amount: Number(row.billed_amount),
+            collected_amount: Number(row.collected_amount),
+            invoice_count: Number(row.invoice_count),
+          })),
+          totals,
+        };
+      }
     }
 
     // ── Live path (≤ 7 days) — real-time accuracy from transactional tables ───

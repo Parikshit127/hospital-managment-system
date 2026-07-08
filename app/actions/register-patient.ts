@@ -298,23 +298,48 @@ export async function registerPatient(formData: FormData) {
             });
 
             if (!existingAppt) {
-                // Find a doctor in that department
-                const matchingDoctor = await db.user.findFirst({
-                    where: {
-                        role: 'doctor',
-                        specialty: rawData.department,
-                        is_active: true
+                let doctorIdToUse: string | null = null;
+                let doctorNameToUse: string | null = null;
+
+                if (session?.role === 'doctor') {
+                    doctorIdToUse = session.id;
+                    doctorNameToUse = session.name || session.username;
+                } else {
+                    const explicitDoctorId = formData.get('doctor_id') as string;
+                    if (explicitDoctorId) {
+                        const doc = await db.user.findFirst({
+                            where: { id: explicitDoctorId, role: 'doctor' },
+                        });
+                        if (doc) {
+                            doctorIdToUse = doc.id;
+                            doctorNameToUse = doc.name || doc.username;
+                        }
                     }
-                });
+                }
+
+                // Fallback to department matching
+                if (!doctorIdToUse) {
+                    const matchingDoctor = await db.user.findFirst({
+                        where: {
+                            role: 'doctor',
+                            specialty: rawData.department,
+                            is_active: true
+                        }
+                    });
+                    if (matchingDoctor) {
+                        doctorIdToUse = matchingDoctor.id;
+                        doctorNameToUse = matchingDoctor.name || matchingDoctor.username;
+                    }
+                }
 
                 await db.appointments.create({
                     data: {
                         appointment_id: appointmentId,
-                        patient_id: agentPatientId, // FK to OPD_REG
+                        patient_id: agentPatientId,
                         status: 'Pending',
                         department: rawData.department,
-                        doctor_id: matchingDoctor ? matchingDoctor.id : null,
-                        doctor_name: matchingDoctor ? matchingDoctor.name || matchingDoctor.username : null,
+                        doctor_id: doctorIdToUse,
+                        doctor_name: doctorNameToUse,
                         reason_for_visit: 'Initial Consultation',
                         organizationId,
                     }

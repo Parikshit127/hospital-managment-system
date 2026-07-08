@@ -40,6 +40,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
     const [data, setData] = useState<any[]>([]);
     const [meta, setMeta] = useState<any>({ page: 1, limit: 15, total: 0, totalPages: 1 });
     const [loading, setLoading] = useState(true);
+    const [trigger, setTrigger] = useState(0);
 
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState<'ALL' | 'ACTIVE' | 'SETTLED'>('ACTIVE');
@@ -75,7 +76,17 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
         } else if (preset === 'ALL') {
             setDateFrom(''); setDateTo('');
         }
+    };
+
+    const handleApplyFilters = () => {
         setPage(1);
+        setTrigger(t => t + 1);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            handleApplyFilters();
+        }
     };
 
     const clearAllFilters = () => {
@@ -88,6 +99,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
         setMinBalance(''); setMaxBalance('');
         setSortBy('recent');
         setPage(1);
+        setTrigger(t => t + 1);
     };
 
     const activeFilterCount =
@@ -195,19 +207,12 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
         } finally {
             setLoading(false);
         }
-    }, [page, search, filter]);
+    }, [page, search, trigger]);
 
     useEffect(() => {
         const t = setTimeout(() => { loadData(); }, 300);
         return () => clearTimeout(t);
     }, [loadData]);
-
-    // Whenever any filter dimension changes, kick the page back to 1 — keeps the
-    // user from seeing an empty page because the previous offset overshot the
-    // narrower result set.
-    useEffect(() => {
-        setPage(1);
-    }, [filter, patientType, tpaStatus, datePreset, minBalance, maxBalance, sortBy]);
 
     const handlePayment = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -489,6 +494,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                         type="date"
                                         value={dateFrom}
                                         onChange={e => setDateFrom(e.target.value)}
+                                        onKeyDown={handleKeyDown}
                                         className="flex-1 px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-500"
                                     />
                                     <span className="text-xs text-gray-400">to</span>
@@ -496,6 +502,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                         type="date"
                                         value={dateTo}
                                         onChange={e => setDateTo(e.target.value)}
+                                        onKeyDown={handleKeyDown}
                                         className="flex-1 px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-500"
                                     />
                                 </div>
@@ -511,6 +518,7 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                     placeholder="Min"
                                     value={minBalance}
                                     onChange={e => setMinBalance(e.target.value)}
+                                    onKeyDown={handleKeyDown}
                                     className="flex-1 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium outline-none focus:ring-2 focus:ring-orange-500"
                                 />
                                 <span className="text-xs text-gray-400">–</span>
@@ -519,10 +527,28 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                     placeholder="Max"
                                     value={maxBalance}
                                     onChange={e => setMaxBalance(e.target.value)}
+                                    onKeyDown={handleKeyDown}
                                     className="flex-1 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium outline-none focus:ring-2 focus:ring-orange-500"
                                 />
                             </div>
                         </div>
+                    </div>
+
+                    <div className="mt-5 pt-4 border-t border-gray-100 flex justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={clearAllFilters}
+                            className="px-4 py-2 border border-gray-200 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-gray-50 rounded-xl transition-colors"
+                        >
+                            Reset Filters
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleApplyFilters}
+                            className="px-5 py-2 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl shadow-sm transition-colors flex items-center gap-1.5"
+                        >
+                            <Check className="h-3.5 w-3.5" /> Apply Filters
+                        </button>
                     </div>
                 </div>
             )}
@@ -532,24 +558,24 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                 <div className="mb-4 flex flex-wrap items-center gap-1.5">
                     <span className="text-[10px] font-black text-slate-400 uppercase mr-1">Filters:</span>
                     {filter !== 'ACTIVE' && (
-                        <FilterChip label={filter === 'ALL' ? 'All accounts' : 'Settled only'} onClear={() => setFilter('ACTIVE')} />
+                        <FilterChip label={filter === 'ALL' ? 'All accounts' : 'Settled only'} onClear={() => { setFilter('ACTIVE'); setTrigger(t => t + 1); }} />
                     )}
                     {patientType !== 'ALL' && (
-                        <FilterChip label={`Type: ${patientType}`} onClear={() => setPatientType('ALL')} />
+                        <FilterChip label={`Type: ${patientType}`} onClear={() => { setPatientType('ALL'); setTrigger(t => t + 1); }} />
                     )}
                     {tpaStatus !== 'ALL' && (
-                        <FilterChip label={`TPA: ${tpaStatus.toLowerCase()}`} onClear={() => setTpaStatus('ALL')} />
+                        <FilterChip label={`TPA: ${tpaStatus.toLowerCase()}`} onClear={() => { setTpaStatus('ALL'); setTrigger(t => t + 1); }} />
                     )}
                     {datePreset !== 'ALL' && (
                         <FilterChip
                             label={datePreset === 'CUSTOM' ? `${dateFrom ? dateFrom.split('-').reverse().join('-') : '…'} → ${dateTo ? dateTo.split('-').reverse().join('-') : '…'}` : datePreset.toLowerCase()}
-                            onClear={() => applyDatePreset('ALL')}
+                            onClear={() => { applyDatePreset('ALL'); setTrigger(t => t + 1); }}
                         />
                     )}
-                    {minBalance && <FilterChip label={`Min ₹${minBalance}`} onClear={() => setMinBalance('')} />}
-                    {maxBalance && <FilterChip label={`Max ₹${maxBalance}`} onClear={() => setMaxBalance('')} />}
+                    {minBalance && <FilterChip label={`Min ₹${minBalance}`} onClear={() => { setMinBalance(''); setTrigger(t => t + 1); }} />}
+                    {maxBalance && <FilterChip label={`Max ₹${maxBalance}`} onClear={() => { setMaxBalance(''); setTrigger(t => t + 1); }} />}
                     {sortBy !== 'recent' && (
-                        <FilterChip label={`Sort: ${sortBy.replace('_', ' ')}`} onClear={() => setSortBy('recent')} />
+                        <FilterChip label={`Sort: ${sortBy.replace('_', ' ')}`} onClear={() => { setSortBy('recent'); setTrigger(t => t + 1); }} />
                     )}
                     <button
                         onClick={clearAllFilters}

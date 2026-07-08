@@ -230,15 +230,17 @@ export const pharmacyIpDailyReport: ReportDefinition = {
           AND r.report_date <= ${end}
         ORDER BY r.report_date DESC
       `;
-      return {
-        rows: rows.map(r => ({
-          ...r,
-          total_orders:          Number(r.total_orders || 0),
-          total_items_dispensed: null, // not available at rollup granularity
-          total_amount:          Number(r.total_amount || 0),
-        })),
-        totals: {},
-      };
+      if (rows.length > 0) {
+        return {
+          rows: rows.map(r => ({
+            ...r,
+            total_orders:          Number(r.total_orders || 0),
+            total_items_dispensed: null, // not available at rollup granularity
+            total_amount:          Number(r.total_amount || 0),
+          })),
+          totals: {},
+        };
+      }
     }
 
     // ── Live path ─────────────────────────────────────────────────────────────
@@ -947,25 +949,27 @@ export const pharmacyOpSummaryReport: ReportDefinition = {
         ORDER BY r.report_date DESC
       `;
 
-      const totals = rows.reduce((acc, r) => {
-        acc.total_orders   += Number(r.total_orders   || 0);
-        acc.total_amount   += Number(r.total_amount   || 0);
-        acc.return_amount  += Number(r.return_amount  || 0);
-        acc.net_amount     += Number(r.net_amount     || 0);
-        return acc;
-      }, { total_orders: 0, items_dispensed: 0, total_amount: 0, return_amount: 0, net_amount: 0 });
+      if (rows.length > 0) {
+        const totals = rows.reduce((acc, r) => {
+          acc.total_orders   += Number(r.total_orders   || 0);
+          acc.total_amount   += Number(r.total_amount   || 0);
+          acc.return_amount  += Number(r.return_amount  || 0);
+          acc.net_amount     += Number(r.net_amount     || 0);
+          return acc;
+        }, { total_orders: 0, items_dispensed: 0, total_amount: 0, return_amount: 0, net_amount: 0 });
 
-      return {
-        rows: rows.map(r => ({
-          ...r,
-          total_orders:   Number(r.total_orders   || 0),
-          items_dispensed: null, // not available at rollup granularity
-          total_amount:   Number(r.total_amount   || 0),
-          return_amount:  Number(r.return_amount  || 0),
-          net_amount:     Number(r.net_amount     || 0),
-        })),
-        totals,
-      };
+        return {
+          rows: rows.map(r => ({
+            ...r,
+            total_orders:   Number(r.total_orders   || 0),
+            items_dispensed: null, // not available at rollup granularity
+            total_amount:   Number(r.total_amount   || 0),
+            return_amount:  Number(r.return_amount  || 0),
+            net_amount:     Number(r.net_amount     || 0),
+          })),
+          totals,
+        };
+      }
     }
 
     // ── Live path (≤ 7 days) ─────────────────────────────────────────────────

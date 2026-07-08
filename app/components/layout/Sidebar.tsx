@@ -418,8 +418,8 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
     {
       title: "Procedural",
       items: [
-        { label: "OT Worklist", href: "/ot/worklist", icon: Scissors },
-        { label: "ER Triage", href: "/er/dashboard", icon: Siren },
+        { label: "OT Worklist", href: "/nurse/ot-worklist", icon: Scissors },
+        { label: "ER Triage", href: "/nurse/er-triage", icon: Siren },
         { label: "ER Tracking Board", href: "/er/tracking-board", icon: MonitorPlay },
       ],
     },
@@ -589,6 +589,7 @@ const PATH_ROLE: { prefix: string; role: string }[] = [
   { prefix: "/hr", role: "hr" },
   { prefix: "/coordinator", role: "coordinator" },
   { prefix: "/er", role: "er_staff" },
+  { prefix: "/ot/worklist", role: "ipd_manager" },
   { prefix: "/ot", role: "ot_manager" },
   { prefix: "/crm", role: "crm_manager" },
   { prefix: "/counselling", role: "counsellor" },
@@ -609,8 +610,8 @@ const ADMIN_SWITCH_PORTALS: { label: string; path: string }[] = [
   { label: "Nurse", path: "/nurse/dashboard" },
   { label: "IPD", path: "/ipd" },
   { label: "OPD Manager", path: "/opd-manager/dashboard" },
-  { label: "Lab", path: "/lab/technician" },
-  { label: "Pharmacy", path: "/pharmacy/billing" },
+  { label: "Lab", path: "/lab/dashboard" },
+  { label: "Pharmacy", path: "/pharmacy/dashboard" },
   { label: "Finance", path: "/finance/dashboard" },
   { label: "HR", path: "/hr/dashboard" },
   { label: "Coordinator", path: "/coordinator/dashboard" },
@@ -659,15 +660,26 @@ export function Sidebar({ session }: SidebarProps) {
   useEffect(() => {
     const el = navRef.current;
     if (!el) return;
-    try {
-      const saved = window.sessionStorage.getItem("sidebar-scroll");
-      if (saved) el.scrollTop = parseInt(saved, 10) || 0;
-    } catch {}
-    const onScroll = () => {
-      try { window.sessionStorage.setItem("sidebar-scroll", String(el.scrollTop)); } catch {}
+    let onScroll: (() => void) | null = null;
+
+    const timer = setTimeout(() => {
+      try {
+        const saved = window.sessionStorage.getItem("sidebar-scroll");
+        if (saved) el.scrollTop = parseInt(saved, 10) || 0;
+      } catch {}
+
+      onScroll = () => {
+        try {
+          window.sessionStorage.setItem("sidebar-scroll", String(el.scrollTop));
+        } catch {}
+      };
+      el.addEventListener("scroll", onScroll, { passive: true });
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      if (onScroll) el.removeEventListener("scroll", onScroll);
     };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
   // An admin viewing a portal sees that portal's nav (derived from the URL);

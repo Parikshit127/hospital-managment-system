@@ -7,14 +7,56 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { admissionId } = await params;
     const { db, organizationId } = await requireTenantContext();
     const branding = await getBillBranding(organizationId);
-    const admission = await (db.admissions as any).findUnique({
+    let admission: any = null;
+    let patient: any = null;
+    let isBooking = false;
+
+    // 1. Try to find by admission_id
+    admission = await (db.admissions as any).findUnique({
       where: { admission_id: admissionId },
     });
-    if (!admission) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    let patient: any = null;
-    if (admission.patient_id) {
-      patient = await (db.oPD_REG as any).findUnique({ where: { patient_id: admission.patient_id } });
+    // 2. If not found, try to find active admission by patient_id
+    if (!admission) {
+      admission = await (db.admissions as any).findFirst({
+        where: { patient_id: admissionId, status: 'Admitted', is_archived: false },
+        orderBy: { admission_date: 'desc' },
+      });
+    }
+
+    // 3. If still not found, try to find an AdmissionBooking
+    if (!admission) {
+      const booking = await (db.admissionBooking as any).findFirst({
+        where: {
+          organizationId,
+          OR: [
+            { id: admissionId },
+            { booking_number: admissionId },
+            { patient_id: admissionId }
+          ]
+        },
+        orderBy: { expected_date: 'desc' },
+      });
+
+      if (booking) {
+        isBooking = true;
+        patient = await (db.oPD_REG as any).findUnique({ where: { patient_id: booking.patient_id } });
+        admission = {
+          admission_id: booking.booking_number,
+          patient_id: booking.patient_id,
+          admission_date: booking.expected_date,
+          ward_name: booking.bed_category,
+          bed_number: 'Pending',
+          department: booking.department,
+          doctor_name: booking.doctor_name,
+          billing_category: booking.bed_category,
+          admission_type: `${booking.admission_type || 'REGULAR'} (PRE-BOOKED)`,
+        };
+      }
+    } else {
+      if (admission.patient_id) {
+        patient = await (db.oPD_REG as any).findUnique({ where: { patient_id: admission.patient_id } });
+      }
     }
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Facesheet</title>

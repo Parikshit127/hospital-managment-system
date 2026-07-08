@@ -6,6 +6,7 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { CalendarClock, Plus, X } from 'lucide-react';
 import { useToast } from '@/app/components/ui/Toast';
 import { getAdmissionBookings, createAdmissionBooking } from '@/app/actions/ipd-enhancement-actions';
+import { getDepartments, getDoctorsForDropdown } from '@/app/actions/admin-actions';
 
 const STATUS_COLORS: Record<string, string> = {
   Booked: 'bg-blue-50 text-blue-700',
@@ -28,6 +29,10 @@ export default function PreAdmissionsPage() {
     department: '', doctorName: '', estimatedCost: '', notes: '',
   });
 
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [allDoctors, setAllDoctors] = useState<any[]>([]);
+  const [filteredDoctors, setFilteredDoctors] = useState<any[]>([]);
+
   const loadData = async () => {
     setRefreshing(true);
     try {
@@ -40,7 +45,36 @@ export default function PreAdmissionsPage() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData();
+    // Load metadata (departments and doctors)
+    async function loadMeta() {
+      const [deptRes, docRes] = await Promise.all([
+        getDepartments(),
+        getDoctorsForDropdown(),
+      ]);
+      if (deptRes.success && deptRes.data) {
+        setDepartments(deptRes.data);
+      }
+      if (docRes.success && docRes.data) {
+        setAllDoctors(docRes.data);
+      }
+    }
+    loadMeta();
+  }, []);
+
+  const handleDepartmentChange = (deptName: string) => {
+    setForm(f => ({ ...f, department: deptName, doctorName: '' }));
+    if (!deptName) {
+      setFilteredDoctors([]);
+      return;
+    }
+    const filtered = allDoctors.filter(doc => 
+      (doc.department?.toLowerCase() === deptName.toLowerCase()) || 
+      (doc.specialty?.toLowerCase() === deptName.toLowerCase())
+    );
+    setFilteredDoctors(filtered);
+  };
 
   const today = new Date().toISOString().slice(0, 10);
   const weekEnd = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
@@ -190,15 +224,25 @@ export default function PreAdmissionsPage() {
                 </div>
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Department *</label>
-                  <input required value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none" placeholder="e.g. Cardiology" />
+                  <select required value={form.department} onChange={e => handleDepartmentChange(e.target.value)}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none bg-white">
+                    <option value="">-- Select Department --</option>
+                    {departments.map(d => (
+                      <option key={d.id} value={d.name}>{d.name}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Doctor Name</label>
-                  <input value={form.doctorName} onChange={e => setForm(f => ({ ...f, doctorName: e.target.value }))}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none" placeholder="Dr. Name" />
+                  <select value={form.doctorName} onChange={e => setForm(f => ({ ...f, doctorName: e.target.value }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none bg-white">
+                    <option value="">-- Select Doctor --</option>
+                    {filteredDoctors.map(d => (
+                      <option key={d.id} value={d.name}>{d.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Estimated Cost (₹)</label>

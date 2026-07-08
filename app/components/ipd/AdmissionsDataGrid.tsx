@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
 import { Search, Filter, Activity, BedDouble, Calendar, UserRound, ArrowRight, ShieldAlert, CheckCircle2, ArrowLeftRight, X, Loader2, AlertTriangle, HeartPulse, XCircle } from 'lucide-react';
 import { NEWSScoreBadge } from '@/app/components/ipd/NEWSScoreBadge';
@@ -9,10 +9,18 @@ import { Button } from '@/app/components/ui/Button';
 import { Select } from '@/app/components/ui/Select';
 import Link from 'next/link';
 import { getWardsWithBeds, transferPatient, cancelAdmission } from '@/app/actions/ipd-actions';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[], wards: any[] }) {
-    const [search, setSearch] = useState('');
+    const searchParams = useSearchParams();
+    const [search, setSearch] = useState(() => searchParams?.get('q') || '');
+
+    useEffect(() => {
+        const q = searchParams?.get('q');
+        if (q) {
+            setSearch(q);
+        }
+    }, [searchParams]);
     const [statusFilter, setStatusFilter] = useState<'All' | 'Admitted' | 'Discharged' | 'Cancelled'>('Admitted');
     const [wardFilter, setWardFilter] = useState<string>('All');
     const [doctorFilter, setDoctorFilter] = useState<string>('All');

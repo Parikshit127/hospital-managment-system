@@ -17,9 +17,6 @@ export async function getRecentPatientHistory(searchQuery?: string, dateFrom?: s
         const invoices = await db.invoices.findMany({
             where: {
                 organizationId,
-                // OPD fee-receipt bills: new rows carry is_fee_receipt; legacy rows
-                // (pre-migration) still carry invoice_type 'OPD_FEE'.
-                OR: [{ is_fee_receipt: true }, { invoice_type: "OPD_FEE" }],
                 ...dateFilter,
                 // If search query is provided, search inside the related `patient` table
                 ...(searchQuery && searchQuery.trim().length > 0 ? {

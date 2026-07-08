@@ -24,7 +24,7 @@ async function nextERNumber(db: any, organizationId: string): Promise<string> {
   const prefix = `ER-${yyyymmdd}-`;
   
   const last = await db.eRRegistration.findFirst({
-    where: { organizationId, er_number: { startsWith: prefix } },
+    where: { er_number: { startsWith: prefix } },
     orderBy: { er_number: "desc" },
     select: { er_number: true },
   });
@@ -44,7 +44,7 @@ async function nextMLCNumber(db: any, organizationId: string): Promise<string> {
   const prefix = `MLC-${year}-`;
   
   const last = await db.mLCRecord.findFirst({
-    where: { organizationId, mlc_number: { startsWith: prefix } },
+    where: { mlc_number: { startsWith: prefix } },
     orderBy: { mlc_number: "desc" },
     select: { mlc_number: true },
   });
