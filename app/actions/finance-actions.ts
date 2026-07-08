@@ -1293,6 +1293,22 @@ export async function recordPayment(data: {
                 if (excess <= 0) break;
                 const apply = Math.min(excess, Number(other.balance_due));
 
+                // Create negative adjustment payment on the source invoice
+                await db.payments.create({
+                    data: {
+                        receipt_number: await genRcpNum(organizationId, db),
+                        invoice_id: data.invoice_id,
+                        amount: -apply,
+                        payment_method: 'Adjustment',
+                        payment_type: 'adjustment',
+                        status: 'Completed',
+                        notes: `Auto-adjusted: ₹${apply.toLocaleString('en-IN')} excess transferred to ${other.invoice_number || `Draft #${other.id}`}`,
+                        received_by: session?.username || session?.name || null,
+                        organizationId,
+                    },
+                });
+
+                // Create positive adjustment payment on the target invoice
                 await db.payments.create({
                     data: {
                         receipt_number: await genRcpNum(organizationId, db),
@@ -1301,7 +1317,7 @@ export async function recordPayment(data: {
                         payment_method: 'Adjustment',
                         payment_type: 'adjustment',
                         status: 'Completed',
-                        notes: `Auto-adjusted: ₹${apply.toLocaleString('en-IN')} excess from ${invoice.invoice_number}`,
+                        notes: `Auto-adjusted: ₹${apply.toLocaleString('en-IN')} excess from ${invoice.invoice_number || `Draft #${invoice.id}`}`,
                         received_by: session?.username || session?.name || null,
                         organizationId,
                     },
@@ -1321,6 +1337,21 @@ export async function recordPayment(data: {
 
                 excess -= apply;
             }
+
+            // Recalculate source invoice paid_amount and balance_due AFTER all spillovers
+            const updatedPayments = await db.payments.findMany({
+                where: { invoice_id: data.invoice_id, status: 'Completed' },
+            });
+            const updatedTotalPaid = updatedPayments.reduce((sum: any, p: any) => sum + Number(p.amount), 0);
+            const updatedBalance = netAmount - updatedTotalPaid;
+            await db.invoices.update({
+                where: { id: data.invoice_id },
+                data: {
+                    paid_amount: updatedTotalPaid,
+                    balance_due: updatedBalance > 0 ? updatedBalance : 0,
+                    version: { increment: 1 },
+                },
+            });
         }
 
         // Referral commission accrues on collected amount (best-effort, never blocks billing)
@@ -3785,7 +3816,7 @@ export async function reconcilePatientOverpayments(patientId: string) {
         // Find invoices with excess payment (paid > net)
         type InvSummary = { id: number; invoice_number: string; net: number; paid: number; excess: number };
         const overpaid: InvSummary[] = [];
-        const underpaid: { id: number; net: number; paid: number; shortfall: number }[] = [];
+        const underpaid: { id: number; invoice_number: string; net: number; paid: number; shortfall: number }[] = [];
 
         for (const inv of invoices) {
             const net = Number(inv.net_amount || 0);
@@ -3794,7 +3825,7 @@ export async function reconcilePatientOverpayments(patientId: string) {
             if (diff > 0.5) { // > 50 paise tolerance
                 overpaid.push({ id: inv.id, invoice_number: inv.invoice_number || '', net, paid, excess: diff });
             } else if (diff < -0.5 && Number(inv.balance_due) > 0) {
-                underpaid.push({ id: inv.id, net, paid, shortfall: Math.abs(diff) });
+                underpaid.push({ id: inv.id, invoice_number: inv.invoice_number || '', net, paid, shortfall: Math.abs(diff) });
             }
         }
 
@@ -3814,7 +3845,22 @@ export async function reconcilePatientOverpayments(patientId: string) {
 
                 const apply = Math.min(remaining, target.shortfall);
 
-                // Create adjustment payment on the target invoice
+                // Create negative adjustment payment on the source invoice
+                await db.payments.create({
+                    data: {
+                        receipt_number: await genRcpNum(organizationId, db),
+                        invoice_id: source.id,
+                        amount: -apply,
+                        payment_method: 'Adjustment',
+                        payment_type: 'adjustment',
+                        status: 'Completed',
+                        notes: `Reconciliation: ₹${apply.toLocaleString('en-IN')} excess transferred to ${target.invoice_number || `Draft #${target.id}`}`,
+                        received_by: session?.username || session?.name || null,
+                        organizationId,
+                    },
+                });
+
+                // Create positive adjustment payment on the target invoice
                 await db.payments.create({
                     data: {
                         receipt_number: await genRcpNum(organizationId, db),
@@ -3823,7 +3869,7 @@ export async function reconcilePatientOverpayments(patientId: string) {
                         payment_method: 'Adjustment',
                         payment_type: 'adjustment',
                         status: 'Completed',
-                        notes: `Reconciliation: ₹${apply.toLocaleString('en-IN')} excess from ${source.invoice_number}`,
+                        notes: `Reconciliation: ₹${apply.toLocaleString('en-IN')} excess from ${source.invoice_number || `Draft #${source.id}`}`,
                         received_by: session?.username || session?.name || null,
                         organizationId,
                     },
@@ -3842,6 +3888,19 @@ export async function reconcilePatientOverpayments(patientId: string) {
                 });
                 target.paid = newPaid;
                 target.shortfall -= apply;
+
+                // Update the source invoice balances
+                const newSourcePaid = source.paid - apply;
+                const newSourceBal = source.net - newSourcePaid;
+                await db.invoices.update({
+                    where: { id: source.id },
+                    data: {
+                        paid_amount: newSourcePaid,
+                        balance_due: newSourceBal > 0 ? newSourceBal : 0,
+                        version: { increment: 1 },
+                    },
+                });
+                source.paid = newSourcePaid;
 
                 remaining -= apply;
                 totalAdjusted += apply;
