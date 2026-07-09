@@ -527,13 +527,15 @@ function DrillDownWrapper({
         <div className="space-y-5">
 
             {/* 🎯 Filter Engine (date-only; doctor select suppressed) 🎯 */}
-            <MISFilterEngine reportId={reportId} doctorOptions={[]} showDoctorFilter={false} filterSpec={filterSpec} />
+            <div className="rounded-2xl border border-gray-200 bg-white/90 p-2 shadow-sm">
+                <MISFilterEngine reportId={reportId} doctorOptions={[]} showDoctorFilter={false} filterSpec={filterSpec} />
+            </div>
 
             {/* ── Data Table Card ─────────────────────────────────────────────── */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden">
 
                 {/* Card header */}
-                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+                <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-gray-50 via-white to-orange-50">
                     <div className="flex items-center gap-2.5">
                         <BarChart3 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
                         <span className="text-sm font-bold text-stone-900 truncate">

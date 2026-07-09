@@ -230,16 +230,27 @@ export function CatalogueShell({ catalogue, totalCount, basePath = '/admin/mis' 
     const isSearching        = query.trim().length > 0;
 
     return (
-        <div className="space-y-7">
+        <div className="space-y-6 rounded-3xl border border-gray-200 bg-white/90 p-3 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-orange-500">
+                        Browse reports
+                    </p>
+                    <h2 className="mt-1 text-lg font-black text-stone-900">
+                        Find the report you need
+                    </h2>
+                    <p className="mt-1 text-sm text-gray-500">
+                        Search by name, description, or module to open a report instantly.
+                    </p>
+                </div>
 
-            {/* ── Stats strip ──────────────────────────────────────────────── */}
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                <StatPill icon={<LayoutGrid className="h-3.5 w-3.5" />} label="Categories" value={Object.keys(catalogue).length} />
-                <StatPill icon={<FileBarChart2 className="h-3.5 w-3.5" />} label="Total Reports" value={totalCount} />
+                <div className="flex flex-wrap items-center gap-2">
+                    <StatPill icon={<LayoutGrid className="h-3.5 w-3.5" />} label="Categories" value={Object.keys(catalogue).length} />
+                    <StatPill icon={<FileBarChart2 className="h-3.5 w-3.5" />} label="Total Reports" value={totalCount} />
+                </div>
             </div>
 
-            {/* ── Search bar ───────────────────────────────────────────────── */}
-            <div className="relative max-w-lg">
+            <div className="relative max-w-2xl">
                 <Search
                     className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"
                     aria-hidden="true"
@@ -254,12 +265,12 @@ export function CatalogueShell({ catalogue, totalCount, basePath = '/admin/mis' 
                     spellCheck={false}
                     aria-label="Search MIS reports"
                     className="
-                        w-full pl-10 pr-10 py-2.5
+                        w-full pl-10 pr-10 py-2
                         text-sm text-stone-900 placeholder:text-gray-400
-                        bg-white border border-gray-200 rounded-xl
+                        bg-gray-50 border border-gray-200 rounded-2xl
                         shadow-sm
                         outline-none
-                        focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100
+                        focus:border-orange-400 focus:ring-2 focus:ring-orange-100
                         transition-all duration-150
                     "
                 />
@@ -295,7 +306,7 @@ export function CatalogueShell({ catalogue, totalCount, basePath = '/admin/mis' 
                         {filteredCategories
                             .filter(([cat]) => cat !== 'Daily Revenue')
                             .map(([category, reports]) => (
-                                <div key={category} className="w-[85vw] md:w-[350px] xl:w-[400px] shrink-0 snap-start">
+                                <div key={category} className="w-[85vw] md:w-88 xl:w-104 shrink-0 snap-start">
                                     <CategoryCard
                                         category={category}
                                         reports={reports}
@@ -338,7 +349,7 @@ function CategoryCard({ category, reports, isSearching, basePath }: CategoryCard
             `}
         >
             {/* Card header */}
-            <div className="px-5 pt-5 pb-4 border-b border-gray-100 flex items-start gap-3.5">
+            <div className="px-4 pt-3 pb-3 border-b border-gray-100 flex items-start gap-3">
                 {/* Coloured icon */}
                 <div className={`p-2.5 rounded-xl shrink-0 ${styles.iconWrap}`}>
                     <Icon className={`h-5 w-5 ${styles.iconText}`} aria-hidden="true" />
@@ -366,7 +377,7 @@ function CategoryCard({ category, reports, isSearching, basePath }: CategoryCard
             </div>
 
             {/* Report list */}
-            <ul className="flex-1 divide-y divide-gray-50 overflow-y-auto max-h-[400px] scroll-smooth" role="list">
+            <ul className="flex-1 divide-y divide-gray-50 overflow-y-auto max-h-100 scroll-smooth" role="list">
                 {reports.map((report) => (
                     <ReportRow
                         key={report.id}
@@ -396,11 +407,11 @@ function ReportRow({ report, styles, basePath }: ReportRowProps) {
             <Link
                 href={report.moduleFlag ? '#' : `${basePath}/${report.id}`}
                 className={`
-                    group flex items-start gap-3 px-5 py-3.5
-                    transition-colors duration-100
+                    group flex items-start gap-3 px-4 py-2.5
+                    transition-all duration-150
                     focus-visible:outline-none
                     focus-visible:ring-2 focus-visible:ring-inset
-                    ${report.moduleFlag ? 'opacity-60 cursor-not-allowed bg-gray-50/50' : `${styles.ring} ${styles.rowHover}`}
+                    ${report.moduleFlag ? 'opacity-60 cursor-not-allowed bg-gray-50/70' : `${styles.ring} ${styles.rowHover}`}
                 `}
                 onClick={(e) => report.moduleFlag && e.preventDefault()}
                 prefetch={false}
@@ -444,7 +455,7 @@ function ReportRow({ report, styles, basePath }: ReportRowProps) {
 
 function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
     return (
-        <div className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-500 text-[11px] font-bold px-3 py-1.5 rounded-full select-none">
+        <div className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-500 text-[11px] font-bold px-2 py-1 rounded-full select-none">
             <span className="text-gray-400">{icon}</span>
             <span className="text-stone-700 font-black tabular-nums">{value}</span>
             <span>{label}</span>
@@ -456,8 +467,8 @@ function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string
 
 function EmptySearchState({ query, onClear }: { query: string; onClear: () => void }) {
     return (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="p-4 bg-gray-100 rounded-2xl mb-4 inline-flex">
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="p-3 bg-gray-100 rounded-2xl mb-4 inline-flex">
                 <Search className="h-7 w-7 text-gray-400" aria-hidden="true" />
             </div>
             <h3 className="font-bold text-stone-900 mb-1 text-base">

@@ -111,17 +111,25 @@ export async function PortalMISViewerPage({
                 </Link>
 
                 {/* ── Page header ───────────────────────────────────────────── */}
-                <div className="flex items-center gap-3">
-                    <div className="p-2.5 bg-orange-100 rounded-xl">
-                        <FileBarChart2 className="h-5 w-5 text-orange-600" />
-                    </div>
-                    <div>
-                        <h1 className="text-lg font-black text-stone-900">
-                            {reportName}
-                        </h1>
-                        <p className="text-sm text-gray-500 font-medium">
-                            {portalName} Portal — MIS Report
-                        </p>
+                <div className="rounded-3xl border border-orange-200/70 bg-gradient-to-br from-orange-50 via-white to-amber-50 p-3 shadow-sm">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-white rounded-2xl shadow-sm ring-1 ring-orange-100">
+                                <FileBarChart2 className="h-5 w-5 text-orange-600" />
+                            </div>
+                            <div>
+                                <h1 className="text-lg font-black text-stone-900">
+                                    {reportName}
+                                </h1>
+                                <p className="text-sm text-gray-500 font-medium">
+                                    {portalName} Portal — MIS Report
+                                </p>
+                            </div>
+                        </div>
+                        <div className="rounded-2xl border border-white/80 bg-white/80 px-3 py-1 shadow-sm">
+                            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-gray-500">Report view</p>
+                            <p className="text-sm font-semibold text-stone-700">Use the filters and export actions to review results quickly.</p>
+                        </div>
                     </div>
                 </div>
 
