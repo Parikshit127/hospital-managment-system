@@ -3598,6 +3598,16 @@ export async function recordSupplierPayment(data: {
             return { success: false, error: 'Invoice must be Posted or PartiallyPaid' };
         }
 
+        // Credit = purchase on supplier account — payable stays open, no cash/bank movement.
+        if (data.payment_method === 'Credit') {
+            revalidatePath('/pharmacy/purchase-invoices');
+            return { success: true, fully_paid: false, on_credit: true };
+        }
+
+        if (!data.amount || data.amount <= 0) {
+            return { success: false, error: 'Enter a valid payment amount' };
+        }
+
         const newPaid = Number(invoice.amount_paid) + data.amount;
         const fullyPaid = newPaid >= Number(invoice.total_amount);
 
@@ -3611,12 +3621,13 @@ export async function recordSupplierPayment(data: {
 
         // GL: debit Vendor Payable, credit Cash/Bank
         try {
+            const creditAccount = data.payment_method === 'Cash' ? '1000' : '1010';
             await postPharmacyJournal(db, invoice.organizationId, {
                 narration: `Supplier payment: ${invoice.vendor?.vendor_name} — ${invoice.invoice_number}`,
                 reference_number: `SUPPAY-${invoice.invoice_number}-${Date.now()}`,
                 lines: [
                     { account_code: '3110', debit: data.amount, credit: 0, description: 'Vendor payable settlement' },
-                    { account_code: data.payment_method === 'Bank' ? '1010' : '1000', debit: 0, credit: data.amount, description: `Payment via ${data.payment_method}` },
+                    { account_code: creditAccount, debit: 0, credit: data.amount, description: `Payment via ${data.payment_method}` },
                 ]
             });
         } catch (glErr) {

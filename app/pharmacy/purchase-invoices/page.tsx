@@ -37,7 +37,7 @@ export default function PurchaseInvoicesPage() {
     // Create form
     const [vendors, setVendors] = useState<any[]>([]);
     const [pos, setPos] = useState<any[]>([]);
-    const [form, setForm] = useState({ vendor_id: '', po_id: '', invoice_number: '', invoice_date: new Date().toISOString().slice(0, 10), due_date: '', vendor_gstin: '' });
+    const [form, setForm] = useState({ vendor_id: '', po_id: '', invoice_number: '', invoice_date: new Date().toISOString().slice(0, 10), due_date: '', vendor_gstin: '', payment_terms: 'Credit' });
     const [lines, setLines] = useState<any[]>([{ medicine_id: '', medicine_name: '', quantity: 1, unit_price: 0, gst_rate: 12, hsn_code: '3004' }]);
     const [medSearch, setMedSearch] = useState('');
     const [medResults, setMedResults] = useState<any[]>([]);
@@ -46,7 +46,7 @@ export default function PurchaseInvoicesPage() {
 
     // Pay form
     const [payAmount, setPayAmount] = useState('');
-    const [payMethod, setPayMethod] = useState('Bank');
+    const [payMethod, setPayMethod] = useState('Credit');
     const [payRef, setPayRef] = useState('');
     const [paying, setPaying] = useState(false);
 
@@ -67,7 +67,7 @@ export default function PurchaseInvoicesPage() {
         if (v.success) setVendors(v.data || []);
         // Show all POs that are not cancelled — invoice can be created for any stage
         if (p.success) setPos(p.data || []);
-        setForm({ vendor_id: '', po_id: '', invoice_number: '', invoice_date: new Date().toISOString().slice(0, 10), due_date: '', vendor_gstin: '' });
+        setForm({ vendor_id: '', po_id: '', invoice_number: '', invoice_date: new Date().toISOString().slice(0, 10), due_date: '', vendor_gstin: '', payment_terms: 'Credit' });
         setLines([{ medicine_id: '', medicine_name: '', quantity: 1, unit_price: 0, gst_rate: 12, hsn_code: '3004' }]);
         setShowCreate(true);
     };
@@ -178,17 +178,21 @@ export default function PurchaseInvoicesPage() {
     };
 
     const handlePay = async () => {
-        if (!showPayModal || !payAmount) return;
+        if (!showPayModal) return;
+        if (payMethod !== 'Credit' && !payAmount) return;
         setPaying(true);
         const res = await recordSupplierPayment({
             invoice_id: showPayModal.id,
-            amount: parseFloat(payAmount),
+            amount: payMethod === 'Credit' ? 0 : parseFloat(payAmount),
             payment_method: payMethod,
             payment_reference: payRef || undefined,
         });
         setPaying(false);
-        if (res.success) { toast.success(res.fully_paid ? 'Fully paid' : 'Partial payment recorded'); setShowPayModal(null); load(); }
-        else toast.error(res.error || 'Failed');
+        if (res.success) {
+            toast.success((res as any).on_credit ? 'Invoice on supplier credit — payable balance unchanged' : res.fully_paid ? 'Fully paid' : 'Partial payment recorded');
+            setShowPayModal(null);
+            load();
+        } else toast.error(res.error || 'Failed');
     };
 
     // Round each line to 2dp (paise) so the displayed grand total matches what
@@ -268,7 +272,7 @@ export default function PurchaseInvoicesPage() {
                                                 <button onClick={() => handlePost(inv)} className="p-1.5 hover:bg-blue-50 rounded-lg" title="Post to GL"><CheckCircle className="h-3.5 w-3.5 text-blue-500" /></button>
                                             )}
                                             {['Posted', 'PartiallyPaid'].includes(inv.status) && (
-                                                <button onClick={() => { setShowPayModal(inv); setPayAmount(String(Number(inv.total_amount) - Number(inv.amount_paid))); }} className="p-1.5 hover:bg-emerald-50 rounded-lg" title="Record Payment"><CreditCard className="h-3.5 w-3.5 text-emerald-500" /></button>
+                                                <button onClick={() => { setShowPayModal(inv); setPayAmount(String(Number(inv.total_amount) - Number(inv.amount_paid))); setPayMethod('Credit'); setPayRef(''); }} className="p-1.5 hover:bg-emerald-50 rounded-lg" title="Record Payment"><CreditCard className="h-3.5 w-3.5 text-emerald-500" /></button>
                                             )}
                                         </div>
                                     </td>
@@ -358,26 +362,33 @@ export default function PurchaseInvoicesPage() {
                             <p className="text-sm text-gray-600">Invoice: <span className="font-bold">{showPayModal.invoice_number}</span> | Balance: <span className="font-bold text-red-600">{fmt(Number(showPayModal.total_amount) - Number(showPayModal.amount_paid))}</span></p>
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-black text-gray-400 uppercase">Amount</label>
-                                <input type="number" value={payAmount} onChange={e => setPayAmount(e.target.value)} className="w-full p-3 border border-gray-300 rounded-xl text-sm font-bold" />
+                                <input type="number" value={payAmount} onChange={e => setPayAmount(e.target.value)} disabled={payMethod === 'Credit'} className="w-full p-3 border border-gray-300 rounded-xl text-sm font-bold disabled:bg-gray-50 disabled:text-gray-400" />
                             </div>
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-black text-gray-400 uppercase">Method</label>
                                 <select value={payMethod} onChange={e => setPayMethod(e.target.value)} className="w-full p-3 border border-gray-300 rounded-xl text-sm">
+                                    <option value="Credit">Credit (Pay Later)</option>
                                     <option value="Bank">Bank Transfer</option>
                                     <option value="Cash">Cash</option>
                                     <option value="Cheque">Cheque</option>
                                     <option value="UPI">UPI</option>
                                 </select>
                             </div>
+                            {payMethod === 'Credit' ? (
+                                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                                    Payment deferred on supplier credit. Post the invoice first — balance stays in Vendor Payable until you pay via Bank/Cash/UPI/Cheque.
+                                </p>
+                            ) : (
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-black text-gray-400 uppercase">Reference</label>
                                 <input value={payRef} onChange={e => setPayRef(e.target.value)} className="w-full p-3 border border-gray-300 rounded-xl text-sm" placeholder="UTR / Cheque No." />
                             </div>
+                            )}
                         </div>
                         <div className="p-5 bg-gray-50 border-t flex justify-end gap-3">
                             <button onClick={() => setShowPayModal(null)} className="px-5 py-2.5 text-gray-500 font-bold">Cancel</button>
-                            <button onClick={handlePay} disabled={paying} className="px-6 py-2.5 bg-emerald-500 text-white font-bold rounded-xl flex items-center gap-2 disabled:opacity-70">
-                                {paying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />} Pay
+                            <button onClick={handlePay} disabled={paying} className={`px-6 py-2.5 text-white font-bold rounded-xl flex items-center gap-2 disabled:opacity-70 ${payMethod === 'Credit' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}>
+                                {paying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />} {payMethod === 'Credit' ? 'Confirm on Credit' : 'Pay'}
                             </button>
                         </div>
                     </div>
@@ -425,7 +436,19 @@ export default function PurchaseInvoicesPage() {
                                     <label className="text-[10px] font-black text-gray-400 uppercase">Due Date</label>
                                     <DateField value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })} className="w-full p-3 border border-gray-300 rounded-xl text-sm" />
                                 </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase">Payment Terms</label>
+                                    <select value={form.payment_terms} onChange={e => setForm({ ...form, payment_terms: e.target.value })} className="w-full p-3 border border-gray-300 rounded-xl text-sm">
+                                        <option value="Credit">Credit (Pay Later)</option>
+                                        <option value="Immediate">Immediate Payment</option>
+                                    </select>
+                                </div>
                             </div>
+                            {form.payment_terms === 'Credit' && !form.due_date && (
+                                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                                    Set a due date for credit purchases. After posting, the invoice stays in Vendor Payable until paid.
+                                </p>
+                            )}
 
                             {/* Line Items */}
                             <h4 className="text-xs font-black text-gray-400 uppercase pt-2">Line Items</h4>
