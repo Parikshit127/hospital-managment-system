@@ -5,12 +5,51 @@ import { resolveIncomeHeadCode, incomeHeadName } from '@/app/lib/gl-income-head-
 import { formatDoctorName } from '@/app/lib/format-name';
 import { canonicalTender, tenderVariants } from '@/app/lib/payment-tender';
 
+type MISPaymentBreakup = {
+    cash_amount: number;
+    upi_amount: number;
+    card_amount: number;
+    bank_transfer_amount: number;
+};
+
 function serialize<T>(data: T): T {
     return JSON.parse(JSON.stringify(data, (_, value) =>
         typeof value === 'object' && value !== null && value.constructor?.name === 'Decimal'
             ? Number(value)
             : value
     ));
+}
+
+function emptyMISPaymentBreakup(): MISPaymentBreakup {
+    return { cash_amount: 0, upi_amount: 0, card_amount: 0, bank_transfer_amount: 0 };
+}
+
+function misPaymentBreakupKey(method: string | null | undefined): keyof MISPaymentBreakup | null {
+    const tender = canonicalTender(method);
+    if (tender === 'Cash') return 'cash_amount';
+    if (tender === 'UPI') return 'upi_amount';
+    if (tender === 'Card') return 'card_amount';
+    if (tender === 'Bank Transfer' || tender === 'NEFT/RTGS') return 'bank_transfer_amount';
+    return null;
+}
+
+function addMISPaymentBreakup(
+    target: MISPaymentBreakup,
+    method: string | null | undefined,
+    amount: number,
+    direction: 1 | -1 = 1,
+) {
+    const key = misPaymentBreakupKey(method);
+    if (!key) return;
+    target[key] += direction * Number(amount || 0);
+}
+
+function mergeMISPaymentBreakup(target: MISPaymentBreakup, source: MISPaymentBreakup | undefined, direction: 1 | -1 = 1) {
+    if (!source) return;
+    target.cash_amount += direction * Number(source.cash_amount || 0);
+    target.upi_amount += direction * Number(source.upi_amount || 0);
+    target.card_amount += direction * Number(source.card_amount || 0);
+    target.bank_transfer_amount += direction * Number(source.bank_transfer_amount || 0);
 }
 
 export async function getCollectionsReport(filters: { from: string; to: string; method?: string; invoiceType?: string; admissionStatus?: string }) {
@@ -916,7 +955,7 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 },
                 payments: {
                     where: { status: 'Completed' },
-                    select: { amount: true, payment_method: true, payment_type: true },
+                    select: { amount: true, payment_method: true, payment_type: true, notes: true },
                 },
                 credit_notes: {
                     where: { status: 'Applied' },
@@ -1007,18 +1046,57 @@ export async function getMISReport(filters: { from: string; to: string; billType
         const invoiceIds = invoices.map((i: any) => i.id);
         const admissionIds = [...new Set(invoices.filter((i: any) => i.admission_id).map((i: any) => i.admission_id))] as string[];
         const appliedDepByInvoice: Record<number, number> = {};
+        const appliedDepBreakupByInvoice: Record<number, MISPaymentBreakup> = {};
         const availDepByAdmission: Record<string, number> = {};
-        const depositRows = await db.patientDeposit.findMany({
+        const availDepBreakupByAdmission: Record<string, MISPaymentBreakup> = {};
+        type DepositTenderRow = {
+            deposit_number: string | null;
+            payment_method: string | null;
+            applied_to_invoice: number | null;
+            admission_id: string | null;
+            amount: unknown;
+            applied_amount: unknown;
+            refunded_amount: unknown;
+            status: string | null;
+        };
+        const depositRows: DepositTenderRow[] = await db.patientDeposit.findMany({
             where: { OR: [{ applied_to_invoice: { in: invoiceIds } }, ...(admissionIds.length ? [{ admission_id: { in: admissionIds } }] : [])] },
-            select: { applied_to_invoice: true, admission_id: true, amount: true, applied_amount: true, refunded_amount: true, status: true },
+            select: {
+                deposit_number: true,
+                payment_method: true,
+                applied_to_invoice: true,
+                admission_id: true,
+                amount: true,
+                applied_amount: true,
+                refunded_amount: true,
+                status: true,
+            },
         });
-        for (const d of depositRows as any[]) {
+        const depositTenderByNumber = new Map<string, string>(
+            depositRows
+                .filter((d) => d.deposit_number)
+                .map((d) => [String(d.deposit_number), String(d.payment_method || '')])
+        );
+        const resolvePaymentTender = (payment: { payment_method?: string | null; notes?: string | null } | null | undefined) => {
+            if (!payment) return null;
+            if (canonicalTender(payment.payment_method) !== 'Deposit') return payment.payment_method;
+            const match = /deposit\s+(\S+)/i.exec(payment.notes || '');
+            return match ? (depositTenderByNumber.get(match[1]) || payment.payment_method) : payment.payment_method;
+        };
+        for (const d of depositRows) {
             if (d.applied_to_invoice != null) {
-                appliedDepByInvoice[d.applied_to_invoice] = (appliedDepByInvoice[d.applied_to_invoice] || 0) + Number(d.applied_amount || 0);
+                const applied = Number(d.applied_amount || 0);
+                appliedDepByInvoice[d.applied_to_invoice] = (appliedDepByInvoice[d.applied_to_invoice] || 0) + applied;
+                const bucket = appliedDepBreakupByInvoice[d.applied_to_invoice] || emptyMISPaymentBreakup();
+                addMISPaymentBreakup(bucket, d.payment_method, applied);
+                appliedDepBreakupByInvoice[d.applied_to_invoice] = bucket;
             }
             if (d.admission_id && d.status === 'Active') {
                 const avail = Math.max(0, Number(d.amount || 0) - Number(d.applied_amount || 0) - Number(d.refunded_amount || 0));
                 availDepByAdmission[d.admission_id] = (availDepByAdmission[d.admission_id] || 0) + avail;
+                const bucket = availDepBreakupByAdmission[d.admission_id] || emptyMISPaymentBreakup();
+                addMISPaymentBreakup(bucket, d.payment_method, avail);
+                availDepBreakupByAdmission[d.admission_id] = bucket;
             }
         }
 
@@ -1027,14 +1105,39 @@ export async function getMISReport(filters: { from: string; to: string; billType
         // (and correspondingly raises outstanding). Only settled refunds count.
         const refundByInvoice: Record<number, number> = {};
         // invoices.id is Int but refunds.invoice_id is String — match on string keys.
-        const refundRows = await db.refund.findMany({
+        type RefundTenderRow = { invoice_id: string | null; payment_id: string | null; amount: unknown };
+        type RefundPaymentTender = { id: number; payment_method: string | null; notes: string | null };
+        const refundRows: RefundTenderRow[] = await db.refund.findMany({
             where: { invoice_id: { in: invoiceIds.map(String) }, status: { in: ['Approved', 'Processed'] } },
-            select: { invoice_id: true, amount: true },
+            select: { invoice_id: true, payment_id: true, amount: true },
         });
-        for (const r of refundRows as any[]) {
+        const refundPaymentIds = [...new Set(
+            refundRows
+                .map((r) => Number(r.payment_id))
+                .filter((n: number) => Number.isFinite(n))
+        )];
+        const refundPayments: RefundPaymentTender[] = refundPaymentIds.length
+            ? await db.payments.findMany({
+                where: { id: { in: refundPaymentIds } },
+                select: { id: true, payment_method: true, notes: true },
+            })
+            : [];
+        const refundPaymentById = new Map<string, RefundPaymentTender>(
+            refundPayments.map((p) => [String(p.id), p])
+        );
+        const refundBreakupByInvoice: Record<number, MISPaymentBreakup> = {};
+        for (const r of refundRows) {
             if (r.invoice_id != null) {
                 const key = Number(r.invoice_id);
-                refundByInvoice[key] = (refundByInvoice[key] || 0) + Number(r.amount || 0);
+                const refundAmount = Number(r.amount || 0);
+                refundByInvoice[key] = (refundByInvoice[key] || 0) + refundAmount;
+                const refundPayment = refundPaymentById.get(String(r.payment_id)) || null;
+                const refundTender = resolvePaymentTender(refundPayment);
+                if (refundTender) {
+                    const bucket = refundBreakupByInvoice[key] || emptyMISPaymentBreakup();
+                    addMISPaymentBreakup(bucket, refundTender, refundAmount);
+                    refundBreakupByInvoice[key] = bucket;
+                }
             }
         }
 
@@ -1208,6 +1311,18 @@ export async function getMISReport(filters: { from: string; to: string; billType
             // Net refunds off collection figures (floored at 0).
             const receivedAmount = Math.max(0, nonDepositPaid + appliedDep + availDep - refundAmount);
             const netPatientReceipt = Math.max(0, patientPayments - refundAmount);
+            const paymentBreakup = emptyMISPaymentBreakup();
+            for (const p of allPayments) {
+                if (canonicalTender(p.payment_method) === 'Deposit') continue;
+                addMISPaymentBreakup(paymentBreakup, p.payment_method, Number(p.amount || 0));
+            }
+            mergeMISPaymentBreakup(paymentBreakup, appliedDepBreakupByInvoice[inv.id]);
+            if (inv.admission_id) mergeMISPaymentBreakup(paymentBreakup, availDepBreakupByAdmission[inv.admission_id]);
+            mergeMISPaymentBreakup(paymentBreakup, refundBreakupByInvoice[inv.id], -1);
+            paymentBreakup.cash_amount = Math.max(0, paymentBreakup.cash_amount);
+            paymentBreakup.upi_amount = Math.max(0, paymentBreakup.upi_amount);
+            paymentBreakup.card_amount = Math.max(0, paymentBreakup.card_amount);
+            paymentBreakup.bank_transfer_amount = Math.max(0, paymentBreakup.bank_transfer_amount);
 
             return {
                 invoice_id: inv.id,
@@ -1243,6 +1358,10 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 net_amount: netAmount,
                 gross_net_diff: grossAmount - netAmount,
                 received_amount: receivedAmount,
+                cash_amount: paymentBreakup.cash_amount,
+                upi_amount: paymentBreakup.upi_amount,
+                card_amount: paymentBreakup.card_amount,
+                bank_transfer_amount: paymentBreakup.bank_transfer_amount,
                 outstanding_amount: Math.max(0, netAmount - receivedAmount),
                 patient_receipt: netPatientReceipt,
                 // TPA sanctioned/approved amount — only meaningful for TPA/Insurance

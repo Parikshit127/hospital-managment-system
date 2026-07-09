@@ -51,6 +51,10 @@ const MIS_COLUMNS: { key: string; label: string; type: 'text' | 'currency' | 'da
     { key: 'net_amount', label: 'Net Amount', type: 'currency', width: '110px' },
     { key: 'approved_amount', label: 'Approved Amount', type: 'currency', width: '120px' },
     { key: 'received_amount', label: 'Received', type: 'currency', width: '110px' },
+    { key: 'cash_amount', label: 'Cash', type: 'currency', width: '100px' },
+    { key: 'upi_amount', label: 'UPI', type: 'currency', width: '100px' },
+    { key: 'card_amount', label: 'Card', type: 'currency', width: '100px' },
+    { key: 'bank_transfer_amount', label: 'Bank Transfer', type: 'currency', width: '120px' },
     { key: 'outstanding_amount', label: 'Outstanding', type: 'currency', width: '110px' },
     { key: 'patient_receipt', label: 'Patient Receipt', type: 'currency', width: '110px' },
     { key: 'referral_source', label: 'Referral Source', type: 'text', width: '120px' },
@@ -255,7 +259,7 @@ export function MISReportContent({ shell = 'app' }: { shell?: 'app' | 'admin' })
                             </span>
                         </div>
                         <div className="overflow-x-auto">
-                            <table className="text-xs" style={{ minWidth: '3200px' }}>
+                            <table className="text-xs" style={{ minWidth: '3660px' }}>
                                 <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                                     <tr>
                                         <th className="px-3 py-2.5 text-center text-[10px] font-black text-gray-400 uppercase tracking-wider w-10">#</th>
