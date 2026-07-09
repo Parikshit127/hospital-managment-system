@@ -78,7 +78,10 @@ export function DischargeSettlementContent({ adminMode = false }: { adminMode?: 
     const balanceDue = Math.max(0, netBill - priorPayments - depositsToApply - insuranceApproved - tpaApprovedAmount);
 
     const splitTotal = splits.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-    const overpaid = splitTotal > balanceDue + 0.01;
+    // Allow up to ₹0.99 overpayment margin to accommodate paise rounding 
+    // without blocking the discharge process. The backend handles this gracefully.
+    const overpaymentMargin = 0.99;
+    const overpaid = splitTotal > balanceDue + overpaymentMargin;
     // Outstanding by default: any balance not explicitly paid stays on the invoice.
     const willHaveOutstanding = balanceDue > 0 && splitTotal < balanceDue - 0.01;
 
