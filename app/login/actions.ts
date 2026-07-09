@@ -203,3 +203,14 @@ export async function logout() {
     cookieStore.delete('last_activity');
     redirect('/login');
 }
+
+export async function getPatientCount() {
+    try {
+        const count = await prisma.oPD_REG.count();
+        return count;
+    } catch (error) {
+        console.error('Error fetching patient count:', error);
+        return 0;
+    }
+}
+

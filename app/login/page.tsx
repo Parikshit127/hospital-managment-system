@@ -2,7 +2,10 @@
 
 import { useActionState, useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { login } from './actions';
+import { login, getPatientCount } from './actions';
+import { Lock, Phone, Check } from 'lucide-react';
+import HeartbeatLine from '@/app/components/ui/HeartbeatLine';
+
 
 function LoginForm({ isTimeout }: { isTimeout: boolean }) {
     const [state, loginAction, isPending] = useActionState(login, { success: false, error: '' });
@@ -16,10 +19,10 @@ function LoginForm({ isTimeout }: { isTimeout: boolean }) {
     }, [state, router]);
 
     return (
-        <div className="bg-white rounded-3xl shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] w-full overflow-hidden relative border border-gray-100">
+        <div className="bg-white rounded-[28px] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.03)] w-full overflow-hidden border border-[#ede9e2]">
             <div className="p-8 md:p-10">
-                <h2 className="text-2xl font-bold text-[#0f172a] mb-2">Sign in to Axten</h2>
-                <p className="text-gray-500 text-sm mb-8">Enter your details to access your workspace.</p>
+                <h2 className="text-3xl font-extrabold text-[#0a1e42] tracking-tight mb-2">Sign in to Axten</h2>
+                <p className="text-[#64748b] text-[14px] font-medium mb-8">Enter your details to access your workspace.</p>
                 
                 {isTimeout && (
                     <div className="mb-6 p-3 bg-amber-50 text-amber-800 text-sm rounded-lg border border-amber-200 flex items-center gap-2">
@@ -34,25 +37,46 @@ function LoginForm({ isTimeout }: { isTimeout: boolean }) {
                     </div>
                 )}
 
-                <form action={loginAction} className="space-y-5">
+                <form action={loginAction} className="space-y-6">
                     <div>
-                        <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">Username</label>
-                        <input type="text" name="username" required className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#f97316]/20 focus:border-[#f97316] transition-all text-sm" placeholder="Enter username" />
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 ml-1">Username</label>
+                        <input 
+                            type="text" 
+                            name="username" 
+                            required 
+                            className="w-full px-5 py-4 bg-[#faf9f6] border border-slate-200/80 rounded-full focus:outline-none focus:ring-2 focus:ring-[#f97316]/10 focus:border-[#f97316] transition-all text-sm text-[#0a1e42] placeholder-slate-400 font-medium" 
+                            placeholder="Enter username" 
+                        />
                     </div>
                     <div>
-                        <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">Password</label>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 ml-1">Password</label>
                         <div className="relative">
-                            <input type={showPassword ? 'text' : 'password'} name="password" required className="w-full pl-4 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#f97316]/20 focus:border-[#f97316] transition-all text-sm" placeholder="••••••••" />
-                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-200/50 transition-colors">
+                            <input 
+                                type={showPassword ? 'text' : 'password'} 
+                                name="password" 
+                                required 
+                                className="w-full pl-5 pr-12 py-4 bg-[#faf9f6] border border-slate-200/80 rounded-full focus:outline-none focus:ring-2 focus:ring-[#f97316]/10 focus:border-[#f97316] transition-all text-sm text-[#0a1e42] placeholder-slate-400 font-medium tracking-wide" 
+                                placeholder="••••••••" 
+                            />
+                            <button 
+                                type="button" 
+                                onClick={() => setShowPassword(!showPassword)} 
+                                className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-[#f97316] rounded-md transition-colors"
+                            >
                                 {showPassword ? (
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
                                 ) : (
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                                 )}
                             </button>
                         </div>
                     </div>
-                    <button type="submit" disabled={isPending} className="w-full py-3.5 px-4 bg-[#f97316] hover:bg-[#ea580c] text-white font-bold rounded-xl shadow-lg shadow-[#f97316]/20 transition-all disabled:opacity-70 mt-4 flex justify-center items-center gap-2 text-sm hover:-translate-y-0.5">
+
+                    <button 
+                        type="submit" 
+                        disabled={isPending} 
+                        className="w-full py-4 px-4 bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold rounded-full shadow-md shadow-[#f97316]/10 hover:shadow-lg transition-all disabled:opacity-70 mt-8 flex justify-center items-center gap-2 text-sm hover:-translate-y-0.5"
+                    >
                         {isPending ? (
                             <>
                                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -61,92 +85,133 @@ function LoginForm({ isTimeout }: { isTimeout: boolean }) {
                         ) : 'Sign In'}
                     </button>
                 </form>
-                
-                {/* <div className="mt-8 pt-6 border-t border-gray-100">
-                    <p className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Authorized Roles</p>
-                    <div className="flex flex-wrap justify-center gap-2">
-                        {['Admin', 'Doctor', 'Receptionist', 'Lab Tech'].map(role => (
-                            <span key={role} className="px-3 py-1.5 bg-gray-50 border border-gray-200 text-gray-500 text-[11px] font-bold rounded-full">{role}</span>
-                        ))}
-                    </div>
-                </div> */}
             </div>
         </div>
     );
 }
 
+
 function LandingPage() {
     const searchParams = useSearchParams();
     const isTimeout = searchParams.get('reason') === 'timeout';
+    const [patientCount, setPatientCount] = useState<number | null>(null);
+
+    useEffect(() => {
+        getPatientCount().then((count) => {
+            if (!count || count <= 0) {
+                setPatientCount(0);
+                return;
+            }
+            // Count up animation
+            let start = 0;
+            const end = count;
+            const duration = 1000; // 1 second duration
+            const increment = Math.ceil(end / (duration / 16)); // ~60fps
+            const timer = setInterval(() => {
+                start += increment;
+                if (start >= end) {
+                    clearInterval(timer);
+                    setPatientCount(end);
+                } else {
+                    setPatientCount(start);
+                }
+            }, 16);
+            return () => clearInterval(timer);
+        });
+    }, []);
 
     return (
-        <div className="min-h-screen bg-white relative overflow-hidden font-sans flex flex-col">
+        <div className="min-h-screen bg-[#faf9f6] relative overflow-hidden font-sans flex flex-col justify-between">
             {/* Subtle Grid Background */}
             <div className="absolute inset-0 pointer-events-none z-0" style={{
-                backgroundImage: `linear-gradient(to right, #f1f5f9 1px, transparent 1px), linear-gradient(to bottom, #f1f5f9 1px, transparent 1px)`,
-                backgroundSize: '40px 40px',
-                maskImage: 'linear-gradient(to bottom, black 40%, transparent 100%)',
-                WebkitMaskImage: 'linear-gradient(to bottom, black 40%, transparent 100%)'
+                backgroundImage: `linear-gradient(to right, rgba(230, 220, 205, 0.3) 1px, transparent 1px), linear-gradient(to bottom, rgba(230, 220, 205, 0.3) 1px, transparent 1px)`,
+                backgroundSize: '48px 48px',
             }} />
 
             {/* Top Navigation */}
-            <nav className="relative z-10 flex items-center justify-between px-8 md:px-16 lg:px-20 py-5 border-b border-gray-100 bg-white/80 backdrop-blur-md">
+            <nav className="relative z-10 flex items-center justify-between px-8 md:px-16 lg:px-20 py-6">
                 <div className="flex items-center gap-2">
                     {/* Axten Logo */}
-                    <div className="flex items-center text-2xl font-black tracking-tight select-none" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-                        <span className="text-[#1b305b]">Axten</span>
-                        <span className="text-[#f2782e] ml-1.5 flex items-start">
-                            OS<span className="text-sm font-bold relative -top-1.5 ml-0.5">+</span>
+                    <div className="flex items-center text-xl font-extrabold tracking-tight select-none">
+                        <span className="text-[#0a1e42] font-black text-[22px]">Axten</span>
+                        <span className="text-[#ea580c] font-black text-[22px] inline-flex items-start">
+                            OS<sup className="text-xs font-bold relative top-[-0.15em] ml-0.5">+</sup>
                         </span>
                     </div>
                 </div>
-
-                {/* <div className="hidden lg:flex items-center gap-8 text-sm font-semibold text-[#1e3a6e]">
-                    <a href="#" className="hover:text-[#f97316] transition-colors">Staff Directory</a>
-                    <a href="#" className="hover:text-[#f97316] transition-colors">Departments</a>
-                    <a href="#" className="hover:text-[#f97316] transition-colors">Help Desk</a>
-                </div> */}
-                
-                {/* Empty div to maintain space-between flex layout since we removed the button */}
                 <div className="w-[120px] hidden lg:block"></div>
             </nav>
 
             {/* Main Content */}
-            <main className="relative z-10 w-full max-w-[1400px] mx-auto px-10 md:px-20 py-12 lg:py-0 flex-1 grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-12 lg:gap-20 items-center">
-                {/* Left Side: Copy */}
-                <div className="max-w-2xl">
-                    <div className="inline-flex items-center gap-3 px-1 py-1 pr-4 bg-white border border-gray-200 rounded-full mb-8 shadow-sm">
-                        <span className="px-3 py-1 bg-[#fff7ed] text-[#f97316] text-[11px] font-bold rounded-full uppercase tracking-wider">SECURE</span>
-                        <span className="text-sm font-medium text-gray-600">Authorized Personnel Only</span>
+            <main className="relative z-10 w-full max-w-[1400px] mx-auto px-8 md:px-16 lg:px-20 py-12 lg:py-0 flex-1 grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-12 lg:gap-20 items-center lg:items-stretch">
+                {/* Left Side: Copy & Stats */}
+                <div className="max-w-2xl flex flex-col justify-between lg:h-full lg:py-6">
+                    {/* Top Group */}
+                    <div>
+                        <div className="inline-flex items-center gap-2.5 px-1 py-1 pr-4 bg-white/40 border border-[#ede9e2] rounded-full mb-6 shadow-sm">
+                            <span className="px-3 py-1 bg-[#ffedd5] text-[#c2410c] text-[11px] font-bold rounded-full uppercase tracking-wider">SECURE</span>
+                            <span className="text-sm font-semibold text-[#64748b]">Authorized personnel only</span>
+                        </div>
+
+                        <h1 className="text-[44px] lg:text-[56px] leading-[1.08] font-extrabold text-[#0a1e42] tracking-tight mb-5">
+                            Welcome to<br />the Axten <span className="text-[#ea580c] inline-flex items-start">OS<sup className="text-[0.55em] font-extrabold relative top-[-0.2em] ml-0.5">+</sup></span>
+                        </h1>
+
+                        <p className="text-[15px] text-[#64748b] leading-[1.65] font-semibold max-w-[480px]">
+                            Access your personalized dashboard to manage patient records, appointments, billing, and clinical operations efficiently and securely.
+                        </p>
                     </div>
 
-                    <h1 className="text-[56px] lg:text-[72px] leading-[1.05] font-extrabold text-[#0a1e42] tracking-[-0.03em] mb-8" style={{ fontFamily: 'var(--font-sans), sans-serif' }}>
-                        Welcome to<br />The <span className="text-[#1b305b]">Axten</span> <span className="text-[#f2782e] inline-flex items-start">OS<sup className="text-[0.55em] font-bold relative -top-[0.2em] ml-0.5">+</sup></span>
-                    </h1>
+                    {/* Animated Heartbeat EKG UI */}
+                    <div className="w-full max-w-[480px] my-6 overflow-hidden">
+                        <HeartbeatLine color="#ea580c" speed={3.2} className="w-full h-12" />
+                    </div>
 
-                    {/* <div className="w-2.5 h-2.5 bg-[#0a1e42] rounded-full mb-8" /> */}
-
-                    <p className="text-[19px] text-gray-600 leading-[1.6] font-medium max-w-[500px]">
-                        Access your personalized dashboard to manage patient records, appointments, billing, and clinical operations efficiently and securely.
-                    </p>
+                    {/* Stats columns */}
+                    <div className="grid grid-cols-3 gap-6 max-w-[500px]">
+                        <div>
+                            <div className="text-[26px] font-black text-[#0a1e42] tracking-tight mb-1">
+                                {patientCount !== null ? patientCount.toLocaleString() : '0'}+
+                            </div>
+                            <div className="text-[10px] font-extrabold text-slate-400 leading-tight uppercase tracking-wider">
+                                Patient Records<br />Managed
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-[26px] font-black text-[#0a1e42] tracking-tight mb-1">
+                                98.9%
+                            </div>
+                            <div className="text-[10px] font-extrabold text-slate-400 leading-tight uppercase tracking-wider">
+                                Uptime Last 12<br />Months
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-[26px] font-black text-[#0a1e42] tracking-tight mb-1">
+                                24/7
+                            </div>
+                            <div className="text-[10px] font-extrabold text-slate-400 leading-tight uppercase tracking-wider">
+                                Clinical Operations<br />Support
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Right Side: Login Form */}
                 <div className="relative flex justify-center lg:justify-center w-full">
                     {/* Floating shadow behind form for extra depth */}
-                    <div className="absolute inset-0 bg-[#0f172a]/5 blur-[60px] transform rotate-2 scale-105 rounded-[3rem] pointer-events-none" />
+                    <div className="absolute inset-0 bg-[#0f172a]/2 blur-[50px] transform rotate-1 scale-105 rounded-[3rem] pointer-events-none" />
                     
-                    <div className="w-full max-w-[440px] relative z-10">
+                    <div className="w-full max-w-[450px] relative z-10 mt-8 lg:mt-12">
                         <LoginForm isTimeout={isTimeout} />
                     </div>
                 </div>
             </main>
 
             {/* Footer */}
-            <footer className="relative z-10 w-full max-w-[1400px] mx-auto px-10 md:px-20 py-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-400">
+            <footer className="relative z-10 w-full max-w-[1400px] mx-auto px-8 md:px-16 lg:px-20 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-bold text-slate-400">
                 <div className="flex gap-6">
-                    <a href="#" className="hover:text-[#f97316] transition-colors">Terms & Conditions</a>
-                    <a href="#" className="hover:text-[#f97316] transition-colors">Privacy Policy</a>
+                    <a href="#" className="hover:text-[#ea580c] transition-colors">Terms & Conditions</a>
+                    <a href="#" className="hover:text-[#ea580c] transition-colors">Privacy Policy</a>
                 </div>
                 <div>
                     © 2026 Axten. All rights reserved.
