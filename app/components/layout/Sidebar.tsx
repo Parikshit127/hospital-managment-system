@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { logout } from "@/app/login/actions";
@@ -653,41 +653,51 @@ export function Sidebar({ session }: SidebarProps) {
     window.localStorage.setItem("sidebar-collapsed", String(collapsed));
   }, [collapsed]);
 
-  // Every page renders its own AppShell, so the sidebar unmounts/remounts on
-  // each navigation — which snapped a scrolled menu (e.g. the long Finance nav)
-  // back to the top. Persist the nav scroll position and restore it on mount.
-  const navRef = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    const el = navRef.current;
-    if (!el) return;
-    let onScroll: (() => void) | null = null;
-
-    const timer = setTimeout(() => {
-      try {
-        const saved = window.sessionStorage.getItem("sidebar-scroll");
-        if (saved) el.scrollTop = parseInt(saved, 10) || 0;
-      } catch {}
-
-      onScroll = () => {
-        try {
-          window.sessionStorage.setItem("sidebar-scroll", String(el.scrollTop));
-        } catch {}
-      };
-      el.addEventListener("scroll", onScroll, { passive: true });
-    }, 100);
-
-    return () => {
-      clearTimeout(timer);
-      if (onScroll) el.removeEventListener("scroll", onScroll);
-    };
-  }, []);
-
   // An admin viewing a portal sees that portal's nav (derived from the URL);
   // everyone else sees their own role's nav.
   const isAdmin = session?.role === "admin";
   const effectiveRole = session
     ? (isAdmin ? (roleForPath(pathname) ?? "admin") : session.role)
     : "";
+  const sidebarScrollStorageKey = `sidebar-scroll:${effectiveRole || "default"}`;
+
+  // Every page renders its own AppShell, so the sidebar unmounts/remounts on
+  // each navigation — which snapped a scrolled menu (e.g. the long Finance nav)
+  // back to the top. Persist the nav scroll position and restore it on mount.
+  const desktopNavRef = useRef<HTMLElement | null>(null);
+  const mobileNavRef = useRef<HTMLElement | null>(null);
+
+  const restoreSidebarScroll = useCallback((el: HTMLElement | null) => {
+    if (!el) return;
+    try {
+      const saved = window.sessionStorage.getItem(sidebarScrollStorageKey);
+      if (saved) el.scrollTop = parseInt(saved, 10) || 0;
+    } catch {}
+  }, [sidebarScrollStorageKey]);
+
+  const saveSidebarScroll = useCallback(() => {
+    const navs = [desktopNavRef.current, mobileNavRef.current].filter(Boolean) as HTMLElement[];
+    const el = navs.find((nav) => nav.getClientRects().length > 0) ?? navs[0];
+    if (!el) return;
+    try {
+      window.sessionStorage.setItem(sidebarScrollStorageKey, String(el.scrollTop));
+    } catch {}
+  }, [sidebarScrollStorageKey]);
+
+  useLayoutEffect(() => {
+    restoreSidebarScroll(desktopNavRef.current);
+    restoreSidebarScroll(mobileNavRef.current);
+  }, [restoreSidebarScroll]);
+
+  useEffect(() => {
+    const navs = [desktopNavRef.current, mobileNavRef.current].filter(Boolean) as HTMLElement[];
+    navs.forEach((nav) => nav.addEventListener("scroll", saveSidebarScroll, { passive: true }));
+    return () => {
+      saveSidebarScroll();
+      navs.forEach((nav) => nav.removeEventListener("scroll", saveSidebarScroll));
+    };
+  }, [saveSidebarScroll]);
+
   const baseSections = effectiveRole ? NAV_BY_ROLE[effectiveRole] || [] : [];
   // Help Center (Raise Ticket / Track Tickets) is intentionally NOT linked from
   // any sidebar per PRD v3 Addendum §4 — it is reachable only via the notification
@@ -741,7 +751,7 @@ export function Sidebar({ session }: SidebarProps) {
     }`;
   })();
 
-  const sidebarContent = (
+  const renderSidebarContent = (navRef: React.Ref<HTMLElement>) => (
     <aside
       className={`${collapsed ? "w-[68px]" : "w-[260px]"} flex flex-col transition-all duration-300 ease-out h-screen sticky top-0 shrink-0`}
       style={{
@@ -833,7 +843,7 @@ export function Sidebar({ session }: SidebarProps) {
                 {ADMIN_SWITCH_PORTALS.map(p => (
                   <button
                     key={p.path}
-                    onClick={() => { setPortalMenuOpen(false); setMobileOpen(false); router.push(p.path); }}
+                    onClick={() => { saveSidebarScroll(); setPortalMenuOpen(false); setMobileOpen(false); router.push(p.path); }}
                     className="block w-full text-left pl-9 pr-2.5 py-1.5 rounded-lg text-[12px] text-gray-400 hover:text-white hover:bg-white/[0.06] transition-colors"
                   >
                     {p.label}
@@ -863,7 +873,10 @@ export function Sidebar({ session }: SidebarProps) {
                     // page's DB queries) for all of them on every nav render —
                     // ~90% of server load. Routes now render only when clicked.
                     prefetch={false}
-                    onClick={() => setMobileOpen(false)}
+                    onClick={() => {
+                      saveSidebarScroll();
+                      setMobileOpen(false);
+                    }}
                     title={collapsed ? item.label : undefined}
                     className={`flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-all duration-150 ${active
                       ? "text-white"
@@ -964,14 +977,14 @@ export function Sidebar({ session }: SidebarProps) {
       )}
 
       {/* Desktop: always visible */}
-      <div className="hidden lg:block">{sidebarContent}</div>
+      <div className="hidden lg:block">{renderSidebarContent(desktopNavRef)}</div>
 
       {/* Mobile: slide-in */}
       <div
         className={`lg:hidden fixed top-0 left-0 h-screen z-50 transition-transform duration-300 ease-out ${mobileOpen ? "translate-x-0" : "-translate-x-full"
           }`}
       >
-        {sidebarContent}
+        {renderSidebarContent(mobileNavRef)}
       </div>
     </>
   );
