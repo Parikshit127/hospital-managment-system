@@ -34,6 +34,7 @@ import {
   X,
 } from "lucide-react";
 import { AppShell } from "@/app/components/layout/AppShell";
+import { AdminPage } from "@/app/admin/components/AdminPage";
 import {
   getMasterBillingGrid,
   getMasterBillingKPIs,
@@ -192,7 +193,9 @@ const PATIENT_TYPES = ["", "cash", "corporate", "tpa_insurance"];
 const INVOICE_TYPES = ["", "OPD", "IPD", "LAB", "PHARMACY"];
 const RISK_LEVELS = ["", "low", "medium", "high"];
 
-export default function MasterBillingPage() {
+export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin" }) {
+  const isAdminShell = shell === "admin";
+  const billingRoot = isAdminShell ? "/admin/billing" : "/billing";
   const [grid, setGrid] = useState<any[]>([]);
   const [meta, setMeta] = useState<{
     total: number;
@@ -294,8 +297,10 @@ export default function MasterBillingPage() {
     }
   }
 
+  const Shell = isAdminShell ? AdminPage : AppShell;
+
   return (
-    <AppShell
+    <Shell
       pageTitle="Master Billing"
       pageIcon={<CircleDollarSign className="h-5 w-5" />}
       onRefresh={() => {
@@ -334,7 +339,7 @@ export default function MasterBillingPage() {
       }
     >
       {/* Quick Action Toolbar (blueprint § 6) */}
-      <QuickActions onProcessRefund={() => setRefundOpen(true)} />
+      <QuickActions billingRoot={billingRoot} adminMode={isAdminShell} onProcessRefund={() => setRefundOpen(true)} />
 
       {/* KPI Cards (12) */}
       <KpiGrid kpis={kpis} />
@@ -383,7 +388,7 @@ export default function MasterBillingPage() {
                   <tr key={r.invoice_id} className="border-t border-gray-100 hover:bg-blue-50/30">
                     <Td>
                       <Link
-                        href={`/billing/patient/${r.patient_id}`}
+                        href={`${billingRoot}/patient/${r.patient_id}`}
                         className="font-bold text-gray-800 hover:underline"
                       >
                         {r.patient_name}
@@ -453,7 +458,7 @@ export default function MasterBillingPage() {
                     <Td align="right">
                       <div className="flex items-center justify-end gap-1.5">
                         <Link
-                          href={`/billing/patient/${r.patient_id}`}
+                          href={`${billingRoot}/patient/${r.patient_id}`}
                           className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold rounded"
                         >
                           Open
@@ -521,7 +526,7 @@ export default function MasterBillingPage() {
       </div>
 
       {/* Global Finance Search modal */}
-      {searchOpen && <FinanceSearchModal onClose={() => setSearchOpen(false)} />}
+      {searchOpen && <FinanceSearchModal billingRoot={billingRoot} onClose={() => setSearchOpen(false)} />}
 
       {/* Edit Invoice modal */}
       {editingInvoiceId !== null && (
@@ -584,8 +589,12 @@ export default function MasterBillingPage() {
           }}
         />
       )}
-    </AppShell>
+    </Shell>
   );
+}
+
+export default function MasterBillingPage() {
+  return <MasterBillingContent />;
 }
 
 // ── sub-components ────────────────────────────────────────────────────────
@@ -610,7 +619,15 @@ function Td({ children, align = "left" }: { children: React.ReactNode; align?: "
   );
 }
 
-function QuickActions({ onProcessRefund }: { onProcessRefund?: () => void }) {
+function QuickActions({
+  billingRoot,
+  adminMode,
+  onProcessRefund,
+}: {
+  billingRoot: string;
+  adminMode?: boolean;
+  onProcessRefund?: () => void;
+}) {
   // Per blueprint § 6 Quick Action Toolbar.
   // Each button links to the existing flow — the Master Billing page is the orchestrator,
   // not the form host. Forms live in the existing modules (preserves backward compat).
@@ -620,18 +637,18 @@ function QuickActions({ onProcessRefund }: { onProcessRefund?: () => void }) {
     href?: string;
     onClick?: () => void;
   }> = [
-    { label: "New Bill", icon: Plus, href: "/billing/new" },
-    { label: "Fee Receipt", icon: ReceiptText, href: "/billing/fee-receipt" },
-    { label: "Collect Payment", icon: CreditCard, href: "/billing" },
-    { label: "Add Deposit", icon: Wallet, href: "/finance/deposits" },
+    { label: "New Bill", icon: Plus, href: `${billingRoot}/new` },
+    { label: "Fee Receipt", icon: ReceiptText, href: `${billingRoot}/fee-receipt` },
+    { label: "Collect Payment", icon: CreditCard, href: billingRoot },
+    { label: "Add Deposit", icon: Wallet, href: adminMode ? "/admin/finance/deposits" : "/finance/deposits" },
     { label: "Process Refund", icon: Undo2, onClick: onProcessRefund },
-    { label: "Credit Note", icon: ReceiptText, href: "/finance/credit-notes" },
-    { label: "Discharge Settle", icon: BanknoteArrowDown, href: "/ipd/discharge-settlement" },
-    { label: "Insurance Claims", icon: Shield, href: "/insurance" },
-    { label: "Export", icon: Download, href: "/finance/reports" },
-    { label: "Reconcile", icon: ClipboardCheck, href: "/finance/bank-recon" },
-    { label: "Write-off", icon: ShieldAlert, href: "/billing/writeoffs" },
-    { label: "Approvals", icon: ShieldAlert, href: "/billing/approvals" },
+    { label: "Credit Note", icon: ReceiptText, href: adminMode ? "/admin/finance/credit-notes" : "/finance/credit-notes" },
+    { label: "Discharge Settle", icon: BanknoteArrowDown, href: adminMode ? "/admin/ipd/discharge-settlement" : "/ipd/discharge-settlement" },
+    { label: "Insurance Claims", icon: Shield, href: adminMode ? "/admin/finance/tpa-insurance" : "/insurance" },
+    { label: "Export", icon: Download, href: adminMode ? "/admin/finance/reports" : "/finance/reports" },
+    { label: "Reconcile", icon: ClipboardCheck, href: adminMode ? "/admin/finance/bank-recon" : "/finance/bank-recon" },
+    { label: "Write-off", icon: ShieldAlert, href: `${billingRoot}/writeoffs` },
+    { label: "Approvals", icon: ShieldAlert, href: `${billingRoot}/approvals` },
   ];
   const baseClass =
     "flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-700 text-xs font-bold rounded-lg transition-all";
@@ -901,7 +918,7 @@ function FilterSelect({
   );
 }
 
-function FinanceSearchModal({ onClose }: { onClose: () => void }) {
+function FinanceSearchModal({ billingRoot, onClose }: { billingRoot: string; onClose: () => void }) {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<GlobalFinanceSearchHit[]>([]);
   const [loading, setLoading] = useState(false);
@@ -981,7 +998,7 @@ function FinanceSearchModal({ onClose }: { onClose: () => void }) {
               {group.map((h) => (
                 <Link
                   key={`${h.type}-${h.id}`}
-                  href={h.patient_id ? `/billing/patient/${h.patient_id}` : "/billing"}
+                  href={h.patient_id ? `${billingRoot}/patient/${h.patient_id}` : billingRoot}
                   onClick={onClose}
                   className="block px-4 py-2.5 border-b border-gray-50 hover:bg-blue-50/50"
                 >

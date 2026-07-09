@@ -38,6 +38,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { AppShell } from "@/app/components/layout/AppShell";
+import { AdminPage } from "@/app/admin/components/AdminPage";
 import {
   getPatientAuditLog,
   getPatientFinancialProfile,
@@ -98,7 +99,10 @@ const TABS: { key: Tab; label: string; icon: any }[] = [
   { key: "audit", label: "Audit Log", icon: ShieldAlert },
 ];
 
-export default function PatientFinancialProfilePage() {
+export function PatientFinancialProfileContent({ shell = "app" }: { shell?: "app" | "admin" }) {
+  const adminMode = shell === "admin";
+  const billingRoot = adminMode ? "/admin/billing" : "/billing";
+  const Shell = adminMode ? AdminPage : AppShell;
   const params = useParams<{ patientId: string }>();
   const patientId = params?.patientId as string;
 
@@ -233,7 +237,7 @@ export default function PatientFinancialProfilePage() {
   }, [patientId, load]);
 
   return (
-    <AppShell
+    <Shell
       pageTitle="Patient Financial Profile"
       pageIcon={<CircleDollarSign className="h-5 w-5" />}
       onRefresh={load}
@@ -261,7 +265,7 @@ export default function PatientFinancialProfilePage() {
             <Printer className="h-3.5 w-3.5" /> Print Stickers
           </button>
           <Link
-            href="/billing"
+            href={billingRoot}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-lg"
           >
             <ChevronLeft className="h-3.5 w-3.5" /> Back to Master Billing
@@ -353,6 +357,8 @@ export default function PatientFinancialProfilePage() {
                   );
                 })()}
                 <InvoicesTab
+                  adminMode={adminMode}
+                  billingRoot={billingRoot}
                   invoices={profile.invoices}
                   expandedInvoice={expandedInvoice}
                   setExpandedInvoice={setExpandedInvoice}
@@ -369,12 +375,13 @@ export default function PatientFinancialProfilePage() {
                 </>
               )}
               {tab === "payments" && <PaymentsTab invoices={profile.invoices} setEditingPayment={setEditingPayment} setReversingPayment={setReversingPayment} />}
-              {tab === "deposits" && <DepositsTab deposits={profile.deposits} patient={profile.patient} onSaved={load} />}
-              {tab === "insurance" && <InsuranceTab claims={profile.claims} preauths={profile.preauths} policies={profile.patient.insurance_policies} />}
-              {tab === "refunds" && <RefundsTab refunds={profile.refunds} />}
-              {tab === "credit_notes" && <CreditNotesTab invoices={profile.invoices} />}
+              {tab === "deposits" && <DepositsTab adminMode={adminMode} billingRoot={billingRoot} deposits={profile.deposits} patient={profile.patient} onSaved={load} />}
+              {tab === "insurance" && <InsuranceTab adminMode={adminMode} claims={profile.claims} preauths={profile.preauths} policies={profile.patient.insurance_policies} />}
+              {tab === "refunds" && <RefundsTab adminMode={adminMode} billingRoot={billingRoot} refunds={profile.refunds} />}
+              {tab === "credit_notes" && <CreditNotesTab adminMode={adminMode} billingRoot={billingRoot} invoices={profile.invoices} />}
               {tab === "writeoffs" && (
                 <WriteoffsTab
+                  billingRoot={billingRoot}
                   patientId={patientId}
                   writeoffs={profile.writeoffs ?? []}
                   invoices={profile.invoices}
@@ -576,8 +583,12 @@ export default function PatientFinancialProfilePage() {
         initialPatient={initialPatientForModal}
         onRefunded={load}
       />
-    </AppShell>
+    </Shell>
   );
+}
+
+export default function PatientFinancialProfilePage() {
+  return <PatientFinancialProfileContent />;
 }
 
 function EditPaymentModal({ payment, onClose, onSaved }: { payment: any; onClose: () => void; onSaved: () => void }) {
@@ -862,6 +873,8 @@ function FinancialCards({ totals }: { totals: any }) {
 // ──────────────────────────────────────────────────────────────────────────
 
 function InvoicesTab({
+  adminMode,
+  billingRoot,
   invoices,
   expandedInvoice,
   setExpandedInvoice,
@@ -875,6 +888,8 @@ function InvoicesTab({
   setEditingPayment,
   setReversingPayment,
 }: {
+  adminMode: boolean;
+  billingRoot: string;
   invoices: any[];
   expandedInvoice: number | null;
   setExpandedInvoice: (id: number | null) => void;
@@ -1131,7 +1146,7 @@ function InvoicesTab({
 
                 {/* Actions */}
                 <div className="flex flex-wrap gap-1.5 pt-1">
-                  <ActionLink href={`/finance/invoices/${inv.id}`}>View Detail</ActionLink>
+                  <ActionLink href={adminMode ? billingRoot : `/finance/invoices/${inv.id}`}>View Detail</ActionLink>
                   {inv.status === "Draft" && !inv.is_locked && (
                     <button
                       onClick={(e) => {
@@ -1251,7 +1266,7 @@ function InvoicesTab({
                       Absorbed
                     </button>
                   )}
-                  <ActionLink href="/finance/credit-notes">Credit Note</ActionLink>
+                  <ActionLink href={adminMode ? billingRoot : "/finance/credit-notes"}>Credit Note</ActionLink>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -1832,7 +1847,19 @@ function PaymentsTab({ invoices, setEditingPayment, setReversingPayment }: { inv
 // SECTION F — Deposits Tab
 // ──────────────────────────────────────────────────────────────────────────
 
-function DepositsTab({ deposits, patient, onSaved }: { deposits: any[]; patient: any; onSaved: () => void }) {
+function DepositsTab({
+  adminMode,
+  billingRoot,
+  deposits,
+  patient,
+  onSaved,
+}: {
+  adminMode: boolean;
+  billingRoot: string;
+  deposits: any[];
+  patient: any;
+  onSaved: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ amount: "", payment_method: "Cash", payment_ref: "", notes: "" });
   const [saving, setSaving] = useState(false);
@@ -2033,8 +2060,8 @@ function DepositsTab({ deposits, patient, onSaved }: { deposits: any[]; patient:
       </table>
       <div className="flex gap-1.5">
         {collectBtn}
-        <ActionLink href="/finance/deposits">Apply Deposit</ActionLink>
-        <ActionLink href="/finance/deposits">Refund Deposit</ActionLink>
+        <ActionLink href={adminMode ? billingRoot : "/finance/deposits"}>Apply Deposit</ActionLink>
+        <ActionLink href={adminMode ? billingRoot : "/finance/deposits"}>Refund Deposit</ActionLink>
       </div>
       {modal}
     </div>
@@ -2046,10 +2073,12 @@ function DepositsTab({ deposits, patient, onSaved }: { deposits: any[]; patient:
 // ──────────────────────────────────────────────────────────────────────────
 
 function InsuranceTab({
+  adminMode,
   claims,
   preauths,
   policies,
 }: {
+  adminMode: boolean;
   claims: any[];
   preauths: any[];
   policies: any[];
@@ -2157,8 +2186,8 @@ function InsuranceTab({
       </div>
 
       <div className="flex gap-1.5">
-        <ActionLink href="/insurance">Create Pre-Auth</ActionLink>
-        <ActionLink href="/insurance">Raise Claim</ActionLink>
+        <ActionLink href={adminMode ? "/admin/finance/tpa-insurance" : "/insurance"}>Create Pre-Auth</ActionLink>
+        <ActionLink href={adminMode ? "/admin/finance/tpa-insurance" : "/insurance"}>Raise Claim</ActionLink>
       </div>
     </div>
   );
@@ -2177,12 +2206,12 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 // SECTION H — Refunds Tab
 // ──────────────────────────────────────────────────────────────────────────
 
-function RefundsTab({ refunds }: { refunds: any[] }) {
+function RefundsTab({ adminMode, billingRoot, refunds }: { adminMode: boolean; billingRoot: string; refunds: any[] }) {
   if (!refunds.length)
     return (
       <div className="space-y-3">
         <div className="text-xs text-gray-400">No refunds for this patient.</div>
-        <ActionLink href="/finance/refunds">Request Refund</ActionLink>
+        <ActionLink href={adminMode ? billingRoot : "/finance/refunds"}>Request Refund</ActionLink>
       </div>
     );
   return (
@@ -2227,7 +2256,7 @@ function RefundsTab({ refunds }: { refunds: any[] }) {
           ))}
         </tbody>
       </table>
-      <ActionLink href="/finance/refunds">Request New Refund</ActionLink>
+      <ActionLink href={adminMode ? billingRoot : "/finance/refunds"}>Request New Refund</ActionLink>
     </div>
   );
 }
@@ -2236,7 +2265,7 @@ function RefundsTab({ refunds }: { refunds: any[] }) {
 // SECTION I — Credit Notes
 // ──────────────────────────────────────────────────────────────────────────
 
-function CreditNotesTab({ invoices }: { invoices: any[] }) {
+function CreditNotesTab({ adminMode, billingRoot, invoices }: { adminMode: boolean; billingRoot: string; invoices: any[] }) {
   const notes = invoices
     .flatMap((inv: any) =>
       inv.credit_notes.map((cn: any) => ({ ...cn, invoice_number: inv.invoice_number })),
@@ -2246,7 +2275,7 @@ function CreditNotesTab({ invoices }: { invoices: any[] }) {
     return (
       <div className="space-y-3">
         <div className="text-xs text-gray-400">No credit notes issued.</div>
-        <ActionLink href="/finance/credit-notes">Create Credit Note</ActionLink>
+        <ActionLink href={adminMode ? billingRoot : "/finance/credit-notes"}>Create Credit Note</ActionLink>
       </div>
     );
   return (
@@ -2287,7 +2316,7 @@ function CreditNotesTab({ invoices }: { invoices: any[] }) {
           ))}
         </tbody>
       </table>
-      <ActionLink href="/finance/credit-notes">Create Credit Note</ActionLink>
+      <ActionLink href={adminMode ? billingRoot : "/finance/credit-notes"}>Create Credit Note</ActionLink>
     </div>
   );
 }
@@ -2297,11 +2326,13 @@ function CreditNotesTab({ invoices }: { invoices: any[] }) {
 // ──────────────────────────────────────────────────────────────────────────
 
 function WriteoffsTab({
+  billingRoot,
   patientId,
   writeoffs,
   invoices,
   onChanged,
 }: {
+  billingRoot: string;
   patientId: string;
   writeoffs: any[];
   invoices: any[];
@@ -2370,7 +2401,7 @@ function WriteoffsTab({
         </div>
         <div className="flex gap-1.5">
           <Link
-            href="/billing/approvals"
+            href={`${billingRoot}/approvals`}
             className="px-2.5 py-1 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded"
           >
             Approval Center

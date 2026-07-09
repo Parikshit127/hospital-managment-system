@@ -15,9 +15,11 @@ import {
     ChevronDown, X, Printer, AlertTriangle, Ban,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import { useToast } from '@/app/components/ui/Toast';
 
-export default function DepositsPage() {
+export function DepositsContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) {
+    const Shell = shell === 'admin' ? AdminPage : AppShell;
     const toast = useToast();
     const [deposits, setDeposits] = useState<any[]>([]);
     const [stats, setStats] = useState<any>(null);
@@ -223,7 +225,7 @@ export default function DepositsPage() {
     });
 
     return (
-        <AppShell pageTitle="Deposits & Advances" pageIcon={<Wallet className="h-5 w-5" />} onRefresh={loadData} refreshing={loading}>
+        <Shell pageTitle="Deposits & Advances" pageIcon={<Wallet className="h-5 w-5" />} onRefresh={loadData} refreshing={loading}>
         <div className="max-w-7xl mx-auto">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
@@ -596,6 +598,10 @@ export default function DepositsPage() {
                 </div>
             )}
         </div>
-        </AppShell>
+        </Shell>
     );
+}
+
+export default function DepositsPage() {
+    return <DepositsContent />;
 }

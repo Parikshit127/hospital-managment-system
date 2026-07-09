@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from "@/app/components/layout/AppShell";
+import { AdminPage } from "@/app/admin/components/AdminPage";
 import {
     FileText,
     Search,
@@ -111,11 +112,13 @@ function toEditDraft(d: any): EditableReceiptDraft {
     };
 }
 
-export default function FeeReceiptPage() {
+export function FeeReceiptContent({ shell = "app" }: { shell?: "app" | "admin" }) {
     const [activeTab, setActiveTab] = useState<"new" | "history">("new");
+    const billingRoot = shell === "admin" ? "/admin/billing" : "/billing";
+    const Shell = shell === "admin" ? AdminPage : AppShell;
 
     return (
-        <AppShell pageTitle="Fee Receipts" pageIcon={<FileText className="h-5 w-5" />}>
+        <Shell pageTitle="Fee Receipts" pageIcon={<FileText className="h-5 w-5" />}>
             <style>{`
                 @media print {
                     -webkit-print-color-adjust: exact !important;
@@ -135,7 +138,7 @@ export default function FeeReceiptPage() {
             <div className="max-w-6xl mx-auto pb-24 print:max-w-full">
                 <div className="flex items-center justify-between mb-5 print:hidden">
                     <div>
-                        <Link href="/billing" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 font-medium mb-2 transition-colors">
+                        <Link href={billingRoot} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 font-medium mb-2 transition-colors">
                             <ArrowLeft className="h-3.5 w-3.5" /> Master Billing
                         </Link>
                         <h1 className="text-2xl font-bold text-gray-900">Fee Receipt Management</h1>
@@ -159,8 +162,12 @@ export default function FeeReceiptPage() {
 
                 {activeTab === "new" ? <NewReceiptForm /> : <ReceiptHistory />}
             </div>
-        </AppShell>
+        </Shell>
     );
+}
+
+export default function FeeReceiptPage() {
+    return <FeeReceiptContent />;
 }
 
 /* ──────────────────────────────────────────────────────────── NEW RECEIPT */

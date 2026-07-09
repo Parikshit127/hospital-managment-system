@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import { Search, Loader2, Plus, ArrowLeft, Receipt, CheckCircle } from 'lucide-react';
 import { searchPatientsForBilling, createInvoice, addInvoiceItem, getSuggestedOpdDoctor } from '@/app/actions/finance-actions';
 import { getPatientBalances } from '@/app/actions/balance-actions';
@@ -39,7 +40,10 @@ function applyBillDiscount(items: any[], pct: number): any[] {
     });
 }
 
-export default function ReceptionGenerateBillPage() {
+export function GenerateBillContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) {
+    const isAdminShell = shell === 'admin';
+    const billingRoot = isAdminShell ? '/admin/billing' : '/billing';
+    const Shell = isAdminShell ? AdminPage : AppShell;
     const sanitizePositiveInt = (value: string) => value.replace(/\D/g, '');
     const sanitizeDecimal = (value: string) => value.replace(/[^\d.]/g, '');
 
@@ -288,7 +292,7 @@ export default function ReceptionGenerateBillPage() {
             }
 
             toast.success('Bill generated successfully!');
-            router.push(`/finance/invoices/${invoiceId}`);
+            router.push(isAdminShell ? `${billingRoot}/patient/${selectedPatient.patient_id}` : `/finance/invoices/${invoiceId}`);
 
         } catch (err: unknown) {
             toast.error(err instanceof Error ? err.message : 'An error occurred');
@@ -327,12 +331,12 @@ export default function ReceptionGenerateBillPage() {
     };
 
     return (
-        <AppShell
+        <Shell
             pageTitle="Generate New Bill"
             pageIcon={<Receipt className="h-5 w-5" />}
         >
             <div className="max-w-5xl mx-auto pb-12">
-                <Link href="/billing" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 font-medium mb-6 transition-colors">
+                <Link href={billingRoot} className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 font-medium mb-6 transition-colors">
                     <ArrowLeft className="h-4 w-4" /> Back to Master Billing
                 </Link>
 
@@ -812,6 +816,10 @@ export default function ReceptionGenerateBillPage() {
                 </div>
 
             </div>
-        </AppShell>
+        </Shell>
     );
+}
+
+export default function ReceptionGenerateBillPage() {
+    return <GenerateBillContent />;
 }

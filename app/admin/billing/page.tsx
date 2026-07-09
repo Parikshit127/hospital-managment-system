@@ -1,8 +1,7 @@
-import { redirect } from 'next/navigation';
+'use client';
 
-// Master Billing is now a single shared experience for all roles at /billing
-// (the modern grid). Admins previously had a separate legacy dashboard here;
-// this route now redirects so existing links/bookmarks keep working.
-export default async function AdminMasterBillingPage() {
-    redirect('/billing');
+import { MasterBillingContent } from '@/app/billing/page';
+
+export default function AdminMasterBillingPage() {
+    return <MasterBillingContent shell="admin" />;
 }

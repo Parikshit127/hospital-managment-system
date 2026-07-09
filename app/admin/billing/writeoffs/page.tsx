@@ -151,7 +151,7 @@ export default function WriteoffsPage() {
             Approval Center
           </Link>
           <Link
-            href="/billing"
+            href="/admin/billing"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-lg"
           >
             <ChevronLeft className="h-3.5 w-3.5" /> Master Billing
@@ -255,7 +255,7 @@ export default function WriteoffsPage() {
                         <td className="px-3 py-2 font-mono font-bold">{wo.writeoff_number}</td>
                         <td className="px-3 py-2">
                           <Link
-                            href={`/billing/patient/${wo.patient_id}`}
+                            href={`/admin/billing/patient/${wo.patient_id}`}
                             className="text-blue-600 hover:underline font-mono text-[11px]"
                           >
                             {wo.patient_id}

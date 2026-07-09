@@ -10,9 +10,11 @@ import {
     IndianRupee, Search, AlertCircle, Receipt,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import { useToast } from '@/app/components/ui/Toast';
 
-export default function CreditNotesPage() {
+export function CreditNotesContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) {
+    const Shell = shell === 'admin' ? AdminPage : AppShell;
     const toast = useToast();
     const [notes, setNotes] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -107,7 +109,7 @@ export default function CreditNotesPage() {
     });
 
     return (
-        <AppShell pageTitle="Credit Notes" pageIcon={<Receipt className="h-5 w-5" />} onRefresh={loadData} refreshing={loading}>
+        <Shell pageTitle="Credit Notes" pageIcon={<Receipt className="h-5 w-5" />} onRefresh={loadData} refreshing={loading}>
         <div className="max-w-7xl mx-auto">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
@@ -298,6 +300,10 @@ export default function CreditNotesPage() {
                 </div>
             )}
         </div>
-        </AppShell>
+        </Shell>
     );
+}
+
+export default function CreditNotesPage() {
+    return <CreditNotesContent />;
 }

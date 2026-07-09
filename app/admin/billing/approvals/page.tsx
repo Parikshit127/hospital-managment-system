@@ -149,7 +149,7 @@ export default function ApprovalCenterPage() {
       refreshing={loading}
       headerActions={
         <Link
-          href="/billing"
+          href="/admin/billing"
           className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-lg"
         >
           <ChevronLeft className="h-3.5 w-3.5" /> Master Billing
@@ -341,7 +341,7 @@ export default function ApprovalCenterPage() {
                       <td className="px-3 py-2">
                         {item.patient_id ? (
                           <Link
-                            href={`/billing/patient/${item.patient_id}`}
+                            href={`/admin/billing/patient/${item.patient_id}`}
                             className="text-blue-600 hover:underline font-bold"
                           >
                             {item.patient_name ?? item.patient_id}
