@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import { getMISReport } from '@/app/actions/report-actions';
 import {
     FileSpreadsheet, Download, Loader2, Search, Filter,
@@ -57,7 +58,9 @@ const MIS_COLUMNS: { key: string; label: string; type: 'text' | 'currency' | 'da
     { key: 'remarks', label: 'Remarks', type: 'text', width: '150px' },
 ];
 
-export default function MISReportPage() {
+export function MISReportContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) {
+    const adminMode = shell === 'admin';
+    const Shell = adminMode ? AdminPage : AppShell;
     const _now = new Date();
     const _ld = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     const today = _ld(_now);
@@ -156,11 +159,11 @@ export default function MISReportPage() {
     });
 
     return (
-        <AppShell pageTitle="MIS Report" pageIcon={<FileSpreadsheet className="h-5 w-5" />} onRefresh={loadReport} refreshing={loading}>
+        <Shell pageTitle="MIS Report" pageIcon={<FileSpreadsheet className="h-5 w-5" />} onRefresh={loadReport} refreshing={loading}>
             <div className="space-y-4">
 
                 {/* Back Link */}
-                <Link href="/finance/reports" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-emerald-700 transition-colors">
+                <Link href={adminMode ? "/admin/finance/reports" : "/finance/reports"} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-emerald-700 transition-colors">
                     <ArrowLeft className="h-4 w-4" /> Back to Financial Reports
                 </Link>
 
@@ -323,8 +326,12 @@ export default function MISReportPage() {
                     </div>
                 )}
             </div>
-        </AppShell>
+        </Shell>
     );
+}
+
+export default function MISReportPage() {
+    return <MISReportContent />;
 }
 
 function SummaryCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color: string }) {

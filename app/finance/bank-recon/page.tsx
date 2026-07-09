@@ -9,9 +9,11 @@ import {
     Search, IndianRupee, Link2, X, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import { useToast } from '@/app/components/ui/Toast';
 
-export default function BankReconPage() {
+export function BankReconContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) {
+    const Shell = shell === 'admin' ? AdminPage : AppShell;
     const toast = useToast();
     const [transactions, setTransactions] = useState<any[]>([]);
     const [summary, setSummary] = useState<any>(null);
@@ -102,7 +104,7 @@ export default function BankReconPage() {
     });
 
     return (
-        <AppShell pageTitle="Bank Reconciliation" pageIcon={<Link2 className="h-5 w-5" />} onRefresh={loadData} refreshing={loading}>
+        <Shell pageTitle="Bank Reconciliation" pageIcon={<Link2 className="h-5 w-5" />} onRefresh={loadData} refreshing={loading}>
         <div className="max-w-7xl mx-auto">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
                 <div>
@@ -243,6 +245,10 @@ export default function BankReconPage() {
                 </div>
             )}
         </div>
-        </AppShell>
+        </Shell>
     );
+}
+
+export default function BankReconPage() {
+    return <BankReconContent />;
 }

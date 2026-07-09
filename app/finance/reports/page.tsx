@@ -15,6 +15,7 @@ import {
     Loader2, FileText, BookOpenCheck, FileSpreadsheet, CalendarDays, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import { VoucherModal } from '@/app/components/finance/VoucherModal';
 import { canonicalTender } from '@/app/lib/payment-tender';
 import Link from 'next/link';
@@ -32,7 +33,9 @@ const REPORT_TABS: { key: ReportType; label: string; icon: React.ReactNode }[] =
 ];
 
 
-export default function FinancialReportsPage() {
+export function FinancialReportsContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) {
+    const adminMode = shell === 'admin';
+    const Shell = adminMode ? AdminPage : AppShell;
     const _now = new Date();
     const _ld = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     const today = _ld(_now);
@@ -81,7 +84,7 @@ export default function FinancialReportsPage() {
     };
 
     return (
-        <AppShell pageTitle="Financial Reports" pageIcon={<BarChart3 className="h-5 w-5" />} onRefresh={loadReport} refreshing={loading}>
+        <Shell pageTitle="Financial Reports" pageIcon={<BarChart3 className="h-5 w-5" />} onRefresh={loadReport} refreshing={loading}>
         <div className="max-w-7xl mx-auto">
 
             {/* Report Tabs */}
@@ -94,7 +97,7 @@ export default function FinancialReportsPage() {
                         {tab.icon} {tab.label}
                     </button>
                 ))}
-                <Link href="/finance/reports/mis"
+                <Link href={adminMode ? "/admin/finance/reports/mis" : "/finance/reports/mis"}
                     className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg whitespace-nowrap transition bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100">
                     <FileSpreadsheet className="h-4 w-4" /> MIS Report
                 </Link>
@@ -152,8 +155,12 @@ export default function FinancialReportsPage() {
                 </div>
             )}
         </div>
-        </AppShell>
+        </Shell>
     );
+}
+
+export default function FinancialReportsPage() {
+    return <FinancialReportsContent />;
 }
 
 function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, methodFilter, setMethodFilter }: {

@@ -2,11 +2,14 @@
 
 import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { AdminPage } from '@/app/admin/components/AdminPage';
 import { Wallet, Search, Filter, ArrowRight, User, Bed, Clock, Loader2, CircleDollarSign } from 'lucide-react';
 import { getIPDAdmissions } from '@/app/actions/ipd-actions';
 import Link from 'next/link';
 
-export default function IPDSettlementListPage() {
+export function IPDSettlementListContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) {
+    const adminMode = shell === 'admin';
+    const Shell = adminMode ? AdminPage : AppShell;
     const [admissions, setAdmissions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -28,7 +31,7 @@ export default function IPDSettlementListPage() {
     });
 
     return (
-        <AppShell
+        <Shell
             pageTitle="IPD Discharge Settlement"
             pageIcon={<Wallet className="h-5 w-5" />}
             onRefresh={loadData}
@@ -101,7 +104,7 @@ export default function IPDSettlementListPage() {
                                         </span>
                                     </div>
                                     <Link 
-                                        href={`/ipd/discharge-settlement/${adm.admission_id}`}
+                                        href={adminMode ? `/admin/ipd/discharge-settlement/${adm.admission_id}` : `/ipd/discharge-settlement/${adm.admission_id}`}
                                         className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-600/20 group-hover:translate-x-1"
                                     >
                                         Settle & Discharge <ArrowRight className="h-3.5 w-3.5" />
@@ -119,6 +122,10 @@ export default function IPDSettlementListPage() {
                     </div>
                 )}
             </div>
-        </AppShell>
+        </Shell>
     );
+}
+
+export default function IPDSettlementListPage() {
+    return <IPDSettlementListContent />;
 }

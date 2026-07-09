@@ -46,7 +46,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
             { label: 'Finance Master', href: '/admin/finance-master', icon: Receipt },
             { label: 'Referrals', href: '/admin/referrals', icon: UserCheck },
             { label: 'Doctor Invoicing', href: '/admin/doctor-invoicing', icon: Stethoscope },
-            { label: 'Master Billing', href: '/billing', icon: FileText },
+            { label: 'Master Billing', href: '/admin/billing', icon: FileText },
             { label: 'Approval Center', href: '/admin/billing/approvals', icon: ShieldAlert },
             { label: 'Write-offs', href: '/admin/billing/writeoffs', icon: Scale },
             { label: 'HR', href: '/admin/hr', icon: Briefcase },

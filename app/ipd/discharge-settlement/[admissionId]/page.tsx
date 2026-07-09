@@ -10,7 +10,7 @@ function getLocalDatetimeString(date: Date) {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export default function DischargeSettlementPage() {
+export function DischargeSettlementContent({ adminMode = false }: { adminMode?: boolean }) {
     const params = useParams();
     const router = useRouter();
     const admissionId = params.admissionId as string;
@@ -141,7 +141,7 @@ export default function DischargeSettlementPage() {
             } else {
                 showToast('Patient discharged and bill settled successfully');
             }
-            setTimeout(() => router.push('/ipd'), 2000);
+            setTimeout(() => router.push(adminMode ? '/admin/ipd' : '/ipd'), 2000);
         } else {
             showToast(res.error || 'Settlement failed', 'error');
         }
@@ -493,4 +493,8 @@ export default function DischargeSettlementPage() {
             )}
         </div>
     );
+}
+
+export default function DischargeSettlementPage() {
+    return <DischargeSettlementContent />;
 }
