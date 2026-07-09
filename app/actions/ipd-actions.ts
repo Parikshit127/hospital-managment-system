@@ -423,7 +423,7 @@ export async function admitPatientIPD(data: {
 // Get all current admissions (IPD Dashboard)
 export async function getIPDAdmissions(statusFilter?: string) {
   try {
-    const { db } = await requireTenantContext();
+    const { db, organizationId } = await requireTenantContext();
     const where: any = {};
     if (statusFilter) where.status = statusFilter;
 
@@ -464,7 +464,9 @@ export async function getIPDAdmissions(statusFilter?: string) {
     ]);
 
     // Find all admissions that have postings, lab orders, or pharmacy orders
-    const activeAdmittedIds = admissions.filter((a: any) => a.status === 'Admitted').map((a: any) => a.admission_id);
+    const activeAdmissions = admissions.filter((a: any) => a.status === 'Admitted');
+    const activeAdmittedIds = activeAdmissions.map((a: any) => a.admission_id);
+    const activePatientIds = Array.from(new Set(activeAdmissions.map((a: any) => a.patient_id))) as string[];
     
     const [chargePostings, labOrders, pharmacyOrders, invoiceItems] = await Promise.all([
         db.ipdChargePosting.findMany({
@@ -472,8 +474,11 @@ export async function getIPDAdmissions(statusFilter?: string) {
             select: { admission_id: true }
         }),
         db.lab_orders.findMany({
-            where: { admission_id: { in: activeAdmittedIds } },
-            select: { admission_id: true }
+            where: {
+                patient_id: { in: activePatientIds },
+                organizationId
+            },
+            select: { patient_id: true, created_at: true }
         }),
         db.pharmacy_orders.findMany({
             where: { admission_id: { in: activeAdmittedIds } },
@@ -487,13 +492,23 @@ export async function getIPDAdmissions(statusFilter?: string) {
 
     const admissionIdsWithCharges = new Set<string>();
     chargePostings.forEach((c: any) => admissionIdsWithCharges.add(c.admission_id));
-    labOrders.forEach((l: any) => admissionIdsWithCharges.add(l.admission_id));
     pharmacyOrders.forEach((p: any) => admissionIdsWithCharges.add(p.admission_id));
     invoiceItems.forEach((i: any) => {
         if (i.invoice?.admission_id) {
             admissionIdsWithCharges.add(i.invoice.admission_id);
         }
     });
+
+    // Check lab orders created after admission date
+    for (const adm of activeAdmissions) {
+        const hasLab = labOrders.some((l: any) => 
+            l.patient_id === adm.patient_id && 
+            new Date(l.created_at).getTime() >= new Date(adm.admission_date).getTime()
+        );
+        if (hasLab) {
+            admissionIdsWithCharges.add(adm.admission_id);
+        }
+    }
 
     const enriched = admissions.map((a: any) => {
       const daysAdmitted = Math.ceil(
@@ -2076,7 +2091,13 @@ export async function cancelAdmission(admissionId: string, reason: string, cance
     // Enforce charges check
     const [hasCharges, hasLab, hasPharmacy, hasInvoiceItems] = await Promise.all([
       db.ipdChargePosting.findFirst({ where: { admission_id: admissionId } }),
-      db.lab_orders.findFirst({ where: { admission_id: admissionId } }),
+      db.lab_orders.findFirst({
+        where: {
+          patient_id: admission.patient_id,
+          organizationId,
+          created_at: { gte: admission.admission_date }
+        }
+      }),
       db.pharmacy_orders.findFirst({ where: { admission_id: admissionId } }),
       db.invoice_items.findFirst({ where: { invoice: { admission_id: admissionId } } })
     ]);

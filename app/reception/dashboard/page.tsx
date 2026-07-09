@@ -113,7 +113,7 @@ export default function ReceptionDashboard() {
     // ── IPD state ──
     const [ipdAdmissions, setIpdAdmissions] = useState<any[]>([]);
     const [ipdLoading, setIpdLoading] = useState(false);
-    const [ipdStatusFilter, setIpdStatusFilter] = useState<IPDStatusFilter>('All');
+    const [ipdStatusFilter, setIpdStatusFilter] = useState<IPDStatusFilter>('Admitted');
     const [ipdSearch, setIpdSearch] = useState('');
     const ipdLoaded = useRef(false);
     
@@ -315,12 +315,11 @@ export default function ReceptionDashboard() {
         });
     }, []);
 
-    // Lazy-load IPD data when IPD tab is first activated or status filter changes
+    // Load active IPD admissions on page entry so the admitted count and IPD tab
+    // are populated before the user manually opens the tab.
     useEffect(() => {
-        if (activeTab === 'ipd') {
-            loadIPDData();
-        }
-    }, [activeTab, loadIPDData]);
+        loadIPDData();
+    }, [loadIPDData]);
 
     // Refetch when user navigates back
     useEffect(() => {
