@@ -6,6 +6,7 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { Clock, Plus, X, Play, CheckCircle, Loader2, Receipt } from 'lucide-react';
 import { useToast } from '@/app/components/ui/Toast';
 import { getAdmissionBookings, createAdmissionBooking, updateAdmissionBookingStatus, createDaycareInvoice } from '@/app/actions/ipd-enhancement-actions';
+import { getDoctorList } from '@/app/actions/reception-actions';
 
 const STATUS_COLORS: Record<string, string> = {
   Booked: 'bg-blue-50 text-blue-700',
@@ -19,6 +20,7 @@ type FilterTab = 'Today' | 'In Progress' | 'Upcoming' | 'Completed';
 export default function DaycarePage() {
   const toast = useToast();
   const [bookings, setBookings] = useState<any[]>([]);
+  const [doctors, setDoctors] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -92,7 +94,17 @@ export default function DaycarePage() {
     setRefreshing(false);
   };
 
-  useEffect(() => { loadData(); }, []);
+  const loadDoctors = async () => {
+    const res = await getDoctorList();
+    if (res.success && res.data) {
+      setDoctors(res.data);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+    loadDoctors();
+  }, []);
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -342,19 +354,18 @@ export default function DaycarePage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Doctor Name</label>
-                  <input
-                    type="text"
-                    inputMode="text"
-                    autoComplete="off"
-                    maxLength={100}
+                  <select
                     value={form.doctor_name}
-                    onChange={e => {
-                      const val = e.target.value.replace(/[^a-zA-Z\s.\-']/g, '');
-                      setForm(f => ({ ...f, doctor_name: val }));
-                    }}
-                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none"
-                    placeholder="Dr. Name"
-                  />
+                    onChange={e => setForm(f => ({ ...f, doctor_name: e.target.value }))}
+                    className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none bg-white text-gray-700"
+                  >
+                    <option value="">Select Doctor</option>
+                    {doctors.map((d: any) => (
+                      <option key={d.id} value={d.name}>
+                        {d.name} {d.specialty ? `— ${d.specialty}` : ''}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Scheduled Date *</label>
@@ -499,10 +510,12 @@ export default function DaycarePage() {
                   type="button"
                   disabled={billing || !billForm.unitPrice}
                   onClick={handleBill}
-                  className="flex-1 py-2.5 bg-orange-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                  className="flex-1 py-2.5 bg-orange-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center justify-center"
                 >
-                  {billing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
-                  {billing ? 'Creating Invoice…' : 'Generate Invoice & Collect'}
+                  <span className="inline-flex items-center gap-2">
+                    {billing ? <Loader2 className="h-4 w-4 animate-spin flex-shrink-0 ml-1" /> : <Receipt className="h-4 w-4 flex-shrink-0 ml-1" />}
+                    {billing ? 'Creating Invoice…' : 'Generate Invoice & Collect'}
+                  </span>
                 </button>
               </div>
             </div>
