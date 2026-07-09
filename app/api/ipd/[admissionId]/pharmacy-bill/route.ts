@@ -3,6 +3,7 @@ import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getPharmacyBranding } from '@/app/lib/pharmacy-branding';
 import { dispensingKey } from '@/app/lib/pharmacy-bill-group';
+import { formatDoctorName } from '@/app/lib/format-name';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'ipd_manager', 'doctor', 'pharmacist', 'nurse', 'store_manager'];
 
@@ -35,8 +36,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         });
         if (!admission) return new NextResponse('Admission not found', { status: 404 });
 
-        const [patient, allPostings] = await Promise.all([
+        const [patient, attendingDoctor, allPostings] = await Promise.all([
             prisma.oPD_REG.findFirst({ where: { patient_id: admission.patient_id, organizationId }, select: { full_name: true, patient_id: true, phone: true } }),
+            admission.attending_doctor_id
+                ? prisma.user.findFirst({
+                    where: { id: admission.attending_doctor_id, organizationId },
+                    select: { name: true },
+                })
+                : Promise.resolve(null),
             prisma.ipdChargePosting.findMany({
                 where: {
                     admission_id: admissionId,
@@ -64,6 +71,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             return { idx: idx + 1, name, batch, qty, rate, amount };
         });
         const total = lines.reduce((s, l) => s + l.amount, 0);
+
+        const doctorName = formatDoctorName(attendingDoctor?.name || admission.doctor_name || '');
 
         const branding = getPharmacyBranding(organizationId);
         const rows = lines.map((l) => `
@@ -131,6 +140,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
     <div class="box"><div class="t">Patient</div><div class="v">${esc(patient?.full_name || '-')}</div></div>
     <div class="box"><div class="t">MRN</div><div class="v">${esc(patient?.patient_id || '-')}</div></div>
     <div class="box"><div class="t">Contact</div><div class="v">${esc(patient?.phone || '-')}</div></div>
+    <div class="box"><div class="t">Doctor</div><div class="v">${esc(doctorName || '—')}</div></div>
   </div>
   <div class="note">Medicines dispensed under the package (absorbed as hospital expense — not charged to the patient/TPA).</div>
 
