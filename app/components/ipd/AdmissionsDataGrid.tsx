@@ -65,9 +65,22 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
     // Cancel Admission State
     const [cancelModal, setCancelModal] = useState<any | null>(null);
     const [cancelReason, setCancelReason] = useState('');
+    const [cancelDateTime, setCancelDateTime] = useState('');
     const [cancelling, setCancelling] = useState(false);
     const [cancelError, setCancelError] = useState('');
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+    const getLocalDatetimeString = (date: Date) => {
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    };
+
+    const openCancelModal = (adm: any) => {
+        setCancelModal(adm);
+        setCancelReason('');
+        setCancelDateTime(getLocalDatetimeString(new Date()));
+        setCancelError('');
+    };
 
     const router = useRouter();
 
@@ -81,13 +94,18 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
             setCancelError('Please provide a reason for cancellation');
             return;
         }
+        if (cancelReason.trim().length < 3) {
+            setCancelError('Reason must be at least 3 characters');
+            return;
+        }
         setCancelling(true);
         setCancelError('');
         try {
-            const res = await cancelAdmission(cancelModal.admission_id, cancelReason);
+            const res = await cancelAdmission(cancelModal.admission_id, cancelReason, cancelDateTime || undefined);
             if (res.success) {
                 setCancelModal(null);
                 setCancelReason('');
+                setCancelDateTime('');
                 showToast('Admission cancelled successfully');
                 router.refresh();
             } else {
@@ -458,13 +476,15 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                                                     >
                                                         <ArrowLeftRight className="h-4 w-4" />
                                                     </button>
-                                                    <button
-                                                        onClick={() => { setCancelModal(adm); setCancelReason(''); setCancelError(''); }}
-                                                        className="p-2 bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-xl transition-all"
-                                                        title="Cancel Admission"
-                                                    >
-                                                        <XCircle className="h-4 w-4" />
-                                                    </button>
+                                                    {adm.canCancel && (
+                                                        <button
+                                                            onClick={() => openCancelModal(adm)}
+                                                            className="p-2 bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-xl transition-all"
+                                                            title="Cancel Admission"
+                                                        >
+                                                            <XCircle className="h-4 w-4" />
+                                                        </button>
+                                                    )}
                                                     <Link href={`/ipd/nursing-station/${adm.admission_id}`}>
                                                         <button className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm hover:shadow transition-all group-hover:scale-105 active:scale-95">
                                                             <Activity className="h-4 w-4" />
@@ -521,32 +541,72 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                     <div className="bg-white border border-gray-200 shadow-sm rounded-2xl w-full max-w-md p-6 space-y-5">
                         <div className="flex items-center justify-between">
                             <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                                <XCircle className="h-5 w-5 text-rose-500" />
-                                Cancel Admission
+                                <XCircle className="h-5 w-5 text-red-500" /> Cancel Admission
                             </h3>
-                            <button onClick={() => setCancelModal(null)} className="text-gray-400 hover:text-gray-900">
-                                <X className="h-5 w-5" />
+                            <button
+                                onClick={() => setCancelModal(null)}
+                                className="text-gray-400 hover:text-gray-900 text-xl"
+                            >
+                                &times;
                             </button>
                         </div>
-
-                        <div className="bg-rose-50 border border-rose-200 p-3 rounded-xl space-y-1">
-                            <p className="text-sm font-bold text-gray-800">{cancelModal.patient?.full_name}</p>
-                            <p className="text-xs text-gray-500">
-                                Admitted: <span className="font-bold text-gray-700">{new Date(cancelModal.admission_date).toLocaleDateString('en-GB')}</span>
-                                {cancelModal.bed_id && <> &bull; Bed <span className="font-bold text-gray-700">{cancelModal.bed_id}</span></>}
-                            </p>
-                            <p className="text-[10px] text-rose-600 font-bold mt-1">⚠ This will free the bed and cancel the invoice. This cannot be undone.</p>
+                        
+                        {/* Patient details */}
+                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-xs space-y-2">
+                            <div className="flex justify-between">
+                                <span className="font-bold text-gray-400 uppercase tracking-wider text-[9px]">Patient Name</span>
+                                <span className="font-bold text-gray-800">{cancelModal.patient?.full_name || '—'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="font-bold text-gray-400 uppercase tracking-wider text-[9px]">UHID / Admission ID</span>
+                                <span className="font-mono text-gray-700">{cancelModal.patient?.patient_id || '—'} / {cancelModal.admission_id}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="font-bold text-gray-400 uppercase tracking-wider text-[9px]">Doctor</span>
+                                <span className="font-medium text-gray-800">{cancelModal.doctor_name || '—'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="font-bold text-gray-400 uppercase tracking-wider text-[9px]">Ward / Room / Bed</span>
+                                <span className="font-medium text-gray-800">
+                                    {cancelModal.wardName || cancelModal.ward?.ward_name || cancelModal.bed?.wards?.ward_name || '—'}
+                                    {cancelModal.bed?.bed_id && ` / Bed ${cancelModal.bed.bed_id}`}
+                                </span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="font-bold text-gray-400 uppercase tracking-wider text-[9px]">Admission Date & Time</span>
+                                <span className="font-medium text-gray-800">
+                                    {new Date(cancelModal.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                            </div>
                         </div>
 
-                        <div>
-                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Reason for Cancellation *</label>
-                            <input
-                                type="text"
-                                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl text-sm"
-                                placeholder="e.g. Patient admitted by mistake, wrong patient..."
-                                value={cancelReason}
-                                onChange={(e) => { setCancelReason(e.target.value); setCancelError(''); }}
-                            />
+                        {/* Form Inputs */}
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">
+                                    Reason for Cancellation *
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-red-500/50 focus:outline-none"
+                                    placeholder="Reason for cancelling admission (minimum 3 chars)..."
+                                    value={cancelReason}
+                                    onChange={(e) => { setCancelReason(e.target.value); setCancelError(''); }}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">
+                                    Cancellation Date &amp; Time
+                                </label>
+                                <input
+                                    type="datetime-local"
+                                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-red-500/50 focus:outline-none"
+                                    value={cancelDateTime}
+                                    onChange={(e) => setCancelDateTime(e.target.value)}
+                                />
+                            </div>
                         </div>
 
                         {cancelError && (
@@ -558,15 +618,15 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                                 onClick={() => setCancelModal(null)}
                                 className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all"
                             >
-                                Keep Admission
+                                Close
                             </button>
                             <button
                                 onClick={handleCancelAdmission}
                                 disabled={cancelling}
-                                className="flex-1 py-2.5 bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
+                                className="flex-1 py-2.5 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-md shadow-red-500/10 disabled:opacity-50"
                             >
                                 {cancelling && <Loader2 className="h-4 w-4 animate-spin" />}
-                                Cancel Admission
+                                Confirm Cancellation
                             </button>
                         </div>
                     </div>

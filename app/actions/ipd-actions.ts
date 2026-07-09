@@ -463,11 +463,48 @@ export async function getIPDAdmissions(statusFilter?: string) {
       getAdmissionCancellationReasons(db, cancelledAdmissionIds),
     ]);
 
+    // Find all admissions that have postings, lab orders, or pharmacy orders
+    const activeAdmittedIds = admissions.filter((a: any) => a.status === 'Admitted').map((a: any) => a.admission_id);
+    
+    const [chargePostings, labOrders, pharmacyOrders, invoiceItems] = await Promise.all([
+        db.ipdChargePosting.findMany({
+            where: { admission_id: { in: activeAdmittedIds } },
+            select: { admission_id: true }
+        }),
+        db.lab_orders.findMany({
+            where: { admission_id: { in: activeAdmittedIds } },
+            select: { admission_id: true }
+        }),
+        db.pharmacy_orders.findMany({
+            where: { admission_id: { in: activeAdmittedIds } },
+            select: { admission_id: true }
+        }),
+        db.invoice_items.findMany({
+            where: { invoice: { admission_id: { in: activeAdmittedIds } } },
+            select: { invoice: { select: { admission_id: true } } }
+        })
+    ]);
+
+    const admissionIdsWithCharges = new Set<string>();
+    chargePostings.forEach((c: any) => admissionIdsWithCharges.add(c.admission_id));
+    labOrders.forEach((l: any) => admissionIdsWithCharges.add(l.admission_id));
+    pharmacyOrders.forEach((p: any) => admissionIdsWithCharges.add(p.admission_id));
+    invoiceItems.forEach((i: any) => {
+        if (i.invoice?.admission_id) {
+            admissionIdsWithCharges.add(i.invoice.admission_id);
+        }
+    });
+
     const enriched = admissions.map((a: any) => {
       const daysAdmitted = Math.ceil(
         (new Date().getTime() - new Date(a.admission_date).getTime()) /
           (1000 * 60 * 60 * 24),
       );
+      
+      const hasCharges = admissionIdsWithCharges.has(a.admission_id);
+      const isWithin8Hours = (new Date().getTime() - new Date(a.admission_date).getTime()) < 8 * 60 * 60 * 1000;
+      const canCancel = a.status === "Admitted" && !hasCharges && isWithin8Hours;
+
       return {
         ...a,
         daysAdmitted,
@@ -480,7 +517,10 @@ export async function getIPDAdmissions(statusFilter?: string) {
           daysAdmitted *
           Number(a.ward?.cost_per_day || a.bed?.wards?.cost_per_day || 0),
         totalBalance: balances[a.patient_id]?.totalBalance || 0,
-        cancellation_reason: cancellationReasons.get(a.admission_id) || null,
+        cancellation_reason: a.cancellation_reason || cancellationReasons.get(a.admission_id) || null,
+        cancellation_date: a.cancellation_date || null,
+        cancelled_by: a.cancelled_by || null,
+        canCancel,
       };
     });
 
@@ -2004,16 +2044,18 @@ export async function markBedAvailable(bedId: string) {
 // ============================================
 // CANCEL ADMISSION
 // ============================================
-export async function cancelAdmission(admissionId: string, reason: string) {
+export async function cancelAdmission(admissionId: string, reason: string, cancellationDate?: string | Date) {
   try {
-    const { db, organizationId } = await requireTenantContext();
+    const { db, organizationId, session } = await requireTenantContext();
     const cancellationReason = (reason || '').trim();
+    const cancelDate = cancellationDate ? new Date(cancellationDate) : new Date();
+    const cancelledBy = session.username || session.name || 'system';
 
     if (!cancellationReason) {
       return { success: false, error: 'Cancellation reason is required.' };
     }
-    if (cancellationReason.length < 10) {
-      return { success: false, error: 'Cancellation reason must be at least 10 characters.' };
+    if (cancellationReason.length < 3) {
+      return { success: false, error: 'Cancellation reason must be at least 3 characters.' };
     }
 
     const admission = await db.admissions.findUnique({
@@ -2023,14 +2065,37 @@ export async function cancelAdmission(admissionId: string, reason: string) {
     if (!admission) return { success: false, error: 'Admission not found' };
     if (admission.status !== 'Admitted') return { success: false, error: 'Only active admissions can be cancelled' };
 
+    // Enforce 8 hours limit check
+    const now = new Date();
+    const admissionDate = new Date(admission.admission_date);
+    const hoursDiff = (now.getTime() - admissionDate.getTime()) / (1000 * 60 * 60);
+    if (hoursDiff > 8) {
+      return { success: false, error: 'Cannot cancel admission because it was created more than 8 hours ago.' };
+    }
+
+    // Enforce charges check
+    const [hasCharges, hasLab, hasPharmacy, hasInvoiceItems] = await Promise.all([
+      db.ipdChargePosting.findFirst({ where: { admission_id: admissionId } }),
+      db.lab_orders.findFirst({ where: { admission_id: admissionId } }),
+      db.pharmacy_orders.findFirst({ where: { admission_id: admissionId } }),
+      db.invoice_items.findFirst({ where: { invoice: { admission_id: admissionId } } })
+    ]);
+
+    if (hasCharges || hasLab || hasPharmacy || hasInvoiceItems) {
+      return { success: false, error: 'Cannot cancel admission because charges or orders have already been added.' };
+    }
+
     await db.$transaction(async (tx: any) => {
       // 1. Mark admission as Cancelled
       await tx.admissions.update({
         where: { admission_id: admissionId },
         data: {
           status: 'Cancelled',
-          discharge_date: new Date(),
+          discharge_date: cancelDate,
           discharge_type: 'Cancelled',
+          cancellation_reason: cancellationReason,
+          cancellation_date: cancelDate,
+          cancelled_by: cancelledBy,
         },
       });
 

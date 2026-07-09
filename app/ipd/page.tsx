@@ -52,6 +52,7 @@ import {
   accrueIPDDailyCharges,
   findAssignedDoctorByPatientPhone,
   checkActiveAdmission,
+  cancelAdmission,
 } from "@/app/actions/ipd-actions";
 import { getIpdPackages } from "@/app/actions/ipd-master-actions";
 import { applyPackageToAdmission } from "@/app/actions/ipd-finance-actions";
@@ -136,6 +137,45 @@ export default function IPDDashboard() {
   const [dischargeNotes, setDischargeNotes] = useState("");
   const [dischargeDateTime, setDischargeDateTime] = useState<string>("");
   const [dischargeLoading, setDischargeLoading] = useState(false);
+
+  // Cancel Admission modal
+  const [cancelModal, setCancelModal] = useState<any>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelDateTime, setCancelDateTime] = useState("");
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+
+  const handleCancelAdmissionSubmit = async () => {
+    if (!cancelReason.trim()) {
+      setCancelError("Reason for cancellation is required.");
+      return;
+    }
+    if (cancelReason.trim().length < 3) {
+      setCancelError("Reason must be at least 3 characters.");
+      return;
+    }
+    setCancelLoading(true);
+    setCancelError("");
+    try {
+      const res = await cancelAdmission(
+        cancelModal.admission_id,
+        cancelReason,
+        cancelDateTime || undefined
+      );
+      if (res.success) {
+        setCancelModal(null);
+        setCancelReason("");
+        setCancelDateTime("");
+        loadData();
+      } else {
+        setCancelError(res.error || "Failed to cancel admission");
+      }
+    } catch (err: any) {
+      setCancelError(err.message || "An unexpected error occurred.");
+    } finally {
+      setCancelLoading(false);
+    }
+  };
 
   // Search assigned doctor by patient phone
   const [doctorLookupPhone, setDoctorLookupPhone] = useState("");
@@ -1102,20 +1142,36 @@ export default function IPDDashboard() {
                                     </Link>
                                   )}
                                   {adm.status === "Admitted" && (
-                                    <button
-                                      onClick={() => {
-                                        const pad = (n: number) => String(n).padStart(2, "0");
-                                        const d = new Date();
-                                        setDischargeDateTime(
-                                          `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`,
-                                        );
-                                        setDischargeModal(adm);
-                                      }}
-                                      className="p-1.5 hover:bg-rose-500/10 rounded-lg"
-                                      title="Discharge"
-                                    >
-                                      <LogOut className="h-3.5 w-3.5 text-rose-400/60" />
-                                    </button>
+                                    <>
+                                      <button
+                                        onClick={() => {
+                                          const pad = (n: number) => String(n).padStart(2, "0");
+                                          const d = new Date();
+                                          setDischargeDateTime(
+                                            `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`,
+                                          );
+                                          setDischargeModal(adm);
+                                        }}
+                                        className="p-1.5 hover:bg-rose-500/10 rounded-lg"
+                                        title="Discharge"
+                                      >
+                                        <LogOut className="h-3.5 w-3.5 text-rose-400/60" />
+                                      </button>
+                                      {adm.canCancel && (
+                                        <button
+                                          onClick={() => {
+                                            setCancelModal(adm);
+                                            setCancelReason("");
+                                            setCancelDateTime(getLocalDatetimeString(new Date()));
+                                            setCancelError("");
+                                          }}
+                                          className="p-1.5 hover:bg-red-500/10 rounded-lg"
+                                          title="Cancel Admission"
+                                        >
+                                          <XCircle className="h-3.5 w-3.5 text-red-500/60" />
+                                        </button>
+                                      )}
+                                    </>
                                   )}
                                 </div>
                               </td>
@@ -1608,6 +1664,91 @@ export default function IPDDashboard() {
                 <CheckCircle className="h-4 w-4" />
               )}
               Confirm Discharge
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* CANCEL ADMISSION MODAL */}
+      {cancelModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 shadow-sm rounded-2xl w-full max-w-md p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <XCircle className="h-5 w-5 text-red-500" /> Cancel Admission
+              </h3>
+              <button
+                onClick={() => setCancelModal(null)}
+                className="text-gray-400 hover:text-gray-900 text-xl"
+              >
+                &times;
+              </button>
+            </div>
+            
+            {/* Patient details */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-xs space-y-2">
+              <div className="flex justify-between">
+                <span className="font-bold text-gray-400 uppercase tracking-wider text-[9px]">Patient Name</span>
+                <span className="font-bold text-gray-800">{cancelModal.patient?.full_name || '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-bold text-gray-400 uppercase tracking-wider text-[9px]">UHID / Admission ID</span>
+                <span className="font-mono text-gray-700">{cancelModal.patient?.patient_id || '—'} / {cancelModal.admission_id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-bold text-gray-400 uppercase tracking-wider text-[9px]">Doctor</span>
+                <span className="font-medium text-gray-800">{cancelModal.doctor_name || '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-bold text-gray-400 uppercase tracking-wider text-[9px]">Ward / Bed</span>
+                <span className="font-medium text-gray-800">{cancelModal.wardName} / {cancelModal.bed_id || 'No Bed Assigned'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-bold text-gray-400 uppercase tracking-wider text-[9px]">Admission Date & Time</span>
+                <span className="font-medium text-gray-800">{new Date(cancelModal.admission_date).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">
+                Reason for Cancellation (Required)
+              </label>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                rows={3}
+                className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-red-500/50 focus:outline-none"
+                placeholder="Why is this admission being cancelled?..."
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">
+                Cancellation Date & Time
+              </label>
+              <input
+                type="datetime-local"
+                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-red-500/50 focus:outline-none"
+                value={cancelDateTime}
+                onChange={(e) => setCancelDateTime(e.target.value)}
+              />
+            </div>
+
+            {cancelError && (
+              <p className="text-xs text-red-500 font-bold">{cancelError}</p>
+            )}
+
+            <button
+              onClick={handleCancelAdmissionSubmit}
+              disabled={cancelLoading}
+              className="w-full py-3 bg-gradient-to-r from-red-500 to-rose-600 text-white text-sm font-black rounded-xl hover:shadow-lg hover:shadow-red-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {cancelLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <XCircle className="h-4 w-4" />
+              )}
+              Confirm Cancellation
             </button>
           </div>
         </div>

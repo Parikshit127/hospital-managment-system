@@ -1,3 +1,5 @@
+import { prisma } from '@/backend/db';
+
 /**
  * Unified UHID (Unique Hospital ID) generator.
  * Single source of truth — used by both registration and triage flows.
@@ -29,7 +31,23 @@ export async function generateUHID(
         if (!isNaN(lastSeq)) nextSeq = lastSeq + 1;
     }
 
-    return `${yearPrefix}${String(nextSeq).padStart(5, '0')}`;
+    const candidate = `${yearPrefix}${String(nextSeq).padStart(5, '0')}`;
+
+    // Verify global uniqueness across all tenants to avoid unique constraint violations
+    let finalNumber = candidate;
+    let attempt = nextSeq;
+    const globalClient = prisma || (db as any);
+    while (globalClient) {
+        const existing = await globalClient.oPD_REG.findFirst({
+            where: { patient_id: finalNumber },
+            select: { id: true },
+        });
+        if (!existing) break;
+        attempt++;
+        finalNumber = `${yearPrefix}${String(attempt).padStart(5, '0')}`;
+    }
+
+    return finalNumber;
 }
 
 /**

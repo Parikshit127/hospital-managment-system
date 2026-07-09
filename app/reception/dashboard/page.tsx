@@ -6,7 +6,7 @@ import {
     ChevronLeft, ChevronRight, Eye, Zap, Loader2, Activity,
     CheckCircle2, Bell, Stethoscope, Bed, IndianRupee, Receipt, Lock,
     ReceiptText, Wallet, Download, FileText, Printer, ChevronDown, X, Sparkles,
-    ArrowUpDown, ArrowUp, ArrowDown,
+    ArrowUpDown, ArrowUp, ArrowDown, XCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -17,10 +17,10 @@ import { Skeleton, SkeletonCard } from '@/app/components/ui/Skeleton';
 import { DateField } from '@/app/components/ui/DateField';
 import {
     getRegisteredPatients, getReceptionStats, getReceptionRevenueToday,
-    getExpectedArrivals, checkInPatient,
+    getExpectedArrivals, checkInPatient, cancelAppointment,
 } from '@/app/actions/reception-actions';
 import { finalizePatientLatestDraft } from '@/app/actions/finance-actions';
-import { getIPDAdmissions } from '@/app/actions/ipd-actions';
+import { getIPDAdmissions, cancelAdmission } from '@/app/actions/ipd-actions';
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 
 // ─── helpers ──────────────────────────────────────────────────────────────
@@ -116,6 +116,87 @@ export default function ReceptionDashboard() {
     const [ipdStatusFilter, setIpdStatusFilter] = useState<IPDStatusFilter>('All');
     const [ipdSearch, setIpdSearch] = useState('');
     const ipdLoaded = useRef(false);
+    
+    // ── IPD Cancel Admission Modal state ──
+    const [cancelModal, setCancelModal] = useState<any | null>(null);
+    const [cancelReason, setCancelReason] = useState('');
+    const [cancelDateTime, setCancelDateTime] = useState('');
+    const [cancelling, setCancelling] = useState(false);
+    const [cancelError, setCancelError] = useState('');
+
+    // ── OPD Cancel Appointment Modal state ──
+    const [cancelApptTarget, setCancelApptTarget] = useState<string | null>(null);
+    const [cancelApptReason, setCancelApptReason] = useState('');
+    const [cancelApptLoading, setCancelApptLoading] = useState(false);
+    const [cancelApptError, setCancelApptError] = useState('');
+
+    const handleCancelAppointmentSubmit = async () => {
+        if (!cancelApptReason.trim()) {
+            setCancelApptError('Reason for cancellation is required.');
+            return;
+        }
+        if (cancelApptReason.trim().length < 10) {
+            setCancelApptError('Reason must be at least 10 characters.');
+            return;
+        }
+        setCancelApptLoading(true);
+        setCancelApptError('');
+        try {
+            const res = await cancelAppointment(cancelApptTarget!, cancelApptReason);
+            if (res.success) {
+                setCancelApptTarget(null);
+                setCancelApptReason('');
+                toast.success('Appointment cancelled successfully.');
+                loadArrivals(); // Refresh arrivals list
+            } else {
+                setCancelApptError(res.error || 'Failed to cancel appointment');
+            }
+        } catch (err: any) {
+            setCancelApptError(err.message || 'An unexpected error occurred.');
+        } finally {
+            setCancelApptLoading(false);
+        }
+    };
+
+    const getLocalDatetimeString = (date: Date) => {
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    };
+
+    const openCancelModal = (adm: any) => {
+        setCancelModal(adm);
+        setCancelReason('');
+        setCancelDateTime(getLocalDatetimeString(new Date()));
+        setCancelError('');
+    };
+
+    const handleCancelAdmissionSubmit = async () => {
+        if (!cancelReason.trim()) {
+            setCancelError('Reason for cancellation is required.');
+            return;
+        }
+        if (cancelReason.trim().length < 3) {
+            setCancelError('Reason must be at least 3 characters.');
+            return;
+        }
+        setCancelling(true);
+        setCancelError('');
+        try {
+            const res = await cancelAdmission(cancelModal.admission_id, cancelReason, cancelDateTime || undefined);
+            if (res.success) {
+                toast.success('Admission cancelled successfully');
+                setCancelModal(null);
+                setCancelReason('');
+                setCancelDateTime('');
+                loadIPDData();
+            } else {
+                setCancelError(res.error || 'Failed to cancel admission');
+            }
+        } catch (err: any) {
+            setCancelError(err.message || 'An unexpected error occurred.');
+        }
+        setCancelling(false);
+    };
 
     // ── IPD inline column filters ──
     const [ipdColFilters, setIpdColFilters] = useState<Record<string, string>>({});
@@ -1240,13 +1321,26 @@ export default function ReceptionDashboard() {
                                                     >
                                                         View
                                                     </Link>
-                                                    <Link
-                                                        href={`/ipd/discharge-settlement/${encodeURIComponent(admission.admission_id)}`}
-                                                        className="inline-flex items-center gap-1 px-2 py-1.5 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
-                                                        title="Discharge Settlement"
-                                                    >
-                                                        <Wallet className="h-3 w-3" /> Settle
-                                                    </Link>
+                                                    {admission.status === 'Admitted' && (
+                                                        <>
+                                                            <Link
+                                                                href={`/ipd/discharge-settlement/${encodeURIComponent(admission.admission_id)}`}
+                                                                className="inline-flex items-center gap-1 px-2 py-1.5 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
+                                                                title="Discharge Settlement"
+                                                            >
+                                                                <Wallet className="h-3 w-3" /> Settle
+                                                            </Link>
+                                                            {admission.canCancel && (
+                                                                <button
+                                                                    onClick={() => openCancelModal(admission)}
+                                                                    className="inline-flex items-center gap-1 px-2 py-1.5 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+                                                                    title="Cancel Admission"
+                                                                >
+                                                                    <XCircle className="h-3 w-3" /> Cancel
+                                                                </button>
+                                                            )}
+                                                        </>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -1322,6 +1416,18 @@ export default function ReceptionDashboard() {
                                                     </a>
                                                 )}
                                                 <button
+                                                    onClick={() => {
+                                                        setCancelApptTarget(arrival.appointment_id);
+                                                        setCancelApptReason('');
+                                                        setCancelApptError('');
+                                                    }}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-700 border border-red-200 text-xs font-bold rounded-lg hover:bg-red-100 transition-colors mr-1.5"
+                                                    title="Cancel Appointment"
+                                                >
+                                                    <XCircle className="h-3.5 w-3.5" />
+                                                    Cancel
+                                                </button>
+                                                <button
                                                     onClick={() => handleCheckIn(arrival.appointment_id)}
                                                     disabled={checkingIn === arrival.appointment_id}
                                                     className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 text-white text-xs font-bold rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50"
@@ -1342,6 +1448,157 @@ export default function ReceptionDashboard() {
                     </div>
                 )}
             </div>
+
+            {/* CANCEL ADMISSION MODAL */}
+            {cancelModal && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl w-full max-w-md p-6 space-y-5">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                                <XCircle className="h-5 w-5 text-red-500" /> Cancel Admission
+                            </h3>
+                            <button
+                                onClick={() => setCancelModal(null)}
+                                className="text-gray-400 hover:text-gray-900 text-xl"
+                            >
+                                &times;
+                            </button>
+                        </div>
+                        
+                        {/* Patient details */}
+                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-xs space-y-2">
+                            <div className="flex justify-between">
+                                <span className="font-bold text-gray-400 uppercase tracking-wider text-[9px]">Patient Name</span>
+                                <span className="font-bold text-gray-800">{cancelModal.patient?.full_name || '—'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="font-bold text-gray-400 uppercase tracking-wider text-[9px]">UHID / Admission ID</span>
+                                <span className="font-mono text-gray-700">{cancelModal.patient?.patient_id || '—'} / {cancelModal.admission_id}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="font-bold text-gray-400 uppercase tracking-wider text-[9px]">Doctor</span>
+                                <span className="font-medium text-gray-800">{cancelModal.doctor_name || '—'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="font-bold text-gray-400 uppercase tracking-wider text-[9px]">Ward / Room / Bed</span>
+                                <span className="font-medium text-gray-800">
+                                    {cancelModal.wardName || cancelModal.ward?.ward_name || cancelModal.bed?.wards?.ward_name || '—'}
+                                    {cancelModal.bed?.bed_id && ` / Bed ${cancelModal.bed.bed_id}`}
+                                </span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="font-bold text-gray-400 uppercase tracking-wider text-[9px]">Admission Date & Time</span>
+                                <span className="font-medium text-gray-800">
+                                    {new Date(cancelModal.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Form Inputs */}
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">
+                                    Reason for Cancellation *
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-red-500/50 focus:outline-none"
+                                    placeholder="Reason for cancelling admission (minimum 3 chars)..."
+                                    value={cancelReason}
+                                    onChange={(e) => { setCancelReason(e.target.value); setCancelError(''); }}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">
+                                    Cancellation Date &amp; Time
+                                </label>
+                                <input
+                                    type="datetime-local"
+                                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-red-500/50 focus:outline-none"
+                                    value={cancelDateTime}
+                                    onChange={(e) => setCancelDateTime(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        {cancelError && (
+                            <p className="text-xs text-rose-500 font-bold">{cancelError}</p>
+                        )}
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setCancelModal(null)}
+                                className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all"
+                            >
+                                Close
+                            </button>
+                            <button
+                                onClick={handleCancelAdmissionSubmit}
+                                disabled={cancelling}
+                                className="flex-1 py-2.5 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-md shadow-red-500/10 disabled:opacity-50"
+                            >
+                                {cancelling && <Loader2 className="h-4 w-4 animate-spin" />}
+                                Confirm Cancellation
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* CANCEL APPOINTMENT MODAL */}
+            {cancelApptTarget && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl w-full max-w-md p-6 space-y-5">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                                <XCircle className="h-5 w-5 text-red-500" /> Cancel OPD Appointment
+                            </h3>
+                            <button
+                                onClick={() => setCancelApptTarget(null)}
+                                className="text-gray-400 hover:text-gray-900 text-xl"
+                            >
+                                &times;
+                            </button>
+                        </div>
+                        
+                        <div>
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">
+                                Reason for Cancellation (Required - Minimum 10 chars)
+                            </label>
+                            <textarea
+                                value={cancelApptReason}
+                                onChange={(e) => setCancelApptReason(e.target.value)}
+                                rows={3}
+                                className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 focus:border-red-500/50 focus:outline-none"
+                                placeholder="Why is this appointment being cancelled?..."
+                            />
+                        </div>
+
+                        {cancelApptError && (
+                            <p className="text-xs text-red-500 font-bold">{cancelApptError}</p>
+                        )}
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setCancelApptTarget(null)}
+                                className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all"
+                            >
+                                Close
+                            </button>
+                            <button
+                                onClick={handleCancelAppointmentSubmit}
+                                disabled={cancelApptLoading}
+                                className="flex-1 py-2.5 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-md shadow-red-500/10 disabled:opacity-50"
+                            >
+                                {cancelApptLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                                Confirm Cancellation
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AppShell>
     );
 }

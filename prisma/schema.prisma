@@ -1042,6 +1042,9 @@ model admissions {
   allergy_alerts            Json?
   version                   Int                    @default(0)
   billing_category          String?                @default("General")
+  cancellation_reason       String?
+  cancellation_date         DateTime?
+  cancelled_by              String?
   admission_consultants     AdmissionConsultant[]
   bed                       beds?                  @relation(fields: [bed_id], references: [bed_id])
   organization              Organization           @relation(fields: [organizationId], references: [id])
