@@ -3835,6 +3835,8 @@ export async function reconcilePatientOverpayments(patientId: string) {
 
         let totalAdjusted = 0;
         const adjustments: { from: string; to_id: number; amount: number }[] = [];
+        const txOperations: any[] = [];
+        const affectedInvoiceIds = new Set<number>();
 
         for (const source of overpaid) {
             let remaining = source.excess;
@@ -3846,61 +3848,73 @@ export async function reconcilePatientOverpayments(patientId: string) {
                 const apply = Math.min(remaining, target.shortfall);
 
                 // Create negative adjustment payment on the source invoice
-                await db.payments.create({
-                    data: {
-                        receipt_number: await genRcpNum(organizationId, db),
-                        invoice_id: source.id,
-                        amount: -apply,
-                        payment_method: 'Adjustment',
-                        payment_type: 'adjustment',
-                        status: 'Completed',
-                        notes: `Reconciliation: ₹${apply.toLocaleString('en-IN')} excess transferred to ${target.invoice_number || `Draft #${target.id}`}`,
-                        received_by: session?.username || session?.name || null,
-                        organizationId,
-                    },
-                });
+                txOperations.push(
+                    db.payments.create({
+                        data: {
+                            receipt_number: await genRcpNum(organizationId, db),
+                            invoice_id: source.id,
+                            amount: -apply,
+                            payment_method: 'Adjustment',
+                            payment_type: 'adjustment',
+                            status: 'Completed',
+                            notes: `Reconciliation: ₹${apply.toLocaleString('en-IN')} excess transferred to ${target.invoice_number || `Draft #${target.id}`}`,
+                            received_by: session?.username || session?.name || null,
+                            organizationId,
+                        },
+                    })
+                );
 
                 // Create positive adjustment payment on the target invoice
-                await db.payments.create({
-                    data: {
-                        receipt_number: await genRcpNum(organizationId, db),
-                        invoice_id: target.id,
-                        amount: apply,
-                        payment_method: 'Adjustment',
-                        payment_type: 'adjustment',
-                        status: 'Completed',
-                        notes: `Reconciliation: ₹${apply.toLocaleString('en-IN')} excess from ${source.invoice_number || `Draft #${source.id}`}`,
-                        received_by: session?.username || session?.name || null,
-                        organizationId,
-                    },
-                });
+                txOperations.push(
+                    db.payments.create({
+                        data: {
+                            receipt_number: await genRcpNum(organizationId, db),
+                            invoice_id: target.id,
+                            amount: apply,
+                            payment_method: 'Adjustment',
+                            payment_type: 'adjustment',
+                            status: 'Completed',
+                            notes: `Reconciliation: ₹${apply.toLocaleString('en-IN')} excess from ${source.invoice_number || `Draft #${source.id}`}`,
+                            received_by: session?.username || session?.name || null,
+                            organizationId,
+                        },
+                    })
+                );
 
-                // Update the target invoice balances
+                // Calculate balances to update manually
                 const newPaid = target.paid + apply;
                 const newBal = target.net - newPaid;
-                await db.invoices.update({
-                    where: { id: target.id },
-                    data: {
-                        paid_amount: newPaid,
-                        balance_due: newBal > 0 ? newBal : 0,
-                        version: { increment: 1 },
-                    },
-                });
+                txOperations.push(
+                    db.invoices.update({
+                        where: { id: target.id },
+                        data: {
+                            paid_amount: newPaid,
+                            balance_due: newBal > 0 ? newBal : 0,
+                            version: { increment: 1 },
+                        },
+                    })
+                );
+                
                 target.paid = newPaid;
                 target.shortfall -= apply;
 
-                // Update the source invoice balances
                 const newSourcePaid = source.paid - apply;
                 const newSourceBal = source.net - newSourcePaid;
-                await db.invoices.update({
-                    where: { id: source.id },
-                    data: {
-                        paid_amount: newSourcePaid,
-                        balance_due: newSourceBal > 0 ? newSourceBal : 0,
-                        version: { increment: 1 },
-                    },
-                });
+                txOperations.push(
+                    db.invoices.update({
+                        where: { id: source.id },
+                        data: {
+                            paid_amount: newSourcePaid,
+                            balance_due: newSourceBal > 0 ? newSourceBal : 0,
+                            version: { increment: 1 },
+                        },
+                    })
+                );
+                
                 source.paid = newSourcePaid;
+                
+                affectedInvoiceIds.add(source.id);
+                affectedInvoiceIds.add(target.id);
 
                 remaining -= apply;
                 totalAdjusted += apply;
@@ -3908,8 +3922,29 @@ export async function reconcilePatientOverpayments(patientId: string) {
             }
         }
 
-        // Audit log
-        if (totalAdjusted > 0) {
+        if (txOperations.length > 0) {
+            await db.$transaction(txOperations);
+            
+            // Recalculate accurately based on DB to guarantee consistency and fix UI state if any previous desync occurred
+            for (const invId of affectedInvoiceIds) {
+                const allPayments = await db.payments.findMany({
+                    where: { invoice_id: invId, status: { not: 'Cancelled' }, organizationId }
+                });
+                const totalPaid = allPayments.reduce((s: number, p: any) => s + Number(p.amount), 0);
+                const inv = await db.invoices.findUnique({ where: { id: invId } });
+                if (inv) {
+                    const balance = Number(inv.net_amount) - totalPaid;
+                    await db.invoices.update({
+                        where: { id: invId },
+                        data: {
+                            paid_amount: totalPaid,
+                            balance_due: balance > 0 ? balance : 0
+                        }
+                    });
+                }
+            }
+            
+            // Audit log
             await db.system_audit_logs.create({
                 data: {
                     user_id: session?.id,
