@@ -44,6 +44,7 @@ export default function WardRoundsPage() {
             plan_changes: planChanges
         });
         if (res.success) {
+            toast.success('Observation saved successfully');
             setModalOpen(false);
             setObservations('');
             setPlanChanges('');

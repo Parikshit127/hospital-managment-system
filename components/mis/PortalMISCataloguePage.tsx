@@ -47,6 +47,8 @@ export interface PortalMISCataloguePageProps {
     backHref: string;
     /** Label for the back breadcrumb (e.g. "Finance Dashboard"). */
     backLabel: string;
+    /** Hide the in-page breadcrumb and catalogue intro block. */
+    hideIntro?: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -56,6 +58,7 @@ export async function PortalMISCataloguePage({
     basePath,
     backHref,
     backLabel,
+    hideIntro = false,
 }: PortalMISCataloguePageProps) {
     // 1. Fetch — runs in Node.js; Zod instances are fine here in memory.
     const rawCatalogue = await listCatalogue();
@@ -82,14 +85,14 @@ export async function PortalMISCataloguePage({
                 {/* ── Breadcrumb ────────────────────────────────────────────── */}
                 <Link
                     href={backHref}
-                    className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-orange-600 transition-colors font-bold"
+                    className={`${hideIntro ? 'hidden' : 'inline-flex'} items-center gap-1.5 text-sm text-gray-500 hover:text-orange-600 transition-colors font-bold`}
                 >
                     <ArrowLeft className="h-4 w-4" />
                     {backLabel}
                 </Link>
 
                 {/* ── Page header ───────────────────────────────────────────── */}
-                <div className="flex items-center gap-3">
+                <div className={`${hideIntro ? 'hidden' : 'flex'} items-center gap-3`}>
                     <div className="p-2.5 bg-orange-100 rounded-xl">
                         <LayoutGrid className="h-5 w-5 text-orange-600" />
                     </div>

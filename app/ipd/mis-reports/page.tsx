@@ -15,6 +15,7 @@ export default function IPDMISCataloguePage() {
             basePath="/ipd/mis"
             backHref="/ipd"
             backLabel="IPD Dashboard"
+            hideIntro
         />
     );
 }

@@ -660,6 +660,7 @@ export function Sidebar({ session }: SidebarProps) {
     ? (isAdmin ? (roleForPath(pathname) ?? "admin") : session.role)
     : "";
   const sidebarScrollStorageKey = `sidebar-scroll:${effectiveRole || "default"}`;
+  const sidebarRestoreStorageKey = `${sidebarScrollStorageKey}:restore`;
 
   // Every page renders its own AppShell, so the sidebar unmounts/remounts on
   // each navigation — which snapped a scrolled menu (e.g. the long Finance nav)
@@ -670,10 +671,17 @@ export function Sidebar({ session }: SidebarProps) {
   const restoreSidebarScroll = useCallback((el: HTMLElement | null) => {
     if (!el) return;
     try {
+      const shouldRestore = window.sessionStorage.getItem(sidebarRestoreStorageKey) === "true";
+      if (!shouldRestore) {
+        el.scrollTop = 0;
+        return;
+      }
+
       const saved = window.sessionStorage.getItem(sidebarScrollStorageKey);
       if (saved) el.scrollTop = parseInt(saved, 10) || 0;
+      window.sessionStorage.removeItem(sidebarRestoreStorageKey);
     } catch {}
-  }, [sidebarScrollStorageKey]);
+  }, [sidebarRestoreStorageKey, sidebarScrollStorageKey]);
 
   const saveSidebarScroll = useCallback(() => {
     const navs = [desktopNavRef.current, mobileNavRef.current].filter(Boolean) as HTMLElement[];
@@ -683,6 +691,13 @@ export function Sidebar({ session }: SidebarProps) {
       window.sessionStorage.setItem(sidebarScrollStorageKey, String(el.scrollTop));
     } catch {}
   }, [sidebarScrollStorageKey]);
+
+  const saveSidebarScrollForNavigation = useCallback(() => {
+    saveSidebarScroll();
+    try {
+      window.sessionStorage.setItem(sidebarRestoreStorageKey, "true");
+    } catch {}
+  }, [saveSidebarScroll, sidebarRestoreStorageKey]);
 
   useLayoutEffect(() => {
     restoreSidebarScroll(desktopNavRef.current);
@@ -843,7 +858,7 @@ export function Sidebar({ session }: SidebarProps) {
                 {ADMIN_SWITCH_PORTALS.map(p => (
                   <button
                     key={p.path}
-                    onClick={() => { saveSidebarScroll(); setPortalMenuOpen(false); setMobileOpen(false); router.push(p.path); }}
+                    onClick={() => { saveSidebarScrollForNavigation(); setPortalMenuOpen(false); setMobileOpen(false); router.push(p.path); }}
                     className="block w-full text-left pl-9 pr-2.5 py-1.5 rounded-lg text-[12px] text-gray-400 hover:text-white hover:bg-white/[0.06] transition-colors"
                   >
                     {p.label}
@@ -874,7 +889,7 @@ export function Sidebar({ session }: SidebarProps) {
                     // ~90% of server load. Routes now render only when clicked.
                     prefetch={false}
                     onClick={() => {
-                      saveSidebarScroll();
+                      saveSidebarScrollForNavigation();
                       setMobileOpen(false);
                     }}
                     title={collapsed ? item.label : undefined}

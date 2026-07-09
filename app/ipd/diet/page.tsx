@@ -42,6 +42,7 @@ export default function DietPage() {
             instructions
         });
         if (res.success) {
+            toast.success('Diet plan updated successfully');
             setModalOpen(false);
             setInstructions('');
             loadData();
