@@ -65,6 +65,7 @@ export async function GET(req: NextRequest) {
                         invoice_number: true,
                         final_bill_number: true,
                         invoice_type: true,
+                        doctor_name: true,
                         patient: {
                             select: {
                                 full_name: true,
@@ -182,6 +183,7 @@ export async function GET(req: NextRequest) {
             invoiceNo: string;
             patientName: string;
             mrn: string;
+            doctorName: string;
             mode: string;
             date: string;
             time: string;
@@ -224,6 +226,8 @@ export async function GET(req: NextRequest) {
             const dateStr = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
             const timeStr = dt.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
 
+            const doctorName = (p.invoice as any)?.doctor_name || '-';
+
             if (p.status === 'Completed') {
                 itemsList.push({
                     srNo: sr++,
@@ -232,6 +236,7 @@ export async function GET(req: NextRequest) {
                     invoiceNo: (p.invoice as any)?.final_bill_number || p.invoice?.invoice_number || '-',
                     patientName,
                     mrn: patientId,
+                    doctorName,
                     mode,
                     date: dateStr,
                     time: timeStr,
@@ -249,6 +254,7 @@ export async function GET(req: NextRequest) {
                     invoiceNo: (p.invoice as any)?.final_bill_number || p.invoice?.invoice_number || '-',
                     patientName,
                     mrn: patientId,
+                    doctorName,
                     mode,
                     date: dateStr,
                     time: timeStr,
@@ -282,6 +288,7 @@ export async function GET(req: NextRequest) {
                 invoiceNo: '-',
                 patientName,
                 mrn: patientId,
+                doctorName: '-',
                 mode,
                 date: dateStr,
                 time: timeStr,
@@ -319,6 +326,7 @@ export async function GET(req: NextRequest) {
                 invoiceNo: r.invoice_id ? String(r.invoice_id) : '-',
                 patientName,
                 mrn: patientId,
+                doctorName: '-',
                 mode,
                 date: dateStr,
                 time: timeStr,
@@ -590,6 +598,7 @@ export async function GET(req: NextRequest) {
                         ${item.patientName}<br/>
                         <span style="color:#666;font-size:9px;">${item.mrn}</span>
                     </td>
+                    <td style="padding:5px;border:1px solid #ddd;font-size:9px;">${item.doctorName}</td>
                     <td style="padding:5px;border:1px solid #ddd;text-align:center;">${item.mode}</td>
                     <td style="padding:5px;border:1px solid #ddd;text-align:center;font-size:9px;">
                         ${item.date}<br/>
@@ -618,6 +627,7 @@ export async function GET(req: NextRequest) {
                             <th style="padding:5px;border:1px solid #ddd;text-align:center;width:40px;">Sr.</th>
                             <th style="padding:5px;border:1px solid #ddd;text-align:left;">Receipt No. / Invoice No.</th>
                             <th style="padding:5px;border:1px solid #ddd;text-align:left;">Patient Name / MRN</th>
+                            <th style="padding:5px;border:1px solid #ddd;text-align:left;">Doctor</th>
                             <th style="padding:5px;border:1px solid #ddd;text-align:center;">Mode</th>
                             <th style="padding:5px;border:1px solid #ddd;text-align:center;">Date / Time</th>
                             <th style="padding:5px;border:1px solid #ddd;text-align:right;">Receipt Amt</th>
