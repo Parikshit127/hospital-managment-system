@@ -1352,3 +1352,289 @@ export const pharmacyDoctorWiseDetailReport: ReportDefinition = {
     };
   },
 };
+
+// ─── New reports: Purchase Order, Purchase Invoice, Vendor, IPD & OPD ──────────
+
+export const pharmacyPurchaseOrderReport: ReportDefinition = {
+  id: 'pharmacy-purchase-order-report',
+  category: ReportCategory.Pharmacy,
+  name: 'Pharmacy - Purchase Order Report',
+  description: 'List of all purchase orders placed with vendors — status, quantities, totals and approval details.',
+  filters: defaultFilters,
+  columns: [
+    { key: 'po_date',         label: 'PO Date',          type: 'date' },
+    { key: 'po_number',       label: 'PO Number',        type: 'string' },
+    { key: 'vendor_name',     label: 'Vendor',           type: 'string' },
+    { key: 'status',          label: 'Status',           type: 'string' },
+    { key: 'total_items',     label: 'Total Items',      type: 'number',   total: 'sum' },
+    { key: 'total_amount',    label: 'Total Amount',     type: 'currency', total: 'sum' },
+    { key: 'amount_received', label: 'Amount Received',  type: 'currency', total: 'sum' },
+    { key: 'payment_terms',   label: 'Payment Terms',    type: 'string' },
+  ],
+  defaultSort: { column: 'po_date', direction: 'desc' },
+  rowLimitSync: 5000,
+  requiredPermission: 'mis_reports.pharmacy.view',
+  queryFn: async (filters: ValidatedFilters, orgId: string) => {
+    const { date_start, date_end } = filters;
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT
+        DATE(po.created_at)                         AS "po_date",
+        po.po_number                                AS "po_number",
+        COALESCE(v.vendor_name, ps.name, 'Unknown') AS "vendor_name",
+        po.status                                   AS "status",
+        COUNT(poi.id)::int                          AS "total_items",
+        COALESCE(po.total_amount, 0)                AS "total_amount",
+        COALESCE(SUM(poi.quantity_received * poi.unit_price), 0) AS "amount_received",
+        COALESCE(po.payment_terms, '—')             AS "payment_terms"
+      FROM "purchase_orders" po
+      LEFT JOIN "vendors"              v   ON po.vendor_id   = v.id
+      LEFT JOIN "pharmacy_suppliers"   ps  ON po.supplier_id = ps.id
+      LEFT JOIN "purchase_order_items" poi ON poi.po_id      = po.id
+      WHERE po."organizationId" = ${orgId}
+        AND po.created_at >= ${toStartOfDay(date_start)}
+        AND po.created_at <= ${toEndOfDay(date_end)}
+      GROUP BY po.id, po.po_number, v.vendor_name, ps.name, po.status,
+               po.total_amount, po.payment_terms, po.created_at
+      ORDER BY po.created_at DESC
+    `;
+
+    const totals = rows.reduce((acc, r) => {
+      acc.total_items     += Number(r.total_items     || 0);
+      acc.total_amount    += Number(r.total_amount    || 0);
+      acc.amount_received += Number(r.amount_received || 0);
+      return acc;
+    }, { total_items: 0, total_amount: 0, amount_received: 0 });
+
+    return {
+      rows: rows.map(r => ({
+        ...r,
+        total_items:     Number(r.total_items     || 0),
+        total_amount:    Number(r.total_amount    || 0),
+        amount_received: Number(r.amount_received || 0),
+      })),
+      totals,
+    };
+  },
+};
+
+export const pharmacyPurchaseInvoiceReport: ReportDefinition = {
+  id: 'pharmacy-purchase-invoice-report',
+  category: ReportCategory.Pharmacy,
+  name: 'Pharmacy - Purchase Invoice Report',
+  description: 'List of all supplier/vendor purchase invoices with GST breakup, payment status and outstanding balance.',
+  filters: defaultFilters,
+  columns: [
+    { key: 'invoice_date',   label: 'Invoice Date',   type: 'date' },
+    { key: 'invoice_number', label: 'Invoice No.',    type: 'string' },
+    { key: 'vendor_name',    label: 'Vendor',         type: 'string' },
+    { key: 'po_number',      label: 'Linked PO',      type: 'string' },
+    { key: 'status',         label: 'Status',         type: 'string' },
+    { key: 'subtotal',       label: 'Taxable Amount', type: 'currency', total: 'sum' },
+    { key: 'cgst_amount',    label: 'CGST',           type: 'currency', total: 'sum' },
+    { key: 'sgst_amount',    label: 'SGST',           type: 'currency', total: 'sum' },
+    { key: 'igst_amount',    label: 'IGST',           type: 'currency', total: 'sum' },
+    { key: 'total_amount',   label: 'Total Amount',   type: 'currency', total: 'sum' },
+    { key: 'amount_paid',    label: 'Amount Paid',    type: 'currency', total: 'sum' },
+    { key: 'balance',        label: 'Balance Due',    type: 'currency', total: 'sum' },
+    { key: 'due_date',       label: 'Due Date',       type: 'date' },
+  ],
+  defaultSort: { column: 'invoice_date', direction: 'desc' },
+  rowLimitSync: 5000,
+  requiredPermission: 'mis_reports.pharmacy.view',
+  queryFn: async (filters: ValidatedFilters, orgId: string) => {
+    const { date_start, date_end } = filters;
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT
+        DATE(pi.invoice_date)                        AS "invoice_date",
+        pi.invoice_number                            AS "invoice_number",
+        COALESCE(v.vendor_name, 'Unknown')           AS "vendor_name",
+        COALESCE(po.po_number, '—')                  AS "po_number",
+        pi.status                                    AS "status",
+        COALESCE(pi.subtotal, 0)                     AS "subtotal",
+        COALESCE(pi.cgst_amount, 0)                  AS "cgst_amount",
+        COALESCE(pi.sgst_amount, 0)                  AS "sgst_amount",
+        COALESCE(pi.igst_amount, 0)                  AS "igst_amount",
+        COALESCE(pi.total_amount, 0)                 AS "total_amount",
+        COALESCE(pi.amount_paid, 0)                  AS "amount_paid",
+        (COALESCE(pi.total_amount,0) - COALESCE(pi.amount_paid,0)) AS "balance",
+        DATE(pi.due_date)                            AS "due_date"
+      FROM "pharmacy_purchase_invoices" pi
+      LEFT JOIN "vendors"         v  ON pi.vendor_id = v.id
+      LEFT JOIN "purchase_orders" po ON pi.po_id     = po.id
+      WHERE pi."organizationId" = ${orgId}
+        AND pi.invoice_date >= ${toStartOfDay(date_start)}
+        AND pi.invoice_date <= ${toEndOfDay(date_end)}
+      ORDER BY pi.invoice_date DESC
+    `;
+
+    const totals = rows.reduce((acc, r) => {
+      acc.subtotal     += Number(r.subtotal     || 0);
+      acc.cgst_amount  += Number(r.cgst_amount  || 0);
+      acc.sgst_amount  += Number(r.sgst_amount  || 0);
+      acc.igst_amount  += Number(r.igst_amount  || 0);
+      acc.total_amount += Number(r.total_amount || 0);
+      acc.amount_paid  += Number(r.amount_paid  || 0);
+      acc.balance      += Number(r.balance      || 0);
+      return acc;
+    }, { subtotal: 0, cgst_amount: 0, sgst_amount: 0, igst_amount: 0, total_amount: 0, amount_paid: 0, balance: 0 });
+
+    return {
+      rows: rows.map(r => ({
+        ...r,
+        subtotal:     Number(r.subtotal     || 0),
+        cgst_amount:  Number(r.cgst_amount  || 0),
+        sgst_amount:  Number(r.sgst_amount  || 0),
+        igst_amount:  Number(r.igst_amount  || 0),
+        total_amount: Number(r.total_amount || 0),
+        amount_paid:  Number(r.amount_paid  || 0),
+        balance:      Number(r.balance      || 0),
+      })),
+      totals,
+    };
+  },
+};
+
+export const pharmacyVendorReport: ReportDefinition = {
+  id: 'pharmacy-vendor-report',
+  category: ReportCategory.Pharmacy,
+  name: 'Pharmacy - Vendor Report',
+  description: 'Supplier-wise purchase summary: total orders, invoiced amount, paid amount and outstanding payables for the selected period.',
+  filters: defaultFilters,
+  columns: [
+    { key: 'vendor_name',     label: 'Vendor Name',         type: 'string' },
+    { key: 'vendor_code',     label: 'Vendor Code',         type: 'string' },
+    { key: 'gst_number',      label: 'GST Number',          type: 'string' },
+    { key: 'total_pos',       label: 'Total POs',           type: 'number',   total: 'sum' },
+    { key: 'total_invoices',  label: 'Total Invoices',      type: 'number',   total: 'sum' },
+    { key: 'invoiced_amount', label: 'Invoiced Amount',     type: 'currency', total: 'sum' },
+    { key: 'paid_amount',     label: 'Paid Amount',         type: 'currency', total: 'sum' },
+    { key: 'outstanding',     label: 'Outstanding Balance', type: 'currency', total: 'sum' },
+  ],
+  defaultSort: { column: 'outstanding', direction: 'desc' },
+  rowLimitSync: 1000,
+  requiredPermission: 'mis_reports.pharmacy.view',
+  queryFn: async (filters: ValidatedFilters, orgId: string) => {
+    const { date_start, date_end } = filters;
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT
+        v.vendor_name                                       AS "vendor_name",
+        COALESCE(v.vendor_code, '—')                        AS "vendor_code",
+        COALESCE(v.gst_number, '—')                         AS "gst_number",
+        COUNT(DISTINCT po.id)::int                          AS "total_pos",
+        COUNT(DISTINCT pi.id)::int                          AS "total_invoices",
+        COALESCE(SUM(pi.total_amount), 0)                   AS "invoiced_amount",
+        COALESCE(SUM(pi.amount_paid), 0)                    AS "paid_amount",
+        COALESCE(SUM(pi.total_amount - pi.amount_paid), 0)  AS "outstanding"
+      FROM "vendors" v
+      LEFT JOIN "purchase_orders" po
+             ON po.vendor_id = v.id
+            AND po."organizationId" = ${orgId}
+            AND po.created_at >= ${toStartOfDay(date_start)}
+            AND po.created_at <= ${toEndOfDay(date_end)}
+      LEFT JOIN "pharmacy_purchase_invoices" pi
+             ON pi.vendor_id = v.id
+            AND pi."organizationId" = ${orgId}
+            AND pi.invoice_date >= ${toStartOfDay(date_start)}
+            AND pi.invoice_date <= ${toEndOfDay(date_end)}
+      WHERE v."organizationId" = ${orgId}
+        AND v.is_active = true
+        AND v.is_pharmacy_supplier = true
+      GROUP BY v.id, v.vendor_name, v.vendor_code, v.gst_number
+      HAVING COUNT(DISTINCT po.id) > 0 OR COUNT(DISTINCT pi.id) > 0
+      ORDER BY "outstanding" DESC
+    `;
+
+    const totals = rows.reduce((acc, r) => {
+      acc.total_pos       += Number(r.total_pos       || 0);
+      acc.total_invoices  += Number(r.total_invoices  || 0);
+      acc.invoiced_amount += Number(r.invoiced_amount || 0);
+      acc.paid_amount     += Number(r.paid_amount     || 0);
+      acc.outstanding     += Number(r.outstanding     || 0);
+      return acc;
+    }, { total_pos: 0, total_invoices: 0, invoiced_amount: 0, paid_amount: 0, outstanding: 0 });
+
+    return {
+      rows: rows.map(r => ({
+        ...r,
+        total_pos:       Number(r.total_pos       || 0),
+        total_invoices:  Number(r.total_invoices  || 0),
+        invoiced_amount: Number(r.invoiced_amount || 0),
+        paid_amount:     Number(r.paid_amount     || 0),
+        outstanding:     Number(r.outstanding     || 0),
+      })),
+      totals,
+    };
+  },
+};
+
+export const pharmacyIpdOpdReport: ReportDefinition = {
+  id: 'pharmacy-ipd-opd-report',
+  category: ReportCategory.Pharmacy,
+  name: 'Pharmacy - IPD & OPD Report',
+  description: 'Combined pharmacy sales summary split by IPD (inpatient) and OPD (outpatient) for the selected date range.',
+  filters: defaultFilters,
+  columns: [
+    { key: 'sale_date',      label: 'Date',           type: 'date' },
+    { key: 'channel',        label: 'Channel',        type: 'string' },
+    { key: 'order_id',       label: 'Order ID',       type: 'string' },
+    { key: 'patient_name',   label: 'Patient Name',   type: 'string' },
+    { key: 'patient_type',   label: 'Patient Type',   type: 'string' },
+    { key: 'doctor_name',    label: 'Doctor',         type: 'string' },
+    { key: 'total_items',    label: 'Total Items',    type: 'number',   total: 'sum' },
+    { key: 'gross_amount',   label: 'Gross Amount',   type: 'currency', total: 'sum' },
+    { key: 'discount',       label: 'Discount',       type: 'currency', total: 'sum' },
+    { key: 'net_amount',     label: 'Net Amount',     type: 'currency', total: 'sum' },
+    { key: 'payment_method', label: 'Payment Method', type: 'string' },
+    { key: 'status',         label: 'Status',         type: 'string' },
+  ],
+  defaultSort: { column: 'sale_date', direction: 'desc' },
+  rowLimitSync: 5000,
+  requiredPermission: 'mis_reports.pharmacy.view',
+  queryFn: async (filters: ValidatedFilters, orgId: string) => {
+    const { date_start, date_end } = filters;
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT
+        DATE(po.created_at)                          AS "sale_date",
+        CASE WHEN po.is_ipd_linked THEN 'IPD' ELSE 'OPD' END AS "channel",
+        po.id::text                                  AS "order_id",
+        COALESCE(p.full_name, '—')                   AS "patient_name",
+        CASE WHEN po.is_ipd_linked THEN 'Inpatient' ELSE 'Outpatient' END AS "patient_type",
+        COALESCE(doc.name, 'Unassigned')             AS "doctor_name",
+        COUNT(poi.id)::int                           AS "total_items",
+        COALESCE(SUM(poi.total_price + COALESCE(poi.discount, 0)), 0) AS "gross_amount",
+        COALESCE(SUM(poi.discount), 0)               AS "discount",
+        COALESCE(SUM(poi.total_price), 0)            AS "net_amount",
+        COALESCE(po.payment_method, '—')             AS "payment_method",
+        po.status                                    AS "status"
+      FROM "pharmacy_orders" po
+      LEFT JOIN "pharmacy_order_items" poi ON poi.order_id = po.id
+      LEFT JOIN "OPD_REG" p   ON po.patient_id = p.patient_id
+      LEFT JOIN "users"   doc ON po.doctor_id  = doc.id
+      WHERE po."organizationId" = ${orgId}
+        AND po.created_at >= ${toStartOfDay(date_start)}
+        AND po.created_at <= ${toEndOfDay(date_end)}
+      GROUP BY po.id, po.is_ipd_linked, p.full_name, doc.name,
+               po.payment_method, po.status, po.created_at
+      ORDER BY po.created_at DESC
+    `;
+
+    const totals = rows.reduce((acc, r) => {
+      acc.total_items  += Number(r.total_items  || 0);
+      acc.gross_amount += Number(r.gross_amount || 0);
+      acc.discount     += Number(r.discount     || 0);
+      acc.net_amount   += Number(r.net_amount   || 0);
+      return acc;
+    }, { total_items: 0, gross_amount: 0, discount: 0, net_amount: 0 });
+
+    return {
+      rows: rows.map(r => ({
+        ...r,
+        total_items:  Number(r.total_items  || 0),
+        gross_amount: Number(r.gross_amount || 0),
+        discount:     Number(r.discount     || 0),
+        net_amount:   Number(r.net_amount   || 0),
+      })),
+      totals,
+    };
+  },
+};

@@ -3594,12 +3594,17 @@ export async function recordSupplierPayment(data: {
             include: { vendor: true }
         });
         if (!invoice) return { success: false, error: 'Invoice not found' };
-        if (!['Posted', 'PartiallyPaid'].includes(invoice.status)) {
-            return { success: false, error: 'Invoice must be Posted or PartiallyPaid' };
+        if (!['Posted', 'OnCredit', 'PartiallyPaid'].includes(invoice.status)) {
+            return { success: false, error: 'Invoice must be Posted, OnCredit, or PartiallyPaid' };
         }
 
         // Credit = purchase on supplier account — payable stays open, no cash/bank movement.
+        // Update status to OnCredit so the UI reflects the payment mode chosen.
         if (data.payment_method === 'Credit') {
+            await db.pharmacyPurchaseInvoice.update({
+                where: { id: data.invoice_id },
+                data: { status: 'OnCredit' },
+            });
             revalidatePath('/pharmacy/purchase-invoices');
             return { success: true, fully_paid: false, on_credit: true };
         }

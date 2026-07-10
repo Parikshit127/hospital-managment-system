@@ -105,7 +105,11 @@ import {
   pharmacyOpReturnDetailReport,
   pharmacyHsnSummaryReport,
   pharmacySettlementReport,
-  pharmacyDoctorWiseDetailReport
+  pharmacyDoctorWiseDetailReport,
+  pharmacyPurchaseOrderReport,
+  pharmacyPurchaseInvoiceReport,
+  pharmacyVendorReport,
+  pharmacyIpdOpdReport
 } from './registry/pharmacy';
 import {
   inventoryStockReport,
@@ -262,6 +266,10 @@ export const REGISTRY: Record<string, ReportDefinition> = {
   [pharmacyHsnSummaryReport.id]: pharmacyHsnSummaryReport,
   [pharmacySettlementReport.id]: pharmacySettlementReport,
   [pharmacyDoctorWiseDetailReport.id]: pharmacyDoctorWiseDetailReport,
+  [pharmacyPurchaseOrderReport.id]: pharmacyPurchaseOrderReport,
+  [pharmacyPurchaseInvoiceReport.id]: pharmacyPurchaseInvoiceReport,
+  [pharmacyVendorReport.id]: pharmacyVendorReport,
+  [pharmacyIpdOpdReport.id]: pharmacyIpdOpdReport,
   [diagRadiologyServiceReport.id]: diagRadiologyServiceReport,
 };
 

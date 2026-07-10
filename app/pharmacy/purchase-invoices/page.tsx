@@ -18,6 +18,7 @@ const STATUS_COLORS: Record<string, string> = {
     Draft: 'bg-gray-100 text-gray-700',
     PendingApproval: 'bg-amber-100 text-amber-700',
     Posted: 'bg-blue-100 text-blue-700',
+    OnCredit: 'bg-purple-100 text-purple-700',
     PartiallyPaid: 'bg-orange-100 text-orange-700',
     Paid: 'bg-emerald-100 text-emerald-700',
     Cancelled: 'bg-red-100 text-red-700',
@@ -217,7 +218,7 @@ export default function PurchaseInvoicesPage() {
 
             {/* Filter */}
             <div className="flex gap-2 mb-4 flex-wrap">
-                {['', 'Draft', 'Posted', 'PartiallyPaid', 'Paid'].map(s => (
+                {['', 'Draft', 'Posted', 'OnCredit', 'PartiallyPaid', 'Paid'].map(s => (
                     <button key={s} onClick={() => setStatusFilter(s)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${statusFilter === s ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                         {s || 'All'}
@@ -271,7 +272,7 @@ export default function PurchaseInvoicesPage() {
                                             {['Draft', 'PendingApproval'].includes(inv.status) && (
                                                 <button onClick={() => handlePost(inv)} className="p-1.5 hover:bg-blue-50 rounded-lg" title="Post to GL"><CheckCircle className="h-3.5 w-3.5 text-blue-500" /></button>
                                             )}
-                                            {['Posted', 'PartiallyPaid'].includes(inv.status) && (
+                                            {['Posted', 'OnCredit', 'PartiallyPaid'].includes(inv.status) && (
                                                 <button onClick={() => { setShowPayModal(inv); setPayAmount(String(Number(inv.total_amount) - Number(inv.amount_paid))); setPayMethod('Credit'); setPayRef(''); }} className="p-1.5 hover:bg-emerald-50 rounded-lg" title="Record Payment"><CreditCard className="h-3.5 w-3.5 text-emerald-500" /></button>
                                             )}
                                         </div>

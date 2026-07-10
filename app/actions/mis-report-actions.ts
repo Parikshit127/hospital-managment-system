@@ -130,7 +130,11 @@ import {
   pharmacyOpReturnDetailReport,
   pharmacyHsnSummaryReport,
   pharmacySettlementReport,
-  pharmacyDoctorWiseDetailReport
+  pharmacyDoctorWiseDetailReport,
+  pharmacyPurchaseOrderReport,
+  pharmacyPurchaseInvoiceReport,
+  pharmacyVendorReport,
+  pharmacyIpdOpdReport
 } from '@/lib/mis/registry/pharmacy';
 import {
   inventoryStockReport,
@@ -323,6 +327,10 @@ export async function listCatalogue() {
     pharmacyHsnSummaryReport,
     pharmacySettlementReport,
     pharmacyDoctorWiseDetailReport,
+    pharmacyPurchaseOrderReport,
+    pharmacyPurchaseInvoiceReport,
+    pharmacyVendorReport,
+    pharmacyIpdOpdReport,
     diagRadiologyServiceReport
   ];
 
