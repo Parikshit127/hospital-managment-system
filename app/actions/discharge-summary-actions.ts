@@ -11,8 +11,17 @@ import {
     DEFAULT_DISCHARGE_CONDITION,
     DEFAULT_DISCHARGE_INSTRUCTIONS,
 } from '@/app/lib/discharge-summary';
+import { ADMISSION_STATUS } from '@/app/lib/admission-status';
 
 const AUTHORS = ['doctor', 'admin', 'ipd_manager', 'superadmin'];
+
+// A `datetime-local` input yields "YYYY-MM-DDTHH:mm" with no timezone — the
+// hospital works in IST, so pin the offset rather than trusting server locale.
+function parseIstDateTime(value: string): Date | null {
+    const raw = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) ? `${value}:00+05:30` : value;
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+}
 
 // Format the stored medication_reconciliation JSON (if any) into one med per line.
 function medsFromReconciliation(raw: any): string {
@@ -91,12 +100,56 @@ export async function getDischargeSummary(admissionId: string) {
 }
 
 // Create/replace the discharge summary for an admission. Doctor/admin/IPD-manager only.
-export async function saveDischargeSummary(admissionId: string, input: Partial<DischargeSummaryData>) {
+export async function saveDischargeSummary(
+    admissionId: string,
+    input: Partial<DischargeSummaryData>,
+    dischargeDateTime?: string,
+) {
     try {
         const { db, organizationId, session } = await requireRoleAndTenant(AUTHORS);
         const admission = await loadAdmission(db, admissionId);
         if (!admission || admission.organizationId !== organizationId) {
             return { success: false, error: 'Admission not found' };
+        }
+
+        // Authoring the summary records the discharge date/time but leaves the
+        // patient Admitted — that combination IS "semi discharged": the bed stays
+        // occupied and the bill stays Draft until the full discharge (TPA
+        // approval / settlement). See app/lib/admission-status.ts.
+        if (dischargeDateTime && admission.status === ADMISSION_STATUS.CANCELLED) {
+            return { success: false, error: 'Cannot set a discharge date on a cancelled admission.' };
+        }
+        if (dischargeDateTime) {
+            const parsed = parseIstDateTime(dischargeDateTime);
+            if (!parsed) {
+                return { success: false, error: 'Invalid discharge date/time.' };
+            }
+            if (parsed.getTime() > Date.now()) {
+                return { success: false, error: 'Discharge date/time cannot be in the future.' };
+            }
+            if (admission.admission_date && parsed < new Date(admission.admission_date)) {
+                return { success: false, error: 'Discharge date/time cannot be before the admission date.' };
+            }
+
+            // Status is deliberately untouched: still 'Admitted' (semi discharged),
+            // or already 'Discharged' when correcting the time after the fact.
+            await db.admissions.update({
+                where: { admission_id: admissionId },
+                data: { discharge_date: parsed },
+            });
+
+            // Semi-discharge FREEZES the bill: it stays Draft (so a TPA claim can be
+            // filed against it — see getClaimableInvoices) but accepts no further
+            // charges. is_locked drives isBillClosedForCharges. undischargeAdmission
+            // clears both the discharge_date and this lock if it is reversed.
+            await db.invoices.updateMany({
+                where: { admission_id: admissionId, status: 'Draft', is_locked: false },
+                data: { is_locked: true, locked_at: new Date(), locked_by: session.username },
+            });
+
+            // Keep the in-memory record in sync so the rendered summary/header
+            // below shows the discharge date/time we just stored.
+            admission.discharge_date = parsed;
         }
 
         const data = normalizeDischargeData(input);
@@ -139,7 +192,12 @@ export async function saveDischargeSummary(admissionId: string, input: Partial<D
                 module: 'discharge',
                 entity_type: 'admission',
                 entity_id: admissionId,
-                details: JSON.stringify({ by: session.username, patient_id: admission.patient_id }),
+                details: JSON.stringify({
+                    by: session.username,
+                    patient_id: admission.patient_id,
+                    discharge_date: admission.discharge_date ?? null,
+                    status: admission.status,
+                }),
                 organizationId,
             },
         });

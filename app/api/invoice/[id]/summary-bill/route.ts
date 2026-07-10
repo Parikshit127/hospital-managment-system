@@ -144,9 +144,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     const isDischarged = admission?.status === 'Discharged' || !!admission?.discharge_date;
     const isFinal = isIPD ? isDischarged : (invoice.status === 'Paid' || invoice.status === 'Final');
     const billType = isIPD
-        ? (detailed
-            ? (isFinal ? 'FINAL BILL' : 'INTERIM BILL')
-            : (isFinal ? 'FINAL SUMMARY BILL' : 'INTERIM SUMMARY'))
+        ? (detailed ? 'BILL' : 'SUMMARY BILL')
         : 'TAX INVOICE';
     const billColor = isFinal ? branding.accentColor : '#f97316';
     // For final IPD bills use the discharge date (when the bill was finalised),
@@ -200,7 +198,6 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
         blue:  { bg: '#dbeafe', fg: '#1e40af', border: '#93c5fd' },
     };
     const tpaPillStyle = pillColors[tpaPill.color] || pillColors.gray;
-    const showInterimBanner = invoiceStatus.code === 'TPA_APPROVED_INTERIM' && !isDischarged;
 
     // Group items by service_category for MEDNET-style detail rows
     const fmtDate = fmtBillDate;
@@ -313,7 +310,6 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     <div class="watermark">${billType}</div>
     ${printButtonHtml(branding, (detailed ? 'Detailed bill for ' : 'Category-level summary bill for ') + invoice.invoice_number)}
     ${medsToggle}
-    ${showInterimBanner ? `<div style="background:#fef3c7;border:2px solid #f59e0b;color:#92400e;padding:10px 16px;margin:0 60px 12px;border-radius:6px;font-weight:800;text-align:center;font-size:13px;letter-spacing:0.5px;">TPA APPROVED &mdash; INTERIM BILL (Awaiting insurer settlement)</div>` : ''}
     <table class="print-layout-table">
         <thead><tr><td class="print-layout-header-spacer"></td></tr></thead>
         <tbody><tr><td>

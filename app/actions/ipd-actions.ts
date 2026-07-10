@@ -1105,10 +1105,15 @@ export async function undischargeAdmission(admissionId: string, reason?: string)
       },
     });
 
-    // Reopen any finalized invoice so billing can continue (payments are preserved).
+    // Reopen billing so charges can continue (payments are preserved): un-finalize
+    // any Final bill AND lift the semi-discharge freeze (is_locked) on the draft.
     await db.invoices.updateMany({
       where: { admission_id: admissionId, status: "Final" },
       data: { status: "Draft", finalized_at: null },
+    });
+    await db.invoices.updateMany({
+      where: { admission_id: admissionId },
+      data: { is_locked: false, locked_at: null, locked_by: null },
     });
 
     await db.system_audit_logs.create({

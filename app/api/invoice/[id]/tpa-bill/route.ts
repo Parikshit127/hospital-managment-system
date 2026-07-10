@@ -223,7 +223,7 @@ function generateTpaBillHTML(
             <p style="font-size:11px;"><strong>Doctor:</strong> ${formatDoctorName(admission.doctor_name) || '-'}</p>
             <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_id || '-'}</p>
             <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
-            <p style="font-size:11px;"><strong>Discharged:</strong> ${dischargeDate || 'Not discharged (interim)'}</p>
+            <p style="font-size:11px;"><strong>Discharged:</strong> ${dischargeDate || '—'}</p>
             <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
             <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
         `;

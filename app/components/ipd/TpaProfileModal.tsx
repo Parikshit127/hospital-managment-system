@@ -10,6 +10,7 @@ import {
     updatePatientPolicy,
 } from '@/app/actions/insurance-actions';
 import { RecordTpaPaymentModal } from '@/app/components/billing/RecordTpaPaymentModal';
+import { isSemiDischarged } from '@/app/lib/admission-status';
 
 type Provider = { id: number; provider_name: string; provider_code?: string | null };
 
@@ -43,6 +44,9 @@ type Policy = {
     copay_fixed: number | null;
     provider: { provider_name: string; provider_code: string } | null;
     claims: Claim[];
+    // Patient-level admission state (same patient across all policy rows).
+    admission_status?: string | null;
+    is_semi_discharged?: boolean;
 };
 
 // A patient's TPA bill — the system tracks the claim lifecycle on the invoice.
@@ -59,7 +63,20 @@ type TpaInvoice = {
     tpa_settled_amount: number | null;
     net_amount: number | null;
     created_at: string | null;
+    admission_id: string | null;
+    admission: { status: string | null; discharge_date: string | null } | null;
+    is_semi_discharged?: boolean;
 };
+
+// Small amber badge for the derived "Semi Discharged" state (patient still holds
+// a bed awaiting TPA approval). Additive — sits alongside the TPA status pill.
+function SemiDischargedBadge() {
+    return (
+        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
+            Semi Discharged
+        </span>
+    );
+}
 
 // Exact invoice shape RecordTpaPaymentModal expects.
 type TpaInvoiceTarget = {
@@ -256,9 +273,12 @@ export function TpaProfilePanel({ patientId, patientName, patientType }: PanelPr
                                                         )}
                                                     </td>
                                                     <td className="py-2 pr-3">
-                                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${tpaStatusCls(displayStatus)}`}>
-                                                            {tpaStatusLabel(displayStatus)}
-                                                        </span>
+                                                        <div className="flex flex-wrap items-center gap-1">
+                                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${tpaStatusCls(displayStatus)}`}>
+                                                                {tpaStatusLabel(displayStatus)}
+                                                            </span>
+                                                            {isSemiDischarged(inv.admission) && <SemiDischargedBadge />}
+                                                        </div>
                                                     </td>
                                                     <td className="py-2 pr-3 text-right text-gray-700">{inr(approved)}</td>
                                                     <td className="py-2 pr-3 text-right text-gray-700">{inr(settled)}</td>
@@ -321,6 +341,7 @@ export function TpaProfilePanel({ patientId, patientName, patientType }: PanelPr
                                             <span className="text-[11px] text-gray-400">[{p.provider.provider_code}]</span>
                                         )}
                                         <div className="ml-auto flex items-center gap-2">
+                                            {p.is_semi_discharged && <SemiDischargedBadge />}
                                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${statusCls(p.status)}`}>
                                                 {p.status}
                                             </span>

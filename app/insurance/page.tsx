@@ -15,6 +15,7 @@ import {
     submitInsuranceClaim, getRevenueLeakage, getClaimableInvoices,
     getProviderPerformance, autoSubmitClaim
 } from '@/app/actions/insurance-actions';
+import { isSemiDischarged } from '@/app/lib/admission-status';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useToast } from '@/app/components/ui/Toast';
 import {
@@ -313,9 +314,16 @@ export default function InsuranceDashboard() {
                                                         </p>
                                                     </div>
                                                     <div className="text-right">
-                                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${getClaimStatusColor(claim.status)}`}>
-                                                            {claim.status}
-                                                        </span>
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            {isSemiDischarged(claim.invoice?.admission) && (
+                                                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
+                                                                    Semi Discharged
+                                                                </span>
+                                                            )}
+                                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${getClaimStatusColor(claim.status)}`}>
+                                                                {claim.status}
+                                                            </span>
+                                                        </div>
                                                         <p className="text-[10px] font-bold text-gray-500 mt-1">
                                                             {'\u20B9'}{Number(claim.claimed_amount).toLocaleString()}
                                                         </p>

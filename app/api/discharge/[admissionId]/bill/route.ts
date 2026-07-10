@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { ensureIPDRoomChargesAccrued } from '@/app/actions/ipd-billing-helpers'
-import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, deriveInvoiceTotals, deriveInvoiceStatus, deriveTpaStatusPill, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding';
+import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, fmtBillDateTime, deriveInvoiceTotals, deriveInvoiceStatus, deriveTpaStatusPill, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding';
 import { getBillSections } from '@/app/lib/bill-sections';
 import { formatDoctorName } from '@/app/lib/format-name';
 
@@ -142,7 +142,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
     const gstin = branding.gstin;
 
     const admissionDate = fmtBillDate(admission.admission_date);
-    const dischargeDate = admission.discharge_date ? fmtBillDate(admission.discharge_date) : '';
+    const dischargeDate = admission.discharge_date ? fmtBillDateTime(admission.discharge_date) : '';
     const los = Math.max(1, Math.ceil((new Date(admission.discharge_date || new Date()).getTime() - new Date(admission.admission_date).getTime()) / (1000 * 60 * 60 * 24)));
 
     // Derive gross/discount/tax/net from the line items so the summary always matches
@@ -170,13 +170,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
     // never green PAID — so the document never misrepresents an unpaid TPA claim
     // as a settled bill (plan §8 + test scenario 8).
     const billColor = showInterimBanner ? '#f59e0b' : (isFinal ? branding.accentColor : '#f97316');
-    const billTitle = showInterimBanner
-        ? 'TPA APPROVED — INTERIM BILL'
-        : (isFinal ? 'FINAL BILL' : 'INTERIM BILL');
-    const watermarkText = showInterimBanner
-        ? 'TPA INTERIM'
-        : (isFinal ? 'FINAL BILL' : 'INTERIM');
-    const watermarkColor = showInterimBanner ? '#f59e0b' : (isFinal ? branding.accentColor : '#f59e0b');
+    const billTitle = 'BILL';
 
     // Consolidate per-day Room + Nursing rows into summary rows. Group by the
     // DISTINCT charge (description + rate) so different charges billed under the
@@ -316,13 +310,11 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; background: #fff; }
         ${letterheadCss(branding)}
-        .watermark { color: ${watermarkColor}; }
     </style>
 </head>
 <body>
     ${letterheadBackgroundHtml(branding)}
 
-    <div class="watermark">${watermarkText}</div>
 
     ${printButtonHtml(branding)}
     ${medsToggle}
@@ -374,7 +366,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 <p style="font-size:11px;"><strong>Doctor:</strong> ${formatDoctorName(admission.doctor_name) || '-'}</p>
                                 <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_id || '-'}</p>
                                 <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
-                                <p style="font-size:11px;"><strong>Discharged:</strong> ${isFinal && dischargeDate ? dischargeDate : 'Not discharged (interim bill)'}</p>
+                                <p style="font-size:11px;"><strong>Discharged:</strong> ${admission.discharge_date ? dischargeDate : '—'}</p>
                                 <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
                                 <p style="font-size:11px;"><strong>Category:</strong> ${(() => {
                                     const inv = String(invoice.billing_patient_type || '').toLowerCase();

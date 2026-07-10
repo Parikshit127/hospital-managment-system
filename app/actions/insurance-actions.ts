@@ -1,6 +1,7 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
+import { isSemiDischarged } from '@/app/lib/admission-status';
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
 function serialize<T>(data: T): T {
@@ -176,7 +177,24 @@ export async function getPatientPolicies(patientId: string) {
             orderBy: { created_at: 'desc' },
         });
 
-        return { success: true, data: serialize(policies) };
+        // Derive the patient's current admission state once (all these policies
+        // belong to the same patient). "Semi discharged" == still Admitted but a
+        // discharge_date is recorded — the patient holds a bed awaiting TPA approval.
+        const latestAdmission = await db.admissions.findFirst({
+            where: { patient_id: patientId, status: 'Admitted', is_archived: false },
+            select: { status: true, discharge_date: true },
+            orderBy: { admission_date: 'desc' },
+        });
+        const admissionStatus = latestAdmission?.status ?? null;
+        const isSemi = isSemiDischarged(latestAdmission);
+
+        const data = policies.map((pol: any) => ({
+            ...pol,
+            admission_status: admissionStatus,
+            is_semi_discharged: isSemi,
+        }));
+
+        return { success: true, data: serialize(data) };
     } catch (error: any) {
         console.error('getPatientPolicies error:', error);
         return { success: false, error: error.message };
@@ -217,6 +235,10 @@ export async function getPatientTpaInvoices(patientId: string) {
                 tpa_settled_amount: true,
                 net_amount: true,
                 created_at: true,
+                admission_id: true,
+                // Admission status drives the derived "Semi Discharged" badge:
+                // status still 'Admitted' but a discharge_date is recorded.
+                admission: { select: { status: true, discharge_date: true } },
             },
             orderBy: { created_at: 'desc' },
         });
@@ -236,9 +258,13 @@ export async function getPatientTpaInvoices(patientId: string) {
             providers.map((p: { id: number; provider_name: string }) => [p.id, p.provider_name])
         );
 
-        const data = invoices.map((inv: { tpa_provider_id: number | null }) => ({
+        const data = invoices.map((inv: {
+            tpa_provider_id: number | null;
+            admission?: { status: string | null; discharge_date: Date | null } | null;
+        }) => ({
             ...inv,
             tpa_provider_name: inv.tpa_provider_id != null ? (providerName.get(inv.tpa_provider_id) ?? null) : null,
+            is_semi_discharged: isSemiDischarged(inv.admission),
         }));
 
         return { success: true, data: serialize(data) };
@@ -631,7 +657,13 @@ export async function getInsuranceClaims(filters?: {
                         provider: { select: { provider_name: true } },
                     },
                 },
-                invoice: { select: { invoice_number: true, net_amount: true, status: true } },
+                invoice: {
+                    select: {
+                        invoice_number: true, net_amount: true, status: true,
+                        // Surfaces the derived "Semi Discharged" badge on the claims list.
+                        admission: { select: { status: true, discharge_date: true } },
+                    },
+                },
             },
             orderBy: { submitted_at: 'desc' },
             take: filters?.limit || 100,
@@ -736,7 +768,13 @@ export async function getClaimableInvoices(patientId: string) {
         const invoices = await db.invoices.findMany({
             where: {
                 patient_id: patientId,
-                status: 'Final',
+                // A claim can be filed against a finalized bill, OR against a
+                // semi-discharged patient's frozen Draft bill (discharge summary
+                // authored + discharge date recorded, still in a bed awaiting TPA).
+                OR: [
+                    { status: 'Final' },
+                    { status: 'Draft', admission: { status: 'Admitted', discharge_date: { not: null } } },
+                ],
                 id: claimedInvoiceIds.length > 0 ? { notIn: claimedInvoiceIds } : undefined,
             },
             orderBy: { created_at: 'desc' },

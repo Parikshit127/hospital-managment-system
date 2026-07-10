@@ -204,7 +204,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
             ? admission.discharge_date
             : invoice.created_at
     )
-    const billType = isIPD ? (isFinal ? 'FINAL BILL' : 'INTERIM BILL') : 'TAX INVOICE'
+    const billType = isIPD ? 'BILL' : 'TAX INVOICE'
     const gstin = branding.gstin
 
     // Determine patient category from billing_patient_type
@@ -325,13 +325,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
         '<hr style="border:none;border-top:2px solid #000;margin:6px 0 10px 0;" />',
     ].join('\n');
 
-    // Amber "TPA APPROVED — INTERIM BILL" badge replaces the default title when the
-    // derived status is TPA_APPROVED_INTERIM — patient/co-pay may still be due and
-    // the bill must NOT be misread as a final/paid bill.
-    const isInterimTpaBill = invoiceStatus.code === 'TPA_APPROVED_INTERIM' && !isDischarged
-    const hospitalBillTitle = isInterimTpaBill
-        ? '<div style="text-align:center;margin-bottom:12px;"><h2 style="font-size:14px;font-weight:900;color:#92400e;background:#fef3c7;border:2px solid #f59e0b;display:inline-block;padding:4px 14px;border-radius:4px;letter-spacing:0.5px;">TPA APPROVED — INTERIM BILL</h2></div>'
-        : '<div style="text-align:center;margin-bottom:12px;"><h2 style="font-size:14px;font-weight:bold;border-bottom:1px solid #999;display:inline-block;padding-bottom:2px;">' + billType + '</h2></div>';
+    const hospitalBillTitle = '<div style="text-align:center;margin-bottom:12px;"><h2 style="font-size:14px;font-weight:bold;border-bottom:1px solid #999;display:inline-block;padding-bottom:2px;">' + billType + '</h2></div>';
 
     // ── TPA Summary block (plan §8) ─────────────────────────────────────────
     // Rendered for every TPA-flagged invoice: shows provider, claim status pill,

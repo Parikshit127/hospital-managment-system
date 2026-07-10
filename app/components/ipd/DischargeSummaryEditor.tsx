@@ -8,13 +8,16 @@ import {
     saveDischargeSummary,
     generateDischargeSummaryDraft,
 } from '@/app/actions/discharge-summary-actions';
-import { emptyDischargeData, type DischargeSummaryData } from '@/app/lib/discharge-summary';
+import { emptyDischargeData, toIstLocalInput, type DischargeSummaryData } from '@/app/lib/discharge-summary';
 
 type Header = {
     patient_name: string; age_gender: string; indoor_no: string; uhid: string;
     consulting_doctor: string; ward: string; bed_no: string; floor: string;
     class_applicable: string; admission_dt: string; discharge_dt: string; discharge_status: string;
+    discharge_dt_input: string;
 };
+
+const nowIstLocal = () => toIstLocalInput(new Date());
 
 export function DischargeSummaryEditor({ admissionId }: { admissionId: string }) {
     const toast = useToast();
@@ -26,6 +29,9 @@ export function DischargeSummaryEditor({ admissionId }: { admissionId: string })
     const [showProcedure, setShowProcedure] = useState(false);
     const [header, setHeader] = useState<Header | null>(null);
     const [data, setData] = useState<DischargeSummaryData>(emptyDischargeData());
+    // Discharge date/time captured here. Saving it moves the patient to
+    // "Semi Discharged" — bed stays occupied, bill stays Draft.
+    const [dischargeDateTime, setDischargeDateTime] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -34,6 +40,7 @@ export function DischargeSummaryEditor({ admissionId }: { admissionId: string })
             setData(res.data as DischargeSummaryData);
             setHeader(res.header as Header);
             setSavedOnce(!!res.saved);
+            setDischargeDateTime((res.header as Header)?.discharge_dt_input || nowIstLocal());
             // Auto-expand the procedure block if it already has content.
             const d = res.data as DischargeSummaryData;
             if (d.procedure_name || d.operative_notes || d.surgeon) setShowProcedure(true);
@@ -52,8 +59,12 @@ export function DischargeSummaryEditor({ admissionId }: { admissionId: string })
     };
 
     async function handleSave(): Promise<boolean> {
+        if (!dischargeDateTime) {
+            toast.error('Please enter the discharge date and time.');
+            return false;
+        }
         setSaving(true);
-        const res = await saveDischargeSummary(admissionId, data);
+        const res = await saveDischargeSummary(admissionId, data, dischargeDateTime);
         setSaving(false);
         if (res.success) {
             toast.success('Discharge summary saved');
@@ -148,7 +159,16 @@ export function DischargeSummaryEditor({ admissionId }: { admissionId: string })
                         <Info label="Bed" value={header.bed_no} />
                         <Info label="Floor" value={header.floor} />
                         <Info label="Admitted" value={header.admission_dt} />
-                        <Info label="Discharged" value={header.discharge_dt} />
+                        <div>
+                            <p className="text-gray-500">Discharge Date &amp; Time</p>
+                            <input
+                                type="datetime-local"
+                                value={dischargeDateTime}
+                                max={nowIstLocal()}
+                                onChange={e => { setDischargeDateTime(e.target.value); setDirty(true); }}
+                                className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-900 focus:border-gray-400 focus:outline-none"
+                            />
+                        </div>
                         <Info label="Status" value={header.discharge_status} />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3 pt-3 border-t border-gray-100">

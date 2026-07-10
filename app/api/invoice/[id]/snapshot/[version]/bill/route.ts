@@ -200,9 +200,7 @@ function renderSnapshotBillHTML({
     // Derive the same bill type label as summary-bill does
     const isDischarged = admission?.status === 'Discharged' || !!admission?.discharge_date;
     const isFinal = isIPD ? isDischarged : (snapshot.status === 'Paid' || snapshot.status === 'Final');
-    const billType = isIPD
-        ? (isFinal ? 'FINAL BILL' : 'INTERIM BILL')
-        : 'TAX INVOICE';
+    const billType = isIPD ? 'BILL' : 'TAX INVOICE';
     const billColor = isFinal ? branding.accentColor : '#f97316';
 
     let patientInfoHTML = `

@@ -10,6 +10,11 @@ import {
     fmtBillDateTime,
     fmtBillDate,
 } from '@/app/lib/bill-branding';
+import {
+    hasDischargeDateTime,
+    isFullyDischarged,
+    isSemiDischarged,
+} from '@/app/lib/admission-status';
 
 // Doctor-authored, free-text sections of the discharge summary. Header/demographic fields
 // (patient name, UHID, ward, dates, …) are NOT stored here — they are derived live from the
@@ -112,6 +117,23 @@ export interface DischargeHeaderContext {
     admission_dt: string;
     discharge_dt: string;
     discharge_status: string;
+    /** Raw IST value for a `datetime-local` input ("YYYY-MM-DDTHH:mm"), '' if unset. */
+    discharge_dt_input: string;
+}
+
+/** Render a date as an IST "YYYY-MM-DDTHH:mm" string for a datetime-local input. */
+export function toIstLocalInput(value: Date | string | null | undefined): string {
+    if (!value) return '';
+    const d = value instanceof Date ? value : new Date(value);
+    if (isNaN(d.getTime())) return '';
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(d);
+    const g = (t: string) => parts.find(p => p.type === t)?.value ?? '00';
+    const hour = g('hour') === '24' ? '00' : g('hour');
+    return `${g('year')}-${g('month')}-${g('day')}T${hour}:${g('minute')}`;
 }
 
 // Build the header context from the admission (+ included patient, bed, ward).
@@ -120,7 +142,9 @@ export function buildDischargeHeader(admission: any, data?: Partial<DischargeSum
     const patient = admission?.patient || {};
     const ward = admission?.ward || admission?.bed?.wards || {};
     const bed = admission?.bed || {};
-    const isDischarged = admission?.status === 'Discharged';
+    // The discharge date/time is recorded when the summary is authored, so it is
+    // available from semi-discharge onward — not only at full discharge.
+    const showDischargeDt = hasDischargeDateTime(admission);
     return {
         patient_name: patient.full_name || '—',
         age_gender: `${patient.age ?? '—'} Years / ${patient.gender || '—'}`,
@@ -133,8 +157,13 @@ export function buildDischargeHeader(admission: any, data?: Partial<DischargeSum
         class_applicable:
             (data?.class_applicable || '').trim() || admission?.patient_class || admission?.billing_category || '—',
         admission_dt: admission?.admission_date ? fmtBillDateTime(admission.admission_date) : '—',
-        discharge_dt: isDischarged && admission?.discharge_date ? fmtBillDateTime(admission.discharge_date) : '—',
-        discharge_status: isDischarged ? (admission?.discharge_type || 'Discharged') : 'Not yet discharged',
+        discharge_dt: showDischargeDt && admission?.discharge_date ? fmtBillDateTime(admission.discharge_date) : '—',
+        discharge_status: isFullyDischarged(admission?.status)
+            ? (admission?.discharge_type || 'Discharged')
+            : isSemiDischarged(admission)
+              ? 'Semi Discharged (awaiting approval)'
+              : 'Not yet discharged',
+        discharge_dt_input: toIstLocalInput(admission?.discharge_date),
     };
 }
 

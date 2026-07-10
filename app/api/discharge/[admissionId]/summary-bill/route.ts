@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { ensureIPDRoomChargesAccrued } from '@/app/actions/ipd-billing-helpers';
-import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, deriveInvoiceTotals, type BillBranding } from '@/app/lib/bill-branding';
+import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, fmtBillDateTime, deriveInvoiceTotals, type BillBranding } from '@/app/lib/bill-branding';
 import { getBillSections } from '@/app/lib/bill-sections';
 import { formatDoctorName } from '@/app/lib/format-name';
 
@@ -94,7 +94,8 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
 
     const admissionDate = fmtBillDate(admission.admission_date);
     // Only a real discharge date — never default to today for a still-admitted patient.
-    const dischargeDate = admission.discharge_date ? fmtBillDate(admission.discharge_date) : '';
+    // Recorded when the discharge summary is authored, so it prints from semi-discharge on.
+    const dischargeDate = admission.discharge_date ? fmtBillDateTime(admission.discharge_date) : '';
     const los = Math.max(
         1,
         Math.ceil(
@@ -142,18 +143,15 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
 <html>
 <head>
     <meta charset="utf-8">
-    <title>${isFinal ? 'FINAL' : 'INTERIM'} SUMMARY BILL - ${admission.admission_id}</title>
+    <title>SUMMARY BILL - ${admission.admission_id}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; background: #fff; }
         ${letterheadCss(branding)}
-        .watermark { color: ${isFinal ? branding.accentColor : '#f59e0b'}; }
     </style>
 </head>
 <body>
     ${letterheadBackgroundHtml(branding)}
-
-    <div class="watermark">${isFinal ? 'FINAL' : 'INTERIM'} SUMMARY</div>
 
     ${printButtonHtml(branding, 'This is a category-level summary. For line-by-line details, see the Detailed Bill.')}
 
@@ -170,7 +168,7 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                         <!-- Header details matching pharmacy layout (no logo since it is on the letterhead) -->
                         <div style="display:flex;justify-content:flex-end;border-bottom:2px solid ${branding.accentColor};padding-bottom:12px;margin-bottom:20px;">
                             <div style="text-align:right;">
-                                <h2 style="font-size:16px;font-weight:800;color:${billColor};">${isFinal ? 'FINAL SUMMARY BILL' : 'INTERIM SUMMARY'}</h2>
+                                <h2 style="font-size:16px;font-weight:800;color:${billColor};">SUMMARY BILL</h2>
                                 <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${isFinal && (invoice as any).final_bill_number ? (invoice as any).final_bill_number : invoice.invoice_number}</p>
                                 ${isFinal && (invoice as any).final_bill_number ? `<p style="font-size:9px;color:#9ca3af;">Ref: ${invoice.invoice_number}</p>` : ''}
                                 <p style="font-size:10px;color:#6b7280;">Type: <strong>${invoice.invoice_type || 'IPD'}</strong></p>
@@ -190,7 +188,7 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                                 <p style="font-size:11px;"><strong>Doctor:</strong> ${formatDoctorName(admission.doctor_name) || '-'}</p>
                                 <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_id || '-'}</p>
                                 <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
-                                <p style="font-size:11px;"><strong>Discharged:</strong> ${isFinal && dischargeDate ? dischargeDate : 'Not discharged (interim bill)'}</p>
+                                <p style="font-size:11px;"><strong>Discharged:</strong> ${dischargeDate || '—'}</p>
                                 <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
                                 <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
                             </div>

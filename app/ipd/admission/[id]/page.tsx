@@ -44,6 +44,7 @@ import { PreDischargeChecklist } from '@/app/components/ipd/PreDischargeChecklis
 import { DischargeSummaryEditor } from '@/app/components/ipd/DischargeSummaryEditor';
 import { TpaProfilePanel } from '@/app/components/ipd/TpaProfileModal';
 import { formatDoctorName } from '@/app/lib/format-name';
+import { admissionStatusLabel, isSemiDischarged } from '@/app/lib/admission-status';
 
 const TABS = [
     { id: 'overview', label: 'Overview', icon: Activity },
@@ -784,10 +785,12 @@ export default function AdmissionDetailPage() {
                             <div className="flex items-center gap-3 flex-wrap">
                                 <h2 className="text-xl font-black text-gray-900">{data.patient?.full_name}</h2>
                                 <span className={`text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider font-black ${
-                                    data.status === 'Admitted'
-                                        ? 'bg-emerald-100 text-emerald-700'
-                                        : 'bg-gray-100 text-gray-600'
-                                }`}>{data.status}</span>
+                                    isSemiDischarged(data)
+                                        ? 'bg-amber-100 text-amber-700'
+                                        : data.status === 'Admitted'
+                                            ? 'bg-emerald-100 text-emerald-700'
+                                            : 'bg-gray-100 text-gray-600'
+                                }`}>{admissionStatusLabel(data)}</span>
                                 {data.status === 'Admitted' && (
                                     <span className="text-[10px] px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 font-bold flex items-center gap-1">
                                         <CalendarDays className="h-3 w-3" /> Day {daysAdmitted}
@@ -1104,7 +1107,7 @@ export default function AdmissionDetailPage() {
                                             <div className="flex items-start justify-between gap-2">
                                                 <div className="flex-1">
                                                     <DetailRow
-                                                        label="Discharged"
+                                                        label={isSemiDischarged(data) ? 'Discharge Date & Time' : 'Discharged'}
                                                         value={new Date(data.discharge_date).toLocaleString('en-IN', {
                                                             timeZone: 'Asia/Kolkata',
                                                             day: '2-digit', month: 'short', year: 'numeric',
