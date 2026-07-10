@@ -233,7 +233,7 @@ function generateTpaBillHTML(
 <html>
 <head>
     <meta charset="utf-8">
-    <title>TPA CLAIM BILL - ${invoice.invoice_number}</title>
+    <title>TPA CLAIM BILL${invoice.invoice_number ? ` - ${invoice.invoice_number}` : ''}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; background: #fff; }
@@ -244,7 +244,7 @@ function generateTpaBillHTML(
 <body>
     ${letterheadBackgroundHtml(branding)}
     <div class="watermark">TPA CLAIM</div>
-    ${printButtonHtml(branding, 'TPA / Insurance claim bill for ' + invoice.invoice_number)}
+    ${printButtonHtml(branding, 'TPA / Insurance claim bill' + (invoice.invoice_number ? ' for ' + invoice.invoice_number : ''))}
     <table class="print-layout-table">
         <thead><tr><td class="print-layout-header-spacer"></td></tr></thead>
         <tbody><tr><td>
@@ -259,7 +259,7 @@ function generateTpaBillHTML(
                     </div>
                     <div style="text-align:right;">
                         <h2 style="font-size:16px;font-weight:800;color:${billColor};">TPA / INSURANCE CLAIM BILL</h2>
-                        <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${invoice.invoice_number}</p>
+                        <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${invoice.invoice_number || '—'}</p>
                         <p style="font-size:10px;color:#6b7280;">Type: <strong>${invoice.invoice_type || 'OPD'}</strong></p>
                         <p style="font-size:10px;color:#6b7280;">Date: ${billDate}</p>
                     </div>

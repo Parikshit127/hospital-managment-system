@@ -324,7 +324,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
                     </div>
                     <div style="text-align:right;">
                         <h2 style="font-size:16px;font-weight:800;color:${billColor};">${billType}</h2>
-                        <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${(invoice as any).final_bill_number || invoice.invoice_number}</p>
+                        <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${(invoice as any).final_bill_number || invoice.invoice_number || '—'}</p>
                         ${(invoice as any).final_bill_number ? `<p style="font-size:9px;color:#9ca3af;">Ref: ${invoice.invoice_number}</p>` : ''}
                         <p style="font-size:10px;color:#6b7280;">Type: <strong>${invoice.invoice_type || 'OPD'}</strong></p>
                         <p style="font-size:10px;color:#6b7280;">Date: ${invoiceDate}</p>
