@@ -9,8 +9,6 @@ import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan, resolveRegisteredPa
 import { collectDeposit, getPatientDeposits, applyDepositToInvoice } from '@/app/actions/deposit-actions';
 import { getIpdServices } from '@/app/actions/ipd-master-actions';
 import { DepositTracker } from '@/app/components/ipd/DepositTracker';
-import { fetchBillBranding } from '@/app/actions/branding-actions';
-import type { BillBranding } from '@/app/lib/bill-branding';
 import { formatDoctorName } from '@/app/lib/format-name';
 
 export default function IpdBillingPage() {
@@ -67,7 +65,6 @@ export default function IpdBillingPage() {
     const [depositPanNumber, setDepositPanNumber] = useState('');
     const [depositPanName, setDepositPanName] = useState('');
     const [deposits, setDeposits] = useState<any[]>([]);
-    const [branding, setBranding] = useState<BillBranding | null>(null);
 
     // Absorbed (package_consumed) charges viewer — read-only, never on the bill.
     const [showAbsorbedModal, setShowAbsorbedModal] = useState(false);
@@ -115,7 +112,6 @@ export default function IpdBillingPage() {
     useEffect(() => {
         loadAdmissions();
         loadServices();
-        fetchBillBranding().then(r => r.success && r.data && setBranding(r.data));
     }, []);
 
     async function loadAdmissions() {
@@ -340,22 +336,6 @@ export default function IpdBillingPage() {
 
     return (
         <div className="min-h-screen bg-gray-50 p-4">
-            <style jsx global>{`
-                @media print {
-                  body * { visibility: hidden; }
-                  .ipd-print-view, .ipd-print-view * { visibility: visible !important; }
-                  .ipd-print-view {
-                    display: block !important;
-                    position: fixed !important;
-                    inset: 0 !important;
-                    z-index: 9999 !important;
-                    background: white !important;
-                    padding: 0 !important;
-                    overflow: visible !important;
-                  }
-                  .no-print { display: none !important; }
-                }
-            `}</style>
             <div className="max-w-7xl mx-auto">
                 <div className="flex items-center gap-3 mb-4">
                     <a
@@ -1250,196 +1230,6 @@ export default function IpdBillingPage() {
                 </div>
             )}
 
-            {/* ── PRINT VIEW (pharmacy-style full-page overlay) ── */}
-            {billData && (
-                <div className="ipd-print-view" style={{ display: 'none', position: 'relative' }}>
-                    {/* Full letterhead as background — same as pharmacy */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={branding?.letterheadUrl || '/letter head.png'} alt="" aria-hidden="true" style={{
-                        position: 'absolute', top: 0, left: 0,
-                        width: '100%', height: '100%',
-                        objectFit: 'fill',
-                        zIndex: 0, pointerEvents: 'none',
-                    }} />
-                    {/* Content on top of letterhead */}
-                    <div style={{ position: 'relative', zIndex: 1, padding: '130px 60px 80px 60px' }}>
-                        <div className="max-w-3xl mx-auto space-y-4">
-
-                            {/* Invoice header row */}
-                            <div className="flex justify-between items-start border-b-2 pb-3" style={{ borderColor: branding?.accentColor || '#1e3a6e' }}>
-                                <div>
-                                    <p className="text-lg font-black text-gray-900">{billData.admission.patient_name}</p>
-                                    <p className="text-xs text-gray-500 mt-0.5">{billData.admission.admission_id} | {formatDoctorName(billData.admission.doctor_name)}</p>
-                                    <p className="text-xs text-gray-400">{billData.admission.ward_name} | Bed: {billData.admission.bed_id} | Day {billData.admission.days_admitted}</p>
-                                    {billData.admission.diagnosis && (
-                                        <p className="text-xs text-gray-400">Dx: {billData.admission.diagnosis}</p>
-                                    )}
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-xs font-black uppercase tracking-widest" style={{ color: branding?.accentColor || '#1e3a6e' }}>
-                                        {billData.admission.discharge_date ? 'Final Bill' : 'Interim Bill'}
-                                    </p>
-                                    <p className="text-xs font-mono text-gray-600 mt-0.5">{billData.invoice.invoice_number || 'Draft (unsaved)'}</p>
-                                    <p className="text-xs text-gray-500">Admitted: {new Date(billData.admission.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                                    {billData.admission.discharge_date && (
-                                        <p className="text-xs text-gray-500">Discharged: {new Date(billData.admission.discharge_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                                    )}
-                                    <p className="text-xs text-gray-500">Printed: {new Date().toLocaleDateString('en-GB')}</p>
-                                </div>
-                            </div>
-
-                            {/* Charges table — grouped by category */}
-                            <table className="w-full text-sm border-collapse">
-                                <thead>
-                                    <tr className="border-y-2 border-black">
-                                        <th className="py-2 text-left font-black uppercase tracking-wider text-xs">Description</th>
-                                        <th className="py-2 text-left font-black uppercase tracking-wider text-xs">Category</th>
-                                        <th className="py-2 text-right font-black uppercase tracking-wider text-xs">Qty</th>
-                                        <th className="py-2 text-right font-black uppercase tracking-wider text-xs">Rate (₹)</th>
-                                        <th className="py-2 text-right font-black uppercase tracking-wider text-xs">GST%</th>
-                                        <th className="py-2 text-right font-black uppercase tracking-wider text-xs">Amount (₹)</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-200">
-                                    {Object.entries(categoryGroups).map(([cat, items]: [string, any]) => (
-                                        <React.Fragment key={cat}>
-                                            <tr>
-                                                <td colSpan={6} className="pt-3 pb-1 text-[10px] font-black uppercase tracking-widest text-gray-400">
-                                                    {cat}
-                                                </td>
-                                            </tr>
-                                            {items.map((item: any, i: number) => (
-                                                <tr key={`${cat}-${i}`}>
-                                                    <td className="py-1.5 font-medium text-gray-800 pl-2">{item.description}</td>
-                                                    <td className="py-1.5 text-gray-400 text-xs">{item.service_category}</td>
-                                                    <td className="py-1.5 text-right">{item.quantity}</td>
-                                                    <td className="py-1.5 text-right">{Number(item.unit_price).toLocaleString('en-IN')}</td>
-                                                    <td className="py-1.5 text-right">{item.tax_rate}%</td>
-                                                    <td className="py-1.5 text-right font-bold">{(Number(item.net_price) + Number(item.tax_amount || 0)).toLocaleString('en-IN')}</td>
-                                                </tr>
-                                            ))}
-                                        </React.Fragment>
-                                    ))}
-                                </tbody>
-                                <tfoot>
-                                    {/* Subtotal row */}
-                                    <tr className="border-t border-gray-300">
-                                        <td colSpan={5} className="py-2 text-right text-gray-500 text-xs">Subtotal (excl. GST)</td>
-                                        <td className="py-2 text-right">₹{Number(billData.invoice.total_amount || 0).toLocaleString('en-IN')}</td>
-                                    </tr>
-                                    {/* CGST */}
-                                    {Number(billData.invoice.total_tax) > 0 && (
-                                        <>
-                                            <tr>
-                                                <td colSpan={5} className="py-1 text-right text-gray-400 text-xs">CGST</td>
-                                                <td className="py-1 text-right text-xs">₹{(Number(billData.invoice.total_tax) / 2).toFixed(2)}</td>
-                                            </tr>
-                                            <tr>
-                                                <td colSpan={5} className="py-1 text-right text-gray-400 text-xs">SGST</td>
-                                                <td className="py-1 text-right text-xs">₹{(Number(billData.invoice.total_tax) / 2).toFixed(2)}</td>
-                                            </tr>
-                                        </>
-                                    )}
-                                    {/* Discount */}
-                                    {Number(billData.invoice.total_discount) > 0 && (
-                                        <tr>
-                                            <td colSpan={5} className="py-1 text-right text-gray-400 text-xs">Discount</td>
-                                            <td className="py-1 text-right text-xs text-emerald-600">− ₹{Number(billData.invoice.total_discount).toLocaleString('en-IN')}</td>
-                                        </tr>
-                                    )}
-                                    {/* Net Bill */}
-                                    <tr className="border-t-2 border-black">
-                                        <td colSpan={5} className="py-3 text-right font-black uppercase tracking-wider">Net Bill</td>
-                                        <td className="py-3 text-right font-black text-xl">₹{Number(billData.invoice.net_amount || 0).toLocaleString('en-IN')}</td>
-                                    </tr>
-                                    {/* Deposits */}
-                                    {deposits.length > 0 && (
-                                        <tr>
-                                            <td colSpan={5} className="py-1 text-right text-gray-500 text-xs">Deposits Collected</td>
-                                            <td className="py-1 text-right text-xs text-purple-700 font-bold">
-                                                ₹{deposits.reduce((s: number, d: any) => s + Number(d.amount || 0), 0).toLocaleString('en-IN')}
-                                            </td>
-                                        </tr>
-                                    )}
-                                    {/* Amount Paid */}
-                                    {Number(billData.invoice.paid_amount) > 0 && (
-                                        <tr>
-                                            <td colSpan={5} className="py-1 text-right text-gray-500 text-xs">Amount Paid</td>
-                                            <td className="py-1 text-right text-emerald-600 font-bold text-xs">₹{Number(billData.invoice.paid_amount).toLocaleString('en-IN')}</td>
-                                        </tr>
-                                    )}
-                                    {/* Balance Due */}
-                                    <tr>
-                                        <td colSpan={5} className="py-1 text-right font-bold text-red-600">Balance Due</td>
-                                        <td className="py-1 text-right font-black text-red-600">₹{Number(billData.invoice.balance_due || 0).toLocaleString('en-IN')}</td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-
-                            {/* GST summary table (if any tax) */}
-                            {billData.gst_summary && Number(billData.gst_summary.total_tax) > 0 && (
-                                <div className="mt-3">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">GST Summary</p>
-                                    <table className="w-full text-xs border-collapse">
-                                        <thead>
-                                            <tr className="bg-gray-100">
-                                                <th className="p-1.5 text-left">SAC/HSN (Rate%)</th>
-                                                <th className="p-1.5 text-right">Taxable</th>
-                                                <th className="p-1.5 text-right">CGST</th>
-                                                <th className="p-1.5 text-right">SGST</th>
-                                                <th className="p-1.5 text-right">Total Tax</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {billData.gst_summary.rows?.map((row: any, i: number) => (
-                                                <tr key={i} className="border-b border-gray-200">
-                                                    <td className="p-1.5">{row.hsn_sac || '—'} ({row.tax_rate}%)</td>
-                                                    <td className="p-1.5 text-right">₹{row.taxable_amount?.toLocaleString('en-IN')}</td>
-                                                    <td className="p-1.5 text-right">₹{row.cgst?.toFixed(2)}</td>
-                                                    <td className="p-1.5 text-right">₹{row.sgst?.toFixed(2)}</td>
-                                                    <td className="p-1.5 text-right">₹{row.total_tax?.toFixed(2)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                        <tfoot className="font-semibold bg-gray-50">
-                                            <tr>
-                                                <td className="p-1.5">Total</td>
-                                                <td className="p-1.5 text-right">₹{billData.gst_summary.total_taxable?.toLocaleString('en-IN')}</td>
-                                                <td className="p-1.5 text-right">₹{billData.gst_summary.total_cgst?.toFixed(2)}</td>
-                                                <td className="p-1.5 text-right">₹{billData.gst_summary.total_sgst?.toFixed(2)}</td>
-                                                <td className="p-1.5 text-right">₹{billData.gst_summary.total_tax?.toFixed(2)}</td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
-                            )}
-
-                            {/* Footer */}
-                            <div className="pt-10 flex justify-between items-end">
-                                <div className="text-xs text-gray-500 space-y-1">
-                                    {billData.admission.discharge_date ? (
-                                        <p className="font-bold text-gray-600">This is a FINAL bill.</p>
-                                    ) : (
-                                        <>
-                                            <p className="font-bold text-gray-600">This is an INTERIM bill.</p>
-                                            <p>Final bill will be generated at discharge.</p>
-                                        </>
-                                    )}
-                                    <p>Admitted: {new Date(billData.admission.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                                    {billData.admission.discharge_date && (
-                                        <p>Discharged: {new Date(billData.admission.discharge_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                                    )}
-                                </div>
-                                <div className="text-center">
-                                    <div className="border-t border-gray-400 w-40 mb-1" />
-                                    <p className="text-xs font-bold uppercase tracking-wider">Authorized Signatory</p>
-                                    <p className="text-[10px] text-gray-400">Computer Generated Digital Receipt</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
