@@ -3,6 +3,7 @@
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
+import { syncClaimToInvoiceTpa } from '@/app/lib/tpa-claim-sync';
 
 function serialize<T>(data: T): T {
     return JSON.parse(JSON.stringify(data, (_, v) =>
@@ -326,6 +327,14 @@ export async function recordTpaPaymentReceived(input: {
             await tx.invoices.update({
                 where: { id: invoice.id },
                 data: updateData,
+            });
+
+            // 10b. Keep the linked insurance_claims row in step (Settled / partial).
+            await syncClaimToInvoiceTpa(tx, {
+                id: invoice.id,
+                tpa_claim_status: newClaimStatus,
+                tpa_approved_amount: approved,
+                tpa_settled_amount: newSettled,
             });
 
             // 11. Audit log with before/after snapshots.

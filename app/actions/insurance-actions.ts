@@ -528,6 +528,15 @@ export async function submitInsuranceClaim(data: {
             },
         });
 
+        // Reflect the filed claim on the invoice so the bill/status stay in step —
+        // but never downgrade a bill that is already approved/settled.
+        if (!['approved', 'partially_settled', 'settled'].includes(String(claimInvoice.tpa_claim_status ?? ''))) {
+            await db.invoices.update({
+                where: { id: data.invoice_id },
+                data: { tpa_claim_status: 'submitted' },
+            });
+        }
+
         await db.system_audit_logs.create({
             data: {
                 action: 'SUBMIT_INSURANCE_CLAIM',

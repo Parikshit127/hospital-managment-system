@@ -6,6 +6,7 @@ import { createJournalEntry } from './gl-actions';
 import { accrueIPDDailyCharges } from '@/app/actions/ipd-actions';
 import { getPackageGSTRate, getRoomGSTRate } from '@/app/lib/gst';
 import { generateInvoiceNumber as genInvNum } from '@/app/lib/sequence-generator';
+import { syncClaimToInvoiceTpa } from '@/app/lib/tpa-claim-sync';
 import { isBillClosedForCharges, BILL_FINALIZED_INTENT_MSG, isPrivilegedBillingRole } from '@/app/lib/bill-status';
 import {
     CHARGE_DISPOSITION,
@@ -2112,6 +2113,15 @@ export async function settleAndDischarge(data: {
                     tpa_approved_amount: tpaApproved,
                     tpa_approved_at: new Date(),
                 },
+            });
+
+            // Advance the linked insurance_claims row to Approved so the claims
+            // list doesn't lag the bill (which is now TPA-approved).
+            await syncClaimToInvoiceTpa(db, {
+                id: invoice.id,
+                tpa_claim_status: 'approved',
+                tpa_approved_amount: tpaApproved,
+                tpa_settled_amount: Number(invoice.tpa_settled_amount || 0),
             });
 
             await db.system_audit_logs.create({
