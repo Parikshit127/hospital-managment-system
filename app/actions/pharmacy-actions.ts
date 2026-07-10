@@ -22,7 +22,7 @@ import { scheduleMedicationAdministrations } from '@/app/actions/ipd-emr-actions
 import { postInvoiceToGL } from '@/app/actions/gl-actions';
 import { syncInvoiceToGSTRegister } from '@/app/actions/gst-compliance-actions';
 import { generateSequentialNumber, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
-import { formatDoctorName } from '@/app/lib/format-name';
+
 import { validateBackdate } from '@/app/lib/backdate';
 import { dispensingKey } from '@/app/lib/pharmacy-bill-group';
 
@@ -443,18 +443,15 @@ export async function generateInvoice(
                 select: { admission_id: true },
             });
             if (activeAdmission) {
-                const doctorSuffix = options.doctorName ? ` — ${formatDoctorName(options.doctorName)}` : '';
-                // Stamp every line of THIS dispensing with one shared timestamp so
-                // they form a single identifiable "bill" on the IPD invoice (used to
-                // show each dispensing separately on Customer Invoices and to target
-                // returns at the right bill/day).
+                // Doctor name is already shown in the bill header — don't repeat
+                // it on every pharmacy line item (client feedback: clutters the bill).
                 const dispensedAt = backdatedAt || new Date();
                 for (const item of invoiceItems) {
                     await postChargeToIpdBill({
                         admission_id: activeAdmission.admission_id,
                         source_module: 'pharmacy',
                         source_ref_id: `PHARM-COUNTER-${item.medicine_id}-${item.batch_no}-${Date.now()}`,
-                        description: `Pharmacy: ${item.medicine_name} (Batch ${item.batch_no}) × ${item.qty}${doctorSuffix}`,
+                        description: `Pharmacy: ${item.medicine_name} (Batch ${item.batch_no}) × ${item.qty}`,
                         quantity: item.qty,
                         unit_price: item.unit_price,
                         tax_rate: item.tax_rate,
