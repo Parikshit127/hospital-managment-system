@@ -759,11 +759,24 @@ export default function IpdBillingPage() {
                                     Collect Deposit
                                 </button>
                                 <button
-                                    onClick={() => window.print()}
+                                    onClick={() => {
+                                        // Use the same server-rendered bill layout as Master Billing → "Print Bill",
+                                        // so an IPD bill prints identically wherever it's opened from.
+                                        if (billData?.invoice?.id) window.open(`/api/invoice/${billData.invoice.id}/summary-bill`, '_blank');
+                                    }}
                                     disabled={!billData}
                                     className="w-full px-3 py-2 bg-gray-600 text-white rounded-md text-sm hover:bg-gray-700 disabled:opacity-50"
                                 >
                                     {billData?.admission?.discharge_date ? 'Print Final Bill' : 'Print Interim Bill'}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (billData?.invoice?.id) window.open(`/api/invoice/${billData.invoice.id}/summary-bill?detailed=true`, '_blank');
+                                    }}
+                                    disabled={!billData}
+                                    className="w-full px-3 py-2 border border-gray-300 text-gray-700 rounded-md text-sm hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    Print Detailed Bill
                                 </button>
                                 <button
                                     onClick={openAbsorbedModal}
