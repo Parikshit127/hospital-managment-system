@@ -385,7 +385,19 @@ export async function updatePatientPolicy(id: number, data: {
         if (data.plan_name !== undefined) updateData.plan_name = data.plan_name || null;
         if (data.member_id !== undefined) updateData.member_id = data.member_id?.trim() || null;
         if (data.policy_type !== undefined) updateData.policy_type = data.policy_type || null;
-        if (data.coverage_limit !== undefined) updateData.coverage_limit = data.coverage_limit;
+        if (data.coverage_limit !== undefined) {
+            updateData.coverage_limit = data.coverage_limit;
+            // Keep remaining_limit in sync when coverage changes. Derive the amount
+            // already consumed from ACTUAL approved/settled claims (not the stored
+            // remaining_limit, which may have drifted), so remaining = coverage - consumed.
+            const newCoverage = Number(data.coverage_limit || 0);
+            const consumedAgg = await db.insurance_claims.aggregate({
+                where: { policy_id: id, status: { in: ['Approved', 'PartiallyApproved', 'Settled'] } },
+                _sum: { approved_amount: true },
+            });
+            const consumed = Number(consumedAgg._sum.approved_amount || 0);
+            updateData.remaining_limit = Math.max(0, newCoverage - consumed);
+        }
         if (data.copay_percent !== undefined) updateData.copay_percent = data.copay_percent;
         if (data.copay_fixed !== undefined) updateData.copay_fixed = data.copay_fixed;
         if (data.valid_from !== undefined) updateData.valid_from = new Date(data.valid_from);

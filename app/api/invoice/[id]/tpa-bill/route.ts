@@ -31,6 +31,7 @@ import {
     type BillBranding,
 } from '@/app/lib/bill-branding';
 import { formatDoctorName } from '@/app/lib/format-name';
+import { isSemiDischarged } from '@/app/lib/admission-status';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager'];
 
@@ -218,12 +219,14 @@ function generateTpaBillHTML(
         <p style="font-size:11px;"><strong>Phone:</strong> ${patient.phone || '-'}</p>
     `;
     if (isIPD) {
+        const semi = isSemiDischarged(admission);
         beneficiaryHTML += `
             <p style="font-size:11px;"><strong>Admission ID:</strong> ${admission.admission_id}</p>
             <p style="font-size:11px;"><strong>Doctor:</strong> ${formatDoctorName(admission.doctor_name) || '-'}</p>
             <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_id || '-'}</p>
             <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
-            <p style="font-size:11px;"><strong>Discharged:</strong> ${dischargeDate || '—'}</p>
+            <p style="font-size:11px;"><strong>${semi ? 'Discharge Date &amp; Time' : 'Discharged'}:</strong> ${dischargeDate || '—'}</p>
+            ${semi ? `<p style="font-size:11px;"><strong>Status:</strong> <span style="display:inline-block;padding:2px 8px;font-size:10px;font-weight:700;border-radius:9999px;background:#fef3c7;color:#b45309;border:1px solid #fde68a;">SEMI DISCHARGED — awaiting TPA approval</span></p>` : ''}
             <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
             <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
         `;
