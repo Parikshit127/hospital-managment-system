@@ -496,12 +496,15 @@ export default function AdmissionDetailPage() {
     };
 
     const handleUndischarge = async () => {
-        if (!window.confirm(`Undischarge ${data?.patient?.full_name || 'this patient'}? This re-admits the patient and reopens the bill for editing.`)) return;
+        const confirmMsg = isSemiDischarged(data)
+            ? `Unlock ${data?.patient?.full_name || 'this patient'}'s bill? This clears the discharge date and reopens the bill for editing.`
+            : `Undischarge ${data?.patient?.full_name || 'this patient'}? This re-admits the patient and reopens the bill for editing.`;
+        if (!window.confirm(confirmMsg)) return;
         setUndischarging(true);
         const res = await undischargeAdmission(data.admission_id);
         setUndischarging(false);
         if (res.success) {
-            toast.success('Patient undischarged — back to Admitted');
+            toast.success(isSemiDischarged(data) ? 'Bill unlocked — discharge date cleared' : 'Patient undischarged — back to Admitted');
             if (res.data?.bedNote) toast.error(res.data.bedNote);
             loadData();
         } else {
@@ -899,14 +902,16 @@ export default function AdmissionDetailPage() {
                                     </button>
                                 </Link>
                             )}
-                            {data.status === 'Discharged' && (data.viewer_role === 'admin' || data.viewer_role === 'finance') && (
+                            {(data.status === 'Discharged' || isSemiDischarged(data)) && (data.viewer_role === 'admin' || data.viewer_role === 'finance') && (
                                 <button
                                     onClick={handleUndischarge}
                                     disabled={undischarging}
-                                    title="Reverse the discharge — re-admit the patient (Admin/Finance only)"
+                                    title={isSemiDischarged(data)
+                                        ? 'Unlock the bill — clears the discharge date so charges/packages can be added again (Admin/Finance only)'
+                                        : 'Reverse the discharge — re-admit the patient (Admin/Finance only)'}
                                     className="flex items-center gap-1.5 px-3 py-2 border border-amber-300 bg-amber-50 text-amber-700 text-xs font-bold rounded-xl hover:bg-amber-100 transition-colors disabled:opacity-50"
                                 >
-                                    <RotateCcw className="h-3.5 w-3.5" /> {undischarging ? 'Undischarging…' : 'Undischarge'}
+                                    <RotateCcw className="h-3.5 w-3.5" /> {undischarging ? 'Working…' : isSemiDischarged(data) ? 'Unlock Bill' : 'Undischarge'}
                                 </button>
                             )}
                         </div>

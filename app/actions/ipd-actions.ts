@@ -1074,14 +1074,20 @@ export async function undischargeAdmission(admissionId: string, reason?: string)
 
     const admission = await db.admissions.findUnique({ where: { admission_id: admissionId } });
     if (!admission) return { success: false, error: "Admission not found" };
-    if (admission.status !== "Discharged") {
+    // Semi-discharged (Admitted + discharge_date set) also needs a reversal path:
+    // authoring the discharge summary locks the Draft bill (see saveDischargeSummary),
+    // but the patient never actually left the bed, so there is nothing to re-occupy —
+    // only the discharge date/lock need clearing.
+    const semiDischarged = admission.status === "Admitted" && !!admission.discharge_date;
+    if (admission.status !== "Discharged" && !semiDischarged) {
       return { success: false, error: `Patient is not discharged (current status: ${admission.status}).` };
     }
 
     // Re-occupy the original bed only if it is still free; if another patient now holds
-    // it, re-admit without a bed and tell the caller to reassign one.
+    // it, re-admit without a bed and tell the caller to reassign one. Only relevant for
+    // a full discharge — a semi-discharged patient's bed was never released.
     let bedNote = "";
-    if (admission.bed_id) {
+    if (admission.status === "Discharged" && admission.bed_id) {
       const heldByOther = await db.admissions.findFirst({
         where: { bed_id: admission.bed_id, status: "Admitted", NOT: { admission_id: admissionId } },
         select: { admission_id: true },
@@ -1127,6 +1133,7 @@ export async function undischargeAdmission(admissionId: string, reason?: string)
           by_role: session.role,
           reason: reason || null,
           bedNote: bedNote || null,
+          reversed_from: semiDischarged ? "SemiDischarged" : "Discharged",
         }),
       },
     });

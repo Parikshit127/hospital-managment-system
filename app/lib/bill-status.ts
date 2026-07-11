@@ -30,8 +30,13 @@ export function canEditBill(status: string, role?: string | null): boolean {
 // ── Billing-integrity guards (mandatory business rules) ──────────────────────
 
 // User-facing validation messages (kept in one place so every surface matches).
+// Covers both an actually-Final/Cancelled bill AND a still-Draft bill that is
+// merely locked (e.g. the semi-discharge freeze set by saveDischargeSummary) —
+// saying "finalized" for the locked-but-Draft case would be inaccurate, so the
+// message stays deliberately generic. Admin/Finance can lift the semi-discharge
+// lock via the "Unlock Bill" action on the admission page.
 export const BILL_FINALIZED_INTENT_MSG =
-  "Cannot create new intents because the patient's bill has already been finalized.";
+  "Cannot create new intents — the patient's bill is finalized or locked (e.g. after discharge summary authoring). An Admin/Finance user can unlock it from the admission page.";
 export const PRICE_LOCKED_MSG =
   "Item prices cannot be edited. To change the amount, apply a discount or cancel the service and add it again.";
 
