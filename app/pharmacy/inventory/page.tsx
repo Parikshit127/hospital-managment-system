@@ -3,58 +3,81 @@
 import React, { useEffect, useState } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { Package, Search, Plus } from 'lucide-react';
-import { getLowStockAlerts, searchMedicine, addInventoryBatch } from '@/app/actions/pharmacy-actions';
+import { Package, Search, Plus, X } from 'lucide-react';
+import { getInventoryPage, getInventoryCategories, addInventoryBatch } from '@/app/actions/pharmacy-actions';
 import { useDebouncedValue } from '@/app/lib/hooks/useDebouncedValue';
 
-export default function PharmacyInventoryPage() {
-    const [medicines, setMedicines] = useState<any[]>([]);
-    const [refreshing, setRefreshing] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [filterLow, setFilterLow] = useState(false);
-    const debouncedQuery = useDebouncedValue(searchQuery, 250);
+const EMPTY_SUMMARY = { totalValue: 0, lowStockCount: 0, expiringSoonCount: 0, outOfStockCount: 0 };
 
-    // Modal
+function formatCurrency(n: number) {
+    return `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+}
+
+function expiryClass(expiryDate: string | null) {
+    if (!expiryDate) return 'text-gray-400';
+    const days = (new Date(expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+    if (days <= 30) return 'text-red-600 font-bold';
+    if (days <= 60) return 'text-amber-600 font-semibold';
+    return 'text-gray-600';
+}
+
+export default function PharmacyInventoryPage() {
+    const [rows, setRows] = useState<any[]>([]);
+    const [refreshing, setRefreshing] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [cursor, setCursor] = useState<number | undefined>(undefined);
+    const [summary, setSummary] = useState(EMPTY_SUMMARY);
+
+    const [searchQuery, setSearchQuery] = useState('');
+    const debouncedQuery = useDebouncedValue(searchQuery, 250);
+    const [categories, setCategories] = useState<string[]>([]);
+    const [categoryFilter, setCategoryFilter] = useState('');
+    const [stockStatusFilter, setStockStatusFilter] = useState<'all' | 'in' | 'low' | 'out'>('all');
+    const [expiringWithinFilter, setExpiringWithinFilter] = useState('');
+
+    const hasFilters = !!(searchQuery || categoryFilter || stockStatusFilter !== 'all' || expiringWithinFilter);
+    function clearFilters() {
+        setSearchQuery(''); setCategoryFilter(''); setStockStatusFilter('all'); setExpiringWithinFilter('');
+    }
+
+    // Modal: Add Bulk Stock
     const [modalOpen, setModalOpen] = useState(false);
     const [form, setForm] = useState({ brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', expiry: '', rack: '' });
 
-    const loadInventory = async () => {
-        setRefreshing(true);
+    const loadInventory = async (opts?: { append?: boolean }) => {
+        const append = opts?.append ?? false;
+        if (append) setLoadingMore(true); else setRefreshing(true);
         try {
-            if (filterLow) {
-                // Low-stock list comes from the SQL aggregate — shape differs from
-                // searchMedicine (no batches), so normalise to the card layout.
-                const res = await getLowStockAlerts();
-                const q = debouncedQuery.trim().toLowerCase();
-                const items = (res.success ? res.data : []) as any[];
-                const filtered = q
-                    ? items.filter((m: any) =>
-                        m.brand_name?.toLowerCase().includes(q) ||
-                        m.generic_name?.toLowerCase().includes(q))
-                    : items;
-                setMedicines(filtered.map((m: any) => ({
-                    id: m.id,
-                    brand_name: m.brand_name,
-                    generic_name: m.generic_name,
-                    min_threshold: m.min_threshold,
-                    total_stock: m.total_stock,
-                    batches: [],
-                    _lowStock: true,
-                })));
-            } else {
-                const res = await searchMedicine({
-                    query: debouncedQuery,
-                    limit: 50,
-                    includeBatches: true,
-                });
-                setMedicines(res.success ? (res.data as any[]) : []);
+            const res = await getInventoryPage({
+                search: debouncedQuery,
+                limit: 50,
+                cursor: append ? cursor : undefined,
+                category: categoryFilter || undefined,
+                stockStatus: stockStatusFilter === 'all' ? undefined : stockStatusFilter,
+                expiringWithinDays: expiringWithinFilter ? Number(expiringWithinFilter) : undefined,
+                includeSummary: true,
+            });
+            if (res.success) {
+                setRows(prev => append ? [...prev, ...(res.data as any[])] : (res.data as any[]));
+                setCursor(res.nextCursor);
+                if (res.summary) setSummary(res.summary);
+            } else if (!append) {
+                setRows([]);
             }
         } finally {
-            setRefreshing(false);
+            if (append) setLoadingMore(false); else setRefreshing(false);
         }
     };
 
-    useEffect(() => { loadInventory(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [debouncedQuery, filterLow]);
+    useEffect(() => {
+        getInventoryCategories().then(res => { if (res.success) setCategories(res.data as string[]); });
+    }, []);
+
+    useEffect(() => {
+        setCursor(undefined);
+        loadInventory();
+        /* eslint-disable-next-line react-hooks/exhaustive-deps */
+    }, [debouncedQuery, categoryFilter, stockStatusFilter, expiringWithinFilter]);
 
     const handleSaveBatch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -78,7 +101,7 @@ export default function PharmacyInventoryPage() {
         <AppShell
             pageTitle="Pharmacy Inventory"
             pageIcon={<Package className="h-5 w-5" />}
-            onRefresh={loadInventory}
+            onRefresh={() => loadInventory()}
             refreshing={refreshing}
             headerActions={
                 <button onClick={() => { setForm({ brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', expiry: '', rack: '' }); setModalOpen(true); }} className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white font-bold py-2 px-4 rounded-xl shadow-sm transition-all text-sm">
@@ -86,8 +109,27 @@ export default function PharmacyInventoryPage() {
                 </button>
             }
         >
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <div className="bg-white border border-gray-200 rounded-2xl p-4">
+                    <p className="text-xs font-bold text-gray-400 uppercase">Total Stock Value</p>
+                    <p className="text-xl font-black text-gray-900">{formatCurrency(summary.totalValue)}</p>
+                </div>
+                <div className="bg-white border border-gray-200 rounded-2xl p-4">
+                    <p className="text-xs font-bold text-gray-400 uppercase">Low Stock</p>
+                    <p className="text-xl font-black text-amber-600">{summary.lowStockCount}</p>
+                </div>
+                <div className="bg-white border border-gray-200 rounded-2xl p-4">
+                    <p className="text-xs font-bold text-gray-400 uppercase">Expiring Soon (30d)</p>
+                    <p className="text-xl font-black text-red-600">{summary.expiringSoonCount}</p>
+                </div>
+                <div className="bg-white border border-gray-200 rounded-2xl p-4">
+                    <p className="text-xs font-bold text-gray-400 uppercase">Out of Stock</p>
+                    <p className="text-xl font-black text-gray-600">{summary.outOfStockCount}</p>
+                </div>
+            </div>
+
             <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
-                <div className="p-4 border-b border-gray-200 flex gap-4 bg-gray-50/50">
+                <div className="p-4 border-b border-gray-200 flex flex-wrap gap-3 bg-gray-50/50">
                     <div className="relative max-w-sm w-full">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input
@@ -95,41 +137,75 @@ export default function PharmacyInventoryPage() {
                             className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
                         />
                     </div>
-                    <button onClick={() => setFilterLow(!filterLow)} className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${filterLow ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                        {filterLow ? 'Showing Low Stock' : 'Show All Stock'}
-                    </button>
-                </div>
-
-                <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {medicines.map((med: any) => (
-                        <div key={med.id} className="border border-gray-200 rounded-2xl p-4 bg-white hover:shadow-md transition-shadow">
-                            <h3 className="font-bold text-gray-900">{med.brand_name}</h3>
-                            <p className="text-xs text-gray-500 mb-4">{med.generic_name || 'Generic N/A'}</p>
-
-                            <div className="space-y-2">
-                                {med._lowStock ? (
-                                    <div className="p-3 text-center text-xs font-bold text-red-600 bg-red-50 rounded-lg">
-                                        Stock: {med.total_stock} / Threshold: {med.min_threshold}
-                                    </div>
-                                ) : med.batches?.length > 0 ? med.batches.map((b: any) => (
-                                    <div key={b.id} className="flex justify-between items-center bg-gray-50 p-2 rounded-lg border border-gray-100">
-                                        <div>
-                                            <p className="text-xs font-bold text-gray-700 tracking-wider">BATCH: {b.batch_no}</p>
-                                            <p className="text-[10px] text-gray-400">Exp: {new Date(b.expiry_date).toLocaleDateString('en-GB')}</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className={`text-sm font-black ${b.current_stock < 10 ? 'text-red-500' : 'text-emerald-600'}`}>{b.current_stock}</p>
-                                            <p className="text-[10px] font-bold text-gray-500">Vol</p>
-                                        </div>
-                                    </div>
-                                )) : <div className="p-3 text-center text-xs font-bold text-red-500 bg-red-50 rounded-lg">Out of Stock</div>}
-                            </div>
-                        </div>
-                    ))}
-                    {medicines.length === 0 && !refreshing && (
-                        <div className="col-span-full p-8 text-center text-sm text-gray-500">No medicines found.</div>
+                    <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-600">
+                        <option value="">All categories</option>
+                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <select value={stockStatusFilter} onChange={e => setStockStatusFilter(e.target.value as any)} className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-600">
+                        <option value="all">All stock</option>
+                        <option value="in">In stock</option>
+                        <option value="low">Low stock</option>
+                        <option value="out">Out of stock</option>
+                    </select>
+                    <select value={expiringWithinFilter} onChange={e => setExpiringWithinFilter(e.target.value)} className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-600">
+                        <option value="">Any expiry</option>
+                        <option value="30">Expiring in 30 days</option>
+                        <option value="60">Expiring in 60 days</option>
+                        <option value="90">Expiring in 90 days</option>
+                    </select>
+                    {hasFilters && (
+                        <button onClick={clearFilters} className="flex items-center gap-1 px-3 py-2 text-sm font-bold text-gray-500 hover:text-gray-700">
+                            <X className="h-3.5 w-3.5" /> Clear filters
+                        </button>
                     )}
                 </div>
+
+                <div className="overflow-x-auto">
+                    <table className="w-full">
+                        <thead>
+                            <tr className="bg-gray-50 border-b border-gray-100">
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Medicine</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Category</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Batch No</th>
+                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Stock</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Expiry</th>
+                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">MRP</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Rack</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {rows.length === 0 && !refreshing && (
+                                <tr><td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-400">No medicines found.</td></tr>
+                            )}
+                            {rows.map((row: any) => (
+                                <tr key={row.id ?? row.batch_no} className="hover:bg-gray-50/60">
+                                    <td className="px-4 py-3">
+                                        <p className="text-sm font-bold text-gray-900">{row.medicine.brand_name}</p>
+                                        <p className="text-xs text-gray-500">{row.medicine.generic_name || 'Generic N/A'}</p>
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-gray-600">{row.medicine.category || '—'}</td>
+                                    <td className="px-4 py-3 text-sm font-mono text-gray-700">{row._catalog ? '—' : row.batch_no}</td>
+                                    <td className={`px-4 py-3 text-sm text-right font-black ${row._catalog ? 'text-red-500' : row.current_stock < row.medicine.min_threshold ? 'text-red-500' : 'text-emerald-600'}`}>
+                                        {row._catalog ? 'Out of Stock' : row.current_stock}
+                                    </td>
+                                    <td className={`px-4 py-3 text-sm ${expiryClass(row.expiry_date)}`}>
+                                        {row.expiry_date ? new Date(row.expiry_date).toLocaleDateString('en-GB') : '—'}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-right text-gray-700">{row.mrp ? formatCurrency(row.mrp) : '—'}</td>
+                                    <td className="px-4 py-3 text-sm text-gray-600">{row.rack_location || '—'}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                {cursor && (
+                    <div className="p-4 border-t border-gray-100 flex justify-center">
+                        <button onClick={() => loadInventory({ append: true })} disabled={loadingMore} className="px-4 py-2 text-sm font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-xl disabled:opacity-50">
+                            {loadingMore ? 'Loading...' : 'Load more'}
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Quick Add Modal */}
