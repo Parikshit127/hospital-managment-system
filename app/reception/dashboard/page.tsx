@@ -243,6 +243,10 @@ export default function ReceptionDashboard() {
     // ── IPD balance sort ──
     const [ipdBalanceSort, setIpdBalanceSort] = useState<'none' | 'high' | 'low'>('none');
 
+    // ── IPD admission date range filter ──
+    const [ipdDateFrom, setIpdDateFrom] = useState('');
+    const [ipdDateTo, setIpdDateTo] = useState('');
+
     const setColFilter = (col: string, value: string) => {
         setIpdColFilters(prev => {
             const next = { ...prev };
@@ -250,8 +254,8 @@ export default function ReceptionDashboard() {
             return next;
         });
     };
-    const clearAllColFilters = () => { setIpdColFilters({}); setOpenColFilter(null); };
-    const activeColFilterCount = Object.keys(ipdColFilters).length;
+    const clearAllColFilters = () => { setIpdColFilters({}); setOpenColFilter(null); setIpdDateFrom(''); setIpdDateTo(''); };
+    const activeColFilterCount = Object.keys(ipdColFilters).length + (ipdDateFrom ? 1 : 0) + (ipdDateTo ? 1 : 0);
 
     // ── Tab ── (honours ?tab=ipd|arrivals from redirects)
     const [activeTab, setActiveTab] = useState<'opd' | 'ipd' | 'arrivals'>(() => {
@@ -465,6 +469,15 @@ export default function ReceptionDashboard() {
             const cellVal = getColValue(a, col).toLowerCase();
             if (!cellVal.includes(filterVal.toLowerCase())) return false;
         }
+
+        // Admission date range filter (day-level, both bounds inclusive)
+        if (ipdDateFrom || ipdDateTo) {
+            if (!a.admission_date) return false;
+            const admissionDay = new Date(a.admission_date).toISOString().slice(0, 10);
+            if (ipdDateFrom && admissionDay < ipdDateFrom) return false;
+            if (ipdDateTo && admissionDay > ipdDateTo) return false;
+        }
+
         return true;
     });
 
@@ -1035,6 +1048,23 @@ export default function ReceptionDashboard() {
                             onChange={e => setIpdSearch(e.target.value)}
                             placeholder="Search name, UHID, phone, admission ID..."
                             className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-emerald-400 placeholder-gray-400"
+                        />
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase">From</span>
+                        <input
+                            type="date"
+                            value={ipdDateFrom}
+                            onChange={e => setIpdDateFrom(e.target.value)}
+                            className="px-2 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-600 focus:outline-none focus:border-emerald-400"
+                        />
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase">To</span>
+                        <input
+                            type="date"
+                            value={ipdDateTo}
+                            onChange={e => setIpdDateTo(e.target.value)}
+                            className="px-2 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-600 focus:outline-none focus:border-emerald-400"
                         />
                     </div>
 
