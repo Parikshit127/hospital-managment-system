@@ -77,9 +77,13 @@ export async function getInventoryPage(opts?: {
     cursor?: number;
     limit?: number;
     inStockOnly?: boolean;
+    category?: string;
+    stockStatus?: 'in' | 'low' | 'out';
+    expiringWithinDays?: number;
+    includeSummary?: boolean;
 }) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
         const search = (opts?.search ?? '').trim();
         const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 100);
         const inStockOnly = opts?.inStockOnly ?? false;
@@ -96,6 +100,7 @@ export async function getInventoryPage(opts?: {
                 }));
             }
         }
+        if (opts?.category) medWhere.category = opts.category;
         if (opts?.cursor) medWhere.id = { gt: opts.cursor };
 
         const medicines = await db.pharmacy_medicine_master.findMany({
@@ -106,6 +111,8 @@ export async function getInventoryPage(opts?: {
                 id: true,
                 brand_name: true,
                 generic_name: true,
+                category: true,
+                min_threshold: true,
                 selling_price: true,
                 price_per_unit: true,
                 mrp: true,
@@ -123,16 +130,31 @@ export async function getInventoryPage(opts?: {
                         expiry_date: true,
                         mrp: true,
                         cost_price: true,
+                        rack_location: true,
                     },
                 },
             },
         });
 
+        const expiryCutoff = opts?.expiringWithinDays
+            ? new Date(Date.now() + opts.expiringWithinDays * 24 * 60 * 60 * 1000)
+            : null;
+
         const flat: any[] = [];
         for (const med of medicines as any[]) {
+            const totalStock = med.batches.reduce((s: number, b: any) => s + b.current_stock, 0);
+            const isLow = totalStock <= med.min_threshold;
+            const isOut = totalStock === 0;
+
+            if (opts?.stockStatus === 'out' && !isOut) continue;
+            if (opts?.stockStatus === 'low' && !isLow) continue;
+            if (opts?.stockStatus === 'in' && (isLow || isOut)) continue;
+
             const medicinePayload = {
                 brand_name: med.brand_name,
                 generic_name: med.generic_name,
+                category: med.category,
+                min_threshold: med.min_threshold,
                 selling_price: med.selling_price,
                 price_per_unit: med.price_per_unit,
                 mrp: med.mrp,
@@ -141,8 +163,15 @@ export async function getInventoryPage(opts?: {
                 hsn_sac_code: med.hsn_sac_code,
                 is_active: med.is_active,
             };
-            if (med.batches.length > 0) {
-                for (const b of med.batches) {
+
+            let batchesToShow = med.batches;
+            if (expiryCutoff) {
+                batchesToShow = batchesToShow.filter((b: any) => new Date(b.expiry_date) <= expiryCutoff);
+                if (batchesToShow.length === 0) continue;
+            }
+
+            if (batchesToShow.length > 0) {
+                for (const b of batchesToShow) {
                     flat.push({
                         id: b.id,
                         batch_no: b.batch_no,
@@ -151,24 +180,60 @@ export async function getInventoryPage(opts?: {
                         expiry_date: b.expiry_date,
                         cost_price: b.cost_price,
                         mrp: b.mrp ?? med.mrp,
+                        rack_location: b.rack_location,
                         medicine: medicinePayload,
+                        _lowStock: isLow,
                     });
                 }
-            } else if (!inStockOnly) {
+            } else if (!inStockOnly && !expiryCutoff) {
                 flat.push({
                     id: null,
                     batch_no: `CATALOG-${med.id}`,
                     medicine_id: med.id,
-                    current_stock: 999999,
+                    current_stock: 0,
                     expiry_date: null,
+                    rack_location: null,
                     medicine: medicinePayload,
                     _catalog: true,
+                    _lowStock: true,
                 });
             }
         }
 
         const nextCursor = medicines.length === limit ? (medicines[medicines.length - 1] as any).id : undefined;
-        return { success: true, data: flat, nextCursor };
+
+        let summary: { totalValue: number; lowStockCount: number; expiringSoonCount: number; outOfStockCount: number } | undefined;
+        if (opts?.includeSummary) {
+            const summaryRows = await db.$queryRaw<Array<{
+                total_value: number | null;
+                low_stock_count: number;
+                expiring_soon_count: number;
+                out_of_stock_count: number;
+            }>>`
+                SELECT
+                    COALESCE(SUM(b.current_stock * COALESCE(b.cost_price, 0)), 0)::float AS total_value,
+                    COUNT(DISTINCT CASE WHEN agg.total_stock <= m.min_threshold AND agg.total_stock > 0 THEN m.id END)::int AS low_stock_count,
+                    COUNT(DISTINCT CASE WHEN b.expiry_date <= NOW() + INTERVAL '30 days' AND b.current_stock > 0 THEN b.id END)::int AS expiring_soon_count,
+                    COUNT(DISTINCT CASE WHEN agg.total_stock = 0 OR agg.total_stock IS NULL THEN m.id END)::int AS out_of_stock_count
+                FROM "pharmacy_medicine_master" m
+                LEFT JOIN "pharmacy_batch_inventory" b ON b.medicine_id = m.id
+                LEFT JOIN (
+                    SELECT medicine_id, COALESCE(SUM(current_stock), 0) AS total_stock
+                    FROM "pharmacy_batch_inventory"
+                    GROUP BY medicine_id
+                ) agg ON agg.medicine_id = m.id
+                WHERE m."organizationId" = ${organizationId}
+                  AND m.is_active = true
+            `;
+            summary = {
+                totalValue: Number(summaryRows[0]?.total_value || 0),
+                lowStockCount: Number(summaryRows[0]?.low_stock_count || 0),
+                expiringSoonCount: Number(summaryRows[0]?.expiring_soon_count || 0),
+                outOfStockCount: Number(summaryRows[0]?.out_of_stock_count || 0),
+            };
+        }
+
+        return { success: true, data: flat, nextCursor, summary };
     } catch (error) {
         console.error('Inventory Page Fetch Error:', error);
         return { success: false, data: [] };
