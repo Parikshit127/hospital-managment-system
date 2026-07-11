@@ -265,10 +265,15 @@ export async function updateBatchDetails(data: {
     cost_price?: number;
 }) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
 
-        const batch = await db.pharmacy_batch_inventory.findUnique({ where: { id: data.batch_id } });
-        if (!batch) return { success: false, error: 'Batch not found' };
+        const batch = await db.pharmacy_batch_inventory.findUnique({
+            where: { id: data.batch_id },
+            include: { medicine: { select: { organizationId: true } } },
+        });
+        if (!batch || batch.medicine.organizationId !== organizationId) {
+            return { success: false, error: 'Batch not found' };
+        }
 
         const updateData: any = {};
         if (data.batch_no !== undefined) updateData.batch_no = data.batch_no;

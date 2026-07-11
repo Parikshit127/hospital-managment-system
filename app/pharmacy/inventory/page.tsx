@@ -123,7 +123,7 @@ export default function PharmacyInventoryPage() {
                 category: categoryFilter || undefined,
                 stockStatus: stockStatusFilter === 'all' ? undefined : stockStatusFilter,
                 expiringWithinDays: expiringWithinFilter ? Number(expiringWithinFilter) : undefined,
-                includeSummary: true,
+                includeSummary: !append,
             });
             if (res.success) {
                 setRows(prev => append ? [...prev, ...(res.data as any[])] : (res.data as any[]));
