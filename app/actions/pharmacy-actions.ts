@@ -240,6 +240,65 @@ export async function getInventoryPage(opts?: {
     }
 }
 
+export async function getInventoryCategories() {
+    try {
+        const { db } = await requireTenantContext();
+        const rows = await db.pharmacy_medicine_master.findMany({
+            where: { is_active: true, category: { not: null } },
+            distinct: ['category'],
+            select: { category: true },
+            orderBy: { category: 'asc' },
+        });
+        return { success: true, data: rows.map((r: any) => r.category).filter(Boolean) as string[] };
+    } catch (error) {
+        console.error('Get Inventory Categories Error:', error);
+        return { success: false, data: [] };
+    }
+}
+
+export async function updateBatchDetails(data: {
+    batch_id: number;
+    batch_no?: string;
+    expiry_date?: Date;
+    rack_location?: string;
+    mrp?: number;
+    cost_price?: number;
+}) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const batch = await db.pharmacy_batch_inventory.findUnique({ where: { id: data.batch_id } });
+        if (!batch) return { success: false, error: 'Batch not found' };
+
+        const updateData: any = {};
+        if (data.batch_no !== undefined) updateData.batch_no = data.batch_no;
+        if (data.expiry_date !== undefined) updateData.expiry_date = data.expiry_date;
+        if (data.rack_location !== undefined) updateData.rack_location = data.rack_location;
+        if (data.mrp !== undefined) updateData.mrp = data.mrp;
+        if (data.cost_price !== undefined) updateData.cost_price = data.cost_price;
+
+        const updated = await db.pharmacy_batch_inventory.update({
+            where: { id: data.batch_id },
+            data: updateData,
+        });
+
+        await logAudit({
+            action: 'PHARMACY_BATCH_DETAILS_UPDATED',
+            module: 'Pharmacy',
+            entity_type: 'pharmacy_batch_inventory',
+            entity_id: String(data.batch_id),
+            details: JSON.stringify(updateData),
+        });
+
+        invalidatePharmacyTags(['stock', 'catalog']);
+        revalidatePath('/pharmacy/inventory');
+        return { success: true, batch: updated };
+    } catch (error: any) {
+        console.error('Update Batch Details Error:', error);
+        return { success: false, error: error.message || 'Failed to update batch' };
+    }
+}
+
 /** @deprecated Use getInventoryPage with a search string. Kept for callers not yet migrated. */
 export async function getInventory() {
     return getInventoryPage({ limit: 100 });
