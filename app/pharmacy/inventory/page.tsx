@@ -3,8 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { Package, Search, Plus, X } from 'lucide-react';
-import { getInventoryPage, getInventoryCategories, addInventoryBatch } from '@/app/actions/pharmacy-actions';
+import { Package, Search, Plus, X, SlidersHorizontal } from 'lucide-react';
+import { getInventoryPage, getInventoryCategories, addInventoryBatch, adjustStock } from '@/app/actions/pharmacy-actions';
 import { useDebouncedValue } from '@/app/lib/hooks/useDebouncedValue';
 
 const EMPTY_SUMMARY = { totalValue: 0, lowStockCount: 0, expiringSoonCount: 0, outOfStockCount: 0 };
@@ -43,6 +43,36 @@ export default function PharmacyInventoryPage() {
     // Modal: Add Bulk Stock
     const [modalOpen, setModalOpen] = useState(false);
     const [form, setForm] = useState({ brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', expiry: '', rack: '' });
+
+    // Modal: Adjust Stock
+    const [adjustRow, setAdjustRow] = useState<any>(null);
+    const [adjustQty, setAdjustQty] = useState('');
+    const [adjustReason, setAdjustReason] = useState('');
+    const [adjusting, setAdjusting] = useState(false);
+
+    const handleAdjustStock = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!adjustRow) return;
+        const qty = Number(adjustQty);
+        if (!qty || !adjustReason.trim()) return;
+        setAdjusting(true);
+        try {
+            const res = await adjustStock({
+                medicine_id: adjustRow.medicine_id,
+                batch_id: adjustRow.id,
+                adjustment_qty: qty,
+                reason: adjustReason.trim(),
+            });
+            if (res.success) {
+                setAdjustRow(null);
+                setAdjustQty('');
+                setAdjustReason('');
+                loadInventory();
+            } else alert(res.error || 'Failed to adjust stock');
+        } finally {
+            setAdjusting(false);
+        }
+    };
 
     const loadInventory = async (opts?: { append?: boolean }) => {
         const append = opts?.append ?? false;
@@ -171,11 +201,12 @@ export default function PharmacyInventoryPage() {
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Expiry</th>
                                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">MRP</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Rack</th>
+                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {rows.length === 0 && !refreshing && (
-                                <tr><td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-400">No medicines found.</td></tr>
+                                <tr><td colSpan={8} className="px-6 py-10 text-center text-sm text-gray-400">No medicines found.</td></tr>
                             )}
                             {rows.map((row: any) => (
                                 <tr key={row.id ?? row.batch_no} className="hover:bg-gray-50/60">
@@ -193,6 +224,17 @@ export default function PharmacyInventoryPage() {
                                     </td>
                                     <td className="px-4 py-3 text-sm text-right text-gray-700">{row.mrp ? formatCurrency(row.mrp) : '—'}</td>
                                     <td className="px-4 py-3 text-sm text-gray-600">{row.rack_location || '—'}</td>
+                                    <td className="px-4 py-3 text-right">
+                                        {!row._catalog && (
+                                            <button
+                                                onClick={() => { setAdjustRow(row); setAdjustQty(''); setAdjustReason(''); }}
+                                                className="p-1.5 hover:bg-amber-50 rounded-lg"
+                                                title="Adjust Stock"
+                                            >
+                                                <SlidersHorizontal className="h-3.5 w-3.5 text-amber-500" />
+                                            </button>
+                                        )}
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -225,6 +267,34 @@ export default function PharmacyInventoryPage() {
                                 <DateField required className="w-full p-2 border rounded-lg text-sm text-gray-500" value={form.expiry} onChange={e => setForm({ ...form, expiry: e.target.value })} />
                             </div>
                             <button type="submit" className="w-full bg-orange-600 text-white font-bold p-2 rounded-lg">Save Item</button>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {/* Adjust Stock Modal */}
+            {adjustRow && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <form onSubmit={handleAdjustStock} className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+                        <div className="p-4 border-b bg-gray-50 flex justify-between">
+                            <h3 className="font-bold">Adjust Stock &mdash; {adjustRow.medicine.brand_name} ({adjustRow.batch_no})</h3>
+                            <button type="button" onClick={() => setAdjustRow(null)}>&times;</button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <p className="text-xs text-gray-500">Current stock: <span className="font-bold text-gray-800">{adjustRow.current_stock}</span></p>
+                            <input
+                                required type="number" placeholder="Adjustment (+ to add, - to deduct)"
+                                className="w-full p-2 border rounded-lg text-sm"
+                                value={adjustQty} onChange={e => setAdjustQty(e.target.value)}
+                            />
+                            <textarea
+                                required placeholder="Reason (e.g. damaged, expired, count correction)"
+                                className="w-full p-2 border rounded-lg text-sm" rows={3}
+                                value={adjustReason} onChange={e => setAdjustReason(e.target.value)}
+                            />
+                            <button type="submit" disabled={adjusting} className="w-full bg-amber-600 text-white font-bold p-2 rounded-lg disabled:opacity-50">
+                                {adjusting ? 'Saving...' : 'Save Adjustment'}
+                            </button>
                         </div>
                     </form>
                 </div>
