@@ -64,4 +64,6 @@ make-dev-admin.js
 
 # local handover notes and internal docs
 Claude_Handover.md
-docs/help-centre/
+docs/help-centre/.superpowers/
+
+.superpowers/
