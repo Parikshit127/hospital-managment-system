@@ -184,13 +184,40 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
 
     const [excelExporting, setExcelExporting] = useState(false);
 
+    // Column-level client-side filters for the Payment Details table
+    const [colReceipt, setColReceipt] = useState('');
+    const [colPatient, setColPatient] = useState('');
+    const [colColMethod, setColColMethod] = useState('');
+    const [colAmountMin, setColAmountMin] = useState('');
+    const [colDate, setColDate] = useState('');
+
+    const uniquePaymentMethods: string[] = Array.from(new Set<string>(payments.map((p: any) => canonicalTender(p.payment_method)))).sort();
+
+    const filteredPayments = payments.filter((p: any) => {
+        if (colReceipt && !String(p.receipt_number || '').toLowerCase().includes(colReceipt.toLowerCase())) return false;
+        if (colPatient && !(p.invoice?.patient?.full_name || '').toLowerCase().includes(colPatient.toLowerCase())) return false;
+        if (colColMethod && canonicalTender(p.payment_method) !== colColMethod) return false;
+        if (colAmountMin && Number(p.amount) < Number(colAmountMin)) return false;
+        if (colDate) {
+            const dt = new Date(p.created_at);
+            const ymd = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+            if (ymd !== colDate) return false;
+        }
+        return true;
+    });
+
+    const hasColFilter = colReceipt || colPatient || colColMethod || colAmountMin || colDate;
+    function clearColFilters() {
+        setColReceipt(''); setColPatient(''); setColColMethod(''); setColAmountMin(''); setColDate('');
+    }
+
     async function handleCollectionsExcelExport() {
         setExcelExporting(true);
         try {
             const xlsxModule = await import('xlsx');
             const XLSX = xlsxModule.default ?? xlsxModule;
 
-            const depts = ['Advance', 'OP/ER', 'IPD', 'Walkin', 'Pharmacy', 'Voucher'];
+            const depts = ['Advance', 'OP/ER', 'IPD', 'Walkin', 'Voucher'];
             const allModesSet = new Set<string>();
             const cashierList = new Set<string>();
 
@@ -204,8 +231,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
             function getDept(invoiceType: string) {
                 const t = (invoiceType || '').toUpperCase();
                 if (t === 'IPD') return 'IPD';
-                if (t === 'PHARMACY' || t === 'Pharmacy') return 'Pharmacy';
-                if (t === 'LAB' || t === 'Walkin') return 'Walkin';
+                if (t === 'LAB' || t === 'WALKIN') return 'Walkin';
                 if (t === 'Voucher') return 'Voucher';
                 return 'OP/ER';
             }
@@ -364,10 +390,10 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
             }
 
             const summaryRows: any[] = [];
-            summaryRows.push({ 'Payment Mode': '1. SUMMARY', 'Advance': '', 'OP/ER': '', 'IPD': '', 'Walkin': '', 'Pharmacy': '', 'Voucher': '', 'Total Collection': '' });
+            summaryRows.push({ 'Payment Mode': '1. SUMMARY', 'Advance': '', 'OP/ER': '', 'IPD': '', 'Walkin': '', 'Voucher': '', 'Total Collection': '' });
             summaryRows.push({});
 
-            const summaryHeaders = ['Payment Mode', 'Advance', 'OP/ER', 'IPD', 'Walkin', 'Pharmacy', 'Voucher', 'Total Collection'];
+            const summaryHeaders = ['Payment Mode', 'Advance', 'OP/ER', 'IPD', 'Walkin', 'Voucher', 'Total Collection'];
             summaryRows.push(summaryHeaders.reduce((acc, h) => ({ ...acc, [h]: h }), {}));
 
             function addMatrixRows(matrix: { receipts: Record<string, Record<string, number>>; refunds: Record<string, Record<string, number>> }, rowsArray: any[]) {
@@ -529,7 +555,6 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
             });
 
             const detailRows: any[] = [];
-            let detailSr = 1;
 
             depts.forEach(dept => {
                 const deptItems = itemsList.filter(item => item.department === dept);
@@ -662,7 +687,16 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
             )}
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                    <h3 className="font-semibold text-gray-900">Payment Details ({payments.length})</h3>
+                    <div className="flex items-center gap-3">
+                        <h3 className="font-semibold text-gray-900">
+                            Payment Details ({hasColFilter ? `${filteredPayments.length} of ${payments.length}` : payments.length})
+                        </h3>
+                        {hasColFilter && (
+                            <button onClick={clearColFilters} className="text-xs text-rose-500 hover:text-rose-700 font-medium underline">
+                                Clear filters
+                            </button>
+                        )}
+                    </div>
                     <div className="flex items-center gap-2">
                         <button
                             onClick={handleCollectionsExcelExport}
@@ -689,22 +723,76 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full">
-                        <thead><tr className="bg-gray-50">
-                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Receipt</th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Patient</th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Method</th>
-                            <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Amount</th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
-                        </tr></thead>
+                        <thead>
+                            <tr className="bg-gray-50 border-b border-gray-100">
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Receipt</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Patient</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Method</th>
+                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Amount</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                            </tr>
+                            <tr className="bg-gray-50/60 border-b border-gray-200">
+                                <td className="px-3 py-2">
+                                    <input
+                                        type="text"
+                                        value={colReceipt}
+                                        onChange={e => setColReceipt(e.target.value)}
+                                        placeholder="Search receipt…"
+                                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-400 bg-white placeholder-gray-300"
+                                    />
+                                </td>
+                                <td className="px-3 py-2">
+                                    <input
+                                        type="text"
+                                        value={colPatient}
+                                        onChange={e => setColPatient(e.target.value)}
+                                        placeholder="Search patient…"
+                                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-400 bg-white placeholder-gray-300"
+                                    />
+                                </td>
+                                <td className="px-3 py-2">
+                                    <select
+                                        value={colColMethod}
+                                        onChange={e => setColColMethod(e.target.value)}
+                                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-400 bg-white text-gray-600"
+                                    >
+                                        <option value="">All methods</option>
+                                        {uniquePaymentMethods.map((m: string) => (
+                                            <option key={m} value={m}>{m}</option>
+                                        ))}
+                                    </select>
+                                </td>
+                                <td className="px-3 py-2">
+                                    <input
+                                        type="number"
+                                        value={colAmountMin}
+                                        onChange={e => setColAmountMin(e.target.value)}
+                                        placeholder="Min ₹"
+                                        min={0}
+                                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-400 bg-white placeholder-gray-300 text-right"
+                                    />
+                                </td>
+                                <td className="px-3 py-2">
+                                    <input
+                                        type="date"
+                                        value={colDate}
+                                        onChange={e => setColDate(e.target.value)}
+                                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-400 bg-white text-gray-600"
+                                    />
+                                </td>
+                            </tr>
+                        </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {payments.slice(0, 50).map((p: any) => (
+                            {filteredPayments.length === 0 ? (
+                                <tr><td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-400">No payments match the current filters</td></tr>
+                            ) : filteredPayments.map((p: any) => (
                                 <tr key={p.id}
                                     onClick={() => window.open(`/api/payment/${p.id}/receipt`, '_blank')}
                                     title="Open receipt"
                                     className="hover:bg-emerald-50/60 cursor-pointer transition-colors">
-                                    <td className="px-6 py-3 text-sm font-mono text-emerald-700 hover:underline">{p.receipt_number}</td>
-                                    <td className="px-6 py-3 text-sm text-gray-900">{p.invoice?.patient?.full_name || '-'}</td>
-                                    <td className="px-6 py-3 text-sm text-gray-600">{(() => {
+                                    <td className="px-4 py-3 text-sm font-mono text-emerald-700 hover:underline">{p.receipt_number}</td>
+                                    <td className="px-4 py-3 text-sm text-gray-900">{p.invoice?.patient?.full_name || '-'}</td>
+                                    <td className="px-4 py-3 text-sm text-gray-600">{(() => {
                                         if (p.payment_method !== 'Deposit') return canonicalTender(p.payment_method);
                                         const parts = [
                                             p.deposit_is_ipd != null ? (p.deposit_is_ipd ? 'IPD' : 'OPD') : null,
@@ -712,8 +800,8 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                                         ].filter(Boolean);
                                         return parts.length ? `Deposit (${parts.join(' · ')})` : 'Deposit';
                                     })()}</td>
-                                    <td className="px-6 py-3 text-sm font-semibold text-gray-900 text-right">{fmt(Number(p.amount))}</td>
-                                    <td className="px-6 py-3 text-sm text-gray-500">{new Date(p.created_at).toLocaleDateString('en-GB')}</td>
+                                    <td className="px-4 py-3 text-sm font-semibold text-gray-900 text-right">{fmt(Number(p.amount))}</td>
+                                    <td className="px-4 py-3 text-sm text-gray-500">{new Date(p.created_at).toLocaleDateString('en-GB')}</td>
                                 </tr>
                             ))}
                         </tbody>

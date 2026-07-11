@@ -67,14 +67,15 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
         } else if (filters.method === 'others') {
             where.payment_method = { notIn: ['Cash', 'UPI'] };
         }
-        // IPD/OPD split (by invoice type) and Admit/Discharge split (by the
-        // invoice's admission status) — both filter via the related invoice.
-        if (filters.invoiceType || filters.admissionStatus) {
-            where.invoice = {
-                ...(filters.invoiceType ? { invoice_type: filters.invoiceType } : {}),
-                ...(filters.admissionStatus ? { admission: { status: filters.admissionStatus } } : {}),
-            };
-        }
+        // Always filter via the related invoice. When no explicit invoiceType is
+        // requested, pharmacy invoices are excluded — pharmacy is a separate counter
+        // and should not appear in the hospital reception collection report.
+        where.invoice = {
+            ...(filters.invoiceType
+                ? { invoice_type: filters.invoiceType }
+                : { invoice_type: { notIn: ['Pharmacy', 'PHARMACY'] } }),
+            ...(filters.admissionStatus ? { admission: { status: filters.admissionStatus } } : {}),
+        };
 
         const payments = await db.payments.findMany({
             where,
@@ -309,8 +310,13 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
 export async function getARAgingReport(filters?: { invoiceType?: string; admissionStatus?: string }) {
     try {
         const { db } = await requireTenantContext();
-        const where: any = { status: 'Final', balance_due: { gt: 0 } };
-        if (filters?.invoiceType) where.invoice_type = filters.invoiceType;
+        const where: any = {
+            status: 'Final',
+            balance_due: { gt: 0 },
+            invoice_type: filters?.invoiceType
+                ? filters.invoiceType
+                : { notIn: ['Pharmacy', 'PHARMACY'] },
+        };
         if (filters?.admissionStatus) where.admission = { status: filters.admissionStatus };
         const invoices = await db.invoices.findMany({
             where,
