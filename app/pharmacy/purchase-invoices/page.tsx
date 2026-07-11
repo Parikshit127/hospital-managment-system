@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     FileText, Plus, X, Loader2, CheckCircle, Eye, CreditCard,
-    AlertTriangle, Search, Filter, Printer,
+    AlertTriangle, Search, Filter, Printer, Download,
 } from 'lucide-react';
 import {
     getPurchaseInvoices, createPurchaseInvoice, matchPurchaseInvoice,
@@ -31,6 +32,9 @@ export default function PurchaseInvoicesPage() {
     const [invoices, setInvoices] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [statusFilter, setStatusFilter] = useState('');
+    const [searchFilter, setSearchFilter] = useState('');
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
     const [showCreate, setShowCreate] = useState(false);
     const [showDetail, setShowDetail] = useState<any>(null);
     const [showPayModal, setShowPayModal] = useState<any>(null);
@@ -212,11 +216,97 @@ export default function PurchaseInvoicesPage() {
     };
     const grandTotal = r2(lines.reduce((s, l) => s + lineTotal(l), 0));
 
+    // ── List filters (search / date range on top of the status buttons) ──
+    const filteredInvoices = useMemo(() => {
+        const q = searchFilter.trim().toLowerCase();
+        return invoices.filter((inv: any) => {
+            if (q) {
+                const vendorName = (inv.vendor?.vendor_name || '').toLowerCase();
+                const poNumber = (inv.po?.po_number || '').toLowerCase();
+                if (!inv.invoice_number.toLowerCase().includes(q) && !vendorName.includes(q) && !poNumber.includes(q)) return false;
+            }
+            const invDate = new Date(inv.invoice_date);
+            if (dateFrom && invDate < new Date(dateFrom + 'T00:00:00')) return false;
+            if (dateTo && invDate > new Date(dateTo + 'T23:59:59.999')) return false;
+            return true;
+        });
+    }, [invoices, searchFilter, dateFrom, dateTo]);
+
+    const hasExtraFilters = !!(searchFilter || dateFrom || dateTo);
+
+    const exportExcel = () => {
+        const rows = filteredInvoices.map((inv: any) => ({
+            'Invoice #': inv.invoice_number,
+            'Vendor': inv.vendor?.vendor_name || '',
+            'PO': inv.po?.po_number || '',
+            'Invoice Date': new Date(inv.invoice_date).toLocaleDateString('en-GB'),
+            'Due Date': inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-GB') : '',
+            'Status': inv.status,
+            'Subtotal': Number(inv.subtotal || 0),
+            'GST': Number(inv.cgst_amount || 0) + Number(inv.sgst_amount || 0) + Number(inv.igst_amount || 0),
+            'Total Amount': Number(inv.total_amount || 0),
+            'Paid': Number(inv.amount_paid || 0),
+            'Balance': Number(inv.total_amount || 0) - Number(inv.amount_paid || 0),
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        ws['!cols'] = Object.keys(rows[0] || {}).map(k => ({ wch: Math.max(k.length + 2, 14) }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Purchase Invoices');
+        XLSX.writeFile(wb, `purchase-invoices-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    };
+
+    const exportPdf = () => {
+        const params = new URLSearchParams();
+        if (searchFilter) params.set('search', searchFilter);
+        if (statusFilter) params.set('status', statusFilter);
+        if (dateFrom) params.set('from', dateFrom);
+        if (dateTo) params.set('to', dateTo);
+        window.open(`/api/pharmacy/purchase-invoice/pdf?${params.toString()}`, '_blank');
+    };
+
     return (
         <AppShell pageTitle="Purchase Invoices" pageIcon={<FileText className="h-5 w-5" />} onRefresh={load} refreshing={loading}
-            headerActions={<button onClick={openCreate} className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold py-2 px-4 rounded-xl text-sm"><Plus className="h-4 w-4" /> New Invoice</button>}>
+            headerActions={
+                <div className="flex items-center gap-2">
+                    <button onClick={exportExcel} disabled={filteredInvoices.length === 0}
+                        className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 font-bold py-2 px-4 rounded-xl text-sm hover:bg-gray-50 disabled:opacity-40">
+                        <Download className="h-4 w-4" /> Excel
+                    </button>
+                    <button onClick={exportPdf} disabled={filteredInvoices.length === 0}
+                        className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 font-bold py-2 px-4 rounded-xl text-sm hover:bg-gray-50 disabled:opacity-40">
+                        <FileText className="h-4 w-4" /> PDF
+                    </button>
+                    <button onClick={openCreate} className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold py-2 px-4 rounded-xl text-sm"><Plus className="h-4 w-4" /> New Invoice</button>
+                </div>
+            }>
 
-            {/* Filter */}
+            {/* Filters */}
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 mb-4 flex flex-wrap items-end gap-3">
+                <div className="flex-1 min-w-[200px]">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Search</label>
+                    <div className="flex items-center border border-gray-200 rounded-lg px-3 py-2 gap-2">
+                        <Search className="h-4 w-4 text-gray-400 shrink-0" />
+                        <input type="text" placeholder="Invoice #, vendor, or PO..." value={searchFilter}
+                            onChange={e => setSearchFilter(e.target.value)} className="flex-1 text-sm outline-none" />
+                    </div>
+                </div>
+                <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">From</label>
+                    <DateField value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="p-2 border border-gray-200 rounded-lg text-sm" />
+                </div>
+                <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">To</label>
+                    <DateField value={dateTo} onChange={e => setDateTo(e.target.value)} className="p-2 border border-gray-200 rounded-lg text-sm" />
+                </div>
+                {hasExtraFilters && (
+                    <button onClick={() => { setSearchFilter(''); setDateFrom(''); setDateTo(''); }}
+                        className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-800 px-3 py-2">
+                        <X className="h-3.5 w-3.5" /> Clear
+                    </button>
+                )}
+                <span className="text-xs text-gray-400 ml-auto">{filteredInvoices.length} of {invoices.length} invoices</span>
+            </div>
+
             <div className="flex gap-2 mb-4 flex-wrap">
                 {['', 'Draft', 'Posted', 'OnCredit', 'PartiallyPaid', 'Paid'].map(s => (
                     <button key={s} onClick={() => setStatusFilter(s)}
@@ -229,11 +319,11 @@ export default function PurchaseInvoicesPage() {
             {/* Invoice List */}
             {loading ? (
                 <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-blue-400" /></div>
-            ) : invoices.length === 0 ? (
+            ) : filteredInvoices.length === 0 ? (
                 <div className="bg-white border border-dashed border-gray-300 rounded-2xl p-12 text-center text-gray-500">
                     <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                     <h3 className="font-bold text-gray-900 mb-1">No Purchase Invoices</h3>
-                    <p className="text-sm">Create your first supplier invoice to start tracking payables.</p>
+                    <p className="text-sm">{invoices.length === 0 ? 'Create your first supplier invoice to start tracking payables.' : 'No invoices match these filters.'}</p>
                 </div>
             ) : (
                 <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
@@ -251,7 +341,7 @@ export default function PurchaseInvoicesPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {invoices.map((inv: any) => (
+                            {filteredInvoices.map((inv: any) => (
                                 <tr key={inv.id} className="hover:bg-gray-50">
                                     <td className="px-4 py-3 font-bold text-gray-900">{inv.invoice_number}</td>
                                     <td className="px-4 py-3 text-gray-600">{inv.vendor?.vendor_name}</td>

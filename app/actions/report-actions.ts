@@ -892,8 +892,11 @@ export async function getMISReport(filters: { from: string; to: string; billType
         const fromDate = new Date(filters.from + 'T00:00:00+05:30');
         const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
         const reportDateRange = { gte: fromDate, lte: toDate };
+        // Include Cancelled bills alongside Final ones so the bill-number series
+        // stays gap-free and auditors can see a cancellation instead of a "missing"
+        // number. Draft bills are excluded — they carry no invoice_number yet.
         const baseWhere: any = {
-            status: { notIn: ['Cancelled'] },
+            status: { in: ['Final', 'Cancelled'] },
             is_archived: false,
         };
         let where: any = { ...baseWhere };
@@ -1330,6 +1333,14 @@ export async function getMISReport(filters: { from: string; to: string; billType
             paymentBreakup.card_amount = Math.max(0, paymentBreakup.card_amount);
             paymentBreakup.bank_transfer_amount = Math.max(0, paymentBreakup.bank_transfer_amount);
 
+            // A cancelled bill carries no revenue (cancellation is only permitted
+            // before any money is collected — see cancelInvoice in finance-actions.ts).
+            // Zero out every financial column so it doesn't inflate the gross/net/
+            // outstanding totals; the row still surfaces with its bill number, date,
+            // patient and Status = "Cancelled" so the series stays visible.
+            const isCancelled = inv.status === 'Cancelled';
+            const zeroIfCancelled = (n: number) => (isCancelled ? 0 : n);
+
             return {
                 invoice_id: inv.id,
                 patient_name: inv.patient?.full_name || '-',
@@ -1345,37 +1356,37 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 room_category: roomCat,
                 phone: inv.patient?.phone || '',
                 // Income breakdown
-                package_income: categorySums.package,
-                pharma_income: categorySums.pharmacy,
-                lab_income: categorySums.lab,
-                radiology_income: categorySums.radiology,
-                ct_mri_income: categorySums.ct_mri,
-                room_rent_income: categorySums.room_rent,
-                procedure_income: categorySums.procedure,
-                consultation_income: categorySums.consultation,
-                nursing_income: categorySums.nursing,
-                consumables_income: categorySums.consumables,
-                implant_income: categorySums.implant,
-                other_income: categorySums.other,
+                package_income: zeroIfCancelled(categorySums.package),
+                pharma_income: zeroIfCancelled(categorySums.pharmacy),
+                lab_income: zeroIfCancelled(categorySums.lab),
+                radiology_income: zeroIfCancelled(categorySums.radiology),
+                ct_mri_income: zeroIfCancelled(categorySums.ct_mri),
+                room_rent_income: zeroIfCancelled(categorySums.room_rent),
+                procedure_income: zeroIfCancelled(categorySums.procedure),
+                consultation_income: zeroIfCancelled(categorySums.consultation),
+                nursing_income: zeroIfCancelled(categorySums.nursing),
+                consumables_income: zeroIfCancelled(categorySums.consumables),
+                implant_income: zeroIfCancelled(categorySums.implant),
+                other_income: zeroIfCancelled(categorySums.other),
                 // Totals
-                discount: Number(inv.total_discount || 0),
-                credit_note: creditNoteTotal,
-                gross_amount: grossAmount,
-                net_amount: netAmount,
-                gross_net_diff: grossAmount - netAmount,
-                received_amount: receivedAmount,
-                cash_amount: paymentBreakup.cash_amount,
-                upi_amount: paymentBreakup.upi_amount,
-                card_amount: paymentBreakup.card_amount,
-                bank_transfer_amount: paymentBreakup.bank_transfer_amount,
-                outstanding_amount: Math.max(0, netAmount - receivedAmount),
-                patient_receipt: netPatientReceipt,
+                discount: zeroIfCancelled(Number(inv.total_discount || 0)),
+                credit_note: zeroIfCancelled(creditNoteTotal),
+                gross_amount: zeroIfCancelled(grossAmount),
+                net_amount: zeroIfCancelled(netAmount),
+                gross_net_diff: zeroIfCancelled(grossAmount - netAmount),
+                received_amount: zeroIfCancelled(receivedAmount),
+                cash_amount: zeroIfCancelled(paymentBreakup.cash_amount),
+                upi_amount: zeroIfCancelled(paymentBreakup.upi_amount),
+                card_amount: zeroIfCancelled(paymentBreakup.card_amount),
+                bank_transfer_amount: zeroIfCancelled(paymentBreakup.bank_transfer_amount),
+                outstanding_amount: zeroIfCancelled(Math.max(0, netAmount - receivedAmount)),
+                patient_receipt: zeroIfCancelled(netPatientReceipt),
                 // TPA sanctioned/approved amount — only meaningful for TPA/Insurance
                 // bills; left at 0 (renders as "-") for Cash/Corporate so the column
                 // reads cleanly for the TPA patients it's intended for.
-                approved_amount: effectiveType === 'tpa_insurance' ? Number(inv.tpa_approved_amount || 0) : 0,
+                approved_amount: zeroIfCancelled(effectiveType === 'tpa_insurance' ? Number(inv.tpa_approved_amount || 0) : 0),
                 // TPA amount actually settled/received from the payer (paid against the claim).
-                settled_amount: effectiveType === 'tpa_insurance' ? Number(inv.tpa_settled_amount || 0) : 0,
+                settled_amount: zeroIfCancelled(effectiveType === 'tpa_insurance' ? Number(inv.tpa_settled_amount || 0) : 0),
                 tpa_corporate_name: tpaCorporateName,
                 referral_source: inv.admission?.admission_source || '',
                 package_vs_nonpackage: hasPackage ? 'Package' : 'Non-Package',

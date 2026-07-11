@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { Truck, Plus, CheckCircle, PackageOpen, X, Search, AlertTriangle, ListChecks, Pencil, Printer } from 'lucide-react';
+import { Truck, Plus, CheckCircle, PackageOpen, X, Search, AlertTriangle, ListChecks, Pencil, Printer, Download, FileText } from 'lucide-react';
 import { getPurchaseOrders, receivePurchaseOrder, createPurchaseOrder, updatePurchaseOrder, quickCreateMedicineForPO, getSuppliers, getInventoryForPO } from '@/app/actions/pharmacy-actions';
 
 type PoItem = {
@@ -63,6 +64,12 @@ export default function PurchaseOrdersPage() {
     const [selectedMedIds, setSelectedMedIds] = useState<Set<number>>(new Set());
 
     const [loadError, setLoadError] = useState('');
+
+    // Filters
+    const [filterSearch, setFilterSearch] = useState('');
+    const [filterStatus, setFilterStatus] = useState('');
+    const [filterFrom, setFilterFrom] = useState('');
+    const [filterTo, setFilterTo] = useState('');
 
     const loadOrders = async () => {
         setRefreshing(true);
@@ -323,6 +330,57 @@ export default function PurchaseOrdersPage() {
         else alert('Failed to receive items.');
     };
 
+    // ── List filters (search / status / date range) ─────────────────────
+    const statusOptions = useMemo(
+        () => Array.from(new Set(orders.map((o: any) => o.status).filter(Boolean))).sort(),
+        [orders]
+    );
+
+    const filteredOrders = useMemo(() => {
+        const q = filterSearch.trim().toLowerCase();
+        return orders.filter((po: any) => {
+            if (filterStatus && po.status !== filterStatus) return false;
+            if (q) {
+                const supplierName = (po.supplier?.name || po.vendor?.vendor_name || '').toLowerCase();
+                if (!po.po_number.toLowerCase().includes(q) && !supplierName.includes(q)) return false;
+            }
+            const created = new Date(po.created_at);
+            if (filterFrom && created < new Date(filterFrom + 'T00:00:00')) return false;
+            if (filterTo && created > new Date(filterTo + 'T23:59:59.999')) return false;
+            return true;
+        });
+    }, [orders, filterSearch, filterStatus, filterFrom, filterTo]);
+
+    const hasActiveFilters = !!(filterSearch || filterStatus || filterFrom || filterTo);
+    const clearFilters = () => { setFilterSearch(''); setFilterStatus(''); setFilterFrom(''); setFilterTo(''); };
+
+    const exportExcel = () => {
+        const rows = filteredOrders.map((po: any) => ({
+            'PO Number': po.po_number,
+            'Supplier': po.supplier?.name || po.vendor?.vendor_name || `Vendor #${po.supplier_id}`,
+            'Status': po.status,
+            'Items': (po.items || []).length,
+            'GST Amount': Number(po.gst_amount || 0),
+            'Total Amount': Number(po.total_amount || 0),
+            'Created Date': new Date(po.created_at).toLocaleDateString('en-GB'),
+            'Received At': po.received_at ? new Date(po.received_at).toLocaleDateString('en-GB') : '',
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        ws['!cols'] = Object.keys(rows[0] || {}).map(k => ({ wch: Math.max(k.length + 2, 14) }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Purchase Orders');
+        XLSX.writeFile(wb, `purchase-orders-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    };
+
+    const exportPdf = () => {
+        const params = new URLSearchParams();
+        if (filterSearch) params.set('search', filterSearch);
+        if (filterStatus) params.set('status', filterStatus);
+        if (filterFrom) params.set('from', filterFrom);
+        if (filterTo) params.set('to', filterTo);
+        window.open(`/api/pharmacy/purchase-order/pdf?${params.toString()}`, '_blank');
+    };
+
     const filteredMeds = medicines.filter((m: any, idx: number) =>
         (m.brand_name || m.medicine?.brand_name || '').toLowerCase().includes(medicineSearch.toLowerCase()) &&
         !poItems.find(i => i.medicine_id === m.medicine_id) &&
@@ -352,11 +410,55 @@ export default function PurchaseOrdersPage() {
             onRefresh={loadOrders}
             refreshing={refreshing}
             headerActions={
-                <button onClick={openCreateModal} className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-600 text-white font-bold py-2 px-4 rounded-xl text-sm">
-                    <Plus className="h-4 w-4" /> Create PO
-                </button>
+                <div className="flex items-center gap-2">
+                    <button onClick={exportExcel} disabled={filteredOrders.length === 0}
+                        className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 font-bold py-2 px-4 rounded-xl text-sm hover:bg-gray-50 disabled:opacity-40">
+                        <Download className="h-4 w-4" /> Excel
+                    </button>
+                    <button onClick={exportPdf} disabled={filteredOrders.length === 0}
+                        className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 font-bold py-2 px-4 rounded-xl text-sm hover:bg-gray-50 disabled:opacity-40">
+                        <FileText className="h-4 w-4" /> PDF
+                    </button>
+                    <button onClick={openCreateModal} className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-600 text-white font-bold py-2 px-4 rounded-xl text-sm">
+                        <Plus className="h-4 w-4" /> Create PO
+                    </button>
+                </div>
             }
         >
+            {/* ── Filters ── */}
+            <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4 mb-4 flex flex-wrap items-end gap-3">
+                <div className="flex-1 min-w-[200px]">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Search</label>
+                    <div className="flex items-center border border-gray-200 rounded-lg px-3 py-2 gap-2">
+                        <Search className="h-4 w-4 text-gray-400 shrink-0" />
+                        <input type="text" placeholder="PO number or supplier..." value={filterSearch}
+                            onChange={e => setFilterSearch(e.target.value)} className="flex-1 text-sm outline-none" />
+                    </div>
+                </div>
+                <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Status</label>
+                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+                        className="p-2 border border-gray-200 rounded-lg text-sm min-w-[140px]">
+                        <option value="">All</option>
+                        {statusOptions.map((s: string) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">From</label>
+                    <DateField value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="p-2 border border-gray-200 rounded-lg text-sm" />
+                </div>
+                <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">To</label>
+                    <DateField value={filterTo} onChange={e => setFilterTo(e.target.value)} className="p-2 border border-gray-200 rounded-lg text-sm" />
+                </div>
+                {hasActiveFilters && (
+                    <button onClick={clearFilters} className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-800 px-3 py-2">
+                        <X className="h-3.5 w-3.5" /> Clear
+                    </button>
+                )}
+                <span className="text-xs text-gray-400 ml-auto">{filteredOrders.length} of {orders.length} orders</span>
+            </div>
+
             <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm whitespace-nowrap">
@@ -371,13 +473,13 @@ export default function PurchaseOrdersPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                            {orders.length === 0 ? (
+                            {filteredOrders.length === 0 ? (
                                 <tr><td colSpan={6} className={`px-6 py-16 text-center text-sm ${loadError ? 'text-red-600' : 'text-gray-400'}`}>
                                     {loadError ? (
                                         <span className="inline-flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Couldn’t load purchase orders: {loadError}</span>
-                                    ) : 'No purchase orders yet'}
+                                    ) : hasActiveFilters ? 'No purchase orders match these filters' : 'No purchase orders yet'}
                                 </td></tr>
-                            ) : orders.map((po) => (
+                            ) : filteredOrders.map((po) => (
                                 <tr key={po.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-4"><span className="font-mono font-bold text-gray-900 bg-gray-100 rounded px-2 py-1">{po.po_number}</span></td>
                                     <td className="px-6 py-4 text-gray-800 font-medium">{po.supplier?.name || `Vendor #${po.supplier_id}`}</td>
