@@ -13,7 +13,10 @@ export const metadata = {
 export default async function AdmissionsHubPage() {
     // We get the data without any initial filters to allow client-side fast filtering
     // since this is a high density page.
-    const { admissions, wards } = await getAdmissionsHubData();
+    const [{ admissions, wards }, { session }] = await Promise.all([
+        getAdmissionsHubData(),
+        requireTenantContext(),
+    ]);
 
     return (
         <AppShell
@@ -21,9 +24,10 @@ export default async function AdmissionsHubPage() {
             pageIcon={<Activity className="h-5 w-5" />}
         >
             <div className="max-w-6xl mx-auto py-6">
-                <AdmissionsDataGrid 
-                    initialData={admissions || []} 
-                    wards={wards || []} 
+                <AdmissionsDataGrid
+                    initialData={admissions || []}
+                    wards={wards || []}
+                    userRole={session?.role || ''}
                 />
             </div>
         </AppShell>

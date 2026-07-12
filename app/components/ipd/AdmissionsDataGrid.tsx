@@ -11,7 +11,7 @@ import Link from 'next/link';
 import { getWardsWithBeds, transferPatient, cancelAdmission } from '@/app/actions/ipd-actions';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[], wards: any[] }) {
+export function AdmissionsDataGrid({ initialData, wards, userRole = '' }: { initialData: any[], wards: any[], userRole?: string }) {
     const searchParams = useSearchParams();
     const [search, setSearch] = useState(() => searchParams?.get('q') || '');
 
@@ -610,16 +610,18 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                                 />
                             </div>
 
-                            <label className="flex items-center gap-2 cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={forceCancel}
-                                    onChange={(e) => setForceCancel(e.target.checked)}
-                                    className="w-4 h-4 rounded border-gray-300 text-red-500 focus:ring-red-500"
-                                />
-                                <span className="text-xs font-bold text-amber-700">Force Cancel</span>
-                                <span className="text-[10px] text-gray-400">(bypass 8-hour limit &amp; charges check)</span>
-                            </label>
+                            {userRole === 'admin' && (
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={forceCancel}
+                                        onChange={(e) => setForceCancel(e.target.checked)}
+                                        className="w-4 h-4 rounded border-gray-300 text-red-500 focus:ring-red-500"
+                                    />
+                                    <span className="text-xs font-bold text-amber-700">Force Cancel</span>
+                                    <span className="text-[10px] text-gray-400">(bypass 8-hour limit &amp; charges check)</span>
+                                </label>
+                            )}
                         </div>
 
                         {cancelError && (

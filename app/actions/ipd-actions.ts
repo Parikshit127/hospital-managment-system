@@ -2078,6 +2078,11 @@ export async function cancelAdmission(admissionId: string, reason: string, cance
     const cancelDate = cancellationDate ? new Date(cancellationDate) : new Date();
     const cancelledBy = session.username || session.name || 'system';
 
+    // Force-cancel is admin-only (server-side enforcement)
+    if (forceCancel && session.role !== 'admin') {
+      return { success: false, error: 'Force-cancel is restricted to admin users only.' };
+    }
+
     if (!cancellationReason) {
       return { success: false, error: 'Cancellation reason is required.' };
     }
