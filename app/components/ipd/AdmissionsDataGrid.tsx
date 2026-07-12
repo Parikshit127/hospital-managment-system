@@ -68,6 +68,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
     const [cancelDateTime, setCancelDateTime] = useState('');
     const [cancelling, setCancelling] = useState(false);
     const [cancelError, setCancelError] = useState('');
+    const [forceCancel, setForceCancel] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
     const getLocalDatetimeString = (date: Date) => {
@@ -80,6 +81,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
         setCancelReason('');
         setCancelDateTime(getLocalDatetimeString(new Date()));
         setCancelError('');
+        setForceCancel(false);
     };
 
     const router = useRouter();
@@ -101,7 +103,7 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
         setCancelling(true);
         setCancelError('');
         try {
-            const res = await cancelAdmission(cancelModal.admission_id, cancelReason, cancelDateTime || undefined);
+            const res = await cancelAdmission(cancelModal.admission_id, cancelReason, cancelDateTime || undefined, forceCancel);
             if (res.success) {
                 setCancelModal(null);
                 setCancelReason('');
@@ -607,6 +609,17 @@ export function AdmissionsDataGrid({ initialData, wards }: { initialData: any[],
                                     onChange={(e) => setCancelDateTime(e.target.value)}
                                 />
                             </div>
+
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={forceCancel}
+                                    onChange={(e) => setForceCancel(e.target.checked)}
+                                    className="w-4 h-4 rounded border-gray-300 text-red-500 focus:ring-red-500"
+                                />
+                                <span className="text-xs font-bold text-amber-700">Force Cancel</span>
+                                <span className="text-[10px] text-gray-400">(bypass 8-hour limit &amp; charges check)</span>
+                            </label>
                         </div>
 
                         {cancelError && (

@@ -2071,7 +2071,7 @@ export async function markBedAvailable(bedId: string) {
 // ============================================
 // CANCEL ADMISSION
 // ============================================
-export async function cancelAdmission(admissionId: string, reason: string, cancellationDate?: string | Date) {
+export async function cancelAdmission(admissionId: string, reason: string, cancellationDate?: string | Date, forceCancel?: boolean) {
   try {
     const { db, organizationId, session } = await requireTenantContext();
     const cancellationReason = (reason || '').trim();
@@ -2092,15 +2092,17 @@ export async function cancelAdmission(admissionId: string, reason: string, cance
     if (!admission) return { success: false, error: 'Admission not found' };
     if (admission.status !== 'Admitted') return { success: false, error: 'Only active admissions can be cancelled' };
 
-    // Enforce 8 hours limit check
-    const now = new Date();
-    const admissionDate = new Date(admission.admission_date);
-    const hoursDiff = (now.getTime() - admissionDate.getTime()) / (1000 * 60 * 60);
-    if (hoursDiff > 8) {
-      return { success: false, error: 'Cannot cancel admission because it was created more than 8 hours ago.' };
+    // Enforce 8 hours limit check — skipped when forceCancel (admin override)
+    if (!forceCancel) {
+      const now = new Date();
+      const admissionDate = new Date(admission.admission_date);
+      const hoursDiff = (now.getTime() - admissionDate.getTime()) / (1000 * 60 * 60);
+      if (hoursDiff > 8) {
+        return { success: false, error: 'Cannot cancel admission because it was created more than 8 hours ago. Use force-cancel for admin override.' };
+      }
     }
 
-    // Enforce charges check
+    // Enforce charges check — when forceCancel, cascade-cancel instead of blocking
     const [hasCharges, hasLab, hasPharmacy, hasInvoiceItems] = await Promise.all([
       db.ipdChargePosting.findFirst({ where: { admission_id: admissionId } }),
       db.lab_orders.findFirst({
@@ -2114,11 +2116,27 @@ export async function cancelAdmission(admissionId: string, reason: string, cance
       db.invoice_items.findFirst({ where: { invoice: { admission_id: admissionId } } })
     ]);
 
-    if (hasCharges || hasLab || hasPharmacy || hasInvoiceItems) {
-      return { success: false, error: 'Cannot cancel admission because charges or orders have already been added.' };
+    if ((hasCharges || hasLab || hasPharmacy || hasInvoiceItems) && !forceCancel) {
+      return { success: false, error: 'Cannot cancel admission because charges or orders have already been added. Use force-cancel for admin override.' };
     }
 
     await db.$transaction(async (tx: any) => {
+      // Force-cancel: cascade-cancel/delete associated data first
+      if (forceCancel && (hasCharges || hasLab || hasPharmacy || hasInvoiceItems)) {
+        // IpdChargePosting has no status column — delete the rows
+        await tx.ipdChargePosting.deleteMany({
+          where: { admission_id: admissionId },
+        });
+        await tx.pharmacy_orders.updateMany({
+          where: { admission_id: admissionId },
+          data: { status: 'Cancelled' },
+        });
+        await tx.ipdAdmissionPackage.updateMany({
+          where: { admission_id: admissionId },
+          data: { status: 'Cancelled' },
+        });
+      }
+
       // 1. Mark admission as Cancelled
       await tx.admissions.update({
         where: { admission_id: admissionId },
@@ -2140,20 +2158,25 @@ export async function cancelAdmission(admissionId: string, reason: string, cance
         });
       }
 
-      // 3. Cancel any active invoices
+      // 3. Cancel any active invoices for this admission
       await tx.invoices.updateMany({
-        where: { admission_id: admissionId, status: { not: 'Cancelled' }, balance_due: { gt: 0 } },
+        where: { admission_id: admissionId, status: { not: 'Cancelled' } },
         data: { status: 'Cancelled' },
       });
 
       // 4. Audit log
       await tx.system_audit_logs.create({
         data: {
-          action: 'CANCEL_ADMISSION',
+          action: forceCancel ? 'FORCE_CANCEL_ADMISSION' : 'CANCEL_ADMISSION',
           module: 'ipd',
           entity_type: 'admission',
           entity_id: admissionId,
-          details: JSON.stringify({ reason: cancellationReason, bed_id: admission.bed_id }),
+          details: JSON.stringify({
+            reason: cancellationReason,
+            bed_id: admission.bed_id,
+            force: !!forceCancel,
+            had_charges: !!(hasCharges || hasLab || hasPharmacy || hasInvoiceItems),
+          }),
           organizationId,
         },
       });
