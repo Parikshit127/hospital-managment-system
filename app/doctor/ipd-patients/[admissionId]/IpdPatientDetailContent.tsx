@@ -7,6 +7,8 @@ import {
     Loader2, Save, ArrowLeft,
 } from 'lucide-react';
 import { getAdmissionFullDetails, updateAdmissionDiagnosis } from '@/app/actions/ipd-actions';
+import { getIPDVitalsHistory } from '@/app/actions/ipd-nursing-actions';
+import { VitalsChart } from '@/app/components/ipd/VitalsChart';
 import { useToast } from '@/app/components/ui/Toast';
 
 type TabKey = 'profile' | 'diagnosis' | 'clinical' | 'vitals' | 'nursing' | 'discharge';
@@ -32,6 +34,10 @@ export default function IpdPatientDetailContent({ admissionId }: { admissionId: 
     const [secondaryDx, setSecondaryDx] = useState('');
     const [savingDiagnosis, setSavingDiagnosis] = useState(false);
 
+    const [vitals, setVitals] = useState<any[]>([]);
+    const [loadingVitals, setLoadingVitals] = useState(false);
+    const [vitalsLoaded, setVitalsLoaded] = useState(false);
+
     const loadDetails = useCallback(async () => {
         setLoading(true);
         const res = await getAdmissionFullDetails(admissionId);
@@ -55,6 +61,18 @@ export default function IpdPatientDetailContent({ admissionId }: { admissionId: 
         }
         loadDetails();
     }, [admissionId, loadDetails, router]);
+
+    useEffect(() => {
+        if (activeTab !== 'vitals' || vitalsLoaded) return;
+        setLoadingVitals(true);
+        getIPDVitalsHistory(admissionId).then((res) => {
+            if (res.success) setVitals(res.data as any[]);
+            else toast.error('Failed to load vitals');
+            setLoadingVitals(false);
+            setVitalsLoaded(true);
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab, admissionId, vitalsLoaded]);
 
     const handleSaveDiagnosis = async () => {
         setSavingDiagnosis(true);
@@ -239,6 +257,23 @@ export default function IpdPatientDetailContent({ admissionId }: { admissionId: 
                             <p className="text-sm text-gray-400">No ward rounds recorded.</p>
                         )}
                     </div>
+                </div>
+            )}
+
+            {activeTab === 'vitals' && (
+                <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                    {loadingVitals ? (
+                        <div className="flex items-center justify-center py-12 text-gray-400">
+                            <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading vitals...
+                        </div>
+                    ) : vitals.length === 0 ? (
+                        <p className="text-sm text-gray-400">No vitals recorded yet.</p>
+                    ) : (
+                        <VitalsChart
+                            vitals={vitals.map((v) => ({ ...v, recorded_at: v.created_at }))}
+                            mode="vitals"
+                        />
+                    )}
                 </div>
             )}
         </div>
