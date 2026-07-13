@@ -220,6 +220,28 @@ export async function generateReceiptNumber(organizationId: string, db?: any): P
 }
 
 /**
+ * generateSequentialNumber() picks the next number via count+existence-check,
+ * not a DB-level atomic increment. Two concurrent callers (e.g. two cashiers
+ * recording payments, or a double-submitted click) can both pass the
+ * existence check for the same candidate before either has committed, then
+ * race to insert — the loser hits a Prisma P2002 unique constraint error.
+ * Wrap the generate+create in this retry so the loser just regenerates a
+ * fresh number and tries again instead of surfacing the race to the user.
+ */
+export async function createWithUniqueRetry<T>(fn: () => Promise<T>, maxAttempts = 5): Promise<T> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            return await fn();
+        } catch (err: any) {
+            if (err?.code === 'P2002' && attempt < maxAttempts) continue;
+            throw err;
+        }
+    }
+    // Unreachable: loop either returns or throws on its final attempt.
+    throw new Error('createWithUniqueRetry: exhausted attempts');
+}
+
+/**
  * Generate deposit receipt number
  */
 export async function generateDepositNumber(organizationId: string, db?: any): Promise<string> {

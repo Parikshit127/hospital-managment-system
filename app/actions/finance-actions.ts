@@ -7,7 +7,7 @@ import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
 import { billingInvoiceMsg, paymentReceiptMsg } from '@/app/lib/whatsapp-templates';
 import { postInvoiceToGL, postPaymentToGL, reverseJournalEntry } from './gl-actions';
 import { getCashThresholds, validateCashCompliance, normalizePan, resolveRegisteredPan, CASH_METHOD } from '@/app/lib/cash-compliance';
-import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
+import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, createWithUniqueRetry } from '@/app/lib/sequence-generator';
 import { validateBackdate } from '@/app/lib/backdate';
 import { recomputeInvoiceCommission } from '@/app/lib/referral-commission';
 import { recomputeInvoiceDoctorCommission } from '@/app/lib/doctor-commission';
@@ -1236,7 +1236,7 @@ export async function recordPayment(data: {
             }
         }
 
-        const payment = await db.payments.create({
+        const payment = await createWithUniqueRetry(async () => db.payments.create({
             data: {
                 receipt_number: await genRcpNum(organizationId, db),
                 invoice_id: data.invoice_id,
@@ -1252,7 +1252,7 @@ export async function recordPayment(data: {
                 received_by: session?.username || session?.name || null,
                 organizationId,
             },
-        });
+        }));
 
         // Update invoice paid_amount and balance
         const allPayments = await db.payments.findMany({
@@ -1294,7 +1294,7 @@ export async function recordPayment(data: {
                 const apply = Math.min(excess, Number(other.balance_due));
 
                 // Create negative adjustment payment on the source invoice
-                await db.payments.create({
+                await createWithUniqueRetry(async () => db.payments.create({
                     data: {
                         receipt_number: await genRcpNum(organizationId, db),
                         invoice_id: data.invoice_id,
@@ -1306,10 +1306,10 @@ export async function recordPayment(data: {
                         received_by: session?.username || session?.name || null,
                         organizationId,
                     },
-                });
+                }));
 
                 // Create positive adjustment payment on the target invoice
-                await db.payments.create({
+                await createWithUniqueRetry(async () => db.payments.create({
                     data: {
                         receipt_number: await genRcpNum(organizationId, db),
                         invoice_id: other.id,
@@ -1321,7 +1321,7 @@ export async function recordPayment(data: {
                         received_by: session?.username || session?.name || null,
                         organizationId,
                     },
-                });
+                }));
 
                 const otherPaid = Number(other.paid_amount || 0) + apply;
                 const otherNet = Number(other.net_amount || 0);
@@ -1480,7 +1480,7 @@ export async function recordSplitPayment(data: {
         // Create one payment record per split
         for (const split of data.splits) {
             const splitIsCash = split.payment_method === CASH_METHOD;
-            const payment = await db.payments.create({
+            const payment = await createWithUniqueRetry(async () => db.payments.create({
                 data: {
                     receipt_number: await genRcpNum(organizationId, db),
                     invoice_id: data.invoice_id,
@@ -1496,7 +1496,7 @@ export async function recordSplitPayment(data: {
                     received_by: session?.username || session?.name || null,
                     organizationId,
                 },
-            });
+            }));
             payments.push(payment);
         }
 
@@ -3882,7 +3882,7 @@ export async function reconcilePatientOverpayments(patientId: string) {
                 const apply = Math.min(remaining, target.shortfall);
 
                 // Negative adjustment on overpaid source
-                await db.payments.create({
+                await createWithUniqueRetry(async () => db.payments.create({
                     data: {
                         receipt_number: await genRcpNum(organizationId, db),
                         invoice_id: source.id,
@@ -3894,10 +3894,10 @@ export async function reconcilePatientOverpayments(patientId: string) {
                         received_by: session?.username || session?.name || null,
                         organizationId,
                     },
-                });
+                }));
 
                 // Positive adjustment on underpaid target
-                await db.payments.create({
+                await createWithUniqueRetry(async () => db.payments.create({
                     data: {
                         receipt_number: await genRcpNum(organizationId, db),
                         invoice_id: target.id,
@@ -3909,7 +3909,7 @@ export async function reconcilePatientOverpayments(patientId: string) {
                         received_by: session?.username || session?.name || null,
                         organizationId,
                     },
-                });
+                }));
 
                 remaining -= apply;
                 target.shortfall -= apply;
