@@ -7,7 +7,7 @@ import {
     Loader2, Save, ArrowLeft,
 } from 'lucide-react';
 import { getAdmissionFullDetails, updateAdmissionDiagnosis } from '@/app/actions/ipd-actions';
-import { getIPDVitalsHistory } from '@/app/actions/ipd-nursing-actions';
+import { getIPDVitalsHistory, getNursingAssessments } from '@/app/actions/ipd-nursing-actions';
 import { VitalsChart } from '@/app/components/ipd/VitalsChart';
 import { useToast } from '@/app/components/ui/Toast';
 
@@ -37,6 +37,10 @@ export default function IpdPatientDetailContent({ admissionId }: { admissionId: 
     const [vitals, setVitals] = useState<any[]>([]);
     const [loadingVitals, setLoadingVitals] = useState(false);
     const [vitalsLoaded, setVitalsLoaded] = useState(false);
+
+    const [nursingAssessments, setNursingAssessments] = useState<any[]>([]);
+    const [loadingNursing, setLoadingNursing] = useState(false);
+    const [nursingLoaded, setNursingLoaded] = useState(false);
 
     const loadDetails = useCallback(async () => {
         setLoading(true);
@@ -73,6 +77,18 @@ export default function IpdPatientDetailContent({ admissionId }: { admissionId: 
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab, admissionId, vitalsLoaded]);
+
+    useEffect(() => {
+        if (activeTab !== 'nursing' || nursingLoaded) return;
+        setLoadingNursing(true);
+        getNursingAssessments(admissionId).then((res) => {
+            if (res.success) setNursingAssessments(res.data as any[]);
+            else toast.error('Failed to load nursing assessments');
+            setLoadingNursing(false);
+            setNursingLoaded(true);
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab, admissionId, nursingLoaded]);
 
     const handleSaveDiagnosis = async () => {
         setSavingDiagnosis(true);
@@ -273,6 +289,39 @@ export default function IpdPatientDetailContent({ admissionId }: { admissionId: 
                             vitals={vitals.map((v) => ({ ...v, recorded_at: v.created_at }))}
                             mode="vitals"
                         />
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'nursing' && (
+                <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                    {loadingNursing ? (
+                        <div className="flex items-center justify-center py-12 text-gray-400">
+                            <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading nursing assessments...
+                        </div>
+                    ) : nursingAssessments.length === 0 ? (
+                        <p className="text-sm text-gray-400">No nursing assessments recorded.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {nursingAssessments.map((a) => (
+                                <div key={a.id} className="border border-gray-100 rounded-xl p-4 bg-gray-50/50">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs font-black text-teal-600 uppercase">{a.assessment_type}</span>
+                                        <span className="text-[10px] text-gray-400 font-semibold">{new Date(a.created_at).toLocaleString('en-GB')}</span>
+                                    </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-gray-600">
+                                        <div><span className="font-bold text-gray-400 block">Consciousness</span>{a.consciousness || 'N/A'}</div>
+                                        <div><span className="font-bold text-gray-400 block">Pain Score</span>{a.pain_score ?? 'N/A'}</div>
+                                        <div><span className="font-bold text-gray-400 block">Fall Risk</span>{a.fall_risk_score ?? 'N/A'}</div>
+                                        <div><span className="font-bold text-gray-400 block">Braden Score</span>{a.braden_score ?? 'N/A'}</div>
+                                        <div><span className="font-bold text-gray-400 block">Mobility</span>{a.mobility || 'N/A'}</div>
+                                        <div><span className="font-bold text-gray-400 block">Continence</span>{a.continence || 'N/A'}</div>
+                                        <div><span className="font-bold text-gray-400 block">Nutrition</span>{a.nutrition_screen || 'N/A'}</div>
+                                        <div><span className="font-bold text-gray-400 block">Assessed By</span>{a.assessed_by || 'N/A'}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     )}
                 </div>
             )}
