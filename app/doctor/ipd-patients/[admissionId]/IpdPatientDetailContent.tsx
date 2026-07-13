@@ -9,6 +9,7 @@ import {
 import { getAdmissionFullDetails, updateAdmissionDiagnosis } from '@/app/actions/ipd-actions';
 import { getIPDVitalsHistory, getNursingAssessments } from '@/app/actions/ipd-nursing-actions';
 import { VitalsChart } from '@/app/components/ipd/VitalsChart';
+import { DischargeSummaryEditor } from '@/app/components/ipd/DischargeSummaryEditor';
 import { useToast } from '@/app/components/ui/Toast';
 
 type TabKey = 'profile' | 'diagnosis' | 'clinical' | 'vitals' | 'nursing' | 'discharge';
@@ -324,6 +325,10 @@ export default function IpdPatientDetailContent({ admissionId }: { admissionId: 
                         </div>
                     )}
                 </div>
+            )}
+
+            {activeTab === 'discharge' && (
+                <DischargeSummaryEditor admissionId={admissionId} />
             )}
         </div>
     );
