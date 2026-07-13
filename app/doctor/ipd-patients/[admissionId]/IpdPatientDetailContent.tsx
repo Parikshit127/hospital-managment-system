@@ -194,6 +194,53 @@ export default function IpdPatientDetailContent({ admissionId }: { admissionId: 
                     </button>
                 </div>
             )}
+
+            {activeTab === 'clinical' && (
+                <div className="space-y-6">
+                    <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                        <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wide">Medical Notes</h3>
+                        {data.medical_notes?.length ? (
+                            <div className="space-y-3">
+                                {data.medical_notes.map((note: any) => (
+                                    <div key={note.id} className="border border-gray-100 rounded-xl p-4 bg-gray-50/50">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-xs font-black text-teal-600 uppercase">{note.note_type}</span>
+                                            <span className="text-[10px] text-gray-400 font-semibold">{new Date(note.created_at).toLocaleString('en-GB')}</span>
+                                        </div>
+                                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{note.details}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-gray-400">No medical notes recorded.</p>
+                        )}
+                    </div>
+
+                    <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                        <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wide">Ward Rounds</h3>
+                        {data.ward_rounds?.length ? (
+                            <div className="space-y-3">
+                                {data.ward_rounds.map((round: any) => (
+                                    <div key={round.id} className="border border-gray-100 rounded-xl p-4 bg-gray-50/50">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-xs font-black text-teal-600 uppercase">{round.round_type}</span>
+                                            <span className="text-[10px] text-gray-400 font-semibold">{new Date(round.created_at).toLocaleString('en-GB')}</span>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-700">
+                                            {round.subjective && <p><span className="font-bold text-gray-500">S:</span> {round.subjective}</p>}
+                                            {round.objective && <p><span className="font-bold text-gray-500">O:</span> {round.objective}</p>}
+                                            {round.assessment && <p><span className="font-bold text-gray-500">A:</span> {round.assessment}</p>}
+                                            {round.plan && <p><span className="font-bold text-gray-500">P:</span> {round.plan}</p>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-gray-400">No ward rounds recorded.</p>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
