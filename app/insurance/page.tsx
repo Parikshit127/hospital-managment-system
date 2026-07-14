@@ -231,49 +231,49 @@ export default function InsuranceDashboard() {
                     </div>
                 ) : (
                     <>
-                        {/* KPIs */}
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                            <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-blue-500/30 transition-all overflow-hidden">
-                                <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl" />
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Providers</span>
-                                    <div className="p-1.5 bg-blue-500/10 rounded-lg"><Building2 className="h-3.5 w-3.5 text-blue-400" /></div>
-                                </div>
-                                <p className="text-3xl font-black text-gray-900 tracking-tight">{stats?.totalProviders || 0}</p>
-                                <div className="flex items-center gap-1 mt-2 text-xs font-bold text-blue-400">
-                                    <Shield className="h-3 w-3" /> Active TPAs
-                                </div>
-                            </div>
-
-                            <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-amber-500/30 transition-all overflow-hidden">
-                                <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl" />
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Pending Claims</span>
-                                    <div className="p-1.5 bg-amber-500/10 rounded-lg"><Clock className="h-3.5 w-3.5 text-amber-400" /></div>
-                                </div>
-                                <p className="text-3xl font-black text-gray-900 tracking-tight">{stats?.pendingClaims || 0}</p>
-                                <div className="flex items-center gap-1 mt-2 text-xs font-bold text-amber-400">
-                                    <AlertTriangle className="h-3 w-3" /> of {stats?.totalClaims || 0} total
-                                </div>
-                            </div>
-
-                            <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-orange-500/30 transition-all overflow-hidden">
-                                <div className="absolute top-0 right-0 w-24 h-24 bg-orange-500/5 rounded-full blur-2xl" />
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Approved Total</span>
-                                    <div className="p-1.5 bg-orange-500/10 rounded-lg"><Wallet className="h-3.5 w-3.5 text-teal-400" /></div>
-                                </div>
-                                <p className="text-3xl font-black text-gray-900 tracking-tight">
-                                    {'\u20B9'}{((stats?.approvedTotal || 0) / 1000).toFixed(1)}K
-                                </p>
-                                <div className="flex items-center gap-1 mt-2 text-xs font-bold text-teal-400">
-                                    <ArrowUpRight className="h-3 w-3" /> {'\u20B9'}{((stats?.claimedTotal || 0) / 1000).toFixed(1)}K claimed
-                                </div>
-                            </div>
-                        </div>
-
                         {/* OVERVIEW */}
                         {activeTab === 'overview' && (<>
+                            {/* KPIs */}
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-blue-500/30 transition-all overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl" />
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Providers</span>
+                                        <div className="p-1.5 bg-blue-500/10 rounded-lg"><Building2 className="h-3.5 w-3.5 text-blue-400" /></div>
+                                    </div>
+                                    <p className="text-3xl font-black text-gray-900 tracking-tight">{stats?.totalProviders || 0}</p>
+                                    <div className="flex items-center gap-1 mt-2 text-xs font-bold text-blue-400">
+                                        <Shield className="h-3 w-3" /> Active TPAs
+                                    </div>
+                                </div>
+
+                                <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-amber-500/30 transition-all overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl" />
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Pending Claims</span>
+                                        <div className="p-1.5 bg-amber-500/10 rounded-lg"><Clock className="h-3.5 w-3.5 text-amber-400" /></div>
+                                    </div>
+                                    <p className="text-3xl font-black text-gray-900 tracking-tight">{stats?.pendingClaims || 0}</p>
+                                    <div className="flex items-center gap-1 mt-2 text-xs font-bold text-amber-400">
+                                        <AlertTriangle className="h-3 w-3" /> of {stats?.totalClaims || 0} total
+                                    </div>
+                                </div>
+
+                                <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-orange-500/30 transition-all overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-24 h-24 bg-orange-500/5 rounded-full blur-2xl" />
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Approved Total</span>
+                                        <div className="p-1.5 bg-orange-500/10 rounded-lg"><Wallet className="h-3.5 w-3.5 text-teal-400" /></div>
+                                    </div>
+                                    <p className="text-3xl font-black text-gray-900 tracking-tight">
+                                        {'\u20B9'}{((stats?.approvedTotal || 0) / 1000).toFixed(1)}K
+                                    </p>
+                                    <div className="flex items-center gap-1 mt-2 text-xs font-bold text-teal-400">
+                                        <ArrowUpRight className="h-3 w-3" /> {'\u20B9'}{((stats?.claimedTotal || 0) / 1000).toFixed(1)}K claimed
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 {/* Providers */}
                                 <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
