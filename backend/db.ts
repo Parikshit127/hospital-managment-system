@@ -39,7 +39,7 @@ const TENANT_SCOPED_MODELS = new Set([
     // Phase 1 models
     'Department', 'PrescriptionTemplate', 'FollowUp',
     'LabSampleTracking', 'LabReagentInventory',
-    'PharmacySupplier', 'PurchaseOrder', 'PharmacyReturn',
+    'PharmacySupplier', 'PurchaseOrder', 'PharmacyPurchaseInvoice', 'PharmacyReturn',
     'BedTransfer', 'DietPlan', 'WardRound', 'NursingTask',
     'PatientFeedback',
     // Phase 2 models
