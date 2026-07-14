@@ -73,10 +73,17 @@ export async function getInsuranceOutstanding(opts?: {
   const basis = opts?.agingBasis || 'approval';
 
   // All open payer invoices with a balance still due from the payer.
+  // TPA bills: match on billing_patient_type OR an active claim status — the
+  // flag frequently drifts (bill created 'cash', later approved for a TPA
+  // claim without the flag being corrected), which would otherwise silently
+  // drop real receivables out of this view. See reception-actions.ts for the
+  // same drift pattern already handled on the patient-search side.
   const invoices = await db.invoices.findMany({
     where: {
       organizationId,
-      billing_patient_type: payerType,
+      ...(payerType === 'tpa_insurance'
+        ? { OR: [{ billing_patient_type: 'tpa_insurance' }, { tpa_claim_status: { not: 'not_submitted' } }] }
+        : { billing_patient_type: payerType }),
       tpa_payable: payerType === 'tpa_insurance' ? { gt: 0 } : undefined,
       ...(opts?.provider_id ? { tpa_provider_id: opts.provider_id } : {}),
     },
@@ -159,7 +166,13 @@ export async function getBillWiseSanction(filters?: {
 }) {
   const { db, organizationId } = await requireTenantContext();
 
-  const where: any = { organizationId, billing_patient_type: 'tpa_insurance' };
+  // Same drift fix as getInsuranceOutstanding — "is this a TPA bill" is an
+  // OR-membership check, kept in `where.AND` so it doesn't collide with the
+  // separate `where.OR` used below for the free-text search filter.
+  const where: any = {
+    organizationId,
+    AND: [{ OR: [{ billing_patient_type: 'tpa_insurance' }, { tpa_claim_status: { not: 'not_submitted' } }] }],
+  };
   if (filters?.provider_id) where.tpa_provider_id = filters.provider_id;
   if (filters?.status) where.tpa_claim_status = filters.status;
   if (filters?.from || filters?.to) {
@@ -225,28 +238,36 @@ export async function getBillWiseSanction(filters?: {
 // ─────────────────────────────────────────────────────────────────────────────
 // DESK DASHBOARD  (KPIs for the cockpit landing)
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getTpaDeskDashboard() {
+export async function getTpaDeskDashboard(filters?: { provider_id?: number }) {
   const { db, organizationId } = await requireTenantContext();
+
+  // Same billing_patient_type drift fix as getInsuranceOutstanding / getBillWiseSanction.
+  const isTpa = { OR: [{ billing_patient_type: 'tpa_insurance' }, { tpa_claim_status: { not: 'not_submitted' } }] };
+  const providerFilter = filters?.provider_id ? { tpa_provider_id: filters.provider_id } : {};
 
   const [outstandingAgg, pendingAdvices, denied, queries, unmappedAgg, shortPayPending] = await Promise.all([
     db.invoices.aggregate({
-      where: { organizationId, billing_patient_type: 'tpa_insurance', tpa_payable: { gt: 0 } },
+      where: { organizationId, ...isTpa, ...providerFilter, tpa_payable: { gt: 0 } },
       _sum: { tpa_payable: true }, _count: true,
     }),
     db.invoices.count({
-      where: { organizationId, billing_patient_type: 'tpa_insurance', tpa_claim_status: { in: ['approved', 'partially_settled'] }, tpa_payable: { gt: 0 } },
+      where: { organizationId, ...isTpa, ...providerFilter, tpa_claim_status: { in: ['approved', 'partially_settled'] }, tpa_payable: { gt: 0 } },
     }),
-    db.invoices.count({ where: { organizationId, billing_patient_type: 'tpa_insurance', tpa_claim_status: 'rejected' } }),
-    db.insurancePreAuth.count({ where: { organizationId, status: 'QueryRaised' } }),
+    db.invoices.count({ where: { organizationId, ...isTpa, ...providerFilter, tpa_claim_status: 'rejected' } }),
+    db.insurancePreAuth.count({ where: { organizationId, status: 'QueryRaised', ...(filters?.provider_id ? { provider_id: filters.provider_id } : {}) } }),
     db.insuranceReceipt.aggregate({
-      where: { organizationId, status: { in: ['Open', 'PartiallyAllocated'] } }, _sum: { unmapped_amount: true },
+      where: { organizationId, status: { in: ['Open', 'PartiallyAllocated'] }, ...(filters?.provider_id ? { provider_id: filters.provider_id } : {}) },
+      _sum: { unmapped_amount: true },
     }),
-    db.claimShortPay.aggregate({ where: { organizationId, disposition: 'PendingReview' }, _sum: { amount: true }, _count: true }),
+    db.claimShortPay.aggregate({
+      where: { organizationId, disposition: 'PendingReview', ...(filters?.provider_id ? { invoice: { tpa_provider_id: filters.provider_id } } : {}) },
+      _sum: { amount: true }, _count: true,
+    }),
   ]);
 
   // Submission backlog: approved claims not yet dispatched (no ack).
   const submissionBacklog = await db.invoices.count({
-    where: { organizationId, billing_patient_type: 'tpa_insurance', tpa_claim_status: 'submitted' },
+    where: { organizationId, ...isTpa, ...providerFilter, tpa_claim_status: 'submitted' },
   });
 
   return {

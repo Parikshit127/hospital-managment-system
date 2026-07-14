@@ -11,6 +11,18 @@ function serialize<T>(data: T): T {
     ));
 }
 
+// Resolve a TPA provider for a patient from their own policy, for backfilling
+// invoice.tpa_provider_id when a claim gets submitted/approved without it
+// having been set. Prefers the most recently created Active policy.
+async function resolveTpaProviderId(db: any, patientId: string): Promise<number | undefined> {
+    const policy = await db.insurance_policies.findFirst({
+        where: { patient_id: patientId, status: 'Active' },
+        orderBy: { created_at: 'desc' },
+        select: { provider_id: true },
+    });
+    return policy?.provider_id;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CORPORATE OUTSTANDING
 // ─────────────────────────────────────────────────────────────────────────────
@@ -159,11 +171,26 @@ export async function submitTpaClaimAction(invoiceId: number) {
     const { db, organizationId } = await requireTenantContext();
     try {
         const claimNumber = `CLM-${Date.now()}`;
+        const invoice = await db.invoices.findFirst({
+            where: { id: invoiceId, organizationId },
+            select: { billing_patient_type: true, patient_id: true, tpa_provider_id: true },
+        });
+        const resolvedProviderId = invoice && invoice.tpa_provider_id == null
+            ? await resolveTpaProviderId(db, invoice.patient_id)
+            : undefined;
         await db.invoices.update({
             where: { id: invoiceId, organizationId },
             data: {
                 tpa_claim_status: 'submitted',
                 tpa_claim_number: claimNumber,
+                // A claim is being submitted on this bill — it's a TPA bill. Bills
+                // default to 'cash'; correct that here so it doesn't silently fall
+                // out of every TPA dashboard (Outstanding, Bill-Wise Sanction, Desk
+                // KPIs). Never override an explicit 'corporate' billing type.
+                ...(invoice?.billing_patient_type === 'cash' ? { billing_patient_type: 'tpa_insurance' } : {}),
+                // Also resolve a missing TPA provider from the patient's own policy,
+                // so this bill groups under the right payer instead of "Unmapped".
+                ...(resolvedProviderId != null ? { tpa_provider_id: resolvedProviderId } : {}),
             },
         });
         revalidatePath('/reception/insurance');
@@ -188,11 +215,23 @@ export async function updateTpaClaimAction(data: {
     }
     const { db, organizationId } = await requireTenantContext();
     try {
+        const invoice = await db.invoices.findFirst({
+            where: { id: data.invoice_id, organizationId },
+            select: { billing_patient_type: true, patient_id: true, tpa_provider_id: true },
+        });
+        const resolvedProviderId = invoice && invoice.tpa_provider_id == null
+            ? await resolveTpaProviderId(db, invoice.patient_id)
+            : undefined;
         await db.invoices.update({
             where: { id: data.invoice_id, organizationId },
             data: {
                 tpa_claim_status: data.status,
                 tpa_settled_amount: data.settled_amount ?? undefined,
+                // Same fix as submitTpaClaimAction: a claim status update implies an
+                // active TPA claim on this bill, so correct a still-default 'cash'
+                // flag rather than let it stay invisible to the TPA dashboards.
+                ...(invoice?.billing_patient_type === 'cash' ? { billing_patient_type: 'tpa_insurance' } : {}),
+                ...(resolvedProviderId != null ? { tpa_provider_id: resolvedProviderId } : {}),
             },
         });
 

@@ -2035,6 +2035,18 @@ export async function settleAndDischarge(data: {
         // co-pay via the splits below, leaving the TPA share outstanding.
         const tpaApproved = Math.max(0, Number(data.tpa_approved_amount) || 0);
         if (tpaApproved > 0) {
+            // The invoice often has no tpa_provider_id yet either — resolve it from the
+            // patient's own policy so Outstanding/Bill-Wise Sanction can group this bill
+            // under the right TPA instead of "Unmapped / Unknown".
+            let resolvedProviderId: number | undefined;
+            if (invoice.tpa_provider_id == null) {
+                const policy = await db.insurance_policies.findFirst({
+                    where: { patient_id: invoice.patient_id, status: 'Active' },
+                    orderBy: { created_at: 'desc' },
+                    select: { provider_id: true },
+                });
+                resolvedProviderId = policy?.provider_id;
+            }
             await db.invoices.update({
                 where: { id: invoice.id },
                 data: {
@@ -2042,6 +2054,15 @@ export async function settleAndDischarge(data: {
                     tpa_claim_status: 'approved',
                     tpa_approved_amount: tpaApproved,
                     tpa_approved_at: new Date(),
+                    // Bills are created 'cash' by default and this is the only place a
+                    // TPA-approved amount gets attached at discharge. If it's still
+                    // 'cash' here it was never flagged TPA, so the bill would silently
+                    // vanish from every TPA dashboard (Outstanding, Bill-Wise Sanction,
+                    // Desk KPIs) despite carrying a real receivable. Correct it — but
+                    // only from the 'cash' default, never override an explicit
+                    // 'corporate' billing type.
+                    ...(invoice.billing_patient_type === 'cash' ? { billing_patient_type: 'tpa_insurance' } : {}),
+                    ...(resolvedProviderId != null ? { tpa_provider_id: resolvedProviderId } : {}),
                 },
             });
 

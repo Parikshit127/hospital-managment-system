@@ -423,9 +423,15 @@ export async function getInsuranceReceiptSummary(filters?: { from?: string; to?:
     const totalReceiptAmt = receipts.reduce((s: number, r: any) => s + Number(r.total_amount), 0);
 
     // Pending advices: invoices approved/partially settled with TPA balance still due.
+    // Same billing_patient_type drift fix as insurance-aging-actions.ts. Note this
+    // is still scoped to tpa_provider_id === p.id, so an invoice whose provider link
+    // is also missing (not just the billing type) won't surface under any provider
+    // here — that gap needs the claim's TPA provider assigned, not a query fix.
     const pending = await db.invoices.count({
       where: {
-        organizationId, billing_patient_type: 'tpa_insurance', tpa_provider_id: p.id,
+        organizationId,
+        OR: [{ billing_patient_type: 'tpa_insurance' }, { tpa_claim_status: { not: 'not_submitted' } }],
+        tpa_provider_id: p.id,
         tpa_claim_status: { in: ['approved', 'partially_settled'] },
         tpa_payable: { gt: 0 },
       },
