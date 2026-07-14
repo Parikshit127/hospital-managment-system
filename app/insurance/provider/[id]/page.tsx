@@ -13,6 +13,7 @@ import { getInsuranceProviders, getPatientsByProvider, getInsuranceClaims } from
 import { listInsuranceReceipts } from '@/app/actions/insurance-receipts-actions';
 import { getInsuranceOutstanding, getBillWiseSanction } from '@/app/actions/insurance-aging-actions';
 import { NewReceiptModal } from '@/app/components/insurance/finance-receivables';
+import TpaProfileModal from '@/app/components/ipd/TpaProfileModal';
 
 const fmtMoney = (n: number | null | undefined) =>
     n == null ? '—' : `₹${Number(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
@@ -40,6 +41,7 @@ export default function InsuranceProviderDetailPage() {
     const [to, setTo] = useState('');
     const [search, setSearch] = useState('');
     const [showNewReceipt, setShowNewReceipt] = useState(false);
+    const [tpaModalPatient, setTpaModalPatient] = useState<{ id: string; name: string } | null>(null);
 
     const [patients, setPatients] = useState<any[]>([]);
     const [receipts, setReceipts] = useState<any[]>([]);
@@ -154,7 +156,7 @@ export default function InsuranceProviderDetailPage() {
                     <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-blue-400" /></div>
                 ) : (
                     <>
-                        {tab === 'patients' && <PatientsTab patients={patients} search={search} setSearch={setSearch} onExport={() => exportXlsx(patients.map(p => ({ Patient: p.full_name, UHID: p.patient_id, Phone: p.phone, Policy: p.policy_number, Status: p.policy_status, Coverage: Number(p.coverage_limit || 0), Remaining: Number(p.remaining_limit || 0), Admitted: p.is_admitted ? 'Yes' : 'No' })), 'patients')} />}
+                        {tab === 'patients' && <PatientsTab patients={patients} search={search} setSearch={setSearch} onExport={() => exportXlsx(patients.map(p => ({ Patient: p.full_name, UHID: p.patient_id, Phone: p.phone, Policy: p.policy_number, Status: p.policy_status, Coverage: Number(p.coverage_limit || 0), Remaining: Number(p.remaining_limit || 0), Admitted: p.is_admitted ? 'Yes' : 'No' })), 'patients')} onViewPatient={(p: any) => setTpaModalPatient({ id: p.patient_id, name: p.full_name })} />}
                         {tab === 'receipts' && <ReceiptsTab receipts={receipts} onExport={() => exportXlsx(receipts.map(r => ({ Receipt: r.receipt_number, Date: fmtDate(r.receipt_date), Ref: r.reference_number, Received: Number(r.total_amount || 0), Claim: Number(r.claim_amount || 0), Sanctioned: Number(r.sanctioned_amount || 0), TDS: Number(r.tds_total || 0), 'Service Charge': Number(r.service_charge || 0), Disallowed: Math.max(0, Number(r.claim_amount || 0) - Number(r.sanctioned_amount || 0)), Status: r.status })), 'receipts')} />}
                         {tab === 'outstanding' && <OutstandingTab data={outstanding} />}
                         {tab === 'claims' && <ClaimsTab claims={claims} onExport={() => exportXlsx(claims.map(c => ({ Claim: c.claim_number, Patient: c.policy?.patient?.full_name, Invoice: c.invoice?.invoice_number, Claimed: Number(c.claimed_amount || 0), Sanctioned: Number(c.sanctioned_amount ?? c.approved_amount ?? 0), Settled: Number(c.settled_amount || 0), TDS: Number(c.tds_amount || 0), Status: c.status, Submitted: fmtDate(c.submitted_at) })), 'claims')} />}
@@ -166,6 +168,11 @@ export default function InsuranceProviderDetailPage() {
             {showNewReceipt && (
                 <NewReceiptModal providers={provider ? [provider] : []} defaultProviderId={providerId}
                     onClose={() => setShowNewReceipt(false)} onSaved={() => { setShowNewReceipt(false); if (tab === 'receipts') loadTab(); }} />
+            )}
+
+            {tpaModalPatient && (
+                <TpaProfileModal open onClose={() => setTpaModalPatient(null)}
+                    patientId={tpaModalPatient.id} patientName={tpaModalPatient.name} />
             )}
         </AppShell>
     );
@@ -189,7 +196,7 @@ function EmptyRow({ cols, msg }: { cols: number; msg: string }) {
     return <tr><td colSpan={cols} className="py-14 text-center text-sm font-bold text-gray-300">{msg}</td></tr>;
 }
 
-function PatientsTab({ patients, search, setSearch, onExport }: any) {
+function PatientsTab({ patients, search, setSearch, onExport, onViewPatient }: any) {
     const q = search.trim().toLowerCase();
     const rows = !q ? patients : patients.filter((pt: any) =>
         (pt.full_name || '').toLowerCase().includes(q) || (pt.patient_id || '').toLowerCase().includes(q) || (pt.policy_number || '').toLowerCase().includes(q));
@@ -219,7 +226,18 @@ function PatientsTab({ patients, search, setSearch, onExport }: any) {
                                 <td className="px-3 py-3 text-right text-gray-700">{fmtMoney(pt.coverage_limit)}</td>
                                 <td className="px-3 py-3 text-right text-gray-700">{fmtMoney(pt.remaining_limit)}</td>
                                 <td className="px-3 py-3">{pt.is_admitted ? <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 uppercase"><BedDouble className="h-3 w-3" /> Admitted</span> : <span className="text-gray-300">—</span>}</td>
-                                <td className="px-3 py-3"><Link href={`/reception/patient/${pt.patient_id}`} className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100"><ExternalLink className="h-3 w-3" /> View</Link></td>
+                                <td className="px-3 py-3">
+                                    <div className="flex items-center gap-1.5">
+                                        <button onClick={() => onViewPatient(pt)}
+                                            className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100">
+                                            <Shield className="h-3 w-3" /> TPA Details
+                                        </button>
+                                        <Link href={`/reception/patient/${pt.patient_id}`} title="Patient chart"
+                                            className="inline-flex items-center p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100">
+                                            <ExternalLink className="h-3.5 w-3.5" />
+                                        </Link>
+                                    </div>
+                                </td>
                             </tr>
                         ))}
                     </tbody>
