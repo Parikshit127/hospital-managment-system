@@ -107,6 +107,13 @@ const TENANT_SCOPED_MODELS = new Set([
     'WardStock', 'WardStockTransaction',
     'GoodsReceiptNote',
     'MessageDeliveryLog', 'WhatsAppIncomingMessage',
+    // Same class of gap as PharmacyPurchaseInvoice above: schema has organizationId
+    // but the model was never registered here, so reads without an explicit manual
+    // filter returned every org's rows. PharmacyInventoryMovement was confirmed
+    // actively leaking (pharmacy movement ledger + COGS calc had no org filter at
+    // all); invoice_snapshots' existing reads already filter manually and weren't
+    // exploited, added here as defense-in-depth.
+    'PharmacyInventoryMovement', 'invoice_snapshots',
 ]);
 
 // Models where organizationId is nullable (audit logs, etc.)
