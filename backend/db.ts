@@ -15,7 +15,12 @@ export const prisma = isServer
     ? (globalForPrisma.prisma || new PrismaClient())
     : (undefined as unknown as PrismaClient);
 
-if (isServer && process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+// Cache on globalThis in every environment, not just dev. Next.js can
+// re-evaluate this module more than once per server process (route/action
+// bundle splitting); without an unconditional cache each re-evaluation opens
+// a brand-new PrismaClient with its own connection pool, silently multiplying
+// DB connections in production until the RDS connection ceiling is hit.
+if (isServer) globalForPrisma.prisma = prisma;
 
 // Models that support is_archived field for warm/cold archival
 const ARCHIVABLE_MODELS = new Set([

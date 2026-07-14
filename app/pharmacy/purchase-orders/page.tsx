@@ -287,25 +287,32 @@ export default function PurchaseOrdersPage() {
     const handleCreatePO = async () => {
         if (!poForm.supplier_id || poItems.length === 0) return alert('Select supplier and add at least one item.');
         setCreating(true);
-        const mappedItems = poItems.map(i => ({
-            medicine_id: i.medicine_id,
-            quantity: i.quantity,
-            unit_price: i.unit_price,
-            hsn_code: i.hsn_code || undefined,
-            pack: i.pack || undefined,
-            batch_no: i.batch_no || undefined,
-            expiry: i.expiry || undefined,
-            mrp: i.mrp,
-            discount_pct: i.discount_pct,
-            cgst_rate: i.cgst_rate,
-            sgst_rate: i.sgst_rate,
-        }));
-        const res = editingPoId
-            ? await updatePurchaseOrder(editingPoId, Number(poForm.supplier_id), mappedItems, { notes: poForm.notes || undefined })
-            : await createPurchaseOrder(Number(poForm.supplier_id), mappedItems, { notes: poForm.notes || undefined });
-        setCreating(false);
-        if (res.success) { setShowCreateModal(false); setEditingPoId(null); loadOrders(); }
-        else alert(res.error || 'Failed to save PO');
+        try {
+            const mappedItems = poItems.map(i => ({
+                medicine_id: i.medicine_id,
+                quantity: i.quantity,
+                unit_price: i.unit_price,
+                hsn_code: i.hsn_code || undefined,
+                pack: i.pack || undefined,
+                batch_no: i.batch_no || undefined,
+                expiry: i.expiry || undefined,
+                mrp: i.mrp,
+                discount_pct: i.discount_pct,
+                cgst_rate: i.cgst_rate,
+                sgst_rate: i.sgst_rate,
+            }));
+            const res = editingPoId
+                ? await updatePurchaseOrder(editingPoId, Number(poForm.supplier_id), mappedItems, { notes: poForm.notes || undefined })
+                : await createPurchaseOrder(Number(poForm.supplier_id), mappedItems, { notes: poForm.notes || undefined });
+            if (res.success) { setShowCreateModal(false); setEditingPoId(null); loadOrders(); }
+            else alert(res.error || 'Failed to save PO');
+        } catch (error: any) {
+            // Without this catch, a rejected request (network drop, pool timeout) left
+            // setCreating(false) never called — the button stayed stuck on "Creating…" forever.
+            alert(error?.message || 'Failed to save PO — please try again.');
+        } finally {
+            setCreating(false);
+        }
     };
 
     const handleOpenReceive = (po: any) => {
