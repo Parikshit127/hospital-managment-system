@@ -792,6 +792,12 @@ export async function getRevenueLeakage() {
                 // bill itself was ever meant to be claimed.
                 invoice_type: 'IPD',
                 id: claimedInvoiceIds.length > 0 ? { notIn: claimedInvoiceIds } : undefined,
+                // The real claim lifecycle lives on invoices.tpa_claim_status, not the
+                // legacy insurance_claims table above — a bill can be submitted/approved
+                // there without ever getting an insurance_claims row, which was making
+                // already-approved bills show up here as "no claim filed" with an
+                // Auto-Submit action (risking a duplicate claim on an approved bill).
+                tpa_claim_status: 'not_submitted',
             },
             include: {
                 patient: { select: { full_name: true, patient_id: true } },
