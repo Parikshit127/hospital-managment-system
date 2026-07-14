@@ -210,6 +210,7 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
                 <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Receipt #</th>
                 <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Date</th>
                 <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Payer</th>
+                <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Patient(s)</th>
                 <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Ref No</th>
                 <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Received</th>
                 <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Claim</th>
@@ -228,6 +229,9 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
                   <td className="px-3 py-2.5 font-mono text-xs text-gray-700">{r.receipt_number}</td>
                   <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{r.receipt_date ? new Date(r.receipt_date).toLocaleDateString('en-GB') : '-'}</td>
                   <td className="px-3 py-2.5 text-gray-800">{r.provider?.provider_name || r.corporate?.company_name || '-'}</td>
+                  <td className="px-3 py-2.5 text-gray-600 text-xs max-w-[180px] truncate" title={(r.patients || []).join(', ')}>
+                    {r.patients?.length ? r.patients.join(', ') : <span className="text-gray-300">Unallocated</span>}
+                  </td>
                   <td className="px-3 py-2.5 text-gray-600 font-mono text-xs">{r.reference_number}</td>
                   <td className="px-3 py-2.5 text-right font-bold text-gray-900">{fmt(r.total_amount)}</td>
                   <td className="px-3 py-2.5 text-right text-gray-600">{Number(r.claim_amount) ? fmt(r.claim_amount) : '—'}</td>
@@ -238,7 +242,7 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
                   <td className="px-3 py-2.5"><StatusPill status={r.status} /></td>
                 </tr>
               );})}
-              {receipts.length === 0 && <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">No receipts yet</td></tr>}
+              {receipts.length === 0 && <tr><td colSpan={12} className="px-4 py-8 text-center text-gray-400">No receipts yet</td></tr>}
             </tbody>
           </table>
         </div>

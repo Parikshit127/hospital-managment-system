@@ -376,11 +376,27 @@ export async function listInsuranceReceipts(filters?: {
       provider: { select: { provider_name: true } },
       corporate: { select: { company_name: true } },
       _count: { select: { allocations: true } },
+      // A receipt is a lump-sum payer settlement that can cover more than one
+      // patient's bill — surface which patient(s) it's allocated to on the list
+      // rather than only the payer name.
+      allocations: {
+        select: { invoice: { select: { patient_id: true, patient: { select: { full_name: true } } } } },
+      },
     },
     orderBy: { receipt_date: 'desc' },
     take: 300,
   });
-  return { success: true, data: serialize(receipts) };
+  const data = receipts.map((r: any) => {
+    const seen = new Map<string, string>();
+    for (const a of r.allocations) {
+      if (a.invoice?.patient_id && !seen.has(a.invoice.patient_id)) {
+        seen.set(a.invoice.patient_id, a.invoice.patient?.full_name || a.invoice.patient_id);
+      }
+    }
+    const { allocations, ...rest } = r;
+    return { ...rest, patients: Array.from(seen.values()) };
+  });
+  return { success: true, data: serialize(data) };
 }
 
 export async function getInsuranceReceiptDetail(receiptId: number) {
