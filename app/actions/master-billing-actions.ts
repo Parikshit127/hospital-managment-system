@@ -458,14 +458,25 @@ export async function getMasterBillingKPIs() {
         _sum: { balance_due: true },
         _count: { id: true },
       }),
-      db.insurance_claims.count({
+      // insurance_claims is a legacy table nothing writes to any more (confirmed
+      // 0 rows across every org in production) -- the real claim lifecycle lives
+      // on invoices.tpa_claim_status, so these two counts always read zero.
+      // "Pending" = still in flight (not yet settled or rejected). Invoices have
+      // no distinct "under review" sub-state, so that KPI maps to 'submitted'
+      // (awaiting the TPA's initial response) -- the closest equivalent.
+      db.invoices.count({
         where: {
           organizationId,
-          status: { in: ["Submitted", "Under Review", "Pending", "Partially Approved"] },
+          OR: [{ billing_patient_type: "tpa_insurance" }, { tpa_claim_status: { not: "not_submitted" } }],
+          tpa_claim_status: { in: ["submitted", "approved", "partially_settled"] },
         },
       }),
-      db.insurance_claims.count({
-        where: { organizationId, status: "Under Review" },
+      db.invoices.count({
+        where: {
+          organizationId,
+          OR: [{ billing_patient_type: "tpa_insurance" }, { tpa_claim_status: { not: "not_submitted" } }],
+          tpa_claim_status: "submitted",
+        },
       }),
       db.patientDeposit.aggregate({
         where: { organizationId, status: "Active" },

@@ -29,6 +29,7 @@ export function ReceivablesDashboard({ providers = [] }: { providers?: any[] }) 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [providerId, setProviderId] = useState('');
+  const [showOutstanding, setShowOutstanding] = useState(false);
   const load = useCallback(() => {
     setLoading(true);
     getTpaDeskDashboard({ provider_id: providerId ? Number(providerId) : undefined }).then((r: any) => { if (r?.success) setData(r.data); }).finally(() => setLoading(false));
@@ -51,7 +52,7 @@ export function ReceivablesDashboard({ providers = [] }: { providers?: any[] }) 
         </div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard icon={IndianRupee} label="Total Outstanding" value={`₹${fmt(data.total_outstanding)}`} tone="teal" sub={`${data.outstanding_bills} bills`} />
+        <KpiCard icon={IndianRupee} label="Total Outstanding" value={`₹${fmt(data.total_outstanding)}`} tone="teal" sub={`${data.outstanding_bills} bills · click to view`} onClick={() => setShowOutstanding(true)} />
         <KpiCard icon={Clock} label="Pending Advices" value={data.pending_advices} tone="amber" sub="approved, awaiting receipt" />
         <KpiCard icon={ArrowDownToLine} label="Unmapped Receipts" value={`₹${fmt(data.unmapped_receipts)}`} tone="blue" sub="received, not allocated" />
         <KpiCard icon={XCircle} label="Denied to Action" value={data.denied_to_action} tone="red" />
@@ -59,6 +60,9 @@ export function ReceivablesDashboard({ providers = [] }: { providers?: any[] }) 
         <KpiCard icon={AlertTriangle} label="Queries Pending" value={data.queries_pending} tone="red" />
         <KpiCard icon={Inbox} label="Submission Backlog" value={data.submission_backlog} tone="slate" sub="submitted, awaiting ack" />
       </div>
+      {showOutstanding && (
+        <OutstandingDrilldownModal providerId={providerId ? Number(providerId) : undefined} onClose={() => setShowOutstanding(false)} />
+      )}
     </div>
   );
 }
@@ -538,20 +542,68 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
 function Spinner() { return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>; }
 function Empty({ msg }: { msg: string }) { return <div className="py-12 text-center text-sm text-gray-400">{msg}</div>; }
 function Field({ label, children }: any) { return <label className="block"><span className="mb-1 block text-xs font-bold text-gray-600">{label}</span>{children}</label>; }
-function KpiCard({ icon: Icon, label, value, tone = 'slate', sub }: any) {
+function KpiCard({ icon: Icon, label, value, tone = 'slate', sub, onClick }: any) {
   const tones: any = {
     slate: 'bg-slate-50 text-slate-700', teal: 'bg-teal-50 text-teal-700',
     amber: 'bg-amber-50 text-amber-700', red: 'bg-red-50 text-red-700', blue: 'bg-blue-50 text-blue-700',
   };
+  const Tag = onClick ? 'button' : 'div';
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+    <Tag onClick={onClick} className={`rounded-2xl border border-gray-200 bg-white p-4 shadow-sm text-left w-full ${onClick ? 'hover:border-blue-300 hover:shadow-md transition-all cursor-pointer' : ''}`}>
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-black uppercase tracking-wider text-gray-400">{label}</span>
         <span className={`rounded-lg p-1.5 ${tones[tone]}`}><Icon className="h-4 w-4" /></span>
       </div>
       <div className="mt-2 text-xl font-black text-gray-900">{value}</div>
       {sub && <div className="mt-0.5 text-[11px] text-gray-400">{sub}</div>}
-    </div>
+    </Tag>
+  );
+}
+
+// Drill-down for the "Total Outstanding" KPI: every TPA bill that still has a
+// balance due from the payer, reusing the same data Bill-Wise Sanction shows.
+function OutstandingDrilldownModal({ providerId, onClose }: { providerId?: number; onClose: () => void }) {
+  const [rows, setRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    getBillWiseSanction({ provider_id: providerId }).then((r: any) => {
+      if (r?.success) setRows((r.data?.rows || []).filter((row: any) => Number(row.outstanding) > 0));
+    }).finally(() => setLoading(false));
+  }, [providerId]);
+
+  return (
+    <Modal title="Total Outstanding — Bills" onClose={onClose} wide>
+      {loading ? <Spinner /> : rows.length === 0 ? <Empty msg="No outstanding bills" /> : (
+        <div className="max-h-[60vh] overflow-y-auto rounded-xl border border-gray-200">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 text-gray-600 sticky top-0">
+              <tr>
+                <th className="px-3 py-2 text-left font-black text-[11px] uppercase tracking-wider">Bill #</th>
+                <th className="px-3 py-2 text-left font-black text-[11px] uppercase tracking-wider">Patient</th>
+                <th className="px-3 py-2 text-left font-black text-[11px] uppercase tracking-wider">Provider</th>
+                <th className="px-3 py-2 text-right font-black text-[11px] uppercase tracking-wider">Approved</th>
+                <th className="px-3 py-2 text-right font-black text-[11px] uppercase tracking-wider">Received</th>
+                <th className="px-3 py-2 text-right font-black text-[11px] uppercase tracking-wider">Outstanding</th>
+                <th className="px-3 py-2 text-left font-black text-[11px] uppercase tracking-wider">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map((r: any) => (
+                <tr key={r.invoice_id} className="hover:bg-slate-50">
+                  <td className="px-3 py-2 font-mono text-xs">{r.invoice_number}</td>
+                  <td className="px-3 py-2">{r.patient_name}</td>
+                  <td className="px-3 py-2 text-gray-500">{r.provider_name || 'Unmapped'}</td>
+                  <td className="px-3 py-2 text-right">{fmt(r.sanctioned)}</td>
+                  <td className="px-3 py-2 text-right">{fmt(r.received)}</td>
+                  <td className="px-3 py-2 text-right font-bold text-teal-700">{fmt(r.outstanding)}</td>
+                  <td className="px-3 py-2"><StatusPill status={r.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Modal>
   );
 }
 function StatusPill({ status }: { status: string }) {

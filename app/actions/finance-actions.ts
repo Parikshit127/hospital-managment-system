@@ -1598,6 +1598,33 @@ export async function reversePayment(paymentId: number, reason: string) {
             },
         });
 
+        // If the reversed payment was a TPA settlement, also roll back the
+        // TPA-specific accounting fields -- they aren't covered by the
+        // paid_amount/balance_due recompute above, so reversing a TPA payment
+        // silently left tpa_settled_amount stuck at its pre-reversal value.
+        // Confirmed on production: an invoice with two reversed "Settlement"
+        // payments still showed the full reversed amount as settled, weeks
+        // later, permanently understating its true TPA outstanding.
+        const TPA_SETTLEMENT_TYPES = ['TPA Settlement', 'Settlement'];
+        if (invoice?.billing_patient_type === 'tpa_insurance' && TPA_SETTLEMENT_TYPES.includes(payment.payment_type)) {
+            const remainingTpaSettled = allPayments
+                .filter((p: any) => TPA_SETTLEMENT_TYPES.includes(p.payment_type))
+                .reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+            const approved = Number(invoice.tpa_approved_amount || 0);
+            const disallowed = Number(invoice.tpa_disallowed_amount || 0);
+            const tds = Number(invoice.tpa_tds_amount || 0);
+            const newTpaPayable = Math.max(0, approved - remainingTpaSettled - disallowed - tds);
+            const fullyAccounted = remainingTpaSettled + disallowed + tds >= approved - 0.01;
+            await db.invoices.update({
+                where: { id: payment.invoice_id },
+                data: {
+                    tpa_settled_amount: remainingTpaSettled,
+                    tpa_payable: newTpaPayable,
+                    tpa_claim_status: remainingTpaSettled > 0 ? (fullyAccounted ? 'settled' : 'partially_settled') : 'approved',
+                },
+            });
+        }
+
         try {
             await recomputeInvoiceCommission(db, organizationId, payment.invoice_id);
             await recomputeInvoiceDoctorCommission(db, organizationId, payment.invoice_id);

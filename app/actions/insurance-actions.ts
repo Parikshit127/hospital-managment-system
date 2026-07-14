@@ -681,6 +681,16 @@ export async function updateClaimStatus(claimId: number, data: {
 }
 
 // Get all claims with filters
+// Invoice tpa_claim_status <-> the display vocabulary this UI already uses
+// (getClaimStatusColor in app/insurance/page.tsx expects these PascalCase keys).
+const CLAIM_STATUS_DISPLAY: Record<string, string> = {
+    submitted: 'Submitted',
+    approved: 'Approved',
+    rejected: 'Rejected',
+    partially_settled: 'PartiallyApproved',
+    settled: 'Settled',
+};
+
 export async function getInsuranceClaims(filters?: {
     status?: string;
     policy_id?: number;
@@ -689,30 +699,66 @@ export async function getInsuranceClaims(filters?: {
 }) {
     try {
         const { db } = await requireTenantContext();
-        const where: any = {};
-        if (filters?.status) where.status = filters.status;
-        if (filters?.policy_id) where.policy_id = filters.policy_id;
-        if (filters?.provider_id) where.policy = { provider_id: filters.provider_id };
+        // insurance_claims is a legacy table nothing writes to any more (see
+        // getInsuranceStats/getProviderPerformance above, confirmed 0 rows across
+        // every org in production) -- the real claim lifecycle lives on
+        // invoices.tpa_claim_status. Reconstruct a claims-shaped list from
+        // invoices instead so Overview "Recent Claims" and the provider detail
+        // page's Claims tab show the real data. policy_id has no invoice-side
+        // equivalent and is dropped -- no caller currently passes it.
+        const where: any = {
+            OR: [{ billing_patient_type: 'tpa_insurance' }, { tpa_claim_status: { not: 'not_submitted' } }],
+        };
+        if (filters?.provider_id) where.tpa_provider_id = filters.provider_id;
+        if (filters?.status) {
+            const raw = Object.entries(CLAIM_STATUS_DISPLAY).find(([, v]) => v === filters.status)?.[0];
+            where.tpa_claim_status = raw || filters.status;
+        }
 
-        const claims = await db.insurance_claims.findMany({
+        const invoices = await db.invoices.findMany({
             where,
-            include: {
+            select: {
+                id: true, invoice_number: true, tpa_claim_number: true, tpa_claim_status: true,
+                tpa_provider_id: true, tpa_payable: true, tpa_approved_amount: true, tpa_settled_amount: true,
+                tpa_disallowed_amount: true, tpa_tds_amount: true, tpa_approved_at: true, net_amount: true,
+                created_at: true,
+                patient: { select: { full_name: true, patient_id: true } },
+                admission: { select: { status: true, discharge_date: true } },
+            },
+            orderBy: { created_at: 'desc' },
+            take: filters?.limit || 100,
+        });
+
+        const providerIds = [...new Set(
+            invoices.map((i: { tpa_provider_id: number | null }) => i.tpa_provider_id).filter((v: number | null): v is number => v != null)
+        )];
+        const providers = providerIds.length
+            ? await db.insurance_providers.findMany({ where: { id: { in: providerIds } }, select: { id: true, provider_name: true } })
+            : [];
+        const providerName = new Map<number, string>(providers.map((p: any) => [p.id, p.provider_name]));
+
+        const claims = invoices.map((inv: any) => {
+            const claimAmt = Number(inv.tpa_payable || 0) + Number(inv.tpa_settled_amount || 0) + Number(inv.tpa_disallowed_amount || 0) + Number(inv.tpa_tds_amount || 0);
+            return {
+                id: inv.id,
+                claim_number: inv.tpa_claim_number || `INV-${inv.invoice_number}`,
+                status: CLAIM_STATUS_DISPLAY[inv.tpa_claim_status] || inv.tpa_claim_status,
+                claimed_amount: claimAmt || Number(inv.net_amount || 0),
+                sanctioned_amount: Number(inv.tpa_approved_amount || 0),
+                approved_amount: Number(inv.tpa_approved_amount || 0),
+                settled_amount: Number(inv.tpa_settled_amount || 0),
+                tds_amount: Number(inv.tpa_tds_amount || 0),
+                submitted_at: inv.tpa_approved_at || inv.created_at,
                 policy: {
-                    include: {
-                        patient: { select: { full_name: true, patient_id: true } },
-                        provider: { select: { provider_name: true } },
-                    },
+                    patient: inv.patient ? { full_name: inv.patient.full_name, patient_id: inv.patient.patient_id } : null,
+                    provider: inv.tpa_provider_id ? { provider_name: providerName.get(inv.tpa_provider_id) || 'Unmapped / Unknown' } : null,
                 },
                 invoice: {
-                    select: {
-                        invoice_number: true, net_amount: true, status: true,
-                        // Surfaces the derived "Semi Discharged" badge on the claims list.
-                        admission: { select: { status: true, discharge_date: true } },
-                    },
+                    invoice_number: inv.invoice_number,
+                    net_amount: inv.net_amount,
+                    admission: inv.admission,
                 },
-            },
-            orderBy: { submitted_at: 'desc' },
-            take: filters?.limit || 100,
+            };
         });
 
         return { success: true, data: serialize(claims) };
