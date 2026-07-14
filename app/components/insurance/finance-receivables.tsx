@@ -30,9 +30,15 @@ export function ReceivablesDashboard({ providers = [] }: { providers?: any[] }) 
   const [loading, setLoading] = useState(true);
   const [providerId, setProviderId] = useState('');
   const [showOutstanding, setShowOutstanding] = useState(false);
+  const [billRows, setBillRows] = useState<any[]>([]);
+  const [billsLoading, setBillsLoading] = useState(true);
   const load = useCallback(() => {
     setLoading(true);
     getTpaDeskDashboard({ provider_id: providerId ? Number(providerId) : undefined }).then((r: any) => { if (r?.success) setData(r.data); }).finally(() => setLoading(false));
+    setBillsLoading(true);
+    getBillWiseSanction({ provider_id: providerId ? Number(providerId) : undefined }).then((r: any) => {
+      if (r?.success) setBillRows((r.data?.rows || []).filter((row: any) => Number(row.outstanding) > 0));
+    }).finally(() => setBillsLoading(false));
   }, [providerId]);
   useEffect(() => { load(); }, [load]);
 
@@ -60,6 +66,14 @@ export function ReceivablesDashboard({ providers = [] }: { providers?: any[] }) 
         <KpiCard icon={AlertTriangle} label="Queries Pending" value={data.queries_pending} tone="red" />
         <KpiCard icon={Inbox} label="Submission Backlog" value={data.submission_backlog} tone="slate" sub="submitted, awaiting ack" />
       </div>
+
+      {/* Inline bill list — same data as clicking "Total Outstanding", shown
+          directly on the page so it's visible without an extra click. */}
+      <div className="mt-5">
+        <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Outstanding Bills</h4>
+        {billsLoading ? <Spinner /> : <BillsTable rows={billRows} emptyMsg="No outstanding bills" />}
+      </div>
+
       {showOutstanding && (
         <OutstandingDrilldownModal providerId={providerId ? Number(providerId) : undefined} onClose={() => setShowOutstanding(false)} />
       )}
@@ -573,37 +587,44 @@ function OutstandingDrilldownModal({ providerId, onClose }: { providerId?: numbe
 
   return (
     <Modal title="Total Outstanding — Bills" onClose={onClose} wide>
-      {loading ? <Spinner /> : rows.length === 0 ? <Empty msg="No outstanding bills" /> : (
-        <div className="max-h-[60vh] overflow-y-auto rounded-xl border border-gray-200">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-gray-600 sticky top-0">
-              <tr>
-                <th className="px-3 py-2 text-left font-black text-[11px] uppercase tracking-wider">Bill #</th>
-                <th className="px-3 py-2 text-left font-black text-[11px] uppercase tracking-wider">Patient</th>
-                <th className="px-3 py-2 text-left font-black text-[11px] uppercase tracking-wider">Provider</th>
-                <th className="px-3 py-2 text-right font-black text-[11px] uppercase tracking-wider">Approved</th>
-                <th className="px-3 py-2 text-right font-black text-[11px] uppercase tracking-wider">Received</th>
-                <th className="px-3 py-2 text-right font-black text-[11px] uppercase tracking-wider">Outstanding</th>
-                <th className="px-3 py-2 text-left font-black text-[11px] uppercase tracking-wider">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {rows.map((r: any) => (
-                <tr key={r.invoice_id} className="hover:bg-slate-50">
-                  <td className="px-3 py-2 font-mono text-xs">{r.invoice_number}</td>
-                  <td className="px-3 py-2">{r.patient_name}</td>
-                  <td className="px-3 py-2 text-gray-500">{r.provider_name || 'Unmapped'}</td>
-                  <td className="px-3 py-2 text-right">{fmt(r.sanctioned)}</td>
-                  <td className="px-3 py-2 text-right">{fmt(r.received)}</td>
-                  <td className="px-3 py-2 text-right font-bold text-teal-700">{fmt(r.outstanding)}</td>
-                  <td className="px-3 py-2"><StatusPill status={r.status} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {loading ? <Spinner /> : <BillsTable rows={rows} emptyMsg="No outstanding bills" />}
     </Modal>
+  );
+}
+
+// Shared by the modal above and the inline list on the Receivables Desk tab,
+// so both stay visually identical without duplicating the table markup.
+function BillsTable({ rows, emptyMsg }: { rows: any[]; emptyMsg: string }) {
+  if (rows.length === 0) return <Empty msg={emptyMsg} />;
+  return (
+    <div className="max-h-[60vh] overflow-y-auto rounded-xl border border-gray-200">
+      <table className="min-w-full text-sm">
+        <thead className="bg-slate-50 text-gray-600 sticky top-0">
+          <tr>
+            <th className="px-3 py-2 text-left font-black text-[11px] uppercase tracking-wider">Bill #</th>
+            <th className="px-3 py-2 text-left font-black text-[11px] uppercase tracking-wider">Patient</th>
+            <th className="px-3 py-2 text-left font-black text-[11px] uppercase tracking-wider">Provider</th>
+            <th className="px-3 py-2 text-right font-black text-[11px] uppercase tracking-wider">Approved</th>
+            <th className="px-3 py-2 text-right font-black text-[11px] uppercase tracking-wider">Received</th>
+            <th className="px-3 py-2 text-right font-black text-[11px] uppercase tracking-wider">Outstanding</th>
+            <th className="px-3 py-2 text-left font-black text-[11px] uppercase tracking-wider">Status</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {rows.map((r: any) => (
+            <tr key={r.invoice_id} className="hover:bg-slate-50">
+              <td className="px-3 py-2 font-mono text-xs">{r.invoice_number}</td>
+              <td className="px-3 py-2">{r.patient_name}</td>
+              <td className="px-3 py-2 text-gray-500">{r.provider_name || 'Unmapped'}</td>
+              <td className="px-3 py-2 text-right">{fmt(r.sanctioned)}</td>
+              <td className="px-3 py-2 text-right">{fmt(r.received)}</td>
+              <td className="px-3 py-2 text-right font-bold text-teal-700">{fmt(r.outstanding)}</td>
+              <td className="px-3 py-2"><StatusPill status={r.status} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 function StatusPill({ status }: { status: string }) {
