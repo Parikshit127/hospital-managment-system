@@ -726,26 +726,35 @@ export async function getInsuranceClaims(filters?: {
 export async function getInsuranceStats() {
     try {
         const { db } = await requireTenantContext();
-        const [
-            totalProviders,
-            activePolicies,
-            totalClaims,
-            pendingClaims,
-            approvedTotal,
-            claimedTotal,
-        ] = await Promise.all([
+        // insurance_claims is a legacy table nothing actually writes to any more —
+        // the real claim lifecycle lives on invoices.tpa_claim_status (see
+        // getRevenueLeakage's fix above and the insurance-aging-actions.ts drift
+        // fix). Sourcing these stats from insurance_claims always read zero
+        // despite real, non-trivial TPA activity on invoices.
+        const isTpa = { OR: [{ billing_patient_type: 'tpa_insurance' }, { tpa_claim_status: { not: 'not_submitted' } }] };
+        const [totalProviders, activePolicies, totalClaims, pendingClaims, approvedAgg, tpaInvoices] = await Promise.all([
             db.insurance_providers.count({ where: { is_active: true } }),
             db.insurance_policies.count({ where: { status: 'Active' } }),
-            db.insurance_claims.count(),
-            db.insurance_claims.count({ where: { status: { in: ['Submitted', 'UnderReview'] } } }),
-            db.insurance_claims.aggregate({
-                _sum: { approved_amount: true },
-                where: { status: { in: ['Approved', 'PartiallyApproved', 'Settled'] } },
+            db.invoices.count({ where: isTpa }),
+            db.invoices.count({ where: { ...isTpa, tpa_claim_status: 'submitted' } }),
+            db.invoices.aggregate({
+                where: { ...isTpa, tpa_claim_status: { in: ['approved', 'partially_settled', 'settled'] } },
+                _sum: { tpa_approved_amount: true },
             }),
-            db.insurance_claims.aggregate({
-                _sum: { claimed_amount: true },
+            db.invoices.findMany({
+                where: isTpa,
+                select: { tpa_payable: true, tpa_settled_amount: true, tpa_disallowed_amount: true, tpa_tds_amount: true, net_amount: true },
             }),
         ]);
+
+        // "Claimed total" = gross amount claimed before approval/disallowance,
+        // reconstructed the same way Bill-Wise Sanction does (payable + settled +
+        // disallowed + tds; falls back to net_amount for bills nothing's been
+        // processed on yet).
+        const claimedTotal = tpaInvoices.reduce((sum: number, inv: any) => {
+            const claim = Number(inv.tpa_payable || 0) + Number(inv.tpa_settled_amount || 0) + Number(inv.tpa_disallowed_amount || 0) + Number(inv.tpa_tds_amount || 0);
+            return sum + (claim || Number(inv.net_amount || 0));
+        }, 0);
 
         return {
             success: true,
@@ -754,8 +763,8 @@ export async function getInsuranceStats() {
                 activePolicies,
                 totalClaims,
                 pendingClaims,
-                approvedTotal: Number(approvedTotal._sum.approved_amount || 0),
-                claimedTotal: Number(claimedTotal._sum.claimed_amount || 0),
+                approvedTotal: Number(approvedAgg._sum.tpa_approved_amount || 0),
+                claimedTotal,
             },
         };
     } catch (error: any) {
@@ -879,25 +888,32 @@ export async function getProviderPerformance() {
         });
 
         const results = await Promise.all(providers.map(async (prov: any) => {
-            const claims = await db.insurance_claims.findMany({
-                where: { policy: { provider_id: prov.id } },
+            // Same drift fix as getInsuranceStats: the real claim lifecycle lives on
+            // invoices.tpa_claim_status, not the legacy (unused) insurance_claims table.
+            const invoicesForProvider = await db.invoices.findMany({
+                where: {
+                    tpa_provider_id: prov.id,
+                    OR: [{ billing_patient_type: 'tpa_insurance' }, { tpa_claim_status: { not: 'not_submitted' } }],
+                },
+                select: { tpa_claim_status: true, tpa_settled_amount: true, tpa_approved_at: true, tpa_settled_at: true },
             });
-            const total = claims.length;
-            const approved = claims.filter((c: any) => ['Approved', 'PartiallyApproved', 'Settled'].includes(c.status)).length;
-            const rejected = claims.filter((c: any) => c.status === 'Rejected').length;
-            const settled = claims.filter((c: any) => c.status === 'Settled');
+            const total = invoicesForProvider.length;
+            const approved = invoicesForProvider.filter((c: any) => ['approved', 'partially_settled', 'settled'].includes(c.tpa_claim_status)).length;
+            const rejected = invoicesForProvider.filter((c: any) => c.tpa_claim_status === 'rejected').length;
+            const settled = invoicesForProvider.filter((c: any) => c.tpa_claim_status === 'settled');
 
-            const totalSettled = settled.reduce((s: number, c: any) => s + Number(c.approved_amount || 0), 0);
+            const totalSettled = settled.reduce((s: number, c: any) => s + Number(c.tpa_settled_amount || 0), 0);
 
-            // Average days to settle
+            // Average days from TPA approval to full settlement. Invoices don't carry
+            // a distinct "submitted at" (only tpa_approved_at / tpa_settled_at), and
+            // approval-to-settlement is arguably the more actionable number anyway —
+            // it's when the TPA itself started the clock on paying out.
             let avgSettlementDays = 0;
-            if (settled.length > 0) {
-                const totalDays = settled.reduce((s: number, c: any) => {
-                    const submitted = new Date(c.submitted_at || c.created_at);
-                    const settledAt = new Date(c.settled_at || c.reviewed_at || new Date());
-                    return s + Math.floor((settledAt.getTime() - submitted.getTime()) / 86400000);
-                }, 0);
-                avgSettlementDays = Math.round(totalDays / settled.length);
+            const withDates = settled.filter((c: any) => c.tpa_approved_at && c.tpa_settled_at);
+            if (withDates.length > 0) {
+                const totalDays = withDates.reduce((s: number, c: any) =>
+                    s + Math.floor((new Date(c.tpa_settled_at).getTime() - new Date(c.tpa_approved_at).getTime()) / 86400000), 0);
+                avgSettlementDays = Math.round(totalDays / withDates.length);
             }
 
             return {
