@@ -101,6 +101,7 @@ const serviceMasterColumns: ImportColumn[] = [
     { name: 'hsn_sac_code', required: false, type: 'string', description: 'HSN/SAC code for GST', example: '9993' },
     { name: 'tax_rate', required: false, type: 'number', description: 'Tax rate (%)', example: '5' },
     { name: 'is_active', required: false, type: 'boolean', description: 'Active status', example: 'true' },
+    { name: 'requires_rendered_by', required: false, type: 'boolean', description: 'Doctor must be selected per bill line item', example: 'false' },
 ];
 
 const labTestMasterColumns: ImportColumn[] = [

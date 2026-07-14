@@ -67,6 +67,7 @@ export interface ServiceRow {
   service_code: string; service_name: string;
   service_category: string; default_rate: number;
   hsn_sac_code?: string; tax_rate: number; is_active: boolean;
+  requires_rendered_by: boolean;
 }
 
 export interface LabTestRow {
@@ -161,6 +162,7 @@ export function validateServiceRows(rows: Record<string, unknown>[]): ValidateRe
       hsn_sac_code: optStr(r.hsn_sac_code),
       tax_rate: optNum(r.tax_rate) ?? 0,
       is_active: parseBool(r.is_active),
+      requires_rendered_by: parseBool(r.requires_rendered_by),
     });
   }
   return { valid, errors };

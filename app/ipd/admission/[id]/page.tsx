@@ -29,6 +29,7 @@ import {
     ensureIPDRoomChargesAccrued,
     ensureIPDDemoMasterData,
 } from '@/app/actions/ipd-billing-helpers';
+import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 import { listPackages } from '@/app/actions/service-master-actions';
 import { useToast } from '@/app/components/ui/Toast';
 import {
@@ -80,6 +81,11 @@ export default function AdmissionDetailPage() {
     const [showCatalogResults, setShowCatalogResults] = useState(false);
     const [catalogLoading, setCatalogLoading] = useState(false);
     const [demoSeeded, setDemoSeeded] = useState(false);
+    // Rendered-by doctor attribution (only applies to IpdServiceMaster items with requires_rendered_by)
+    const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+    const [requiresRenderedBy, setRequiresRenderedBy] = useState(false);
+    const [renderedByDoctorId, setRenderedByDoctorId] = useState('');
+    const [renderedByDoctors, setRenderedByDoctors] = useState<any[]>([]);
 
     // Nursing task
     const [taskType, setTaskType] = useState('Vitals');
@@ -330,6 +336,14 @@ export default function AdmissionDetailPage() {
         }, 200);
         return () => clearTimeout(handle);
     }, [catalogQuery, activeTab]);
+
+    // Doctor list for the "Rendered By" dropdown — loaded once, lazily, on first billing visit.
+    useEffect(() => {
+        if (activeTab !== 'billing' || renderedByDoctors.length > 0) return;
+        getDoctorsForDropdown().then(res => {
+            if (res.success) setRenderedByDoctors(res.data as any[]);
+        });
+    }, [activeTab, renderedByDoctors.length]);
 
     useEffect(() => {
         if (activeTab === 'vitals' && !vitalsLoaded && params.id) {
@@ -643,15 +657,18 @@ export default function AdmissionDetailPage() {
         }
 
         if (!chargeDesc.trim() || !chargeRate) { toast.error('Fill description and rate'); return; }
+        if (requiresRenderedBy && !renderedByDoctorId) { toast.error('Select the doctor who rendered this service'); return; }
         setPostingCharge(true);
         const res = await postChargeToIpdBill({
             admission_id: data.admission_id,
             source_module: 'manual',
+            service_id: selectedServiceId || undefined,
             description: chargeDesc,
             quantity: Number(chargeQty) || 1,
             unit_price: Number(chargeRate),
             service_category: chargeCategory,
             posted_at: chargeDateTime ? new Date(chargeDateTime) : undefined,
+            rendered_by_doctor_id: renderedByDoctorId || undefined,
             disposition_override: pkgUtil?.status === 'active' && chargeDisposition !== 'auto'
                 ? chargeDisposition
                 : undefined,
@@ -666,6 +683,7 @@ export default function AdmissionDetailPage() {
                     : 'Charge posted');
             setChargeDesc(''); setChargeQty('1'); setChargeRate(''); setChargeCategory('Miscellaneous'); setChargeDateTime('');
             setChargeDisposition('auto');
+            setSelectedServiceId(null); setRequiresRenderedBy(false); setRenderedByDoctorId('');
             setBill(null); // reset bill cache so it reloads
             loadBill();
         } else {
@@ -2055,6 +2073,11 @@ export default function AdmissionDetailPage() {
                                                                             {item.quantity} × ₹{item.unit_price.toLocaleString()}
                                                                             {Number(item.discount) > 0 && <span className="text-emerald-600"> − ₹{Number(item.discount).toLocaleString()} disc</span>}
                                                                         </p>
+                                                                        {item.rendered_by_doctor_id && (
+                                                                            <p className="text-[10px] text-teal-700 font-bold mt-0.5">
+                                                                                Rendered by: {renderedByDoctors.find((d: any) => d.id === item.rendered_by_doctor_id)?.name || item.rendered_by_doctor_id}
+                                                                            </p>
+                                                                        )}
                                                                     </div>
                                                                     <p className="font-black text-gray-900 ml-4">₹{item.net_price.toLocaleString()}</p>
                                                                     {data.status === 'Admitted' && (
@@ -2210,11 +2233,11 @@ export default function AdmissionDetailPage() {
                                                     <Plus className="h-3.5 w-3.5" /> Post Manual Charge
                                                 </h4>
                                                 <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
-                                                    <button type="button" onClick={() => { setChargeMode('service'); setChargeDesc(''); setChargeRate(''); setCatalogQuery(''); }}
+                                                    <button type="button" onClick={() => { setChargeMode('service'); setChargeDesc(''); setChargeRate(''); setCatalogQuery(''); setSelectedServiceId(null); setRequiresRenderedBy(false); setRenderedByDoctorId(''); }}
                                                         className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${chargeMode === 'service' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-800'}`}>
                                                         Service
                                                     </button>
-                                                    <button type="button" onClick={() => { setChargeMode('package'); setChargeDesc(''); setChargeRate(''); setPkgSearch(''); setSelectedPkgId(null); }}
+                                                    <button type="button" onClick={() => { setChargeMode('package'); setChargeDesc(''); setChargeRate(''); setPkgSearch(''); setSelectedPkgId(null); setSelectedServiceId(null); setRequiresRenderedBy(false); setRenderedByDoctorId(''); }}
                                                         className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${chargeMode === 'package' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-800'}`}>
                                                         Package
                                                     </button>
@@ -2325,6 +2348,9 @@ export default function AdmissionDetailPage() {
                                                                     setChargeCategory(s.service_category || s.category || 'Miscellaneous');
                                                                     setCatalogQuery('');
                                                                     setShowCatalogResults(false);
+                                                                    setSelectedServiceId(s.source === 'ipd' ? String(s.service_master_id) : null);
+                                                                    setRequiresRenderedBy(!!s.requires_rendered_by);
+                                                                    if (!s.requires_rendered_by) setRenderedByDoctorId('');
                                                                 }}
                                                                 className="w-full text-left px-3 py-2 hover:bg-orange-50 border-b border-gray-100 last:border-b-0"
                                                             >
@@ -2346,10 +2372,33 @@ export default function AdmissionDetailPage() {
                                                     type="text"
                                                     required
                                                     value={chargeDesc}
-                                                    onChange={e => setChargeDesc(e.target.value)}
+                                                    onChange={e => {
+                                                        setChargeDesc(e.target.value);
+                                                        // Free-typed text is no longer tied to the picked catalog service.
+                                                        setSelectedServiceId(null); setRequiresRenderedBy(false); setRenderedByDoctorId('');
+                                                    }}
                                                     placeholder="Description"
                                                     className="col-span-2 text-xs p-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
                                                 />
+                                                {requiresRenderedBy && (
+                                                    <div className="col-span-2">
+                                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                                                            Rendered By (Doctor) <span className="text-rose-500">*</span>
+                                                        </label>
+                                                        <select
+                                                            required
+                                                            value={renderedByDoctorId}
+                                                            onChange={e => setRenderedByDoctorId(e.target.value)}
+                                                            className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                                        >
+                                                            <option value="">Select doctor…</option>
+                                                            {renderedByDoctors.map((d: any) => (
+                                                                <option key={d.id} value={d.id}>{d.name}{d.specialty ? ` — ${d.specialty}` : ''}</option>
+                                                            ))}
+                                                        </select>
+                                                        <p className="text-[10px] text-gray-400 mt-1">This service requires attributing a rendering doctor for commission/invoicing.</p>
+                                                    </div>
+                                                )}
                                                 <input
                                                     type="number"
                                                     required

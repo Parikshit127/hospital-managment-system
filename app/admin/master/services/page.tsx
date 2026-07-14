@@ -27,6 +27,7 @@ const EMPTY_SERVICE = {
   service_code: '', service_name: '',
   service_category: 'OPD Consultation' as typeof SERVICE_CATEGORIES[number],
   default_rate: 0, hsn_sac_code: '', tax_rate: 0, is_active: true,
+  requires_rendered_by: false,
 };
 
 const EMPTY_LAB_TEST = {
@@ -446,16 +447,16 @@ export default function ServiceMasterPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50/80">
-                  {['Code', 'Name', 'Category', 'Rate', 'Tax%', 'Status', 'Actions'].map(h => (
+                  {['Code', 'Name', 'Category', 'Rate', 'Tax%', 'Rendered By', 'Status', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {svcLoading ? (
-                  <tr><td colSpan={7} className="text-center py-16"><Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" /></td></tr>
+                  <tr><td colSpan={8} className="text-center py-16"><Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" /></td></tr>
                 ) : svcRows.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center py-12 text-gray-400">No services found</td></tr>
+                  <tr><td colSpan={8} className="text-center py-12 text-gray-400">No services found</td></tr>
                 ) : svcRows.map(r => (
                   <tr key={r.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono text-xs text-gray-600">{r.service_code}</td>
@@ -463,6 +464,11 @@ export default function ServiceMasterPage() {
                     <td className="px-4 py-3 text-gray-600">{r.service_category}</td>
                     <td className="px-4 py-3 text-gray-600">₹{Number(r.default_rate).toFixed(2)}</td>
                     <td className="px-4 py-3 text-gray-600">{Number(r.tax_rate).toFixed(1)}%</td>
+                    <td className="px-4 py-3">
+                      {r.requires_rendered_by && (
+                        <span className="inline-flex px-2 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700">Required</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold ${r.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                         {r.is_active ? 'Active' : 'Inactive'}
@@ -542,6 +548,11 @@ export default function ServiceMasterPage() {
                       inputMode="decimal"
                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
+                  <label className="col-span-2 flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={!!svcForm.requires_rendered_by}
+                      onChange={e => setSvcForm((p: any) => ({ ...p, requires_rendered_by: e.target.checked }))} />
+                    Requires Rendered By (doctor must be selected per bill line item)
+                  </label>
                   <label className="col-span-2 flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={!!svcForm.is_active}
                       onChange={e => setSvcForm((p: any) => ({ ...p, is_active: e.target.checked }))} />

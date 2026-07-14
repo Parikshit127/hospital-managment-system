@@ -403,6 +403,7 @@ export default function ReceptionDashboard() {
         Patient: a.patient?.full_name ?? '',
         UHID: a.patient?.patient_id ?? '',
         Doctor: a.doctor_name ?? '',
+        Category: a.patient?.patient_type === 'tpa_insurance' ? 'TPA' : a.patient?.patient_type === 'corporate' ? 'Corporate' : 'Cash',
         Ward: a.wardName || a.ward?.ward_name || a.bed?.wards?.ward_name || '',
         Bed: a.bed?.bed_id ?? '',
         Diagnosis: a.diagnosis ?? '',
@@ -442,6 +443,12 @@ export default function ReceptionDashboard() {
             case 'patient_name': return a.patient?.full_name || '';
             case 'uhid': return a.patient?.patient_id || '';
             case 'doctor': return a.doctor_name || '';
+            case 'category': {
+                const pt = a.patient?.patient_type;
+                if (pt === 'tpa_insurance') return 'TPA';
+                if (pt === 'corporate') return 'Corporate';
+                return pt && pt !== 'cash' ? pt : 'Cash';
+            }
             case 'ward': return (a.wardName || a.ward?.ward_name || a.bed?.wards?.ward_name || '');
             case 'diagnosis': return a.diagnosis || '';
             case 'days': return String(a.daysAdmitted ?? '');
@@ -1094,21 +1101,22 @@ export default function ReceptionDashboard() {
                 <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm table-fixed">
-                            {/* Fixed proportional widths so all 10 columns fit the
+                            {/* Fixed proportional widths so all 11 columns fit the
                                 viewport without horizontal scroll. Order: Admission ID,
-                                Patient Name, UHID, Doctor, Ward/Bed, Diagnosis, Days,
-                                Balance, Status, Actions. Sum = 100%. No whitespace/
+                                Patient Name, UHID, Doctor, Category, Ward/Bed, Diagnosis,
+                                Days, Balance, Status, Actions. Sum = 100%. No whitespace/
                                 comments allowed directly inside <colgroup>. */}
                             <colgroup>
-                                <col style={{ width: '11%' }} />
-                                <col style={{ width: '13%' }} />
-                                <col style={{ width: '9%' }} />
-                                <col style={{ width: '11%' }} />
-                                <col style={{ width: '11%' }} />
                                 <col style={{ width: '10%' }} />
+                                <col style={{ width: '12%' }} />
+                                <col style={{ width: '8%' }} />
+                                <col style={{ width: '10%' }} />
+                                <col style={{ width: '8%' }} />
+                                <col style={{ width: '10%' }} />
+                                <col style={{ width: '9%' }} />
+                                <col style={{ width: '6%' }} />
+                                <col style={{ width: '8%' }} />
                                 <col style={{ width: '7%' }} />
-                                <col style={{ width: '8%' }} />
-                                <col style={{ width: '8%' }} />
                                 <col style={{ width: '12%' }} />
                             </colgroup>
                             <thead>
@@ -1118,6 +1126,7 @@ export default function ReceptionDashboard() {
                                         { label: 'Patient Name', key: 'patient_name', type: 'filter' },
                                         { label: 'UHID', key: 'uhid', type: 'filter' },
                                         { label: 'Doctor', key: 'doctor', type: 'filter' },
+                                        { label: 'Category', key: 'category', type: 'filter' },
                                         { label: 'Ward / Bed', key: 'ward', type: 'filter' },
                                         { label: 'Diagnosis', key: '', type: 'plain' },
                                         { label: 'Days', key: '', type: 'plain' },
@@ -1254,14 +1263,14 @@ export default function ReceptionDashboard() {
                             <tbody className="divide-y divide-gray-100">
                                 {ipdLoading ? (
                                     <tr>
-                                        <td colSpan={10} className="text-center py-16">
+                                        <td colSpan={11} className="text-center py-16">
                                             <Loader2 className="h-6 w-6 animate-spin text-emerald-500 mx-auto" />
                                             <p className="text-xs text-gray-400 mt-2">Loading admissions...</p>
                                         </td>
                                     </tr>
                                 ) : ipdFiltered.length === 0 ? (
                                     <tr>
-                                        <td colSpan={10} className="text-center py-16">
+                                        <td colSpan={11} className="text-center py-16">
                                             <div className="flex flex-col items-center gap-2">
                                                 <Bed className="h-8 w-8 text-gray-200" />
                                                 <p className="text-sm font-medium text-gray-400">No admissions found</p>
@@ -1305,6 +1314,19 @@ export default function ReceptionDashboard() {
                                                 <span className="text-xs text-gray-700 break-words">
                                                     {admission.doctor_name || '—'}
                                                 </span>
+                                            </td>
+                                            <td className="px-2.5 py-3 align-top">
+                                                {admission.patient?.patient_type && admission.patient.patient_type !== 'cash' ? (
+                                                    <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full ${
+                                                        admission.patient.patient_type === 'tpa_insurance' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                                        admission.patient.patient_type === 'corporate' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                                                        'bg-gray-100 text-gray-600'
+                                                    }`}>
+                                                        {admission.patient.patient_type === 'tpa_insurance' ? 'TPA' : admission.patient.patient_type === 'corporate' ? 'Corporate' : admission.patient.patient_type}
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Cash</span>
+                                                )}
                                             </td>
                                             <td className="px-2.5 py-3 align-top">
                                                 <p className="text-xs font-medium text-gray-800 break-words">{wardName}</p>

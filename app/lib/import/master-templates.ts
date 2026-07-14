@@ -15,6 +15,7 @@ const SAMPLE_ROWS: Record<MasterImportType, Record<string, string>> = {
   service_master: {
     service_code: 'SVC-001', service_name: 'ICU Bed (General)', service_category: 'ICU',
     default_rate: '3500', hsn_sac_code: '9993', tax_rate: '5', is_active: 'true',
+    requires_rendered_by: 'false',
   },
   lab_test_master: {
     test_name: 'Complete Blood Count', price: '350', category: 'Haematology',

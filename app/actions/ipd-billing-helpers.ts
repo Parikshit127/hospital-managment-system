@@ -148,19 +148,21 @@ export async function getIPDServiceCatalog(
                 id: s.id, item_name: s.item_name, item_code: s.item_code || '',
                 default_price: Number(s.default_price),
                 service_category: s.service_category || s.category || 'Services',
-                category: s.category, source: 'catalog',
+                category: s.category, source: 'catalog', requires_rendered_by: false,
             })),
             ...labItems.map((s: any) => ({
                 id: `lab-${s.id}`, item_name: s.test_name, item_code: s.test_code || '',
                 default_price: Number(s.price),
                 service_category: s.category || 'Laboratory',
-                category: 'Laboratory', source: 'lab',
+                category: 'Laboratory', source: 'lab', requires_rendered_by: false,
             })),
             ...ipdItems.map((s: any) => ({
                 id: `ipd-${s.id}`, item_name: s.service_name, item_code: s.service_code || '',
                 default_price: Number(s.default_rate),
                 service_category: s.service_category || 'IPD Services',
                 category: s.service_category, source: 'ipd',
+                requires_rendered_by: !!s.requires_rendered_by,
+                service_master_id: s.id,
             })),
         ].slice(0, limit);
 

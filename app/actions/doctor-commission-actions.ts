@@ -248,8 +248,23 @@ export async function getDoctorCommissionDetail(doctorId: string) {
             include: { service_rates: true },
         });
 
-        const bills = await db.invoices.findMany({
+        const commissions = await (db as any).doctorCommission.findMany({
             where: { organizationId, doctor_id: doctorId },
+            orderBy: { accrued_at: 'desc' },
+        });
+        const commissionByInvoice = new Map<number, any>(commissions.map((c: any) => [c.invoice_id, c]));
+
+        // Bills where this doctor is either the bill-level attending doctor, OR
+        // earned commission via a rendered-by line item on someone else's bill.
+        const commissionInvoiceIds = commissions.map((c: any) => c.invoice_id);
+        const bills = await db.invoices.findMany({
+            where: {
+                organizationId,
+                OR: [
+                    { doctor_id: doctorId },
+                    ...(commissionInvoiceIds.length ? [{ id: { in: commissionInvoiceIds } }] : []),
+                ],
+            },
             select: {
                 id: true,
                 invoice_number: true,
@@ -263,12 +278,6 @@ export async function getDoctorCommissionDetail(doctorId: string) {
             },
             orderBy: { created_at: 'desc' },
         });
-
-        const commissions = await (db as any).doctorCommission.findMany({
-            where: { organizationId, doctor_id: doctorId },
-            orderBy: { accrued_at: 'desc' },
-        });
-        const commissionByInvoice = new Map<number, any>(commissions.map((c: any) => [c.invoice_id, c]));
 
         const statements = await (db as any).doctorPayoutStatement.findMany({
             where: { organizationId, doctor_id: doctorId },

@@ -14,9 +14,6 @@ import {
     ADMISSION_PACKAGE_STATUS,
     PACKAGE_SERVICE_CATEGORY,
     LEGACY_PACKAGE_ADJUSTMENT_CATEGORY,
-    PACKAGE_ABSORBED_EXPENSE_CATEGORY,
-    PACKAGE_ABSORBED_EXPENSE_CODE,
-    packageAbsorbExpenseRef,
     parseExclusions,
     matchExclusion,
     isPlainServiceItem,
@@ -44,11 +41,6 @@ function generateEstimateNumber() {
 // (see IPD_PACKAGE_BILLING_DESIGN.md)
 // ============================================
 
-function generatePackageExpenseNumber() {
-    const rand = Math.random().toString(36).slice(2, 5).toUpperCase();
-    return `EXP-PKG-${String(Date.now()).slice(-8)}-${rand}`;
-}
-
 /** The admission's currently active (non-broken, non-closed) package, if any. */
 async function getActiveAdmissionPackage(client: any, admissionId: string) {
     return client.ipdAdmissionPackage.findFirst({
@@ -56,92 +48,6 @@ async function getActiveAdmissionPackage(client: any, admissionId: string) {
         include: { package: true },
         orderBy: { created_at: 'desc' },
     });
-}
-
-/**
- * Rebuild the rolling "Package Absorbed Cost" expense for an admission package
- * from the consumption ledger. Idempotent; safe to call after every change.
- * Runs on the provided client so it can participate in a transaction.
- */
-async function upsertPackageAbsorbedExpenseTx(
-    tx: any,
-    organizationId: string,
-    admissionId: string,
-    admPkg: { id: number; package?: { package_name?: string } | null },
-) {
-    const consumed = await tx.ipdChargePosting.findMany({
-        where: { admission_package_id: admPkg.id, disposition: CHARGE_DISPOSITION.PACKAGE_CONSUMED },
-    });
-
-    const total = roundMoney(consumed.reduce((s: number, p: any) => s + Number(p.amount), 0));
-    const byCategory: Record<string, number> = {};
-    for (const p of consumed) {
-        const cat = p.service_category || p.source_module || 'Other';
-        byCategory[cat] = roundMoney((byCategory[cat] || 0) + Number(p.amount));
-    }
-
-    const referenceNo = packageAbsorbExpenseRef(admissionId);
-    const existing = await tx.expense.findFirst({
-        where: { organizationId, reference_no: referenceNo },
-    });
-
-    if (total <= 0) {
-        if (existing) {
-            await tx.expense.delete({ where: { id: existing.id } });
-        }
-        await tx.ipdAdmissionPackage.update({
-            where: { id: admPkg.id },
-            data: { expense_id: null },
-        });
-        return null;
-    }
-
-    let category = await tx.expenseCategory.findFirst({
-        where: { organizationId, name: PACKAGE_ABSORBED_EXPENSE_CATEGORY },
-    });
-    if (!category) {
-        category = await tx.expenseCategory.create({
-            data: { name: PACKAGE_ABSORBED_EXPENSE_CATEGORY, code: PACKAGE_ABSORBED_EXPENSE_CODE, organizationId },
-        });
-    }
-
-    const description = `Package absorbed cost — ${admPkg.package?.package_name || 'Package'} (Admission ${admissionId})`;
-    const notes = JSON.stringify({
-        type: 'package_absorbed_cost',
-        admission_id: admissionId,
-        package_name: admPkg.package?.package_name || null,
-        breakdown: byCategory,
-    });
-
-    let expenseId: number;
-    if (existing) {
-        await tx.expense.update({
-            where: { id: existing.id },
-            data: { amount: total, total_amount: total, description, notes },
-        });
-        expenseId = existing.id;
-    } else {
-        const created = await tx.expense.create({
-            data: {
-                expense_number: generatePackageExpenseNumber(),
-                category_id: category.id,
-                description,
-                amount: total,
-                total_amount: total,
-                status: 'Approved',
-                reference_no: referenceNo,
-                notes,
-                organizationId,
-            },
-        });
-        expenseId = created.id;
-    }
-
-    await tx.ipdAdmissionPackage.update({
-        where: { id: admPkg.id },
-        data: { expense_id: expenseId },
-    });
-    return expenseId;
 }
 
 /** Pre-mutation snapshot so any package migration on an invoice is fully auditable. */
@@ -599,6 +505,8 @@ export async function postChargeToIpdBill(data: {
     service_category?: string;
     posted_by?: string;
     posted_at?: Date;
+    /** Doctor who rendered this specific service — required when the selected service's requires_rendered_by is set. */
+    rendered_by_doctor_id?: string;
     /**
      * Two-ledger package billing: explicit routing chosen by the user.
      * Omit for automatic resolution (exclusion-aware). Ignored when the
@@ -642,6 +550,11 @@ export async function postChargeToIpdBill(data: {
         const serviceCategory = masterService ? masterService.service_category : (data.service_category || null);
         const hsnSacCode = masterService ? (masterService.hsn_sac_code || null) : (data.hsn_sac_code || null);
         const refId = data.service_id || data.source_ref_id || null;
+
+        if (masterService?.requires_rendered_by && !data.rendered_by_doctor_id) {
+            return { success: false, error: `"${masterService.service_name}" requires a rendering doctor to be selected.` };
+        }
+        const renderedByDoctorId = data.rendered_by_doctor_id || null;
 
         const isManual = data.source_module === 'manual' || data.source_module === 'billing';
         const isPharm = serviceCategory?.toLowerCase() === 'pharmacy' || data.service_category?.toLowerCase() === 'pharmacy';
@@ -705,9 +618,9 @@ export async function postChargeToIpdBill(data: {
                         quantity: data.quantity,
                         unit_price: unitPrice,
                         tax_rate: taxRate,
+                        rendered_by_doctor_id: renderedByDoctorId,
                     },
                 });
-                await upsertPackageAbsorbedExpenseTx(tx, organizationId, data.admission_id, activePkg);
                 return p;
             });
 
@@ -770,12 +683,25 @@ export async function postChargeToIpdBill(data: {
                 service_category: serviceCategory,
                 ref_id: refId,
                 organizationId,
+                rendered_by_doctor_id: renderedByDoctorId,
                 ...(data.posted_at ? { created_at: data.posted_at } : {}),
             },
         });
 
         // Recalculate invoice totals with GST
         await recalculateInvoiceWithGst(invoice.id);
+
+        // A rendered-by charge changes who's owed commission on this bill, even
+        // though paid_amount hasn't moved yet — recompute now so the split is
+        // correct as soon as (or if already) money is collected.
+        if (renderedByDoctorId) {
+            try {
+                const { recomputeInvoiceDoctorCommission } = await import('@/app/lib/doctor-commission');
+                await recomputeInvoiceDoctorCommission(db, organizationId, invoice.id);
+            } catch (e) {
+                console.error('doctor commission recompute failed:', e);
+            }
+        }
 
         // Create charge posting audit
         const now = new Date();
@@ -798,6 +724,7 @@ export async function postChargeToIpdBill(data: {
                 quantity: data.quantity,
                 unit_price: unitPrice,
                 tax_rate: taxRate,
+                rendered_by_doctor_id: renderedByDoctorId,
             },
         });
 
@@ -934,7 +861,6 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
                     tx, organizationId, session, invoice, admissionId, admPkgFull,
                 );
                 await recalculateInvoiceWithGstTx(tx, invoice.id);
-                await upsertPackageAbsorbedExpenseTx(tx, organizationId, admissionId, admPkgFull);
                 return result;
             });
         }
@@ -1072,9 +998,6 @@ export async function breakOpenPackage(admissionPackageId: number) {
             await tx.invoice_items.deleteMany({
                 where: { invoice_id: invoice.id, service_category: LEGACY_PACKAGE_ADJUSTMENT_CATEGORY },
             });
-
-            // 5) Dissolve the rolling absorbed-cost expense (no consumption left).
-            await upsertPackageAbsorbedExpenseTx(tx, organizationId, admPkg.admission_id, admPkg);
 
             await tx.ipdAdmissionPackage.update({
                 where: { id: admPkg.id },
@@ -1341,6 +1264,7 @@ export async function reclassifyChargeDisposition(
                         service_category: posting.service_category,
                         ref_id: posting.source_ref_id,
                         organizationId,
+                        rendered_by_doctor_id: posting.rendered_by_doctor_id,
                         created_at: posting.posted_at, // keep the original service date
                     },
                 });
@@ -1359,8 +1283,16 @@ export async function reclassifyChargeDisposition(
                 });
             }
             await recalculateInvoiceWithGstTx(tx, invoice.id);
-            await upsertPackageAbsorbedExpenseTx(tx, organizationId, posting.admission_id, admPkg);
         });
+
+        if (posting.rendered_by_doctor_id) {
+            try {
+                const { recomputeInvoiceDoctorCommission } = await import('@/app/lib/doctor-commission');
+                await recomputeInvoiceDoctorCommission(db, organizationId, invoice.id);
+            } catch (e) {
+                console.error('doctor commission recompute failed:', e);
+            }
+        }
 
         await logAudit({
             action: 'RECLASSIFY_PACKAGE_CHARGE',
@@ -1419,7 +1351,6 @@ export async function removeAbsorbedCharge(postingId: number) {
             }
             await tx.ipdChargePosting.delete({ where: { id: posting.id } });
             if (invoice) await recalculateInvoiceWithGstTx(tx, invoice.id);
-            await upsertPackageAbsorbedExpenseTx(tx, organizationId, posting.admission_id, admPkg);
         });
 
         await logAudit({
@@ -1483,7 +1414,6 @@ async function reconcilePackageBillingInternal(
             tx, organizationId, session, invoice, admissionId, admPkg,
         );
         await recalculateInvoiceWithGstTx(tx, invoice.id);
-        await upsertPackageAbsorbedExpenseTx(tx, organizationId, admissionId, admPkg);
         return migration;
     });
 

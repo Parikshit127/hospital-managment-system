@@ -1277,6 +1277,7 @@ model invoice_items {
   tax_amount       Decimal      @default(0)
   hsn_sac_code     String?
   service_category String?
+  rendered_by_doctor_id String? // User.id — doctor who performed this specific line item (commission attribution)
   organizationId   String
   created_at       DateTime     @default(now())
   invoice          invoices     @relation(fields: [invoice_id], references: [id])
@@ -2867,6 +2868,7 @@ model IpdServiceMaster {
   hsn_sac_code     String?
   tax_rate         Decimal         @default(0)
   is_active        Boolean         @default(true)
+  requires_rendered_by Boolean     @default(false)
   organizationId   String
   created_at       DateTime        @default(now())
   updated_at       DateTime        @updatedAt
@@ -2995,6 +2997,7 @@ model IpdChargePosting {
   quantity             Float    @default(1)
   unit_price           Decimal  @default(0)
   tax_rate             Decimal  @default(0)
+  rendered_by_doctor_id String? // User.id — carried into invoice_items if/when this posting is reclassified to billable
   organization         Organization         @relation(fields: [organizationId], references: [id])
   admission_package    IpdAdmissionPackage? @relation(fields: [admission_package_id], references: [id])
 
@@ -4858,7 +4861,10 @@ model DoctorCommission {
   organization Organization           @relation(fields: [organizationId], references: [id])
   statement    DoctorPayoutStatement? @relation(fields: [statement_id], references: [id])
 
-  @@unique([invoice_id])
+  // One row per doctor per bill — a bill can now pay commission to more than
+  // one doctor when some line items carry their own rendered_by_doctor_id
+  // (see invoice_items.rendered_by_doctor_id) distinct from invoices.doctor_id.
+  @@unique([invoice_id, doctor_id])
   @@index([organizationId])
   @@index([doctor_id, status])
   @@index([patient_id])

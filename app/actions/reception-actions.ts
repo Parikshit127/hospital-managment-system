@@ -255,27 +255,27 @@ export async function getReceptionStats() {
         const tz = await getOrgTimezone();
         const { start: todayStart, end: todayEnd } = getTodayRange(tz);
 
-        const [todayRegistrations, todayAppointments, pendingAppointments, completedToday, totalPatients] = await Promise.all([
+        const [todayRegistrations, appointmentsByStatus, totalPatients] = await Promise.all([
             db.oPD_REG.count({
                 where: { created_at: { gte: todayStart, lte: todayEnd } },
             }),
-            db.appointments.count({
+            db.appointments.groupBy({
+                by: ['status'],
                 where: { appointment_date: { gte: todayStart, lte: todayEnd } },
-            }),
-            db.appointments.count({
-                where: {
-                    status: { in: ['Pending', 'Scheduled', 'Checked In'] },
-                    appointment_date: { gte: todayStart, lte: todayEnd },
-                },
-            }),
-            db.appointments.count({
-                where: {
-                    status: 'Completed',
-                    appointment_date: { gte: todayStart, lte: todayEnd },
-                },
+                _count: { _all: true },
             }),
             db.oPD_REG.count(),
         ]);
+
+        const pendingStatuses = new Set(['Pending', 'Scheduled', 'Checked In']);
+        let todayAppointments = 0;
+        let pendingAppointments = 0;
+        let completedToday = 0;
+        for (const row of appointmentsByStatus) {
+            todayAppointments += row._count._all;
+            if (pendingStatuses.has(row.status)) pendingAppointments += row._count._all;
+            if (row.status === 'Completed') completedToday += row._count._all;
+        }
 
         return {
             success: true,

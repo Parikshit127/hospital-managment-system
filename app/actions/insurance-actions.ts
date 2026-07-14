@@ -57,27 +57,36 @@ export async function getInsuranceProviders() {
 export async function getPatientsByProvider(providerId: number) {
     try {
         const { db } = await requireTenantContext();
-        const policies = await db.insurance_policies.findMany({
-            where: { provider_id: providerId },
-            include: {
-                patient: {
-                    select: {
-                        patient_id: true,
-                        full_name: true,
-                        phone: true,
-                        admissions: {
-                            where: { status: 'Admitted', is_archived: false },
-                            select: { admission_id: true, admission_date: true },
-                            orderBy: { admission_date: 'desc' },
-                            take: 1,
-                        },
-                    },
-                },
+        const patientSelect = {
+            patient_id: true,
+            full_name: true,
+            phone: true,
+            admissions: {
+                where: { status: 'Admitted', is_archived: false },
+                select: { admission_id: true, admission_date: true },
+                orderBy: { admission_date: 'desc' },
+                take: 1,
             },
-            orderBy: { created_at: 'desc' },
-        });
+        };
 
-        // One entry per patient — a patient may hold multiple policies with the same TPA.
+        const [policies, billedInvoices] = await Promise.all([
+            db.insurance_policies.findMany({
+                where: { provider_id: providerId },
+                include: { patient: { select: patientSelect } },
+                orderBy: { created_at: 'desc' },
+            }),
+            // Patients billed directly to this TPA (invoices.tpa_provider_id) may not have
+            // a formal insurance_policies row — e.g. TPA selected at admission/billing time
+            // without a policy being recorded. Without this, they never show up here even
+            // though their bills are tied to this provider.
+            db.invoices.findMany({
+                where: { tpa_provider_id: providerId, is_archived: false },
+                select: { patient: { select: patientSelect } },
+                orderBy: { created_at: 'desc' },
+            }),
+        ]);
+
+        // One entry per patient — a patient may hold multiple policies / invoices with the same TPA.
         const byPatient = new Map<string, any>();
         for (const pol of policies) {
             if (!pol.patient) continue;
@@ -92,6 +101,22 @@ export async function getPatientsByProvider(providerId: number) {
                 policy_status: pol.status,
                 coverage_limit: pol.coverage_limit,
                 remaining_limit: pol.remaining_limit,
+                is_admitted: !!admission,
+            });
+        }
+        for (const inv of billedInvoices) {
+            if (!inv.patient) continue;
+            const pid = inv.patient.patient_id;
+            if (byPatient.has(pid)) continue;
+            const admission = inv.patient.admissions?.[0] || null;
+            byPatient.set(pid, {
+                patient_id: pid,
+                full_name: inv.patient.full_name,
+                phone: inv.patient.phone,
+                policy_number: null,
+                policy_status: null,
+                coverage_limit: null,
+                remaining_limit: null,
                 is_admitted: !!admission,
             });
         }
@@ -761,6 +786,11 @@ export async function getRevenueLeakage() {
             where: {
                 patient_id: { in: insuredPatientIds },
                 status: 'Final',
+                // Only IPD (hospitalization) bills go through TPA/insurance claims here —
+                // OPD visits are self-pay/corporate and were leaking into this list because
+                // this query only checked "patient holds an active policy", not whether the
+                // bill itself was ever meant to be claimed.
+                invoice_type: 'IPD',
                 id: claimedInvoiceIds.length > 0 ? { notIn: claimedInvoiceIds } : undefined,
             },
             include: {

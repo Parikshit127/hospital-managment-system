@@ -36,6 +36,7 @@ const serviceSchema = z.object({
   hsn_sac_code: optionalText,
   tax_rate: z.number().nonnegative().default(0),
   is_active: z.boolean().default(true),
+  requires_rendered_by: z.boolean().default(false),
 });
 
 export async function listServices(opts?: { search?: string; category?: string; page?: number; limit?: number }) {

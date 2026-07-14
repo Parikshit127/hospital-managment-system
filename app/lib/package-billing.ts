@@ -34,14 +34,6 @@ export const LEGACY_PACKAGE_ADJUSTMENT_CATEGORY = 'Package Adjustment';
 /** Bill-level discount lines (settleAndDischarge) — never treated as service charges. */
 export const DISCOUNT_DEPARTMENT = 'Discount';
 
-export const PACKAGE_ABSORBED_EXPENSE_CATEGORY = 'Package Absorbed Cost';
-export const PACKAGE_ABSORBED_EXPENSE_CODE = 'PKG-ABSORB';
-
-/** Stable reference linking the rolling absorbed-cost Expense to its admission. */
-export function packageAbsorbExpenseRef(admissionId: string): string {
-    return `PKG-ABSORB-${admissionId}`;
-}
-
 export function roundMoney(n: number): number {
     return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 }
