@@ -58,6 +58,11 @@ export default function InsuranceDashboard() {
     // Provider performance
     const [providerPerf, setProviderPerf] = useState<any[]>([]);
 
+    // Recent Claims (Overview tab) provider filter
+    const [claimsProviderFilter, setClaimsProviderFilter] = useState('');
+    // Providers tab name filter
+    const [providerSearch, setProviderSearch] = useState('');
+
     const loadData = async () => {
         setLoading(true);
         try {
@@ -80,6 +85,12 @@ export default function InsuranceDashboard() {
     };
 
     useEffect(() => { loadData(); }, []);
+
+    // Re-fetch claims when the Overview tab's provider filter changes.
+    useEffect(() => {
+        getInsuranceClaims({ provider_id: claimsProviderFilter ? Number(claimsProviderFilter) : undefined })
+            .then((c: any) => { if (c.success) setClaims(c.data || []); });
+    }, [claimsProviderFilter]);
 
     const handleAddProvider = async () => {
         if (!providerForm.provider_name) return;
@@ -292,11 +303,16 @@ export default function InsuranceDashboard() {
 
                                 {/* Recent Claims */}
                                 <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
-                                    <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-                                        <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm">
+                                    <div className="p-5 border-b border-gray-200 flex items-center justify-between gap-3">
+                                        <h3 className="font-black text-gray-700 flex items-center gap-2 text-sm shrink-0">
                                             <ClipboardCheck className="h-4 w-4 text-amber-400" /> Recent Claims
                                         </h3>
-                                        <span className="text-[10px] font-black text-gray-300">{claims.length} total</span>
+                                        <select value={claimsProviderFilter} onChange={(e) => setClaimsProviderFilter(e.target.value)}
+                                            className="rounded-md border border-gray-200 px-2 py-1 text-[11px] font-bold text-gray-500">
+                                            <option value="">All payers</option>
+                                            {providers.map((p: any) => <option key={p.id} value={p.id}>{p.provider_name}</option>)}
+                                        </select>
+                                        <span className="text-[10px] font-black text-gray-300 shrink-0">{claims.length} total</span>
                                     </div>
                                     <div className="max-h-[320px] overflow-auto">
                                         {claims.length === 0 ? (
@@ -443,8 +459,20 @@ export default function InsuranceDashboard() {
 
                         {/* PROVIDERS TAB */}
                         {activeTab === 'providers' && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {providers.map((p: any) => (
+                            <div className="space-y-4">
+                                <input
+                                    type="text"
+                                    value={providerSearch}
+                                    onChange={(e) => setProviderSearch(e.target.value)}
+                                    placeholder="Search providers by name or code…"
+                                    className="w-full max-w-sm rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                />
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {providers.filter((p: any) => {
+                                    const q = providerSearch.trim().toLowerCase();
+                                    if (!q) return true;
+                                    return p.provider_name?.toLowerCase().includes(q) || p.provider_code?.toLowerCase().includes(q);
+                                }).map((p: any) => (
                                     <Link key={p.id} href={providerHref(p.id)}
                                         className="text-left bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-blue-500/40 hover:shadow-md transition-all group">
                                         <div className="flex items-center gap-3 mb-3">
@@ -474,13 +502,14 @@ export default function InsuranceDashboard() {
                                         <p className="text-xs mt-1">Click &quot;Add Provider&quot; or run seed script</p>
                                     </div>
                                 )}
+                                </div>
                             </div>
                         )}
 
                         {/* ── FINANCE / RECEIVABLES (unified TPA & Insurance) ── */}
-                        {activeTab === 'receivables' && <ReceivablesDashboard />}
+                        {activeTab === 'receivables' && <ReceivablesDashboard providers={providers} />}
                         {activeTab === 'receipts' && <InsuranceReceipts providers={providers} />}
-                        {activeTab === 'outstanding' && <OutstandingAging />}
+                        {activeTab === 'outstanding' && <OutstandingAging providers={providers} />}
                         {activeTab === 'sanction' && <BillWiseSanction providers={providers} />}
                     </>
                 )}

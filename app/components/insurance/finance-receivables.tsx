@@ -25,13 +25,14 @@ const INPUT = 'w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focu
 // ─────────────────────────────────────────────────────────────────────────────
 // RECEIVABLES DASHBOARD
 // ─────────────────────────────────────────────────────────────────────────────
-export function ReceivablesDashboard() {
+export function ReceivablesDashboard({ providers = [] }: { providers?: any[] }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [providerId, setProviderId] = useState('');
   const load = useCallback(() => {
     setLoading(true);
-    getTpaDeskDashboard().then((r: any) => { if (r?.success) setData(r.data); }).finally(() => setLoading(false));
-  }, []);
+    getTpaDeskDashboard({ provider_id: providerId ? Number(providerId) : undefined }).then((r: any) => { if (r?.success) setData(r.data); }).finally(() => setLoading(false));
+  }, [providerId]);
   useEffect(() => { load(); }, [load]);
 
   if (loading) return <Spinner />;
@@ -39,9 +40,15 @@ export function ReceivablesDashboard() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-3">
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-3">
         <h3 className="text-sm font-black text-gray-700">Receivables Desk</h3>
-        <button onClick={load} className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-700"><RefreshCw className="h-3.5 w-3.5" /> Refresh</button>
+        <div className="flex items-center gap-2">
+          <select value={providerId} onChange={(e) => setProviderId(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+            <option value="">All payers</option>
+            {providers.map((p: any) => <option key={p.id} value={p.id}>{p.provider_name}</option>)}
+          </select>
+          <button onClick={load} className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-700"><RefreshCw className="h-3.5 w-3.5" /> Refresh</button>
+        </div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiCard icon={IndianRupee} label="Total Outstanding" value={`₹${fmt(data.total_outstanding)}`} tone="teal" sub={`${data.outstanding_bills} bills`} />
@@ -59,23 +66,28 @@ export function ReceivablesDashboard() {
 // ─────────────────────────────────────────────────────────────────────────────
 // OUTSTANDING & AGING
 // ─────────────────────────────────────────────────────────────────────────────
-export function OutstandingAging() {
+export function OutstandingAging({ providers = [] }: { providers?: any[] }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [agingDays, setAgingDays] = useState(60);
+  const [providerId, setProviderId] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
-    getInsuranceOutstanding({ payer_type: 'tpa_insurance', agingDays }).then((r: any) => { if (r?.success) setData(r.data); }).finally(() => setLoading(false));
-  }, [agingDays]);
+    getInsuranceOutstanding({ payer_type: 'tpa_insurance', agingDays, provider_id: providerId ? Number(providerId) : undefined }).then((r: any) => { if (r?.success) setData(r.data); }).finally(() => setLoading(false));
+  }, [agingDays, providerId]);
   useEffect(() => { load(); }, [load]);
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-3">
+      <div className="flex flex-wrap items-center gap-3 mb-3">
         <span className="text-sm font-bold text-gray-600">Insurance Outstanding — aging threshold</span>
         <input type="number" value={agingDays} onChange={(e) => setAgingDays(Number(e.target.value) || 60)} className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm" />
         <span className="text-sm text-gray-600">days</span>
+        <select value={providerId} onChange={(e) => setProviderId(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+          <option value="">All payers</option>
+          {providers.map((p: any) => <option key={p.id} value={p.id}>{p.provider_name}</option>)}
+        </select>
         <button onClick={load} className="ml-auto flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-700"><RefreshCw className="h-3.5 w-3.5" /> Refresh</button>
       </div>
       {loading ? <Spinner /> : !data ? <Empty msg="No data" /> : (
@@ -130,13 +142,17 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
   const [allocFor, setAllocFor] = useState<any>(null);
+  const [providerId, setProviderId] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
-    Promise.all([getInsuranceReceiptSummary(), listInsuranceReceipts({ payer_type: 'tpa_insurance' })])
+    Promise.all([
+      getInsuranceReceiptSummary(),
+      listInsuranceReceipts({ payer_type: 'tpa_insurance', provider_id: providerId ? Number(providerId) : undefined }),
+    ])
       .then(([s, r]: any[]) => { if (s?.success) setSummary(s.data); if (r?.success) setReceipts(r.data); })
       .finally(() => setLoading(false));
-  }, []);
+  }, [providerId]);
   useEffect(() => { load(); }, [load]);
 
   if (loading) return <Spinner />;
@@ -180,7 +196,13 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
       </div>
 
       <div>
-        <h3 className="text-sm font-black text-gray-700 mb-2">Recent Receipts</h3>
+        <div className="flex items-center gap-3 mb-2">
+          <h3 className="text-sm font-black text-gray-700">Recent Receipts</h3>
+          <select value={providerId} onChange={(e) => setProviderId(e.target.value)} className="ml-auto rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+            <option value="">All payers</option>
+            {providers.map((p: any) => <option key={p.id} value={p.id}>{p.provider_name}</option>)}
+          </select>
+        </div>
         <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-gray-600">
@@ -426,12 +448,19 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
   const [loading, setLoading] = useState(true);
   const [providerId, setProviderId] = useState('');
   const [search, setSearch] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
-    getBillWiseSanction({ provider_id: providerId ? Number(providerId) : undefined, search: search || undefined })
+    getBillWiseSanction({
+      provider_id: providerId ? Number(providerId) : undefined,
+      search: search || undefined,
+      from: from || undefined,
+      to: to || undefined,
+    })
       .then((r: any) => { if (r?.success) setData(r.data); }).finally(() => setLoading(false));
-  }, [providerId, search]);
+  }, [providerId, search, from, to]);
   useEffect(() => { load(); }, [load]);
 
   return (
@@ -442,6 +471,9 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
           {providers.map((p: any) => <option key={p.id} value={p.id}>{p.provider_name}</option>)}
         </select>
         <input placeholder="Search bill / claim #" value={search} onChange={(e) => setSearch(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+        <span className="text-xs text-gray-400">to</span>
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
         <button onClick={load} className="ml-auto flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-700"><RefreshCw className="h-3.5 w-3.5" /> Refresh</button>
       </div>
       {loading ? <Spinner /> : !data ? <Empty msg="No data" /> : (
