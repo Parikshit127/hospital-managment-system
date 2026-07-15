@@ -7,9 +7,11 @@ import {
   listServices, createService, updateService, deactivateService, deleteService,
   listLabTests, createLabTest, updateLabTest, deleteLabTest,
   listPackages, createPackage, updatePackage, deletePackage,
+  listPackageTpaRates, bulkUpsertPackageTpaRates,
   listRadiologyImaging, createRadiologyImaging, updateRadiologyImaging, deleteRadiologyImaging,
   exportRadiologyImaging,
 } from '@/app/actions/service-master-actions';
+import { getInsuranceProviders } from '@/app/actions/insurance-actions';
 import { ensureIPDDemoMasterData } from '@/app/actions/ipd-billing-helpers';
 import MasterImportButton from '@/app/components/master/MasterImportButton';
 import MasterExportButton from '@/app/components/master/MasterExportButton';
@@ -88,6 +90,15 @@ export default function ServiceMasterPage() {
   const [pkgEditingId, setPkgEditingId] = useState<number | null>(null);
   const [pkgForm, setPkgForm] = useState<any>(EMPTY_PACKAGE);
   const [pkgSubmitting, setPkgSubmitting] = useState(false);
+
+  // ---- TPA Rates sub-view state (nested inside Packages tab) ----
+  const [pkgView, setPkgView] = useState<'list' | 'tpa_rates'>('list');
+  const [tpaProviders, setTpaProviders] = useState<{ id: number; provider_name: string; provider_code?: string | null }[]>([]);
+  const [tpaRateProviderId, setTpaRateProviderId] = useState<number | ''>('');
+  const [tpaRateRows, setTpaRateRows] = useState<{ package_id: number; package_code: string; package_name: string; total_amount: number; tpa_amount: number | null }[]>([]);
+  const [tpaRateEdits, setTpaRateEdits] = useState<Record<number, string>>({}); // package_id -> raw input value
+  const [tpaRateLoading, setTpaRateLoading] = useState(false);
+  const [tpaRateSaving, setTpaRateSaving] = useState(false);
 
   // ---- Radiology/Imaging state ----
   const [radRows, setRadRows] = useState<any[]>([]);
@@ -182,6 +193,30 @@ export default function ServiceMasterPage() {
   useEffect(() => { loadLabTests(); }, [loadLabTests]);
   useEffect(() => { loadPackages(); }, [loadPackages]);
   useEffect(() => { loadRadiology(); }, [loadRadiology]);
+
+  useEffect(() => {
+    getInsuranceProviders().then(res => {
+      if (res.success) setTpaProviders((res.data as any[]) || []);
+    });
+  }, []);
+
+  const loadTpaRates = useCallback(async (providerId: number) => {
+    setTpaRateLoading(true);
+    const res = await listPackageTpaRates(providerId);
+    if (res.success) {
+      setTpaRateRows((res.data as any[]) || []);
+      setTpaRateEdits({});
+    } else {
+      toast.error(res.error || 'Failed to load TPA rates');
+    }
+    setTpaRateLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (pkgView === 'tpa_rates' && tpaRateProviderId !== '') {
+      loadTpaRates(Number(tpaRateProviderId));
+    }
+  }, [pkgView, tpaRateProviderId, loadTpaRates]);
 
   useEffect(() => {
     const t = setTimeout(() => { setSvcSearch(svcSearchInput); setSvcPage(1); }, 350);
@@ -342,6 +377,35 @@ export default function ServiceMasterPage() {
       toast.error(err?.message || 'Network error — please check server status');
     } finally {
       setPkgSubmitting(false);
+    }
+  };
+
+  // ---- TPA Rates handlers ----
+  const tpaRateEditCount = Object.keys(tpaRateEdits).length;
+
+  const setTpaRateEdit = (packageId: number, raw: string) => {
+    setTpaRateEdits(prev => ({ ...prev, [packageId]: raw }));
+  };
+
+  const saveTpaRates = async () => {
+    if (tpaRateProviderId === '' || tpaRateEditCount === 0) return;
+    setTpaRateSaving(true);
+    try {
+      const rates = Object.entries(tpaRateEdits).map(([packageIdStr, raw]) => ({
+        package_id: Number(packageIdStr),
+        tpa_amount: raw.trim() === '' ? null : Number(raw),
+      }));
+      const res = await bulkUpsertPackageTpaRates(Number(tpaRateProviderId), rates);
+      if (res.success) {
+        toast.success(`Saved ${(res.data as any).upserted} rate(s)`);
+        await loadTpaRates(Number(tpaRateProviderId));
+      } else {
+        toast.error(res.error || 'Failed to save TPA rates');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Network error — please check server status');
+    } finally {
+      setTpaRateSaving(false);
     }
   };
 
@@ -907,6 +971,89 @@ export default function ServiceMasterPage() {
       {/* ===== PACKAGES TAB ===== */}
       {activeSubTab === 'packages' && (
         <>
+          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl p-1 w-fit">
+            <button
+              onClick={() => setPkgView('list')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${pkgView === 'list' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-800'}`}
+            >
+              Package List
+            </button>
+            <button
+              onClick={() => setPkgView('tpa_rates')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${pkgView === 'tpa_rates' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-800'}`}
+            >
+              TPA Rates
+            </button>
+          </div>
+
+          {pkgView === 'tpa_rates' ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex-1 max-w-sm">
+                  <label className="block text-xs font-bold text-gray-600 mb-1">TPA / Insurance Provider</label>
+                  <select
+                    value={tpaRateProviderId}
+                    onChange={e => setTpaRateProviderId(e.target.value ? Number(e.target.value) : '')}
+                    className="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">Select a provider…</option>
+                    {tpaProviders.map(p => (
+                      <option key={p.id} value={p.id}>{p.provider_name}{p.provider_code ? ` (${p.provider_code})` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+                {tpaRateProviderId !== '' && (
+                  <button
+                    onClick={saveTpaRates}
+                    disabled={tpaRateEditCount === 0 || tpaRateSaving}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {tpaRateSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Save All Changes{tpaRateEditCount > 0 ? ` (${tpaRateEditCount})` : ''}
+                  </button>
+                )}
+              </div>
+
+              {tpaRateProviderId === '' ? (
+                <div className="text-center py-16 text-gray-400 text-sm">Select a provider to view or edit its package rates.</div>
+              ) : (
+                <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50/80">
+                        {['Code', 'Name', 'Cash Rate', 'TPA Rate'].map(h => (
+                          <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {tpaRateLoading ? (
+                        <tr><td colSpan={4} className="text-center py-16"><Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" /></td></tr>
+                      ) : tpaRateRows.length === 0 ? (
+                        <tr><td colSpan={4} className="text-center py-12 text-gray-400">No active packages found</td></tr>
+                      ) : tpaRateRows.map(r => (
+                        <tr key={r.package_id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-mono text-xs text-gray-600">{r.package_code}</td>
+                          <td className="px-4 py-3 font-semibold text-gray-900">{r.package_name}</td>
+                          <td className="px-4 py-3 text-gray-500">₹{Number(r.total_amount).toFixed(2)}</td>
+                          <td className="px-4 py-3">
+                            <input
+                              type="number" min={0} step="0.01"
+                              value={tpaRateEdits[r.package_id] ?? (r.tpa_amount != null ? String(r.tpa_amount) : '')}
+                              onChange={e => setTpaRateEdit(r.package_id, e.target.value)}
+                              placeholder={String(Number(r.total_amount).toFixed(2))}
+                              className="w-32 p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : (
+          <>
           <div className="flex items-center justify-between">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -1076,6 +1223,8 @@ export default function ServiceMasterPage() {
                 </form>
               </div>
             </div>
+          )}
+          </>
           )}
         </>
       )}
