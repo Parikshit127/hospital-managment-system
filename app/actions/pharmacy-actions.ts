@@ -18,6 +18,7 @@ import { logAudit } from '@/app/lib/audit';
 import { checkDrugInteractions } from '@/app/lib/drug-safety';
 import { getPatientBalances } from '@/app/actions/balance-actions';
 import { postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
+import { isBillClosedForCharges, BILL_FINALIZED_INTENT_MSG } from '@/app/lib/bill-status';
 import { scheduleMedicationAdministrations } from '@/app/actions/ipd-emr-actions';
 import { postInvoiceToGL } from '@/app/actions/gl-actions';
 import { syncInvoiceToGSTRegister } from '@/app/actions/gst-compliance-actions';
@@ -575,8 +576,9 @@ export async function generateInvoice(
                 // Doctor name is already shown in the bill header — don't repeat
                 // it on every pharmacy line item (client feedback: clutters the bill).
                 const dispensedAt = backdatedAt || new Date();
+                const chargeFailures: string[] = [];
                 for (const item of invoiceItems) {
-                    await postChargeToIpdBill({
+                    const chargeResult = await postChargeToIpdBill({
                         admission_id: activeAdmission.admission_id,
                         source_module: 'pharmacy',
                         source_ref_id: `PHARM-COUNTER-${item.medicine_id}-${item.batch_no}-${Date.now()}`,
@@ -588,6 +590,19 @@ export async function generateInvoice(
                         service_category: 'Pharmacy',
                         posted_at: dispensedAt,
                     });
+                    if (!chargeResult?.success) {
+                        chargeFailures.push(`${item.medicine_name}: ${chargeResult?.error || 'failed to post charge'}`);
+                    }
+                }
+
+                if (chargeFailures.length > 0) {
+                    // Stock is already deducted at this point (loop above) — report the
+                    // failure instead of claiming success so it isn't lost silently.
+                    return {
+                        success: false,
+                        error: `Stock was dispensed but failed to post to the IPD bill for: ${chargeFailures.join('; ')}. An Admin/Finance user must add these charges manually.`,
+                        ipd_posted: false,
+                    };
                 }
 
                 const netAmount = totalAmount + totalTax;
@@ -1126,6 +1141,40 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
     try {
         const { db, organizationId } = await requireTenantContext();
 
+        // Gate on bill status BEFORE touching inventory. Without this, a closed/locked
+        // IPD bill causes postChargeToIpdBill to fail silently *after* stock has already
+        // been decremented and the order marked Completed below — the medicine looks
+        // dispensed but never reaches the invoice.
+        const preOrder = await db.pharmacy_orders.findUnique({
+            where: { id: orderId },
+            select: { patient_id: true, admission_id: true, is_ipd_linked: true },
+        });
+        if (!preOrder) return { success: false, error: 'Order not found' };
+
+        const preActiveAdmission = preOrder.patient_id ? await db.admissions.findFirst({
+            where: { patient_id: preOrder.patient_id, status: 'Admitted', organizationId },
+            select: { admission_id: true },
+        }) : null;
+        const preTargetAdmissionId = preOrder.admission_id || preActiveAdmission?.admission_id;
+        const preIsIpdPatient = !!(preOrder.is_ipd_linked || preOrder.admission_id || preActiveAdmission);
+
+        if (preIsIpdPatient && preTargetAdmissionId) {
+            const admissionRec = await db.admissions.findUnique({
+                where: { admission_id: preTargetAdmissionId },
+                select: { status: true },
+            });
+            if (admissionRec?.status === 'Discharged') {
+                return { success: false, error: BILL_FINALIZED_INTENT_MSG };
+            }
+            const activeInvoice = await db.invoices.findFirst({
+                where: { admission_id: preTargetAdmissionId, status: { not: 'Cancelled' } },
+                select: { status: true, is_locked: true },
+            });
+            if (isBillClosedForCharges(activeInvoice)) {
+                return { success: false, error: BILL_FINALIZED_INTENT_MSG };
+            }
+        }
+
         let totalAmount = 0;
         let totalTax = 0;
         const dispensedDetails: any[] = [];
@@ -1283,10 +1332,11 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
 
         let invoiceId: number | null = null;
 
+        const chargeFailures: string[] = [];
         if (isIpdPatient && targetAdmissionId) {
             // IPD path: post charges to IPD bill
             for (const detail of dispensedDetails) {
-                await postChargeToIpdBill({
+                const chargeResult = await postChargeToIpdBill({
                     admission_id: targetAdmissionId,
                     source_module: 'pharmacy',
                     source_ref_id: `PHARM-${orderId}-${detail.medicine_id}`,
@@ -1297,6 +1347,10 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
                     hsn_sac_code: detail.hsn_sac_code,
                     service_category: 'Pharmacy',
                 });
+                if (!chargeResult?.success) {
+                    chargeFailures.push(`${detail.medicine_name}: ${chargeResult?.error || 'failed to post charge'}`);
+                    continue;
+                }
 
                 // Generate Medication Administration records
                 try {
@@ -1406,6 +1460,19 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
         revalidatePath('/pharmacy/orders');
         revalidatePath('/pharmacy/billing');
         invalidatePharmacyTags(['stock', 'orders']);
+
+        if (chargeFailures.length > 0) {
+            // Stock is already deducted and the order is marked Completed at this point —
+            // surface this loudly instead of returning success so staff know to reconcile
+            // the bill manually, rather than the medicine silently vanishing from the invoice.
+            return {
+                success: false,
+                error: `Stock was dispensed but failed to post to the IPD bill for: ${chargeFailures.join('; ')}. An Admin/Finance user must add these charges manually.`,
+                total: grandTotal,
+                ipd_posted: false,
+            };
+        }
+
         return {
             success: true,
             total: grandTotal,
