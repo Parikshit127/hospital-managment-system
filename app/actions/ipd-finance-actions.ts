@@ -786,6 +786,40 @@ async function recalculateInvoiceWithGstTx(db: any, invoiceId: number) {
 // PACKAGE BILLING
 // ============================================
 
+// Resolve the price to charge for a package on a given patient: if the patient
+// has a most-recently-created Active insurance_policies row, and that provider
+// has a negotiated rate for this package (IpdPackageTpaRate), use it. Otherwise
+// fall back to the package's cash total_amount. Mirrors the provider-resolution
+// pattern used for discharge-settlement TPA approval (see the tpa_provider_id
+// resolution block further down this file).
+async function resolvePackagePrice(
+    db: any,
+    organizationId: string,
+    patientId: string,
+    packageId: number,
+    fallbackAmount: number,
+): Promise<{ amount: number; providerId: number | null; isTpaRate: boolean }> {
+    const policy = await db.insurance_policies.findFirst({
+        where: { patient_id: patientId, status: 'Active' },
+        orderBy: { created_at: 'desc' },
+        select: { provider_id: true },
+    });
+    if (!policy) return { amount: fallbackAmount, providerId: null, isTpaRate: false };
+
+    const rate = await db.ipdPackageTpaRate.findUnique({
+        where: {
+            package_id_provider_id_organizationId: {
+                package_id: packageId,
+                provider_id: policy.provider_id,
+                organizationId,
+            },
+        },
+    });
+    return rate
+        ? { amount: Number(rate.tpa_amount), providerId: policy.provider_id, isTpaRate: true }
+        : { amount: fallbackAmount, providerId: policy.provider_id, isTpaRate: false };
+}
+
 export async function applyPackageToAdmission(admissionId: string, packageId: number) {
     try {
         const { db, session, organizationId } = await requireTenantContext();
@@ -807,12 +841,21 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
             return { success: false, error: BILL_FINALIZED_INTENT_MSG };
         }
 
+        const admissionForPricing = await db.admissions.findUnique({
+            where: { admission_id: admissionId },
+            select: { patient_id: true },
+        });
+        const priceResolution = await resolvePackagePrice(
+            db, organizationId, admissionForPricing?.patient_id ?? '', packageId, Number(pkg.total_amount),
+        );
+        const resolvedAmount = priceResolution.amount;
+
         // Create admission package record
         const admPkg = await db.ipdAdmissionPackage.create({
             data: {
                 admission_id: admissionId,
                 package_id: packageId,
-                applied_amount: pkg.total_amount,
+                applied_amount: resolvedAmount,
                 applied_by: session.id,
                 status: ADMISSION_PACKAGE_STATUS.ACTIVE,
                 organizationId,
@@ -830,7 +873,7 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
             source_ref_id: String(admPkg.id),
             description: `Package: ${pkg.package_name}`,
             quantity: 1,
-            unit_price: Number(pkg.total_amount),
+            unit_price: resolvedAmount,
             tax_rate: packageTaxRate,
             service_category: PACKAGE_SERVICE_CATEGORY,
         });
@@ -872,7 +915,10 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
             entity_id: String(admPkg.id),
             details: JSON.stringify({
                 package_name: pkg.package_name,
-                amount: Number(pkg.total_amount),
+                amount: resolvedAmount,
+                cash_amount: Number(pkg.total_amount),
+                tpa_provider_id: priceResolution.providerId,
+                is_tpa_rate: priceResolution.isTpaRate,
                 migrated_to_consumption: migration.absorbedCount,
                 migrated_amount: migration.absorbedAmount,
                 kept_as_billable_extras: migration.extrasCount,
