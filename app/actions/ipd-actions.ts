@@ -1556,7 +1556,7 @@ export async function getAdmissionFullDetails(admissionId: string) {
               select: {
                 policy_number: true,
                 plan_name: true,
-                provider: { select: { provider_name: true } },
+                provider: { select: { id: true, provider_name: true } },
               },
             },
           },
