@@ -931,6 +931,65 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
     }
 }
 
+// All active packages for the package picker on the admission page, each
+// annotated with the price that would actually be charged if applied right now
+// (resolved via resolvePackagePrice) so the picker never shows a price different
+// from what applyPackageToAdmission will actually post.
+export async function getPackagesForAdmission(admissionId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const admission = await db.admissions.findUnique({
+            where: { admission_id: admissionId },
+            select: { patient_id: true },
+        });
+        if (!admission) return { success: false, error: 'Admission not found' };
+
+        const policy = await db.insurance_policies.findFirst({
+            where: { patient_id: admission.patient_id, status: 'Active' },
+            orderBy: { created_at: 'desc' },
+            select: {
+                provider_id: true,
+                provider: { select: { provider_name: true } },
+            },
+        });
+
+        const packages = await db.ipdPackage.findMany({
+            where: { organizationId, is_active: true },
+            orderBy: { package_name: 'asc' },
+        });
+
+        let ratesByPackageId = new Map<number, number>();
+        if (policy) {
+            const rates = await db.ipdPackageTpaRate.findMany({
+                where: { organizationId, provider_id: policy.provider_id },
+                select: { package_id: true, tpa_amount: true },
+            });
+            ratesByPackageId = new Map(rates.map((r: any) => [r.package_id, Number(r.tpa_amount)]));
+        }
+
+        const data = packages.map((pkg: any) => {
+            const cashAmount = Number(pkg.total_amount);
+            const tpaRate = policy ? ratesByPackageId.get(pkg.id) : undefined;
+            const isTpaRate = tpaRate !== undefined;
+            return {
+                id: pkg.id,
+                package_code: pkg.package_code,
+                package_name: pkg.package_name,
+                validity_days: pkg.validity_days,
+                total_amount: cashAmount,
+                resolved_amount: isTpaRate ? tpaRate : cashAmount,
+                is_tpa_rate: isTpaRate,
+                tpa_provider_name: policy?.provider?.provider_name ?? null,
+            };
+        });
+
+        return { success: true, data: serialize(data) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
 // Remove the package from an admission's bill. Because the package line is
 // re-created by the posting-time reconciler while the package is ACTIVE, simply
 // deleting the invoice line does nothing — the package must be broken open.
