@@ -53,6 +53,7 @@ model Organization {
   payment_order_intents         PaymentOrderIntent[]
   charge_catalog                charge_catalog[]
   insurance_providers           insurance_providers[]
+  ipd_package_tpa_rates         IpdPackageTpaRate[]
   insurance_policies            insurance_policies[]
   insurance_claims              insurance_claims[]
   system_audit_logs             system_audit_logs[]
@@ -1402,6 +1403,7 @@ model insurance_providers {
   insurance_receipts InsuranceReceipt[]
   sla_configs        PayerSlaConfig[]
   preauths           InsurancePreAuth[]
+  package_rates      IpdPackageTpaRate[]
 
   @@index([organizationId])
 }
@@ -2916,6 +2918,7 @@ model IpdPackage {
   created_at         DateTime              @default(now())
   updated_at         DateTime              @updatedAt
   admission_packages IpdAdmissionPackage[]
+  tpa_rates          IpdPackageTpaRate[]
   organization       Organization          @relation(fields: [organizationId], references: [id])
 
   @@unique([package_code, organizationId])
@@ -2948,6 +2951,29 @@ model IpdAdmissionPackage {
   @@index([organizationId])
   @@index([admission_id, status])
   @@map("ipd_admission_packages")
+}
+
+// TPA-specific package pricing — one row per (package, provider). A package with
+// no row here for a given provider falls back to IpdPackage.total_amount (the
+// cash rate) when applied to an admission. See applyPackageToAdmission /
+// resolvePackagePrice in ipd-finance-actions.ts.
+model IpdPackageTpaRate {
+  id             Int      @id @default(autoincrement())
+  package_id     Int
+  provider_id    Int
+  tpa_amount     Decimal
+  organizationId String
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  package      IpdPackage          @relation(fields: [package_id], references: [id])
+  provider     insurance_providers @relation(fields: [provider_id], references: [id])
+  organization Organization        @relation(fields: [organizationId], references: [id])
+
+  @@unique([package_id, provider_id, organizationId])
+  @@index([organizationId])
+  @@index([provider_id])
+  @@map("ipd_package_tpa_rates")
 }
 
 model IpdEstimate {
