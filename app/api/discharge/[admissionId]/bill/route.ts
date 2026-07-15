@@ -141,7 +141,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
     const hospitalName = branding.hospitalName;
     const gstin = branding.gstin;
 
-    const admissionDate = fmtBillDate(admission.admission_date);
+    const admissionDate = fmtBillDateTime(admission.admission_date);
     const dischargeDate = admission.discharge_date ? fmtBillDateTime(admission.discharge_date) : '';
     const los = Math.max(1, Math.ceil((new Date(admission.discharge_date || new Date()).getTime() - new Date(admission.admission_date).getTime()) / (1000 * 60 * 60 * 24)));
 

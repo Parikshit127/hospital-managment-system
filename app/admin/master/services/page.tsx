@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, Loader2, Pencil, PowerOff, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Search, Plus, Loader2, Pencil, PowerOff, ChevronLeft, ChevronRight, Trash2, Download, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 import {
   listServices, createService, updateService, deactivateService, deleteService,
   listLabTests, createLabTest, updateLabTest, deleteLabTest,
@@ -99,6 +100,9 @@ export default function ServiceMasterPage() {
   const [tpaRateEdits, setTpaRateEdits] = useState<Record<number, string>>({}); // package_id -> raw input value
   const [tpaRateLoading, setTpaRateLoading] = useState(false);
   const [tpaRateSaving, setTpaRateSaving] = useState(false);
+  const [tpaRateExporting, setTpaRateExporting] = useState(false);
+  const [tpaRateImporting, setTpaRateImporting] = useState(false);
+  const tpaRateFileRef = useRef<HTMLInputElement>(null);
 
   // ---- Radiology/Imaging state ----
   const [radRows, setRadRows] = useState<any[]>([]);
@@ -406,6 +410,123 @@ export default function ServiceMasterPage() {
       toast.error(err?.message || 'Network error — please check server status');
     } finally {
       setTpaRateSaving(false);
+    }
+  };
+
+  // Export the current provider's rate sheet to .xlsx. Columns mirror the
+  // import format 1:1 (Package Code / Package Name / Cash Rate / TPA Rate) so
+  // an exported file can be edited offline and re-imported without remapping.
+  const exportTpaRates = () => {
+    if (tpaRateProviderId === '' || tpaRateRows.length === 0) return;
+    setTpaRateExporting(true);
+    try {
+      const provider = tpaProviders.find(p => p.id === Number(tpaRateProviderId));
+      const headers = ['Package Code', 'Package Name', 'Cash Rate', 'TPA Rate'];
+      const data = tpaRateRows.map(r => ({
+        'Package Code': r.package_code,
+        'Package Name': r.package_name,
+        'Cash Rate': Number(r.total_amount),
+        // Leave TPA Rate blank (not 0) when no override exists, so a blank
+        // cell round-trips as "no override" instead of "override to 0".
+        'TPA Rate': tpaRateEdits[r.package_id] !== undefined
+          ? (tpaRateEdits[r.package_id].trim() === '' ? '' : Number(tpaRateEdits[r.package_id]))
+          : (r.tpa_amount != null ? Number(r.tpa_amount) : ''),
+      }));
+      const ws = XLSX.utils.json_to_sheet(data, { header: headers });
+      ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 16) }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'TPA Rates');
+      const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ts = new Date().toISOString().slice(0, 10);
+      const providerSlug = (provider?.provider_code || provider?.provider_name || 'provider').replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase();
+      a.href = url;
+      a.download = `tpa-rates-${providerSlug}-${ts}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${tpaRateRows.length} package rate${tpaRateRows.length !== 1 ? 's' : ''}.`);
+    } catch (e: any) {
+      toast.error('Export failed: ' + (e?.message || 'unknown error'));
+    } finally {
+      setTpaRateExporting(false);
+    }
+  };
+
+  // Import a rate sheet: read the workbook client-side, match each row back to
+  // a package by Package Code (not id — ids aren't stable/visible enough for a
+  // human to edit safely offline), stage matches as edits, then reuse the same
+  // saveTpaRates() bulk-upsert path used by manual edits.
+  const importTpaRates = async (file: File) => {
+    if (tpaRateProviderId === '') {
+      toast.error('Select a provider before importing.');
+      return;
+    }
+    setTpaRateImporting(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array' });
+      const sheetName = wb.SheetNames[0];
+      if (!sheetName) throw new Error('The uploaded file contains no sheets');
+      const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '', raw: false });
+      if (rows.length === 0) throw new Error('The uploaded file contains no data rows');
+
+      const byCode = new Map(tpaRateRows.map(r => [r.package_code.trim().toLowerCase(), r]));
+      const edits: Record<number, string> = {};
+      const errors: string[] = [];
+      let matched = 0;
+
+      rows.forEach((row, i) => {
+        const rowNum = i + 2; // account for header row
+        const rawCode = String(row['Package Code'] ?? '').trim();
+        if (!rawCode) return; // skip blank rows
+        const pkg = byCode.get(rawCode.toLowerCase());
+        if (!pkg) {
+          errors.push(`Row ${rowNum}: unknown Package Code "${rawCode}"`);
+          return;
+        }
+        const rawRate = String(row['TPA Rate'] ?? '').trim();
+        if (rawRate !== '' && Number.isNaN(Number(rawRate))) {
+          errors.push(`Row ${rowNum}: "${rawRate}" is not a valid TPA Rate`);
+          return;
+        }
+        edits[pkg.package_id] = rawRate;
+        matched += 1;
+      });
+
+      if (errors.length > 0) {
+        toast.error(`${errors.length} row${errors.length !== 1 ? 's' : ''} skipped: ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '…' : ''}`);
+      }
+      if (matched === 0) {
+        toast.error('No matching packages found in the file.');
+        return;
+      }
+
+      // Stage the matches as pending edits, then save immediately — mirrors the
+      // manual-edit flow (edits state -> saveTpaRates) rather than a separate
+      // import codepath, so the same bulk-upsert action and audit log apply.
+      const rates = Object.entries(edits).map(([packageIdStr, raw]) => ({
+        package_id: Number(packageIdStr),
+        tpa_amount: raw.trim() === '' ? null : Number(raw),
+      }));
+      setTpaRateSaving(true);
+      const res = await bulkUpsertPackageTpaRates(Number(tpaRateProviderId), rates);
+      if (res.success) {
+        toast.success(`Imported ${matched} rate${matched !== 1 ? 's' : ''} (${(res.data as any).upserted} saved, ${(res.data as any).deleted} cleared).`);
+        setTpaRateEdits({});
+        await loadTpaRates(Number(tpaRateProviderId));
+      } else {
+        toast.error(res.error || 'Failed to save imported rates');
+      }
+    } catch (e: any) {
+      toast.error('Import failed: ' + (e?.message || 'unknown error'));
+    } finally {
+      setTpaRateSaving(false);
+      setTpaRateImporting(false);
+      if (tpaRateFileRef.current) tpaRateFileRef.current.value = '';
     }
   };
 
@@ -1003,14 +1124,39 @@ export default function ServiceMasterPage() {
                   </select>
                 </div>
                 {tpaRateProviderId !== '' && (
-                  <button
-                    onClick={saveTpaRates}
-                    disabled={tpaRateEditCount === 0 || tpaRateSaving}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {tpaRateSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    Save All Changes{tpaRateEditCount > 0 ? ` (${tpaRateEditCount})` : ''}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={tpaRateFileRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) importTpaRates(f); }}
+                    />
+                    <button
+                      onClick={exportTpaRates}
+                      disabled={tpaRateLoading || tpaRateRows.length === 0 || tpaRateExporting}
+                      className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {tpaRateExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                      Export
+                    </button>
+                    <button
+                      onClick={() => tpaRateFileRef.current?.click()}
+                      disabled={tpaRateLoading || tpaRateImporting || tpaRateSaving}
+                      className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {tpaRateImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                      Import
+                    </button>
+                    <button
+                      onClick={saveTpaRates}
+                      disabled={tpaRateEditCount === 0 || tpaRateSaving}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {tpaRateSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                      Save All Changes{tpaRateEditCount > 0 ? ` (${tpaRateEditCount})` : ''}
+                    </button>
+                  </div>
                 )}
               </div>
 
