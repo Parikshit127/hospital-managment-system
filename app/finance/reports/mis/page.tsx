@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { AdminPage } from '@/app/admin/components/AdminPage';
 import { getMISReport } from '@/app/actions/report-actions';
 import {
     FileSpreadsheet, Download, Loader2, Search, Filter,
-    TrendingUp, IndianRupee, Building2, ArrowLeft,
+    TrendingUp, IndianRupee, Building2, ArrowLeft, ChevronDown, X,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -62,6 +62,14 @@ const MIS_COLUMNS: { key: string; label: string; type: 'text' | 'currency' | 'da
     { key: 'remarks', label: 'Remarks', type: 'text', width: '150px' },
 ];
 
+// Categorical columns get an inline header filter dropdown; free-text identifier
+// columns are already covered by the global search box, and date columns by the
+// From/To range above the table.
+const FILTERABLE_KEYS = new Set([
+    'bill_type', 'admission_category', 'tpa_corporate_name', 'department',
+    'doctor_name', 'room_category', 'package_vs_nonpackage', 'referral_source', 'status',
+]);
+
 export function MISReportContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) {
     const adminMode = shell === 'admin';
     const Shell = adminMode ? AdminPage : AppShell;
@@ -78,6 +86,32 @@ export function MISReportContent({ shell = 'app' }: { shell?: 'app' | 'admin' })
     const [search, setSearch] = useState('');
     const [exporting, setExporting] = useState(false);
 
+    // ── Per-column filters ──
+    const [colFilters, setColFilters] = useState<Record<string, string>>({});
+    const [openColFilter, setOpenColFilter] = useState<string | null>(null);
+    const colFilterRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        if (!openColFilter) return;
+        const handler = (e: MouseEvent) => {
+            if (colFilterRef.current && !colFilterRef.current.contains(e.target as Node)) {
+                setOpenColFilter(null);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [openColFilter]);
+
+    const setColFilter = (col: string, value: string) => {
+        setColFilters(prev => {
+            const next = { ...prev };
+            if (value) next[col] = value; else delete next[col];
+            return next;
+        });
+    };
+    const clearAllColFilters = () => { setColFilters({}); setOpenColFilter(null); };
+    const activeColFilterCount = Object.keys(colFilters).length;
+
     const loadReport = useCallback(async () => {
         setLoading(true);
         setData(null);
@@ -91,7 +125,21 @@ export function MISReportContent({ shell = 'app' }: { shell?: 'app' | 'admin' })
     const rows = data?.rows || [];
     const summary = data?.summary || {};
 
+    // Unique values for a column's filter dropdown (computed from the full,
+    // unfiltered row set so options don't shrink as other filters are applied).
+    const getUniqueColValues = (col: string): string[] => {
+        const seen = new Set<string>();
+        for (const r of rows) {
+            const v = String(r[col] ?? '').trim();
+            if (v && v !== '—') seen.add(v);
+        }
+        return Array.from(seen).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+    };
+
     const filtered = rows.filter((r: any) => {
+        for (const [col, filterVal] of Object.entries(colFilters)) {
+            if (String(r[col] ?? '').trim() !== filterVal) return false;
+        }
         if (!search) return true;
         const s = search.toLowerCase();
         return (
@@ -225,11 +273,19 @@ export function MISReportContent({ shell = 'app' }: { shell?: 'app' | 'admin' })
 
                 {/* Search */}
                 {data && rows.length > 0 && (
-                    <div className="relative max-w-md">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-                            placeholder="Search patient, bill no, UHID, doctor, phone..."
-                            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" />
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="relative max-w-md flex-1 min-w-[240px]">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+                                placeholder="Search patient, bill no, UHID, doctor, phone..."
+                                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" />
+                        </div>
+                        {activeColFilterCount > 0 && (
+                            <button onClick={clearAllColFilters}
+                                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition-colors">
+                                <X className="h-3.5 w-3.5" /> Clear {activeColFilterCount} column filter{activeColFilterCount !== 1 ? 's' : ''}
+                            </button>
+                        )}
                     </div>
                 )}
 
@@ -265,9 +321,65 @@ export function MISReportContent({ shell = 'app' }: { shell?: 'app' | 'admin' })
                                         <th className="px-3 py-2.5 text-center text-[10px] font-black text-gray-400 uppercase tracking-wider w-10">#</th>
                                         {MIS_COLUMNS.map(col => (
                                             <th key={col.key}
-                                                className={`px-3 py-2.5 text-[10px] font-black uppercase tracking-wider ${col.type === 'currency' ? 'text-right text-emerald-600' : 'text-left text-gray-500'}`}
+                                                className={`px-3 py-2.5 text-[10px] font-black uppercase tracking-wider relative ${col.type === 'currency' ? 'text-right text-emerald-600' : 'text-left text-gray-500'}`}
                                                 style={{ minWidth: col.width }}>
-                                                {col.label}
+                                                {FILTERABLE_KEYS.has(col.key) ? (
+                                                    <div className="relative" ref={openColFilter === col.key ? colFilterRef : undefined}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setOpenColFilter(openColFilter === col.key ? null : col.key)}
+                                                            className={`flex items-center gap-1 w-full group py-0.5 rounded transition-colors normal-case font-black ${
+                                                                colFilters[col.key] ? 'text-orange-700' : 'text-gray-500 hover:text-gray-800'
+                                                            }`}
+                                                            title={`Filter by ${col.label}`}
+                                                        >
+                                                            <span className="truncate uppercase tracking-wider">{col.label}</span>
+                                                            <ChevronDown className={`h-3 w-3 flex-shrink-0 transition-transform ${
+                                                                openColFilter === col.key ? 'rotate-180' : ''
+                                                            } ${colFilters[col.key] ? 'text-orange-500' : 'text-gray-400 group-hover:text-gray-600'}`} />
+                                                            {colFilters[col.key] && (
+                                                                <span className="flex-shrink-0 h-1.5 w-1.5 rounded-full bg-orange-500" />
+                                                            )}
+                                                        </button>
+
+                                                        {openColFilter === col.key && (
+                                                            <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg min-w-[200px] max-w-[260px] normal-case font-normal"
+                                                                 onClick={e => e.stopPropagation()}>
+                                                                <div className="max-h-[220px] overflow-y-auto p-1">
+                                                                    {getUniqueColValues(col.key).length === 0 ? (
+                                                                        <p className="text-[10px] text-gray-400 text-center py-3">No values</p>
+                                                                    ) : (
+                                                                        getUniqueColValues(col.key).map(val => (
+                                                                            <button
+                                                                                key={val}
+                                                                                type="button"
+                                                                                onClick={() => { setColFilter(col.key, colFilters[col.key] === val ? '' : val); setOpenColFilter(null); }}
+                                                                                className={`w-full text-left px-2.5 py-1.5 text-xs rounded-lg transition-colors truncate ${
+                                                                                    colFilters[col.key] === val
+                                                                                        ? 'bg-orange-50 text-orange-700 font-semibold'
+                                                                                        : 'text-gray-700 hover:bg-gray-50'
+                                                                                }`}
+                                                                            >
+                                                                                {val}
+                                                                            </button>
+                                                                        ))
+                                                                    )}
+                                                                </div>
+                                                                {colFilters[col.key] && (
+                                                                    <div className="p-1.5 border-t border-gray-100">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => { setColFilter(col.key, ''); setOpenColFilter(null); }}
+                                                                            className="w-full px-2.5 py-1.5 text-[10px] font-bold text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                                        >
+                                                                            Clear filter
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : col.label}
                                             </th>
                                         ))}
                                     </tr>

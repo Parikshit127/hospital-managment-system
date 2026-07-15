@@ -133,18 +133,12 @@ export async function saveDischargeSummary(
 
             // Status is deliberately untouched: still 'Admitted' (semi discharged),
             // or already 'Discharged' when correcting the time after the fact.
+            // Semi-discharge does NOT freeze the bill — it stays Draft and fully
+            // editable (packages/charges can still be posted) until the patient
+            // is actually discharged/settled or an admin explicitly locks it.
             await db.admissions.update({
                 where: { admission_id: admissionId },
                 data: { discharge_date: parsed },
-            });
-
-            // Semi-discharge FREEZES the bill: it stays Draft (so a TPA claim can be
-            // filed against it — see getClaimableInvoices) but accepts no further
-            // charges. is_locked drives isBillClosedForCharges. undischargeAdmission
-            // clears both the discharge_date and this lock if it is reversed.
-            await db.invoices.updateMany({
-                where: { admission_id: admissionId, status: 'Draft', is_locked: false },
-                data: { is_locked: true, locked_at: new Date(), locked_by: session.username },
             });
 
             // Keep the in-memory record in sync so the rendered summary/header

@@ -15,8 +15,10 @@ import {
 import {
     getAdmissionFullDetails, createNursingTask, changeAdmissionDoctor,
     recordWardRound, assignDietPlan, addMedicalNote, getWardsWithBeds, transferPatient,
-    updateAdmissionDiagnosis, updateAdmissionBasicDetails, undischargeAdmission
+    updateAdmissionDiagnosis, updateAdmissionBasicDetails, undischargeAdmission,
+    updateAdmissionPatientCategory,
 } from '@/app/actions/ipd-actions';
+import { getInsuranceProviders } from '@/app/actions/insurance-actions';
 import {
     generateInterimBill, postChargeToIpdBill, applyPackageToAdmission,
     getPackageUtilization, reconcilePackageBilling, reclassifyChargeDisposition,
@@ -173,6 +175,20 @@ export default function AdmissionDetailPage() {
     const [transferBed, setTransferBed] = useState('');
     const [transferReason, setTransferReason] = useState('');
     const [transferring, setTransferring] = useState(false);
+
+    // Patient category (Cash / Corporate / TPA-Insurance) change
+    const [showCategoryEdit, setShowCategoryEdit] = useState(false);
+    const [categoryType, setCategoryType] = useState<'cash' | 'corporate' | 'tpa_insurance'>('cash');
+    const [categoryCorporateName, setCategoryCorporateName] = useState('');
+    const [categoryCorporateCard, setCategoryCorporateCard] = useState('');
+    const [categoryEmployeeId, setCategoryEmployeeId] = useState('');
+    const [categoryTpaProviderId, setCategoryTpaProviderId] = useState('');
+    const [categoryPolicyNumber, setCategoryPolicyNumber] = useState('');
+    const [categoryValidFrom, setCategoryValidFrom] = useState('');
+    const [categoryValidUntil, setCategoryValidUntil] = useState('');
+    const [insuranceProviders, setInsuranceProviders] = useState<any[]>([]);
+    const [savingCategory, setSavingCategory] = useState(false);
+    const [categoryError, setCategoryError] = useState<string | null>(null);
 
     // EDD + vitals
     const [eddValue, setEddValue] = useState('');
@@ -510,16 +526,63 @@ export default function AdmissionDetailPage() {
         }
     };
 
+    const openCategoryEdit = async () => {
+        const currentType = (data.patient?.patient_type || 'cash') as 'cash' | 'corporate' | 'tpa_insurance';
+        setCategoryType(currentType);
+        setCategoryCorporateName(data.patient?.corporate?.company_name || '');
+        setCategoryCorporateCard(data.patient?.corporate_card_number || '');
+        setCategoryEmployeeId(data.patient?.employee_id || '');
+        const existingPolicy = data.patient?.insurance_policies?.[0];
+        setCategoryPolicyNumber(existingPolicy?.policy_number || '');
+        setCategoryTpaProviderId('');
+        setCategoryValidFrom('');
+        setCategoryValidUntil('');
+        setCategoryError(null);
+        setShowCategoryEdit(true);
+        if (insuranceProviders.length === 0) {
+            const res = await getInsuranceProviders();
+            if (res.success) setInsuranceProviders(res.data || []);
+        }
+    };
+
+    const handleSaveCategory = async () => {
+        setCategoryError(null);
+        if (categoryType === 'corporate' && !categoryCorporateName.trim()) {
+            setCategoryError('Enter the corporate / company name.');
+            return;
+        }
+        setSavingCategory(true);
+        const res = await updateAdmissionPatientCategory({
+            admission_id: data.admission_id,
+            patient_type: categoryType,
+            corporate_name: categoryCorporateName || undefined,
+            corporate_card_number: categoryCorporateCard || undefined,
+            employee_id: categoryEmployeeId || undefined,
+            tpa_provider_id: categoryTpaProviderId || undefined,
+            insurance_policy_number: categoryPolicyNumber || undefined,
+            insurance_validity_start: categoryValidFrom || undefined,
+            insurance_validity_end: categoryValidUntil || undefined,
+        });
+        setSavingCategory(false);
+        if (res.success) {
+            toast.success('Patient category updated');
+            setShowCategoryEdit(false);
+            loadData();
+        } else {
+            setCategoryError(res.error || 'Failed to update patient category');
+        }
+    };
+
     const handleUndischarge = async () => {
         const confirmMsg = isSemiDischarged(data)
-            ? `Unlock ${data?.patient?.full_name || 'this patient'}'s bill? This clears the discharge date and reopens the bill for editing.`
+            ? `Clear the discharge date for ${data?.patient?.full_name || 'this patient'}? This reverts them to Admitted with no pending discharge.`
             : `Undischarge ${data?.patient?.full_name || 'this patient'}? This re-admits the patient and reopens the bill for editing.`;
         if (!window.confirm(confirmMsg)) return;
         setUndischarging(true);
         const res = await undischargeAdmission(data.admission_id);
         setUndischarging(false);
         if (res.success) {
-            toast.success(isSemiDischarged(data) ? 'Bill unlocked — discharge date cleared' : 'Patient undischarged — back to Admitted');
+            toast.success(isSemiDischarged(data) ? 'Discharge date cleared' : 'Patient undischarged — back to Admitted');
             if (res.data?.bedNote) toast.error(res.data.bedNote);
             loadData();
         } else {
@@ -820,6 +883,17 @@ export default function AdmissionDetailPage() {
                                 )}
                                 <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1 ${billingCategory.cls}`}>
                                     <CreditCard className="h-3 w-3" /> {billingCategory.label}
+                                    {['Admitted', 'Discharged'].includes(data.status) && (
+                                        <button
+                                            type="button"
+                                            onClick={openCategoryEdit}
+                                            title="Change Patient Category"
+                                            aria-label="Change Patient Category"
+                                            className="ml-0.5 p-0.5 rounded hover:bg-black/10"
+                                        >
+                                            <Pencil className="h-3 w-3" />
+                                        </button>
+                                    )}
                                 </span>
                                 {data.news_score_latest != null && (
                                     <NEWSScoreBadge score={data.news_score_latest} size="sm" />
@@ -926,11 +1000,11 @@ export default function AdmissionDetailPage() {
                                     onClick={handleUndischarge}
                                     disabled={undischarging}
                                     title={isSemiDischarged(data)
-                                        ? 'Unlock the bill — clears the discharge date so charges/packages can be added again (Admin/Finance only)'
+                                        ? 'Clear the discharge date — reverts to Admitted with no pending discharge (Admin/Finance only)'
                                         : 'Reverse the discharge — re-admit the patient (Admin/Finance only)'}
                                     className="flex items-center gap-1.5 px-3 py-2 border border-amber-300 bg-amber-50 text-amber-700 text-xs font-bold rounded-xl hover:bg-amber-100 transition-colors disabled:opacity-50"
                                 >
-                                    <RotateCcw className="h-3.5 w-3.5" /> {undischarging ? 'Working…' : isSemiDischarged(data) ? 'Unlock Bill' : 'Undischarge'}
+                                    <RotateCcw className="h-3.5 w-3.5" /> {undischarging ? 'Working…' : isSemiDischarged(data) ? 'Clear Discharge Date' : 'Undischarge'}
                                 </button>
                             )}
                         </div>
@@ -2632,6 +2706,136 @@ export default function AdmissionDetailPage() {
                                 </button>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Change Patient Category Modal ── */}
+            {showCategoryEdit && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white border border-gray-200 shadow-xl rounded-2xl w-full max-w-md p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-black text-gray-900 flex items-center gap-2">
+                                <CreditCard className="h-4 w-4 text-orange-500" /> Change Patient Category
+                            </h3>
+                            <button onClick={() => setShowCategoryEdit(false)} className="text-gray-400 hover:text-gray-900">
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 text-xs">
+                            <p className="font-bold text-gray-700">{data.patient?.full_name}</p>
+                            <p className="text-gray-500 mt-0.5">Current: {billingCategory.label}</p>
+                        </div>
+
+                        {categoryError && (
+                            <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg px-3 py-2">{categoryError}</div>
+                        )}
+
+                        <div>
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Category</label>
+                            <select
+                                className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm"
+                                value={categoryType}
+                                onChange={e => setCategoryType(e.target.value as 'cash' | 'corporate' | 'tpa_insurance')}
+                            >
+                                <option value="cash">Cash / Self-Pay</option>
+                                <option value="corporate">Corporate</option>
+                                <option value="tpa_insurance">TPA / Insurance</option>
+                            </select>
+                        </div>
+
+                        {categoryType === 'corporate' && (
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Corporate / Company Name *</label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm"
+                                        placeholder="e.g. Acme Industries Pvt Ltd"
+                                        value={categoryCorporateName}
+                                        onChange={e => setCategoryCorporateName(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Corporate Card Number</label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm"
+                                        value={categoryCorporateCard}
+                                        onChange={e => setCategoryCorporateCard(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Employee ID</label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm"
+                                        value={categoryEmployeeId}
+                                        onChange={e => setCategoryEmployeeId(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {categoryType === 'tpa_insurance' && (
+                            <div className="space-y-3">
+                                <p className="text-[11px] text-gray-500">
+                                    Optional — add the policy now, or leave blank and add it later from the TPA Profile tab.
+                                </p>
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">TPA / Insurance Provider</label>
+                                    <select
+                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm"
+                                        value={categoryTpaProviderId}
+                                        onChange={e => setCategoryTpaProviderId(e.target.value)}
+                                    >
+                                        <option value="">Select provider…</option>
+                                        {insuranceProviders.map((p: any) => (
+                                            <option key={p.id} value={p.id}>{p.provider_name}{p.provider_code ? ` (${p.provider_code})` : ''}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Policy Number</label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm"
+                                        placeholder="e.g. POL-12345"
+                                        value={categoryPolicyNumber}
+                                        onChange={e => setCategoryPolicyNumber(e.target.value)}
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Valid From</label>
+                                        <input
+                                            type="date"
+                                            className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm"
+                                            value={categoryValidFrom}
+                                            onChange={e => setCategoryValidFrom(e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Valid Until</label>
+                                        <input
+                                            type="date"
+                                            className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm"
+                                            value={categoryValidUntil}
+                                            onChange={e => setCategoryValidUntil(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <button
+                            onClick={handleSaveCategory}
+                            disabled={savingCategory}
+                            className="w-full py-3 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                        >
+                            {savingCategory && <Loader2 className="h-4 w-4 animate-spin" />}
+                            Save Category
+                        </button>
                     </div>
                 </div>
             )}

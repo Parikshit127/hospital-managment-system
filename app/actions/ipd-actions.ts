@@ -1112,7 +1112,9 @@ export async function undischargeAdmission(admissionId: string, reason?: string)
     });
 
     // Reopen billing so charges can continue (payments are preserved): un-finalize
-    // any Final bill AND lift the semi-discharge freeze (is_locked) on the draft.
+    // any Final bill AND clear any hard lock (e.g. from finalizeAndLockInvoice)
+    // on the draft. Semi-discharge itself no longer locks the bill, so this is
+    // a no-op in that case — kept for the full-discharge-then-undischarge path.
     await db.invoices.updateMany({
       where: { admission_id: admissionId, status: "Final" },
       data: { status: "Draft", finalized_at: null },
@@ -1941,6 +1943,154 @@ export async function updateAdmissionBasicDetails(data: {
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Change a patient's billing category (Cash / Corporate / TPA-Insurance) from
+ * the IPD chart, after admission — e.g. a patient admitted as cash later
+ * produces a corporate ID card or insurance policy at the desk.
+ *
+ * Mirrors the payer-type handling in admitPatientIPD (corporate/TPA record
+ * creation) and the corporate-name resolution in reception-actions.updatePatient
+ * (find-or-create CorporateMaster by name), but is admission-page-aware: it
+ * revalidates the IPD chart path instead of the patient-detail admin path.
+ *
+ * For 'tpa_insurance', provider_id + policy_number are optional — if omitted,
+ * the flag flips but no policy is created (staff can add one later from the
+ * TPA Profile tab). If provided, an insurance_policies row is upserted so the
+ * TPA tab and billing pick it up immediately.
+ */
+export async function updateAdmissionPatientCategory(data: {
+  admission_id: string;
+  patient_type: 'cash' | 'corporate' | 'tpa_insurance';
+  // Corporate
+  corporate_name?: string;
+  corporate_card_number?: string;
+  employee_id?: string;
+  // TPA / Insurance
+  tpa_provider_id?: string;
+  insurance_policy_number?: string;
+  insurance_validity_start?: string;
+  insurance_validity_end?: string;
+}) {
+  try {
+    const { db, organizationId, session } = await requireTenantContext();
+    const allowedRoles = ['receptionist', 'reception', 'admin', 'finance', 'superadmin'];
+    const role = String(session.role || '').toLowerCase();
+    if (!allowedRoles.includes(role)) {
+      return { success: false, error: 'Only Reception, Admin, or Finance can change the patient category.' };
+    }
+
+    if (!['cash', 'corporate', 'tpa_insurance'].includes(data.patient_type)) {
+      return { success: false, error: 'Invalid patient category.' };
+    }
+
+    const admission = await db.admissions.findUnique({
+      where: { admission_id: data.admission_id },
+      select: { patient_id: true, patient: { select: { patient_type: true } } },
+    });
+    if (!admission) return { success: false, error: 'Admission not found' };
+
+    const oldPatientType = admission.patient.patient_type || 'cash';
+    const patientId = admission.patient_id;
+
+    await db.$transaction(async (tx: any) => {
+      if (data.patient_type === 'cash') {
+        await tx.oPD_REG.update({
+          where: { patient_id: patientId, organizationId },
+          data: { patient_type: 'cash' },
+        });
+        return;
+      }
+
+      if (data.patient_type === 'corporate') {
+        // Resolve corporate_name to a CorporateMaster (find existing by name,
+        // else create) — mirrors reception-actions.updatePatient.
+        let corporateId: string | null = null;
+        const rawName = (data.corporate_name ?? '').trim();
+        if (rawName) {
+          let corp = await tx.corporateMaster.findFirst({
+            where: { organizationId, company_name: { equals: rawName, mode: 'insensitive' } },
+            select: { id: true },
+          });
+          if (!corp) {
+            const base = rawName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || 'CORP';
+            let code = base, n = 1;
+            while (await tx.corporateMaster.findFirst({ where: { organizationId, company_code: code }, select: { id: true } })) {
+              code = `${base}${n++}`;
+            }
+            corp = await tx.corporateMaster.create({
+              data: { organizationId, company_name: rawName, company_code: code, credit_limit: 0, discount_percentage: 0, payment_terms_days: 30, covered_services: [] },
+              select: { id: true },
+            });
+          }
+          corporateId = corp.id;
+        }
+
+        await tx.oPD_REG.update({
+          where: { patient_id: patientId, organizationId },
+          data: {
+            patient_type: 'corporate',
+            corporate_id: corporateId,
+            corporate_card_number: data.corporate_card_number?.trim() || null,
+            employee_id: data.employee_id?.trim() || null,
+          },
+        });
+        return;
+      }
+
+      // tpa_insurance
+      await tx.oPD_REG.update({
+        where: { patient_id: patientId, organizationId },
+        data: { patient_type: 'tpa_insurance' },
+      });
+
+      if (data.tpa_provider_id && data.insurance_policy_number) {
+        const providerId = parseInt(data.tpa_provider_id, 10);
+        if (!isNaN(providerId)) {
+          await tx.insurance_policies.upsert({
+            where: { policy_number: data.insurance_policy_number },
+            create: {
+              patient_id: patientId,
+              provider_id: providerId,
+              policy_number: data.insurance_policy_number,
+              valid_from: data.insurance_validity_start ? new Date(data.insurance_validity_start) : null,
+              valid_until: data.insurance_validity_end ? new Date(data.insurance_validity_end) : null,
+              status: 'Active',
+              organizationId,
+            },
+            update: {
+              provider_id: providerId,
+              valid_from: data.insurance_validity_start ? new Date(data.insurance_validity_start) : null,
+              valid_until: data.insurance_validity_end ? new Date(data.insurance_validity_end) : null,
+              status: 'Active',
+            },
+          });
+        }
+      }
+    });
+
+    if (oldPatientType !== data.patient_type) {
+      await db.system_audit_logs.create({
+        data: {
+          action: 'CHANGE_PATIENT_CATEGORY',
+          module: 'ipd',
+          entity_type: 'admission',
+          entity_id: data.admission_id,
+          details: JSON.stringify({ old: oldPatientType, new: data.patient_type, by_role: role }),
+          organizationId,
+        },
+      });
+    }
+
+    revalidatePath(`/ipd/admission/${data.admission_id}`);
+    revalidatePath(`/reception/ipd/${data.admission_id}`);
+    revalidatePath(`/admin/patients/${patientId}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error('updateAdmissionPatientCategory error:', error);
+    return { success: false, error: error.message || 'Failed to update patient category' };
   }
 }
 
