@@ -260,6 +260,80 @@ export async function deletePackage(id: number) {
   } catch (e: any) { return { success: false, error: e.message }; }
 }
 
+// ---- Package TPA Rates (IpdPackageTpaRate) ----
+// Provider-first rate sheet: pick a TPA, see/edit its negotiated price for every
+// active package. A package with no row here falls back to IpdPackage.total_amount
+// when applied (see resolvePackagePrice in ipd-finance-actions.ts).
+
+export async function listPackageTpaRates(providerId: number) {
+  try {
+    const { db, organizationId } = await requireTenantContext();
+    const packages = await db.ipdPackage.findMany({
+      where: { organizationId, is_active: true },
+      orderBy: { package_name: 'asc' },
+      select: { id: true, package_code: true, package_name: true, total_amount: true },
+    });
+    const rates = await db.ipdPackageTpaRate.findMany({
+      where: { organizationId, provider_id: providerId },
+      select: { package_id: true, tpa_amount: true },
+    });
+    const rateByPackageId = new Map(rates.map((r: any) => [r.package_id, r.tpa_amount]));
+    const rows = packages.map((p: any) => ({
+      package_id: p.id,
+      package_code: p.package_code,
+      package_name: p.package_name,
+      total_amount: p.total_amount,
+      tpa_amount: rateByPackageId.has(p.id) ? rateByPackageId.get(p.id) : null,
+    }));
+    return { success: true, data: serialize(rows) };
+  } catch (e: any) { return { success: false, error: e.message }; }
+}
+
+export async function bulkUpsertPackageTpaRates(
+  providerId: number,
+  rates: { package_id: number; tpa_amount: number | null }[],
+) {
+  try {
+    const { db, organizationId, session } = await requireTenantContext();
+    if (session.role !== 'admin') return { success: false, error: 'Admin only' };
+
+    let upserted = 0;
+    let deleted = 0;
+    await db.$transaction(async (tx: any) => {
+      for (const r of rates) {
+        if (r.tpa_amount === null || r.tpa_amount === undefined) {
+          const del = await tx.ipdPackageTpaRate.deleteMany({
+            where: { package_id: r.package_id, provider_id: providerId, organizationId },
+          });
+          deleted += del.count;
+          continue;
+        }
+        await tx.ipdPackageTpaRate.upsert({
+          where: {
+            package_id_provider_id_organizationId: {
+              package_id: r.package_id, provider_id: providerId, organizationId,
+            },
+          },
+          create: {
+            package_id: r.package_id, provider_id: providerId, organizationId,
+            tpa_amount: r.tpa_amount,
+          },
+          update: { tpa_amount: r.tpa_amount },
+        });
+        upserted += 1;
+      }
+    });
+
+    await db.system_audit_logs.create({ data: {
+      action: 'BULK_UPSERT_PACKAGE_TPA_RATES', module: 'master-data',
+      details: `Updated ${upserted} TPA rate(s), removed ${deleted} for provider ${providerId}`,
+      organizationId, user_id: session.id, username: session.username, role: session.role,
+    }});
+
+    return { success: true, data: { upserted, deleted } };
+  } catch (e: any) { return { success: false, error: e.message }; }
+}
+
 // ---- Radiology/Imaging (radiology_imaging) ----
 const radiologySchema = z.object({
   procedure_name: z.string().min(1),
