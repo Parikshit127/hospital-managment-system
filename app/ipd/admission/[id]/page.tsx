@@ -21,6 +21,7 @@ import {
     generateInterimBill, postChargeToIpdBill, applyPackageToAdmission,
     getPackageUtilization, reconcilePackageBilling, reclassifyChargeDisposition,
     breakOpenPackage, updateAdmissionPackageAmount, removeAdmissionPackage,
+    getPackagesForAdmission,
 } from '@/app/actions/ipd-finance-actions';
 import { removeInvoiceItem } from '@/app/actions/finance-actions';
 import {
@@ -30,7 +31,6 @@ import {
     ensureIPDDemoMasterData,
 } from '@/app/actions/ipd-billing-helpers';
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
-import { listPackages } from '@/app/actions/service-master-actions';
 import { useToast } from '@/app/components/ui/Toast';
 import {
     setExpectedDischargeDate, markFitForDischarge,
@@ -218,8 +218,9 @@ export default function AdmissionDetailPage() {
         if (activeTab === 'discharge') loadChecklist();
     }, [activeTab, loadChecklist]);
     useEffect(() => {
-        listPackages({ limit: 200 }).then(res => { if (res.success) setPackages(res.data.rows || []); });
-    }, []);
+        if (!data?.admission_id) return;
+        getPackagesForAdmission(data.admission_id).then(res => { if (res.success) setPackages((res.data as any[]) || []); });
+    }, [data?.admission_id]);
 
     const loadBill = useCallback(async () => {
         if (bill) return;
@@ -2268,7 +2269,7 @@ export default function AdmissionDetailPage() {
                                                                         onMouseDown={e => e.preventDefault()}
                                                                         onClick={() => {
                                                                             setChargeDesc(pkg.package_name);
-                                                                            setChargeRate(String(Number(pkg.total_amount ?? 0)));
+                                                                            setChargeRate(String(Number(pkg.resolved_amount ?? pkg.total_amount ?? 0)));
                                                                             setChargeCategory('Package');
                                                                             setPkgSearch(pkg.package_name);
                                                                             setSelectedPkgId(pkg.id);
@@ -2280,6 +2281,16 @@ export default function AdmissionDetailPage() {
                                                                             <div className="min-w-0">
                                                                                 <p className="text-xs font-bold text-gray-800 truncate">{pkg.package_name}</p>
                                                                                 <p className="text-[10px] text-gray-500 font-mono">{pkg.package_code} · {pkg.validity_days}d validity</p>
+                                                                                {pkg.tpa_provider_name && !pkg.is_tpa_rate && (
+                                                                                    <p className="text-[10px] text-amber-600 font-semibold mt-0.5">
+                                                                                        Standard rate — no {pkg.tpa_provider_name} price set
+                                                                                    </p>
+                                                                                )}
+                                                                                {pkg.is_tpa_rate && (
+                                                                                    <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+                                                                                        {pkg.tpa_provider_name} negotiated rate
+                                                                                    </p>
+                                                                                )}
                                                                             </div>
                                                                             <div className="flex items-center gap-2 shrink-0">
                                                                                 <span
@@ -2291,7 +2302,7 @@ export default function AdmissionDetailPage() {
                                                                                 >
                                                                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
                                                                                 </span>
-                                                                                <p className="text-xs font-black text-orange-700 whitespace-nowrap">₹{Number(pkg.total_amount).toLocaleString()}</p>
+                                                                                <p className="text-xs font-black text-orange-700 whitespace-nowrap">₹{Number(pkg.resolved_amount ?? pkg.total_amount).toLocaleString()}</p>
                                                                             </div>
                                                                         </div>
                                                                     </button>
