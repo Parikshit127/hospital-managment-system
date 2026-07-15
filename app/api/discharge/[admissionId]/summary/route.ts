@@ -9,7 +9,7 @@ import {
     emptyDischargeData,
 } from '@/app/lib/discharge-summary';
 
-const ALLOWED_STAFF_ROLES = ['admin', 'doctor', 'ipd_manager', 'nurse', 'finance'];
+const ALLOWED_STAFF_ROLES = ['admin', 'doctor', 'ipd_manager', 'nurse', 'finance', 'receptionist', 'reception'];
 
 // Printable, NABH-format discharge summary (HTML → print to PDF in the browser).
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ admissionId: string }> }) {

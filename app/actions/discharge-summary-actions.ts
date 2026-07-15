@@ -13,7 +13,7 @@ import {
 } from '@/app/lib/discharge-summary';
 import { ADMISSION_STATUS } from '@/app/lib/admission-status';
 
-const AUTHORS = ['doctor', 'admin', 'ipd_manager', 'superadmin'];
+const AUTHORS = ['doctor', 'admin', 'ipd_manager', 'superadmin', 'receptionist', 'reception'];
 
 // A `datetime-local` input yields "YYYY-MM-DDTHH:mm" with no timezone — the
 // hospital works in IST, so pin the offset rather than trusting server locale.
@@ -99,7 +99,7 @@ export async function getDischargeSummary(admissionId: string) {
     }
 }
 
-// Create/replace the discharge summary for an admission. Doctor/admin/IPD-manager only.
+// Create/replace the discharge summary for an admission. Doctor/admin/IPD-manager/reception only.
 export async function saveDischargeSummary(
     admissionId: string,
     input: Partial<DischargeSummaryData>,
@@ -199,7 +199,7 @@ export async function saveDischargeSummary(
         return { success: true };
     } catch (error: any) {
         if (error?.name === 'ForbiddenError' || /FORBIDDEN/.test(error?.message || '')) {
-            return { success: false, error: 'Only a doctor or admin can author the discharge summary.' };
+            return { success: false, error: 'Only a doctor, admin, IPD manager, or reception can author the discharge summary.' };
         }
         console.error('saveDischargeSummary error:', error);
         return { success: false, error: error.message };
