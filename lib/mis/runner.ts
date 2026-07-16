@@ -62,7 +62,8 @@ import {
   doctorTransferReport,
   expiredPatientsReport,
   counsellingSummaryReport,
-  dischargeTatReport
+  dischargeTatReport,
+  opdPatientVisitFrequencyReport
 } from './registry/frontdesk';
 import {
   diagCardiologyAppointmentReport,
@@ -146,6 +147,7 @@ import { ValidatedFilters, ReportDefinition } from './types';
 
 // Add all reports to this registry map
 export const REGISTRY: Record<string, ReportDefinition> = {
+  [opdPatientVisitFrequencyReport.id]: opdPatientVisitFrequencyReport,
   [dailyRevenueReport.id]: dailyRevenueReport,
   [billingDetailReport.id]: billingDetailReport,
   [billingItemDetailReport.id]: billingItemDetailReport,

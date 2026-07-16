@@ -1156,3 +1156,101 @@ export const dischargeTatReport: ReportDefinition = {
     return { rows, totals: {} };
   },
 };
+
+// ─── Per-Patient OPD Visit Frequency ───────────────────────────────────────
+// "How many times has each patient come to OPD?" — asked for by management.
+//
+// Sourced from OPD invoices, NOT the `appointments` table. That choice is
+// deliberate and load-bearing: appointments is effectively unused in
+// production (4 rows for the org that has 650 OPD invoices), because walk-in
+// OPD is billed directly without ever creating an appointment. The existing
+// doctor-footfall report reads `appointments` and consequently reports almost
+// nothing. One finalised OPD bill == one visit is the only reliable signal
+// this deployment actually has.
+//
+// Cancelled/Voided bills are excluded (they aren't visits). Draft bills ARE
+// counted: an OPD bill can sit in Draft while the patient has demonstrably
+// been seen, and excluding them would undercount today's footfall.
+export const opdPatientVisitFrequencyReport: ReportDefinition = {
+  id: 'frontdesk-opd-patient-visits',
+  category: ReportCategory.Registration,
+  name: 'OPD - Patient Wise Visit Count (Repeat Visits)',
+  description:
+    'How many times each patient visited OPD in the period, with first/last visit dates, doctors seen and total billed. Counts finalised + draft OPD bills (one bill = one visit); cancelled/voided bills are excluded.',
+  filters: z.object({
+    date_start: z.string().or(z.date()),
+    date_end: z.string().or(z.date()),
+    // Lets management ask the actual question — "show me repeat patients" —
+    // without exporting every single-visit row. Default 1 = everyone.
+    min_visits: z.coerce.number().int().min(1).optional(),
+    patient_id: z.string().optional(),
+  }),
+  columns: [
+    { key: 'patient_id', label: 'UHID', type: 'string' },
+    { key: 'patient_name', label: 'Patient Name', type: 'string' },
+    { key: 'phone', label: 'Phone', type: 'string' },
+    { key: 'age', label: 'Age', type: 'string' },
+    { key: 'gender', label: 'Gender', type: 'string' },
+    { key: 'visit_count', label: 'OPD Visits', type: 'number' },
+    { key: 'first_visit', label: 'First Visit', type: 'date' },
+    { key: 'last_visit', label: 'Last Visit', type: 'date' },
+    { key: 'doctors_seen', label: 'Doctor(s) Seen', type: 'string' },
+    { key: 'total_billed', label: 'Total Billed', type: 'number' },
+  ],
+  defaultSort: { column: 'visit_count', direction: 'desc' },
+  rowLimitSync: 5000,
+  requiredPermission: 'mis_reports.frontdesk.view',
+  queryFn: async (filters: ValidatedFilters, orgId: string) => {
+    const { date_start, date_end, min_visits, patient_id } = filters as any;
+    const minVisits = Number(min_visits) > 0 ? Number(min_visits) : 1;
+
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT
+        i.patient_id                                        AS "patient_id",
+        COALESCE(p.full_name, i.patient_id)                 AS "patient_name",
+        p.phone                                             AS "phone",
+        p.age                                               AS "age",
+        p.gender                                            AS "gender",
+        COUNT(i.id)                                         AS "visit_count",
+        MIN(i.created_at)                                   AS "first_visit",
+        MAX(i.created_at)                                   AS "last_visit",
+        -- Distinct, non-empty doctor names for this patient's OPD visits.
+        -- OPD is walk-in so doctor_name is frequently null; NULLIF keeps the
+        -- blanks out of the list rather than rendering ", ,".
+        COALESCE(
+          STRING_AGG(DISTINCT NULLIF(TRIM(i.doctor_name), ''), ', '
+                     ORDER BY NULLIF(TRIM(i.doctor_name), '')),
+          '-'
+        )                                                   AS "doctors_seen",
+        COALESCE(SUM(i.net_amount), 0)                      AS "total_billed"
+      FROM "invoices" i
+      LEFT JOIN "OPD_REG" p
+        ON p.patient_id = i.patient_id
+       AND p."organizationId" = i."organizationId"
+      WHERE i."organizationId" = ${orgId}
+        AND i.invoice_type IN ('OPD', 'OPD_FEE')
+        AND i.status NOT IN ('Cancelled', 'Voided')
+        AND i.is_archived = false
+        AND i.created_at >= ${toStartOfDay(date_start)}
+        AND i.created_at <= ${toEndOfDay(date_end)}
+        ${patient_id ? Prisma.sql`AND i.patient_id = ${patient_id}` : Prisma.empty}
+      GROUP BY i.patient_id, p.full_name, p.phone, p.age, p.gender
+      HAVING COUNT(i.id) >= ${minVisits}
+      ORDER BY COUNT(i.id) DESC, MAX(i.created_at) DESC
+    `;
+
+    const mapped = rows.map(r => ({
+      ...r,
+      visit_count: Number(r.visit_count || 0),
+      total_billed: Number(r.total_billed || 0),
+    }));
+
+    return {
+      rows: mapped,
+      totals: {
+        visit_count: mapped.reduce((s, r) => s + r.visit_count, 0),
+        total_billed: mapped.reduce((s, r) => s + r.total_billed, 0),
+      },
+    };
+  },
+};
