@@ -87,7 +87,8 @@ import {
   doctorTransferReport,
   expiredPatientsReport,
   counsellingSummaryReport,
-  dischargeTatReport
+  dischargeTatReport,
+  opdPatientVisitFrequencyReport
 } from '@/lib/mis/registry/frontdesk';
 import {
   diagCardiologyAppointmentReport,
@@ -239,6 +240,7 @@ export async function listCatalogue() {
     revenueBillingCategoryWiseReport,
     revenueWardWiseReport,
     revenueDoctorWiseSummaryReport,
+    opdPatientVisitFrequencyReport,
     preRegistrationReport,
     registrationConvertReport,
     registrationReport,
