@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
+import { fmtIstDate } from '@/app/lib/ist';
 import { Search, Filter, Activity, BedDouble, Calendar, UserRound, ArrowRight, ShieldAlert, CheckCircle2, ArrowLeftRight, X, Loader2, AlertTriangle, HeartPulse, XCircle } from 'lucide-react';
 import { NEWSScoreBadge } from '@/app/components/ipd/NEWSScoreBadge';
 import { Input } from '@/app/components/ui/Input';
@@ -444,13 +445,13 @@ export function AdmissionsDataGrid({ initialData, wards, userRole = '' }: { init
                                             <div className="flex flex-col gap-1.5">
                                                 <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500">
                                                     <Calendar className="h-3 w-3 text-orange-500" />
-                                                    <span className="text-orange-600">In: {new Date(adm.admission_date).toLocaleDateString('en-GB')}</span>
+                                                    <span className="text-orange-600">In: {fmtIstDate(adm.admission_date)}</span>
                                                 </div>
                                                 {adm.expected_discharge_date && adm.status === 'Admitted' && (
                                                     <div className="flex items-center gap-1.5 text-[10px] font-bold">
                                                         <Calendar className="h-3 w-3 text-violet-400" />
                                                         <span className={new Date(adm.expected_discharge_date) < new Date() ? 'text-red-500' : 'text-violet-500'}>
-                                                            EDD: {new Date(adm.expected_discharge_date).toLocaleDateString('en-GB')}
+                                                            EDD: {fmtIstDate(adm.expected_discharge_date)}
                                                             {new Date(adm.expected_discharge_date) < new Date() && ' ⚠'}
                                                         </span>
                                                     </div>
@@ -461,7 +462,7 @@ export function AdmissionsDataGrid({ initialData, wards, userRole = '' }: { init
                                                 {adm.status === 'Discharged' && adm.discharge_date && (
                                                     <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500">
                                                         <CheckCircle2 className="h-3 w-3 text-rose-400" />
-                                                        <span className="text-rose-500">Out: {new Date(adm.discharge_date).toLocaleDateString('en-GB')}</span>
+                                                        <span className="text-rose-500">Out: {fmtIstDate(adm.discharge_date)}</span>
                                                     </div>
                                                 )}
                                             </div>

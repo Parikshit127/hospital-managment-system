@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
+import { fmtIstDateTime } from '@/app/lib/ist';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -1438,7 +1439,7 @@ export default function AdmissionDetailPage() {
                                             <span className="absolute -left-[35px] bg-emerald-100 rounded-full p-1.5 border-4 border-white shadow-sm">
                                                 <ChevronsDown className="h-3.5 w-3.5 text-emerald-600" />
                                             </span>
-                                            <p className="text-[10px] font-bold text-emerald-600 uppercase">Admission Initiated · {new Date(data.admission_date).toLocaleString()}</p>
+                                            <p className="text-[10px] font-bold text-emerald-600 uppercase">Admission Initiated · {fmtIstDateTime(data.admission_date)}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -2606,7 +2607,7 @@ export default function AdmissionDetailPage() {
                                         <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto" />
                                         <h3 className="text-base font-black text-gray-900">Patient Discharged</h3>
                                         <p className="text-xs text-gray-500">
-                                            Discharged on {data.discharge_date ? new Date(data.discharge_date).toLocaleString() : 'N/A'}
+                                            Discharged on {data.discharge_date ? fmtIstDateTime(data.discharge_date) : 'N/A'}
                                         </p>
                                         <Link href={`/api/discharge/${data.admission_id}/bill`} target="_blank">
                                             <button className="mt-2 flex items-center justify-center gap-2 w-full py-2.5 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-xl transition-colors">

@@ -7,6 +7,7 @@ import {
     Loader2, Save, ArrowLeft,
 } from 'lucide-react';
 import { getAdmissionFullDetails, updateAdmissionDiagnosis } from '@/app/actions/ipd-actions';
+import { fmtIstDateTime } from '@/app/lib/ist';
 import { getIPDVitalsHistory, getNursingAssessments } from '@/app/actions/ipd-nursing-actions';
 import { VitalsChart } from '@/app/components/ipd/VitalsChart';
 import { DischargeSummaryEditor } from '@/app/components/ipd/DischargeSummaryEditor';
@@ -164,7 +165,7 @@ export default function IpdPatientDetailContent({ admissionId }: { admissionId: 
                 <div className="bg-white border border-gray-200 rounded-2xl p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <p className={labelCls}>Admission Date</p>
-                        <p className="font-bold text-gray-800">{new Date(data.admission_date).toLocaleString('en-GB')}</p>
+                        <p className="font-bold text-gray-800">{fmtIstDateTime(data.admission_date)}</p>
                     </div>
                     <div>
                         <p className={labelCls}>Attending Doctor</p>

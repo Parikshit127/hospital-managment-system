@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getBillBranding, type BillBranding } from '@/app/lib/bill-branding';
+import { fmtIstDate } from '@/app/lib/ist';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager'];
 
@@ -90,7 +91,7 @@ function packageAcceptanceHTML(admission: any, admPkg: any, org: any, branding: 
 
     const hospitalName = branding.hospitalName;
     const gstin = branding.gstin || org?.registration_number || 'N/A';
-    const admissionDate = new Date(admission.admission_date).toLocaleDateString('en-GB');
+    const admissionDate = fmtIstDate(admission.admission_date);
     const amount = Number(admPkg.applied_amount || pkg.total_amount || 0);
 
     const incRows = inclusions.length
