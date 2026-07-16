@@ -511,10 +511,15 @@ export async function getIPDAdmissions(statusFilter?: string) {
     }
 
     const enriched = admissions.map((a: any) => {
-      const daysAdmitted = Math.ceil(
-        (new Date().getTime() - new Date(a.admission_date).getTime()) /
+      // Length of stay: count to the discharge date once discharged, not to now.
+      // Measuring against now() kept the counter ticking forever after discharge,
+      // so a 4-day stay from three months ago reported ~95 days. Only ever visible
+      // on lists that include discharged rows, which the doctor portal now does.
+      const stayEnd = a.discharge_date ? new Date(a.discharge_date) : new Date();
+      const daysAdmitted = Math.max(1, Math.ceil(
+        (stayEnd.getTime() - new Date(a.admission_date).getTime()) /
           (1000 * 60 * 60 * 24),
-      );
+      ));
       
       const hasCharges = admissionIdsWithCharges.has(a.admission_id);
       const isWithin8Hours = (new Date().getTime() - new Date(a.admission_date).getTime()) < 8 * 60 * 60 * 1000;

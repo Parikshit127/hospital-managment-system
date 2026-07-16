@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Search, BedDouble, Loader2, Users } from 'lucide-react';
 import { getIPDAdmissions } from '@/app/actions/ipd-actions';
 import { useToast } from '@/app/components/ui/Toast';
+import { fmtIstDate } from '@/app/lib/ist';
 
 interface IpdAdmissionRow {
     admission_id: string;
@@ -13,6 +14,7 @@ interface IpdAdmissionRow {
     diagnosis: string | null;
     doctor_name: string | null;
     admission_date: string;
+    discharge_date: string | null;
     daysAdmitted: number;
     wardName: string;
     bed_id: string | null;
@@ -24,17 +26,24 @@ interface IpdAdmissionRow {
     };
 }
 
+type StatusFilter = 'Admitted' | 'Discharged' | 'All';
+
 export default function IpdPatientsContent() {
     const toast = useToast();
     const [admissions, setAdmissions] = useState<IpdAdmissionRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    // Was hardcoded to 'Admitted', so a patient vanished from the doctor's list
+    // the moment they were discharged -- taking the only route to their discharge
+    // summary with them (the detail page itself works fine for any status).
+    // Defaults to 'Admitted' to preserve the ward-round view.
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>('Admitted');
 
     useEffect(() => {
         let cancelled = false;
         async function load() {
             setLoading(true);
-            const res = await getIPDAdmissions('Admitted');
+            const res = await getIPDAdmissions(statusFilter === 'All' ? undefined : statusFilter);
             if (cancelled) return;
             if (res.success) {
                 setAdmissions(res.data as IpdAdmissionRow[]);
@@ -46,7 +55,7 @@ export default function IpdPatientsContent() {
         load();
         return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [statusFilter]);
 
     const filtered = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
@@ -64,19 +73,30 @@ export default function IpdPatientsContent() {
                     <BedDouble className="h-6 w-6 text-teal-500" /> IPD Patients
                 </h1>
                 <span className="bg-orange-500/10 text-teal-600 text-xs px-3 py-1 rounded-lg font-black border border-orange-500/20">
-                    {filtered.length} Admitted
+                    {filtered.length} {statusFilter === 'All' ? 'Total' : statusFilter}
                 </span>
             </div>
 
-            <div className="relative max-w-md mb-6">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
-                <input
-                    type="text"
-                    placeholder="Search by patient name or ID..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-medium text-gray-900"
-                />
+            <div className="flex flex-wrap items-center gap-3 mb-6">
+                <div className="relative max-w-md flex-1 min-w-[240px]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
+                    <input
+                        type="text"
+                        placeholder="Search by patient name or ID..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-medium text-gray-900"
+                    />
+                </div>
+                <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                    className="px-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-medium text-gray-900 focus:ring-2 focus:ring-orange-500/20 outline-none"
+                >
+                    <option value="Admitted">Currently Admitted</option>
+                    <option value="Discharged">Discharged</option>
+                    <option value="All">All</option>
+                </select>
             </div>
 
             {loading ? (
@@ -86,7 +106,9 @@ export default function IpdPatientsContent() {
             ) : filtered.length === 0 ? (
                 <div className="text-center py-20 text-gray-400 flex flex-col items-center gap-2">
                     <Users className="h-10 w-10 text-gray-200" />
-                    No IPD patients currently admitted.
+                    {statusFilter === 'Admitted' ? 'No IPD patients currently admitted.'
+                        : statusFilter === 'Discharged' ? 'No discharged IPD patients found.'
+                        : 'No IPD patients found.'}
                 </div>
             ) : (
                 <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
@@ -94,6 +116,7 @@ export default function IpdPatientsContent() {
                         <thead>
                             <tr className="bg-gray-50 border-b border-gray-200 text-left text-[10px] font-black uppercase tracking-wider text-gray-400">
                                 <th className="px-5 py-3">Patient</th>
+                                <th className="px-5 py-3">Status</th>
                                 <th className="px-5 py-3">Ward / Bed</th>
                                 <th className="px-5 py-3">Admitted</th>
                                 <th className="px-5 py-3">Diagnosis</th>
@@ -113,11 +136,25 @@ export default function IpdPatientsContent() {
                                             {a.patient.gender ? ` / ${a.patient.gender}` : ''}
                                         </div>
                                     </td>
+                                    <td className="px-5 py-4">
+                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide border ${
+                                            a.status === 'Admitted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                            : a.status === 'Discharged' ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                            : 'bg-gray-100 text-gray-500 border-gray-200'
+                                        }`}>
+                                            {a.status}
+                                        </span>
+                                    </td>
                                     <td className="px-5 py-4 text-gray-600 font-medium">
                                         {a.wardName}{a.bed_id ? ` • ${a.bed_id}` : ''}
                                     </td>
                                     <td className="px-5 py-4 text-gray-600 font-medium">
-                                        {new Date(a.admission_date).toLocaleDateString('en-GB')}
+                                        {fmtIstDate(a.admission_date)}
+                                        {a.discharge_date && (
+                                            <div className="text-[10px] text-gray-400 font-semibold">
+                                                Discharged {fmtIstDate(a.discharge_date)}
+                                            </div>
+                                        )}
                                         <div className="text-[10px] text-gray-400 font-semibold">{a.daysAdmitted} day{a.daysAdmitted === 1 ? '' : 's'}</div>
                                     </td>
                                     <td className="px-5 py-4 text-gray-600 font-medium max-w-xs truncate">
