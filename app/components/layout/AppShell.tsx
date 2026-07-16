@@ -7,6 +7,7 @@ import { RefreshCw } from "lucide-react";
 import { NotificationBell } from "@/app/components/NotificationBell";
 import { GlobalPatientSearch } from "./GlobalPatientSearch";
 import { useAdminPortal } from "@/app/admin/components/AdminPortalContext";
+import { SessionKeepAlive } from "@/app/components/providers/SessionKeepAlive";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -44,6 +45,7 @@ export function AppShell({
   if (isAdminPortal) {
     return (
       <div className="space-y-6">
+        <SessionKeepAlive />
         {pageTitle && (
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3.5">
@@ -88,6 +90,7 @@ export function AppShell({
 
   return (
     <div className="flex h-screen relative" style={{ backgroundColor: "var(--admin-bg)" }}>
+      <SessionKeepAlive />
       {/* Global Ambient Background */}
       <div className="blob b1" />
       <div className="blob b2" />

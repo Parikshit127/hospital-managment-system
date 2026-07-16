@@ -309,7 +309,20 @@ export default function PurchaseOrdersPage() {
         } catch (error: any) {
             // Without this catch, a rejected request (network drop, pool timeout) left
             // setCreating(false) never called — the button stayed stuck on "Creating…" forever.
-            alert(error?.message || 'Failed to save PO — please try again.');
+            //
+            // The common case here is an expired session: proxy.ts 307s the server
+            // action to /login, the browser gets HTML instead of an RSC payload, and
+            // Next.js surfaces the opaque "An unexpected response was received from
+            // the server". Say what actually happened, and DON'T close the modal —
+            // the entered lines stay on screen so a re-login in another tab lets the
+            // user retry without re-keying the whole order.
+            const msg = String(error?.message || '');
+            const looksLikeAuthRedirect = /unexpected response|Failed to fetch|NetworkError/i.test(msg);
+            alert(
+                looksLikeAuthRedirect
+                    ? 'Could not save — your session may have expired.\n\nOpen the app in a new tab and sign in again, then come back and press Create PO once more. Your entered items are still here.'
+                    : (msg || 'Failed to save PO — please try again.')
+            );
         } finally {
             setCreating(false);
         }
