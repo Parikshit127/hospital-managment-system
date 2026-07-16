@@ -983,10 +983,18 @@ export async function addInventoryBatch(data: {
     stock: number,
     price: number,
     expiry: Date,
-    rack: string
+    rack: string,
+    // HSN/SAC for GST. Lives on pharmacy_medicine_master (a property of the
+    // product), not on the batch — so this writes through to the medicine.
+    hsn_sac_code?: string
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
+
+        // Normalise defensively: the client already uppercases/strips, but this
+        // action is callable directly. Empty string -> undefined so we never
+        // blank out an existing code with a blank submission.
+        const hsn = data.hsn_sac_code?.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) || undefined;
 
         let medicineId = data.medicine_id;
 
@@ -1010,6 +1018,7 @@ export async function addInventoryBatch(data: {
                         mrp: data.price,
                         selling_price: data.price,
                         price_per_unit: data.price,
+                        hsn_sac_code: hsn ?? null,
                         organizationId,
                     }
                 });
@@ -1018,6 +1027,17 @@ export async function addInventoryBatch(data: {
         }
 
         if (!medicineId) return { success: false, error: 'Invalid Medicine ID' };
+
+        // Backfill HSN onto an existing medicine when one was supplied. Only ~9 of
+        // 13k medicines currently carry an HSN, and this form is where pharmacy
+        // staff actually work, so let them fill it in as stock arrives. Guarded on
+        // `hsn` being truthy so a blank field never wipes an existing code.
+        if (hsn) {
+            await db.pharmacy_medicine_master.updateMany({
+                where: { id: medicineId, organizationId },
+                data: { hsn_sac_code: hsn },
+            });
+        }
 
         // Upsert the batch: if this batch_no already exists for the medicine,
         // top up its stock instead of failing on the unique constraint.

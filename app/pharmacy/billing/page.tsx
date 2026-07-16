@@ -127,7 +127,8 @@ export default function PharmacyPage() {
         stock: '',
         price: '',
         expiry: '',
-        rack: ''
+        rack: '',
+        hsn_sac_code: ''
     });
 
     const debouncedSearch = useDebouncedValue(search, 250);
@@ -481,13 +482,14 @@ export default function PharmacyPage() {
                 stock: Number(invForm.stock),
                 price: Number(invForm.price),
                 expiry: new Date(invForm.expiry),
-                rack: invForm.rack
+                rack: invForm.rack,
+                hsn_sac_code: invForm.hsn_sac_code || undefined
             };
             const res = await addInventoryBatch(payload);
             if (res.success) {
                 setShowInventoryModal(false);
                 loadInventory();
-                setInvForm({ isNewMedicine: false, medicine_id: '', brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', expiry: '', rack: '' });
+                setInvForm({ isNewMedicine: false, medicine_id: '', brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', expiry: '', rack: '', hsn_sac_code: '' });
             } else {
                 alert('Error: ' + res.error);
             }
@@ -2005,9 +2007,32 @@ export default function PharmacyPage() {
                                     <input value={invForm.price} onChange={e => setInvForm({ ...invForm, price: e.target.value })} type="number" step="0.01" className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-bold text-gray-900 placeholder:text-gray-400" placeholder="0.00" />
                                 </div>
                             </div>
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Rack Location</label>
-                                <input value={invForm.rack} onChange={e => setInvForm({ ...invForm, rack: e.target.value })} className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-medium text-gray-900 placeholder:text-gray-400" placeholder="Optional (e.g. A-4)" />
+                            <div className="grid grid-cols-2 gap-5">
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Rack Location</label>
+                                    <input value={invForm.rack} onChange={e => setInvForm({ ...invForm, rack: e.target.value })} className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-medium text-gray-900 placeholder:text-gray-400" placeholder="Optional (e.g. A-4)" />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">HSN / SAC Code</label>
+                                    <input
+                                        value={invForm.hsn_sac_code}
+                                        // Same normalisation as the Medicine Master editor: uppercase,
+                                        // alphanumeric only, max 12 (HSN/SAC is 4-12 chars).
+                                        onChange={e => setInvForm({ ...invForm, hsn_sac_code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) })}
+                                        maxLength={12}
+                                        pattern="[A-Z0-9]{4,12}"
+                                        title="HSN/SAC should be 4-12 alphanumeric characters"
+                                        className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-mono font-medium text-gray-900 placeholder:text-gray-400"
+                                        placeholder="e.g. 30049087"
+                                    />
+                                    {/* HSN lives on the medicine, not the batch — saving it here updates
+                                        the medicine for every batch. Say so rather than surprise them. */}
+                                    <p className="text-[10px] text-gray-400 ml-1">
+                                        {invForm.isNewMedicine
+                                            ? 'Optional · used for GST'
+                                            : 'Optional · applies to all batches of this medicine'}
+                                    </p>
+                                </div>
                             </div>
                         </div>
 
