@@ -27,6 +27,9 @@ export default function DispensePage() {
             // Pre-fill dispense list with asked quantities, but batch_no empty
             setDispenseList(res.data.items.map((it: any) => ({
                 id: it.id,
+                // Carried so handleDispense can identify the medicine. Without one of
+                // these, dispenseMedicine can't resolve it and throws.
+                medicine_id: it.medicine_id,
                 medicine_name: it.medicine_name,
                 requested_qty: it.quantity_requested || it.quantity,
                 dispense_qty: it.quantity_requested || it.quantity,
@@ -58,7 +61,14 @@ export default function DispensePage() {
         }
 
         setSaving(true);
+        // dispenseMedicine resolves the medicine from medicine_id, falling back to
+        // order_item_id — it does NOT look at medicine_name. This previously sent
+        // only { medicine_name, quantity, batch_no }, so every dispense from this
+        // page threw "Could not resolve medicine ID for item". Send the ids the
+        // action actually reads (same contract the IP Orders screen uses).
         const toDispense = dispenseList.map(item => ({
+            order_item_id: item.id,
+            medicine_id: item.medicine_id,
             medicine_name: item.medicine_name,
             quantity: item.dispense_qty,
             batch_no: item.batch_no
