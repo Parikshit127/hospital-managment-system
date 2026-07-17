@@ -29,7 +29,11 @@ interface PharmacyOrder {
   notes?: string;
   verified_by?: string | null;
   items: OrderItem[];
-  patient: { patient_name: string; ward?: string } | null;
+  // Shape actually sent by getPharmacyQueue: it attaches the OPD_REG row
+  // ({ patient_id, full_name, phone }). This was previously typed as
+  // `patient_name`, a field that does not exist on it — so the UI silently read
+  // undefined and fell back to printing the raw UHID instead of the name.
+  patient: { patient_id: string; full_name: string; phone?: string | null } | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -111,13 +115,36 @@ export default function IPMedicationOrdersPage() {
     }
   }
 
-  // Group by ward — use admission_id prefix or patient name prefix as grouping key
-  const grouped: Record<string, PharmacyOrder[]> = {};
+  // One indent sheet per admitted patient — mirrors the paper "Requisition
+  // Indent" the ward actually fills in, where every drug for a patient sits on
+  // a single sheet.
+  //
+  // This previously grouped on `admission_id.slice(0, 8)`, which is just the
+  // constant prefix ("AVS-ADM-26-27-128" -> "AVS-ADM-"). Every admission in the
+  // org shares that prefix, so ALL patients collapsed into one bucket and their
+  // medicines interleaved — and the heading rendered as a bare "Ward /
+  // Admission AVS-ADM-" with no number. Keyed on the full admission_id, each
+  // patient now gets their own sheet no matter how many are admitted.
+  //
+  // Nurses often raise one indent per drug (16 separate orders were seen for a
+  // single admission), so the sheet also flattens every order for that patient
+  // into one medicine list instead of 16 near-identical one-row tables.
+  type IndentSheet = { key: string; admissionId: string | null; patientId: string; patientName: string; orders: PharmacyOrder[] };
+  const sheetMap = new Map<string, IndentSheet>();
   for (const order of orders) {
-    const ward = order.admission_id ? `Ward / Admission ${order.admission_id.slice(0, 8)}` : 'General IPD';
-    if (!grouped[ward]) grouped[ward] = [];
-    grouped[ward].push(order);
+    const key = order.admission_id || `patient:${order.patient_id}`;
+    if (!sheetMap.has(key)) {
+      sheetMap.set(key, {
+        key,
+        admissionId: order.admission_id,
+        patientId: order.patient_id,
+        patientName: order.patient?.full_name || order.patient_id,
+        orders: [],
+      });
+    }
+    sheetMap.get(key)!.orders.push(order);
   }
+  const sheets = Array.from(sheetMap.values());
 
   return (
     <AppShell
@@ -137,13 +164,20 @@ export default function IPMedicationOrdersPage() {
         </div>
       ) : (
         <div className="space-y-5">
-          {Object.entries(grouped).map(([ward, wardOrders]) => (
-            <div key={ward} className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+          {sheets.map((sheet) => {
+            const wardOrders = sheet.orders;
+            const medicineCount = wardOrders.reduce((n, o) => n + o.items.length, 0);
+            return (
+            <div key={sheet.key} className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
               <div className="px-5 py-4 bg-gray-50/70 border-b border-gray-200 flex items-center justify-between">
                 <div>
-                  <h2 className="text-sm font-black text-gray-900">{ward}</h2>
+                  {/* Lead with the patient — this is that patient's indent sheet. */}
+                  <h2 className="text-sm font-black text-gray-900">{sheet.patientName}</h2>
                   <p className="text-xs font-medium text-gray-500 mt-0.5">
-                    {wardOrders.length} order{wardOrders.length !== 1 ? 's' : ''}
+                    {sheet.patientId}
+                    {sheet.admissionId ? ` · ${sheet.admissionId}` : ''}
+                    {' · '}{medicineCount} medicine{medicineCount !== 1 ? 's' : ''}
+                    {wardOrders.length > 1 ? ` · ${wardOrders.length} indents` : ''}
                   </p>
                 </div>
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-700">
@@ -169,7 +203,7 @@ export default function IPMedicationOrdersPage() {
                         <tr key={`${order.id}-${item.id}`} className="hover:bg-gray-50 transition-colors">
                           {idx === 0 && (
                             <td className="px-6 py-4 text-gray-900 font-bold align-top" rowSpan={order.items.length}>
-                              <div>{order.patient?.patient_name || order.patient_id}</div>
+                              <div>{order.patient?.full_name || order.patient_id}</div>
                               <div className="text-xs font-medium text-gray-500 mt-0.5">
                                 {new Date(order.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                               </div>
@@ -226,7 +260,8 @@ export default function IPMedicationOrdersPage() {
                 </table>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </AppShell>
