@@ -195,10 +195,33 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
         : new Date(invoice.created_at);
     const dateStr = dateSource.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-    // GST summary line at bottom (e.g. "GST 100.00*2.5+2.5%=2.50SGST+2.50CGST")
-    const gstSummaryLines = lineData.map(l =>
-        `GST ${l.amount.toFixed(2)}*${l.sgstRate}+${l.cgstRate}%=${l.sgstAmt.toFixed(2)}SGST+${l.cgstAmt.toFixed(2)}CGST`
-    ).join(',  ');
+    // GST summary line at the bottom of the bill, e.g.
+    //   "GST 100.00*2.5+2.5%=2.50SGST+2.50CGST"
+    //
+    // Two deliberate changes from the naive per-line version:
+    //  1) Lines with no GST are skipped. Almost the entire catalogue is 0% GST,
+    //     so emitting one entry per line printed
+    //     "GST 150.00*0+0%=0.00SGST+0.00CGST" seven times across a customer's
+    //     invoice -- unreadable noise that read like a debug string.
+    //  2) The remainder is grouped BY RATE rather than per line, which is the
+    //     normal format on an Indian tax invoice (one figure per slab) and stops
+    //     a 20-line bill producing 20 near-identical fragments.
+    //
+    // A bill with no taxable line renders nothing here (not "0.00SGST+0.00CGST"),
+    // leaving just the footer.
+    const taxedLines = lineData.filter(l => (Number(l.sgstRate) + Number(l.cgstRate)) > 0 || (l.sgstAmt + l.cgstAmt) > 0);
+    const byRate = new Map<string, { taxable: number; sgstRate: number; cgstRate: number; sgstAmt: number; cgstAmt: number }>();
+    for (const l of taxedLines) {
+        const key = `${l.sgstRate}|${l.cgstRate}`;
+        const g = byRate.get(key) ?? { taxable: 0, sgstRate: l.sgstRate, cgstRate: l.cgstRate, sgstAmt: 0, cgstAmt: 0 };
+        g.taxable += l.amount;
+        g.sgstAmt += l.sgstAmt;
+        g.cgstAmt += l.cgstAmt;
+        byRate.set(key, g);
+    }
+    const gstSummaryLines = Array.from(byRate.values())
+        .map(g => `GST ${g.taxable.toFixed(2)}*${g.sgstRate}+${g.cgstRate}%=${g.sgstAmt.toFixed(2)}SGST+${g.cgstAmt.toFixed(2)}CGST`)
+        .join(',  ');
 
     const css = `
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -369,9 +392,10 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
                     </tbody>
                 </table>
 
-                {/* GST Summary line */}
+                {/* GST Summary line — omitted entirely when nothing on the bill is taxable */}
                 <div className="gst-summary">
-                    {gstSummaryLines}&nbsp;&nbsp;&nbsp;<strong>*** GET WELL SOON **</strong>
+                    {gstSummaryLines && <>{gstSummaryLines}&nbsp;&nbsp;&nbsp;</>}
+                    <strong>*** GET WELL SOON **</strong>
                     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
                     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
                     <span style={{ float: 'right' }}>For {pharmacy.name} PHARMACY</span>
