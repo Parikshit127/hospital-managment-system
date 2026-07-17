@@ -852,11 +852,23 @@ export async function getPharmacyQueue() {
     try {
         const { db } = await requireTenantContext();
 
+        // Statuses that still represent OUTSTANDING work for the pharmacist.
+        //
+        // 'Verified' and 'Dispensing' were missing, which silently broke the whole
+        // IPD indent workflow: a nurse raises an indent (Pending) -> pharmacist hits
+        // Verify -> verifyPharmacyOrder sets status='Verified' -> the order instantly
+        // dropped out of this query and vanished from BOTH /pharmacy/orders and
+        // /pharmacy/ip-orders, so it could never be dispensed. The Dispense button in
+        // ip-orders/page.tsx is written for exactly `status === 'Verified' ||
+        // 'Dispensing'` and was therefore unreachable code. Found in production with
+        // 16 indents for one admission stranded this way.
+        //
+        // 'Completed'/'Dispensed' stay out on purpose — that work is genuinely done.
         const orders = await db.pharmacy_orders.findMany({
-            where: { status: { in: ['Pending', 'Processed'] } },
+            where: { status: { in: ['Pending', 'Ordered', 'Verified', 'Dispensing', 'Processed'] } },
             orderBy: { created_at: 'desc' },
             include: { items: true },
-            take: 100, // limit to most recent 100 pending orders
+            take: 100, // most recent 100 outstanding orders
         });
 
         // Manual Join for Patient Details (since relation is missing in schema)
