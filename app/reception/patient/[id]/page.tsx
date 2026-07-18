@@ -513,6 +513,10 @@ export default function PatientProfilePage() {
                             </div>
                         </div>
                         <div className="flex gap-2 mt-3 md:mt-0">
+                            <button onClick={() => window.open(`/api/opd/${patientId}/registration-slip`, '_blank')}
+                                className="px-3 py-1.5 bg-teal-50 border border-teal-200 text-teal-700 text-xs font-bold rounded-lg hover:bg-teal-100 transition-colors flex items-center gap-1.5">
+                                <Printer className="h-3.5 w-3.5" /> Print OPD Slip
+                            </button>
                             <button onClick={() => window.open(`/api/patient/${patientId}/stickers`, '_blank')}
                                 className="px-3 py-1.5 bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-200 transition-colors">
                                 Print Stickers (24)
@@ -735,7 +739,7 @@ export default function PatientProfilePage() {
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-gray-200">
-                                    {['ID', 'Date', 'Doctor', 'Department', 'Reason', 'Status'].map(h => (
+                                    {['ID', 'Date', 'Doctor', 'Department', 'Reason', 'Status', 'Actions'].map(h => (
                                         <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase">{h}</th>
                                     ))}
                                 </tr>
@@ -759,6 +763,12 @@ export default function PatientProfilePage() {
                                             <span className={`inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full border ${getStatusColor(appt.status)}`}>
                                                 {appt.status}
                                             </span>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <button onClick={() => window.open(`/api/opd/${patientId}/registration-slip?appointmentId=${appt.appointment_id}`, '_blank')}
+                                                className="px-2 py-1 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-50 hover:text-orange-600 transition-colors flex items-center gap-1 shadow-sm">
+                                                <Printer className="h-3 w-3" /> Print Slip
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
