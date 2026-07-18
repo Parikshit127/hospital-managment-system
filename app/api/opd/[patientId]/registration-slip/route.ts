@@ -407,7 +407,7 @@ function renderOpdSlipHtml(patient: any, appt: any, b: BillBranding, org: any, d
                 display: none !important;
             }
             body.hide-letterhead .patient-card-container {
-                margin-top: ${200}px;
+                margin-top: ${220}px;
             }
         }
     </style>
