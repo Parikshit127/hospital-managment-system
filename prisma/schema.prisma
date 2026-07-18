@@ -920,6 +920,7 @@ model pharmacy_sales_audit {
 
 model pharmacy_orders {
   id                    Int                    @id @default(autoincrement())
+  indent_number         String?                @unique // Requisition no, e.g. AVS-IND-26-27-001 (null on legacy rows until backfilled)
   patient_id            String
   doctor_id             String
   requested_by_name     String?               // Display name of nurse/staff who placed the indent

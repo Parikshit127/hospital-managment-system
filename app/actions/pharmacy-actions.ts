@@ -878,6 +878,26 @@ export async function getPharmacyQueue() {
             select: { patient_id: true, full_name: true, phone: true },
         }) : [];
 
+        // Ward / bed for the indent-requisition header — resolved from the
+        // admission (pharmacy_orders has no ward column of its own).
+        const admissionIds = Array.from(new Set(
+            orders.map((o: any) => o.admission_id).filter(Boolean)
+        )) as string[];
+        const admissions = admissionIds.length > 0 ? await db.admissions.findMany({
+            where: { admission_id: { in: admissionIds } },
+            select: {
+                admission_id: true,
+                bed: { select: { bed_number: true, wards: { select: { ward_name: true } } } },
+                ward: { select: { ward_name: true } },
+            },
+        }) : [];
+        const wardByAdmission = new Map<string, string>();
+        for (const a of admissions) {
+            const wardName = a.ward?.ward_name || a.bed?.wards?.ward_name || '';
+            const bed = a.bed?.bed_number ? ` - Bed ${a.bed.bed_number}` : '';
+            wardByAdmission.set(a.admission_id, `${wardName}${bed}`.trim() || '—');
+        }
+
         // Collect all medicine names from order items to check stock
         const allMedicineNames = Array.from(new Set(
             orders.flatMap((o: any) => o.items.map((i: any) => i.medicine_name))
@@ -913,6 +933,7 @@ export async function getPharmacyQueue() {
                 ...order,
                 items: itemsWithStock,
                 patient: patients.find((p: any) => p.patient_id === order.patient_id) || null,
+                ward: order.admission_id ? (wardByAdmission.get(order.admission_id) || '—') : '—',
                 stockWarning: hasOutOfStock ? 'Out of Stock' : hasLowStock ? 'Low Stock' : null,
                 pharmacyBalance: 0,
             };

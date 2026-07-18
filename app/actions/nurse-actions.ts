@@ -2,6 +2,7 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
+import { generateIndentNumber } from '@/app/lib/sequence-generator';
 
 // ========================================
 // NURSE DASHBOARD
@@ -508,9 +509,13 @@ export async function createPharmacyIndent(data: {
     try {
         const { db, organizationId } = await requireTenantContext();
 
+        // Requisition number for the pharmacist's indent sheet (AVS-IND-26-27-001).
+        const indentNumber = await generateIndentNumber(organizationId, db);
+
         // Create the pharmacy order (indent) for IPD
         const order = await db.pharmacy_orders.create({
             data: {
+                indent_number: indentNumber,
                 patient_id: data.patientId,
                 doctor_id: data.nurseId,           // nurse raising the indent
                 requested_by_name: data.nurseName || null,  // shown on pharmacy portal
