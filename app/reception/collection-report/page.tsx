@@ -21,6 +21,9 @@ export default function CollectionReportPage() {
     const [toDate, setToDate] = useState(today);
     const [cashier, setCashier] = useState('all');
     const [cashierUsers, setCashierUsers] = useState<{ username: string; name: string }[]>([]);
+    // Default ON: the front-desk report shouldn't carry pharmacy collection
+    // (pharmacy bills at its own counter). Finance's report is unaffected.
+    const [excludePharmacy, setExcludePharmacy] = useState(true);
     const [error, setError] = useState('');
 
     useEffect(() => {
@@ -55,7 +58,8 @@ export default function CollectionReportPage() {
         const r = resolveRange();
         if (!r) { setError('Please select a valid date.'); return; }
         const cashierParam = cashier && cashier !== 'all' ? `&cashier=${encodeURIComponent(cashier)}` : '';
-        window.open(`/api/reports/collections/pdf?from=${r.from}&to=${r.to}${cashierParam}`, '_blank');
+        const pharmaParam = excludePharmacy ? '&excludePharmacy=1' : '';
+        window.open(`/api/reports/collections/pdf?from=${r.from}&to=${r.to}${cashierParam}${pharmaParam}`, '_blank');
     }
 
     const modeCards: { id: Mode; label: string; hint: string; icon: React.ReactNode }[] = [
@@ -124,6 +128,16 @@ export default function CollectionReportPage() {
                             </select>
                         </div>
                     </div>
+
+                    <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+                        <input
+                            type="checkbox"
+                            checked={excludePharmacy}
+                            onChange={(e) => setExcludePharmacy(e.target.checked)}
+                            className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-400"
+                        />
+                        <span className="text-xs font-bold text-gray-600">Reception only — exclude Pharmacy collection</span>
+                    </label>
 
                     {error && <p className="text-xs font-bold text-rose-600">{error}</p>}
 

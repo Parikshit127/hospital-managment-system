@@ -345,7 +345,14 @@ export async function GET(req: NextRequest) {
         }
 
         const modeList = Array.from(allModes);
-        const depts: Array<'Advance' | 'OP/ER' | 'IPD' | 'Walkin' | 'Pharmacy' | 'Voucher'> = ['Advance', 'OP/ER', 'IPD', 'Walkin', 'Pharmacy', 'Voucher'];
+        // Reception prints this as a front-desk collection report and doesn't want
+        // the Pharmacy column/section (pharmacy runs its own billing). Finance uses
+        // the SAME report for full cash reconciliation and must keep Pharmacy, so
+        // this is opt-in per caller via ?excludePharmacy=1 — never a global change.
+        const excludePharmacy = searchParams.get('excludePharmacy') === '1';
+        const depts: Array<'Advance' | 'OP/ER' | 'IPD' | 'Walkin' | 'Pharmacy' | 'Voucher'> =
+            (['Advance', 'OP/ER', 'IPD', 'Walkin', 'Pharmacy', 'Voucher'] as const)
+                .filter(d => !(excludePharmacy && d === 'Pharmacy'));
 
         // Helper function to build summary matrix
         function buildSummaryMatrix(filteredItems: CollectionItem[]) {
@@ -378,6 +385,14 @@ export async function GET(req: NextRequest) {
         const cashierFilter = searchParams.get('cashier');
         if (cashierFilter && cashierFilter !== 'all') {
             const kept = itemsList.filter(it => (it.cashierUsername || '').toLowerCase() === cashierFilter.toLowerCase());
+            itemsList.length = 0;
+            itemsList.push(...kept);
+        }
+
+        // Drop pharmacy rows entirely (not just the column) so grand totals,
+        // matrix and detail sections all agree.
+        if (excludePharmacy) {
+            const kept = itemsList.filter(it => it.department !== 'Pharmacy');
             itemsList.length = 0;
             itemsList.push(...kept);
         }
