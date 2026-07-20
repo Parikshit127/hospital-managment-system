@@ -36,6 +36,8 @@ const ROLE_ROUTES: Record<string, string[]> = {
   "/er": ["admin", "er_staff", "doctor", "nurse"],
   // Master Billing — orchestrates across reception, ipd, finance, admin
   "/billing": ["admin", "finance", "ipd_manager", "receptionist", "opd_manager"],
+  // Call Center — call logs + transcripts contain PHI; restrict to front-desk/admin
+  "/call-center": ["admin", "receptionist", "opd_manager"],
 };
 
 // Route -> required module permission (granular permission check)
@@ -57,6 +59,7 @@ const PERMISSION_ROUTES: Record<string, string> = {
   "/ot": "ot.view",
   "/er": "er.view",
   "/billing": "billing.view",
+  "/call-center": "opd.view",
 };
 
 // System role -> permission map (mirrors session.ts SYSTEM_ROLE_PERMISSIONS)
