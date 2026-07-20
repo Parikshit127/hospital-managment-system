@@ -9,7 +9,7 @@
 | **Tenancy** | Single organization (this deployment) |
 | **Storage** | **Transcript-only** — call audio is discarded after STT; no recordings persisted |
 | **Availability** | 24/7 full service |
-| **Status** | Phases 0–3 DONE & verified on live calls. Next: Phase 4 (booking write-path). |
+| **Status** | Phases 0–4 DONE & verified. Next: Phase 5 (fallback/human handoff). |
 | **Author date** | 2026-07-20 |
 
 > This plan **extends existing infrastructure**; it is not greenfield. Read §1 before starting so we reuse, not duplicate.
@@ -181,7 +181,7 @@ Each phase is a reviewable unit ending in a manual test. **Do not start the next
 - [ ] Register these as tools on the Vapi assistant.
 - **Test:** caller hears real availability + info; verification true/false/multi-match/no-match all behave; zero DB writes.
 
-### Phase 4 — Write path: book / register / reschedule / cancel
+### Phase 4 — Write path: book / register / reschedule / cancel ✅ DONE
 - [ ] `bookAppointment` tool → `createVoiceAppointment()` with `booking_channel:'voice_ai'`, idempotency key = `provider_call_id`; link `CallLog.appointment_id` + `patient_id`; set `outcome:'Booked'`.
 - [ ] **In-call registration** (new/unverified caller): confirm name, ask email, phone from caller ID → `registerPatient()` → continue booking same call; `outcome:'Registered'` (+`Booked` if they book).
 - [ ] `rescheduleAppointment` / `cancelAppointment` tools — **and fix the existing bug: free the old slot** (`is_booked:false, is_available:true`).
