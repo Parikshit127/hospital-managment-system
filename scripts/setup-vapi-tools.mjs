@@ -70,6 +70,54 @@ const TOOLS = [
       required: ['doctorName'],
     },
   },
+  {
+    name: 'book_appointment',
+    description: 'Book an OPD appointment for the identified caller with a doctor at a specific date and time. The caller MUST be verified or registered first. Confirm the doctor, date, and time with the caller before calling this.',
+    parameters: {
+      type: 'object',
+      properties: {
+        doctorName: { type: 'string', description: 'Doctor to book with, e.g. "Dr. Vikas Kumar Jha"' },
+        date: { type: 'string', description: "Date as YYYY-MM-DD, or 'today' / 'tomorrow'" },
+        time: { type: 'string', description: 'Slot start time the caller chose, e.g. "10:00 AM"' },
+        reason: { type: 'string', description: 'Optional reason for the visit' },
+      },
+      required: ['doctorName', 'time'],
+    },
+  },
+  {
+    name: 'register_patient',
+    description: "Register a NEW patient during the call when their number has no record or their name didn't match. The phone number is taken automatically from caller ID — do NOT ask for it. Ask for full name (required) and email (optional).",
+    parameters: {
+      type: 'object',
+      properties: {
+        fullName: { type: 'string', description: "The caller's full name" },
+        email: { type: 'string', description: 'Optional email address' },
+      },
+      required: ['fullName'],
+    },
+  },
+  {
+    name: 'reschedule_appointment',
+    description: "Reschedule the identified caller's upcoming appointment to a new date/time. The caller must be verified. Confirm the new time with the caller first.",
+    parameters: {
+      type: 'object',
+      properties: {
+        newDate: { type: 'string', description: "New date as YYYY-MM-DD, or 'today' / 'tomorrow'" },
+        newTime: { type: 'string', description: 'New start time, e.g. "11:30 AM"' },
+        doctorName: { type: 'string', description: 'Optional — a different doctor for the new appointment' },
+      },
+      required: ['newTime'],
+    },
+  },
+  {
+    name: 'cancel_appointment',
+    description: "Cancel the identified caller's upcoming appointment. The caller must be verified. Confirm with the caller before cancelling.",
+    parameters: {
+      type: 'object',
+      properties: { reason: { type: 'string', description: 'Optional cancellation reason' } },
+      required: [],
+    },
+  },
 ];
 
 async function api(path, method, body) {

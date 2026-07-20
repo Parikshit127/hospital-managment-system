@@ -20,6 +20,13 @@
 import { getTenantPrisma } from '@/backend/db';
 import { getDoctorsBySpecialty, getAvailableSpecialties } from '@/lib/booking/doctor-service';
 import { getAvailableSlotsForDoctor, findNextAvailableDate } from '@/lib/booking/slot-service';
+import {
+  bookAppointment,
+  registerPatient as registerPatientTool,
+  rescheduleAppointment,
+  cancelAppointment,
+  type VoiceCtx,
+} from './vapi-booking';
 
 interface ToolResult {
   toolCallId: string;
@@ -137,7 +144,7 @@ async function lookupCaller(organizationId: string, callerPhone: string | null) 
   };
 }
 
-async function verifyCallerName(organizationId: string, callerPhone: string | null, spokenName?: string) {
+async function verifyCallerName(organizationId: string, callerPhone: string | null, spokenName?: string, callId?: string | null) {
   const phone = normalizePhone(callerPhone);
   if (!phone || !spokenName?.trim()) {
     return { verified: false, message: 'Need both the caller ID and a spoken name to verify.' };
@@ -163,6 +170,16 @@ async function verifyCallerName(organizationId: string, callerPhone: string | nu
       verified: false,
       message: 'The spoken name does not match the record on this number. Treat as unverified — do not disclose any details; offer to register them as a new patient.',
     };
+  }
+  // Persist the verified identity on this call so booking/reschedule/cancel can
+  // act on the correct patient (important when a number has multiple records).
+  if (callId) {
+    await db.callLog
+      .updateMany({
+        where: { provider_call_id: callId },
+        data: { patient_id: hit.patient_id, patient_name: hit.full_name, verification_status: 'name_confirmed' },
+      })
+      .catch(() => {});
   }
   return {
     verified: true,
@@ -268,18 +285,28 @@ async function getDoctorAvailability(organizationId: string, args: { doctorName?
 
 // ── Dispatcher ───────────────────────────────────────────────────────────────
 
-async function runTool(name: string, args: Record<string, any>, ctx: { organizationId: string; callerPhone: string | null }) {
+async function runTool(name: string, args: Record<string, any>, ctx: VoiceCtx) {
   switch (name) {
+    // ── Read-only (Phase 3) ──
     case 'lookup_caller':
       return lookupCaller(ctx.organizationId, ctx.callerPhone);
     case 'verify_caller_name':
-      return verifyCallerName(ctx.organizationId, ctx.callerPhone, args?.name);
+      return verifyCallerName(ctx.organizationId, ctx.callerPhone, args?.name, ctx.callId);
     case 'get_hospital_info':
       return getHospitalInfo(ctx.organizationId);
     case 'find_doctors':
       return findDoctors(ctx.organizationId, args?.department);
     case 'get_doctor_availability':
       return getDoctorAvailability(ctx.organizationId, { doctorName: args?.doctorName, date: args?.date });
+    // ── Write path (Phase 4) ──
+    case 'book_appointment':
+      return bookAppointment(ctx, { doctorName: args?.doctorName, date: args?.date, time: args?.time, reason: args?.reason });
+    case 'register_patient':
+      return registerPatientTool(ctx, { fullName: args?.fullName, email: args?.email });
+    case 'reschedule_appointment':
+      return rescheduleAppointment(ctx, { newDate: args?.newDate, newTime: args?.newTime, doctorName: args?.doctorName });
+    case 'cancel_appointment':
+      return cancelAppointment(ctx, { reason: args?.reason });
     default:
       return { error: `Unknown tool: ${name}` };
   }
@@ -293,12 +320,13 @@ export async function handleVapiToolCalls(message: any, organizationId: string):
   const rawCalls: any[] = message?.toolCallList ?? message?.toolCalls ?? [];
   const callerPhone: string | null =
     message?.call?.customer?.number ?? message?.customer?.number ?? null;
+  const callId: string | null = message?.call?.id ?? null;
 
   const results = await Promise.all(
     rawCalls.map(async (raw) => {
       const { id, name, args } = parseToolCall(raw);
       try {
-        const out = await runTool(name, args, { organizationId, callerPhone });
+        const out = await runTool(name, args, { organizationId, callerPhone, callId });
         // Return a speakable string result — most reliable for the assistant.
         const result = (out && typeof out === 'object' && 'message' in out) ? (out as any).message : out;
         return { toolCallId: id, result };

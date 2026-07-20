@@ -41,6 +41,11 @@ export interface CreateVoiceAppointmentInput {
    * Recommended format: `voice-{patientId}-{slotId}`
    */
   idempotencyKey: string;
+  /**
+   * booking_channel value. Defaults to "patient_portal" (browser voice flow).
+   * The phone assistant passes "voice_ai".
+   */
+  bookingChannel?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -204,7 +209,7 @@ export async function createVoiceAppointment(
           appointment_date: appointmentDate,
           status: 'Scheduled',
           reason_for_visit: encodedReason,
-          booking_channel: 'patient_portal',
+          booking_channel: input.bookingChannel ?? 'patient_portal',
           payment_mode: 'PAV',
           payment_status: 'PENDING',
           slot_id: slotId,
