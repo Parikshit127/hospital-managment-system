@@ -25,8 +25,32 @@ import {
   registerPatient as registerPatientTool,
   rescheduleAppointment,
   cancelAppointment,
+  requestCallback,
   type VoiceCtx,
 } from './vapi-booking';
+
+/** True when a real staff transfer number is configured (not the placeholder). */
+function staffTransferConfigured(): boolean {
+  const n = process.env.STAFF_TRANSFER_NUMBER ?? '';
+  return /^\+?\d{8,15}$/.test(n) && n !== '+910000000000' && n !== '+910000000';
+}
+
+/** OPD open? (Asia/Kolkata, default 9am–6pm) + whether a live transfer is possible now. */
+function getClinicStatus() {
+  const hour = parseInt(
+    new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false }).format(new Date()),
+    10,
+  );
+  const open = hour >= 9 && hour < 18;
+  const transferAvailable = open && staffTransferConfigured();
+  return {
+    open,
+    transferAvailable,
+    message: open
+      ? (transferAvailable ? 'The OPD is open and a staff member can be connected.' : 'The OPD is open, but live transfer is unavailable — offer a callback.')
+      : 'The OPD is currently closed — offer to log a callback for the next working hours.',
+  };
+}
 
 interface ToolResult {
   toolCallId: string;
@@ -307,6 +331,11 @@ async function runTool(name: string, args: Record<string, any>, ctx: VoiceCtx) {
       return rescheduleAppointment(ctx, { newDate: args?.newDate, newTime: args?.newTime, doctorName: args?.doctorName });
     case 'cancel_appointment':
       return cancelAppointment(ctx, { reason: args?.reason });
+    // ── Handoff / fallback (Phase 5) ──
+    case 'get_clinic_status':
+      return getClinicStatus();
+    case 'request_callback':
+      return requestCallback(ctx, { reason: args?.reason, department: args?.department });
     default:
       return { error: `Unknown tool: ${name}` };
   }

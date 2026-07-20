@@ -126,6 +126,23 @@ const TOOLS = [
       required: [],
     },
   },
+  {
+    name: 'get_clinic_status',
+    description: 'Check whether the OPD is currently open and whether a live staff transfer is available right now. Call this before deciding how to hand a caller to a human.',
+    parameters: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'request_callback',
+    description: 'Log a callback request so hospital staff will call the caller back. Use this when the caller wants a human and live transfer is unavailable (after hours or not configured), or when you cannot resolve their request. This guarantees the call is never dropped.',
+    parameters: {
+      type: 'object',
+      properties: {
+        reason: { type: 'string', description: 'Short reason / what the caller needs' },
+        department: { type: 'string', description: 'Optional department the request relates to' },
+      },
+      required: [],
+    },
+  },
 ];
 
 async function api(path, method, body) {
@@ -168,6 +185,29 @@ async function main() {
       toolIds.push(created.id);
       console.log(`created  ${t.name} (${created.id})`);
     }
+  }
+
+  // 1b. Native call-transfer tool — only when a real staff number is configured.
+  const staff = process.env.STAFF_TRANSFER_NUMBER ?? '';
+  const staffValid = /^\+?\d{8,15}$/.test(staff) && staff !== '+910000000000' && staff !== '+910000000';
+  if (staffValid) {
+    const transferPayload = {
+      type: 'transferCall',
+      destinations: [{ type: 'number', number: staff, message: 'Please hold while I connect you to our staff.' }],
+      function: { name: 'transfer_to_staff' },
+    };
+    const existingTransfer = (Array.isArray(existing) ? existing : []).find((t) => t.type === 'transferCall');
+    if (existingTransfer) {
+      await api(`/tool/${existingTransfer.id}`, 'PATCH', transferPayload);
+      toolIds.push(existingTransfer.id);
+      console.log(`updated  transfer_to_staff (${existingTransfer.id}) → ${staff}`);
+    } else {
+      const created = await api('/tool', 'POST', transferPayload);
+      toolIds.push(created.id);
+      console.log(`created  transfer_to_staff (${created.id}) → ${staff}`);
+    }
+  } else {
+    console.log('skipped  transfer_to_staff — set a real STAFF_TRANSFER_NUMBER (E.164) and re-run to enable live transfer.');
   }
 
   // 2. Attach to the assistant (preserve existing model config, just set toolIds)

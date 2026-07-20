@@ -353,3 +353,55 @@ export async function cancelAppointment(ctx: VoiceCtx, args: { reason?: string }
 
   return { message: `Your appointment with ${appt.doctor_name ?? 'the doctor'} has been cancelled. Is there anything else I can help with?` };
 }
+
+function leadNumber(): string {
+  const d = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()).replace(/-/g, '');
+  const rand = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+  return `LEAD-${d}-${rand}`;
+}
+
+/**
+ * Log a callback request (the safety net so a call is NEVER dropped). Creates a
+ * CRMLead for staff follow-up and links it to the CallLog. Used after hours, when
+ * no staff transfer is available, or when the AI can't resolve the caller's need.
+ */
+export async function requestCallback(ctx: VoiceCtx, args: { reason?: string; department?: string }) {
+  const db = getTenantPrisma(ctx.organizationId);
+
+  let name = 'Phone caller';
+  let patientId: string | null = null;
+  let phone = normalizePhone(ctx.callerPhone);
+  if (ctx.callId) {
+    const log = await db.callLog.findFirst({
+      where: { provider_call_id: ctx.callId },
+      select: { patient_id: true, patient_name: true, patient_phone: true, from_number: true },
+    });
+    if (log) {
+      name = log.patient_name || name;
+      patientId = log.patient_id ?? null;
+      phone = phone || normalizePhone(log.from_number ?? log.patient_phone);
+    }
+  }
+
+  const lead = await db.cRMLead.create({
+    data: {
+      lead_number: leadNumber(),
+      name,
+      phone: phone || 'unknown',
+      source: 'voice_ai',
+      source_detail: 'AI voice call — callback requested',
+      status: 'New',
+      department_interest: args.department || null,
+      notes: args.reason || 'Caller requested a callback from staff.',
+      patient_id: patientId,
+    },
+  });
+
+  await updateCallLog(db, ctx.callId, {
+    callback_lead_id: lead.id,
+    outcome: 'Callback',
+    handoff_status: 'callback_created',
+  });
+
+  return { message: 'I have logged a callback request, and our staff will call you back shortly. Is there anything else I can help you with?' };
+}
