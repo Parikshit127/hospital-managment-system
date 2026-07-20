@@ -4,7 +4,7 @@ import {
     Users, UserCog, Building2, ShieldCheck, UserRound,
     Settings, Palette, FileText, Bell, Plug, BarChart3, Lock,
     Workflow, Scissors, GitBranch, DatabaseBackup, BookOpen, Database,
-    ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck, Megaphone,
+    ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck, Megaphone, Phone,
     type LucideIcon,
 } from 'lucide-react';
 
@@ -52,6 +52,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
             { label: 'HR', href: '/admin/hr', icon: Briefcase },
             { label: 'Operation Theatre', href: '/admin/ot/dashboard', icon: Scissors },
             { label: 'Emergency Room', href: '/admin/er/dashboard', icon: Siren },
+            { label: 'Call Center', href: '/call-center/dashboard', icon: Phone },
         ],
     },
     {
