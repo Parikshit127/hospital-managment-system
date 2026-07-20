@@ -193,12 +193,16 @@ function isValidEmail(e: string): boolean {
 
 export async function registerPatient(ctx: VoiceCtx, args: { fullName?: string; email?: string; phone?: string }) {
   const db = getTenantPrisma(ctx.organizationId);
-  // Prefer caller ID; fall back to a spoken number (needed for web test calls).
-  const phone = normalizePhone(args.phone ?? ctx.callerPhone);
   if (!args.fullName?.trim()) return { message: 'What is your full name, so I can register you?' };
-  if (!phone || phone.length !== 10) {
-    return { message: 'I need a valid 10-digit mobile number. Please say it slowly, digit by digit.' };
+
+  // Phone: prefer caller ID; else a spoken number. Speech-to-text often splits or
+  // drops a digit, so accept it best-effort (>= 8 digits) and never loop the caller
+  // over an exact count. Real phone calls provide a clean 10-digit caller ID.
+  const rawDigits = (args.phone ?? ctx.callerPhone ?? '').replace(/\D/g, '');
+  if (!rawDigits || rawDigits.length < 8) {
+    return { message: 'Please tell me your mobile number once more, and I will register you.' };
   }
+  const phone = rawDigits.length >= 10 ? rawDigits.slice(-10) : rawDigits;
 
   const email = normalizeEmail(args.email);
   if (email && !isValidEmail(email)) {
