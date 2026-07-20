@@ -9,7 +9,7 @@
 | **Tenancy** | Single organization (this deployment) |
 | **Storage** | **Transcript-only** — call audio is discarded after STT; no recordings persisted |
 | **Availability** | 24/7 full service |
-| **Status** | Plan — awaiting build kickoff, phase by phase |
+| **Status** | Phases 0–3 DONE & verified on live calls. Next: Phase 4 (booking write-path). |
 | **Author date** | 2026-07-20 |
 
 > This plan **extends existing infrastructure**; it is not greenfield. Read §1 before starting so we reuse, not duplicate.
@@ -158,21 +158,21 @@ Each phase is a reviewable unit ending in a manual test. **Do not start the next
 - [ ] (Parallel, not blocking) Begin the **Indian DID** process: Twilio Regulatory Bundle (business + Indian address proof) **or** an Indian CPaaS (Exotel/Plivo) via SIP. Swap it in for `VOICE_AI_DID` once approved — no code change.
 - **Exit criteria:** a call to the free Vapi number (or the web widget) reaches your greeting.
 
-### Phase 1 — Schema + call-logging skeleton + wire the UI stubs
+### Phase 1 — Schema + call-logging skeleton + wire the UI stubs ✅ DONE
 - [ ] Apply the §3 schema diff; `prisma migrate dev`; add models to `TENANT_SCOPED_MODELS`.
 - [ ] Create `app/actions/call-center-actions.ts`: `getCallLogs(filters)`, `getCallLogDetail(id)`, `getCallCenterStats()` — org-scoped via `requireTenantContext()`.
 - [ ] Wire `app/call-center/dashboard/page.tsx` + `logs/page.tsx` (remove the "wire up backend" stubs) to real data; add a detail view scaffold.
 - [ ] Seed a couple of `CallLog` rows for rendering.
 - **Test:** seeded calls render with correct stats/filters; typecheck + lint pass.
 
-### Phase 2 — Inbound webhook + call lifecycle + transcript persistence
+### Phase 2 — Inbound webhook + call lifecycle + transcript persistence ✅ DONE
 - [ ] `app/api/webhooks/vapi/route.ts` (`POST`): verify the caller against `VAPI_WEBHOOK_SECRET` — accept **either** a plain `X-Vapi-Secret` header match **or** an `X-Vapi-Signature` HMAC-SHA256 of the raw body (Vapi's header differs by account/version). Resolve org from `VOICE_AI_ORG_ID`. Envelope is `{ message: { type, call, ... } }`.
 - [ ] Handle Vapi message types: `status-update` (create `CallLog` on call start with `channel:'voice_ai'`, `direction:'inbound'`, `provider:'vapi'`, `provider_call_id`, `from_number`), and `end-of-call-report` (update `status`, `ended_at`, `duration_seconds`; persist `CallTranscript.turns` + `summary`). Idempotent on `provider_call_id`.
 - [ ] Greeting script self-identifies as an AI assistant + states call handling (DPDP consent). Still **no tools** — greet + log only.
 - [ ] `logAudit({ action:'VOICE_CALL_RECEIVED', module:'call-center', ... })`.
 - **Test:** a real call connects, greets, and produces a `CallLog` + `CallTranscript`; replayed webhook does not duplicate.
 
-### Phase 3 — Read-only tools (no writes)
+### Phase 3 — Read-only tools (no writes) ✅ DONE
 - [ ] Tool endpoints (function-calling from Vapi), each HMAC-verified:
   - `lookupCaller` — `checkDuplicatePatient(from_number)`; set `verification_status:'phone_matched'`.
   - `verifyName` — caller states name; confirm against matched record → `name_confirmed`; mismatch/no-match → mark for registration path.
