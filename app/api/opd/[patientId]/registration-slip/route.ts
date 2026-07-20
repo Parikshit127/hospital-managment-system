@@ -124,7 +124,9 @@ function renderOpdSlipHtml(patient: any, appt: any, b: BillBranding, org: any, d
     const secondary = hospital.secondaryColor;
 
     // Formatting date as "24 May 2026, 01:41 PM" — always the print time, not the visit/bill date.
+    // timeZone is pinned to IST so this is correct regardless of the server's local timezone.
     const visitDate = new Date().toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
         day: '2-digit',
         month: 'short',
         year: 'numeric',
