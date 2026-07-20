@@ -182,8 +182,18 @@ export async function bookAppointment(ctx: VoiceCtx, args: { doctorName?: string
 
 function normalizeEmail(raw?: string): string | null {
   if (!raw) return null;
-  // STT often inserts spaces or spells "at"/"dot" — collapse the obvious cases.
-  const e = raw.trim().toLowerCase().replace(/\s+/g, '').replace(/\(at\)|\sat\s/g, '@').replace(/\(dot\)|\sdot\s/g, '.');
+  let e = ` ${raw.trim().toLowerCase()} `;
+  // spoken symbols → characters
+  e = e.replace(/\s+at\s+the\s+rate\s+(of\s+)?/g, '@');
+  e = e.replace(/\s+at\s+/g, '@');
+  e = e.replace(/\s+(dot|period)\s+/g, '.');
+  e = e.replace(/\s+underscore\s+/g, '_');
+  e = e.replace(/\s+(dash|hyphen)\s+/g, '-');
+  // spelled letter-by-letter: single letters/digits separated by spaces or hyphens
+  // → join them (e.g. "s h l o k e" or "s-h-l-o-k-e" → "shloke"). Dots are preserved
+  // because in an email a dot is almost always a real separator (or the word "dot").
+  e = e.replace(/\b([a-z0-9])[\s-]+(?=[a-z0-9]\b)/g, '$1');
+  e = e.replace(/\s+/g, '').replace(/\.+/g, '.');
   return e || null;
 }
 
@@ -193,21 +203,33 @@ function isValidEmail(e: string): boolean {
 
 export async function registerPatient(ctx: VoiceCtx, args: { fullName?: string; email?: string; phone?: string }) {
   const db = getTenantPrisma(ctx.organizationId);
-  if (!args.fullName?.trim()) return { message: 'What is your full name, so I can register you?' };
-
-  // Phone: prefer caller ID; else a spoken number. Speech-to-text often splits or
-  // drops a digit, so accept it best-effort (>= 8 digits) and never loop the caller
-  // over an exact count. Real phone calls provide a clean 10-digit caller ID.
-  const rawDigits = (args.phone ?? ctx.callerPhone ?? '').replace(/\D/g, '');
-  if (!rawDigits || rawDigits.length < 8) {
-    return { message: 'Please tell me your mobile number once more, and I will register you.' };
-  }
-  const phone = rawDigits.length >= 10 ? rawDigits.slice(-10) : rawDigits;
 
   const email = normalizeEmail(args.email);
-  if (email && !isValidEmail(email)) {
-    return { message: `I heard the email as "${email}", which doesn't look right. Could you spell your email address for me, or we can skip it?` };
+  const emailValid = email ? isValidEmail(email) : false;
+  const digits = (args.phone ?? ctx.callerPhone ?? '').replace(/\D/g, '');
+  const phone = digits.length >= 10 ? digits.slice(-10) : digits || null;
+
+  // If this call already registered someone, treat repeat calls as CORRECTIONS
+  // (e.g. fixing the email or name) — update, never duplicate or loop.
+  const existingLog = ctx.callId
+    ? await db.callLog.findFirst({ where: { provider_call_id: ctx.callId }, select: { patient_id: true } })
+    : null;
+
+  if (existingLog?.patient_id) {
+    const data: Record<string, any> = {};
+    if (args.fullName?.trim()) data.full_name = args.fullName.trim();
+    if (emailValid) data.email = email;
+    if (phone && phone.length >= 8) data.phone = phone;
+    if (Object.keys(data).length) await db.oPD_REG.updateMany({ where: { patient_id: existingLog.patient_id }, data });
+    const p = await db.oPD_REG.findFirst({ where: { patient_id: existingLog.patient_id }, select: { full_name: true, phone: true, email: true } });
+    return {
+      message: `Updated. I have ${p?.full_name}, mobile ${p?.phone ?? 'not set'}${p?.email ? `, email ${p.email}` : ''}. Which doctor and time would you like to book?`,
+    };
   }
+
+  // ── First registration this call ──
+  if (!args.fullName?.trim()) return { message: 'What is your full name, so I can register you?' };
+  if (!phone || phone.length < 8) return { message: 'Please tell me your mobile number once more, and I will register you.' };
 
   const cfg = await db.organizationConfig.findUnique({ where: { organizationId: ctx.organizationId }, select: { uhid_prefix: true } }).catch(() => null);
   const uhid = await generateUHID(db as any, cfg?.uhid_prefix || 'AVN');
@@ -217,7 +239,7 @@ export async function registerPatient(ctx: VoiceCtx, args: { fullName?: string; 
       patient_id: uhid,
       full_name: args.fullName.trim(),
       phone,
-      email: email || null,
+      email: emailValid ? email : null,
       organizationId: ctx.organizationId,
       registration_consent: true,
       preferred_language: 'en',
@@ -233,9 +255,12 @@ export async function registerPatient(ctx: VoiceCtx, args: { fullName?: string; 
     outcome: 'Registered',
   });
 
-  const emailPart = email ? ` I have your email as ${email}.` : '';
+  // Email is optional and hard over voice — never block booking on it.
+  const emailPart = emailValid
+    ? ` Your email is ${email} — please tell me if that's wrong.`
+    : (args.email ? ' I could not capture the email clearly; we can add it at reception.' : '');
   return {
-    message: `Thank you, ${args.fullName.trim()}. You're registered with mobile number ${phone}.${emailPart} Please confirm those are correct, then tell me which doctor and time you'd like to book.`,
+    message: `Thank you, ${args.fullName.trim()}. You're registered with mobile number ${phone}.${emailPart} Now, which doctor and time would you like to book?`,
   };
 }
 
