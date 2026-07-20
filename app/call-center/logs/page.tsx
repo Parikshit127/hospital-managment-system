@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { FileText, Phone } from 'lucide-react';
+import { FileText, Phone, Bot } from 'lucide-react';
+import { getCallLogs } from '@/app/actions/call-center-actions';
 
 interface CallLogEntry {
   id: string;
@@ -15,6 +17,7 @@ interface CallLogEntry {
   created_at: string;
   duration_seconds: number | null;
   notes: string | null;
+  channel?: string | null;
 }
 
 const CALL_TYPES = ['All', 'Inbound', 'Outbound', 'Follow-up'];
@@ -28,9 +31,20 @@ export default function CallLogsPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  const router = useRouter();
+
   useEffect(() => {
-    // Fetch real data here when backend is wired up
-    setLoading(false);
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const res = await getCallLogs(undefined, 500);
+      if (cancelled) return;
+      if (res.success && Array.isArray(res.data)) setLogs(res.data as CallLogEntry[]);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const filtered = logs.filter((l) => {
@@ -125,12 +139,24 @@ export default function CallLogsPage() {
               </thead>
               <tbody>
                 {filtered.map((log) => (
-                  <tr key={log.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <tr
+                    key={log.id}
+                    onClick={() => router.push(`/call-center/logs/${log.id}`)}
+                    className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                  >
                     <td className="px-4 py-3 text-gray-700">
                       {new Date(log.created_at).toLocaleDateString('en-GB')}{' '}
                       {new Date(log.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{log.agent_id}</td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {log.channel === 'voice_ai' ? (
+                        <span className="inline-flex items-center gap-1 text-indigo-600 font-medium">
+                          <Bot className="h-3.5 w-3.5" /> AI
+                        </span>
+                      ) : (
+                        log.agent_id
+                      )}
+                    </td>
                     <td className="px-4 py-3 font-mono text-gray-800">{log.patient_phone}</td>
                     <td className="px-4 py-3 text-gray-700">{log.patient_name || '—'}</td>
                     <td className="px-4 py-3">

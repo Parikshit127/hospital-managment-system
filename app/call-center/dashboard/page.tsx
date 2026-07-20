@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { Phone, PhoneCall, Calendar, Clock, PhoneMissed, Plus } from 'lucide-react';
+import { Phone, PhoneCall, Calendar, Clock, PhoneMissed, Plus, Bot } from 'lucide-react';
 import { useToast } from '@/app/components/ui/Toast';
+import { getCallCenterStats, getCallLogs } from '@/app/actions/call-center-actions';
 
 interface CallLogEntry {
   id: string;
@@ -14,6 +15,7 @@ interface CallLogEntry {
   agent_id: string;
   created_at: string;
   duration_seconds: number | null;
+  channel?: string | null;
 }
 
 interface Stats {
@@ -35,8 +37,21 @@ export default function CallCenterDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch real data here when backend is wired up
-    setLoading(false);
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const [statsRes, logsRes] = await Promise.all([
+        getCallCenterStats(),
+        getCallLogs(undefined, 15),
+      ]);
+      if (cancelled) return;
+      if (statsRes.success && statsRes.data) setStats(statsRes.data);
+      if (logsRes.success && Array.isArray(logsRes.data)) setLogs(logsRes.data as CallLogEntry[]);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const outcomeColor: Record<string, string> = {
@@ -143,7 +158,15 @@ export default function CallCenterDashboard() {
                         {log.outcome}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{log.agent_id}</td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {log.channel === 'voice_ai' ? (
+                        <span className="inline-flex items-center gap-1 text-indigo-600 font-medium">
+                          <Bot className="h-3.5 w-3.5" /> AI
+                        </span>
+                      ) : (
+                        log.agent_id
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-gray-500">
                       {new Date(log.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                     </td>

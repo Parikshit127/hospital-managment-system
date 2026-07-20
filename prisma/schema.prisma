@@ -184,6 +184,7 @@ model Organization {
   crm_campaigns                  CRMCampaign[]
   crm_leads                      CRMLead[]
   call_logs                      CallLog[]
+  call_transcripts               CallTranscript[]
   counselling_sessions           CounsellingSession[]
   discharge_clearances           DischargeClearance[]
   discount_otps                  DiscountOTP[]
@@ -591,6 +592,7 @@ model OPD_REG {
   pill_reminders        PillReminder[]
   video_call_requests   VideoCallRequest[]
   whatsapp_logs         whatsapp_log[]
+  call_logs             CallLog[]
   // Phase 3 — EMR
   clinical_encounters   ClinicalEncounter[]
   patient_allergies     PatientAllergy[]
@@ -663,6 +665,7 @@ model appointments {
   recurrence_rule       Json?
   organization          Organization @relation(fields: [organizationId], references: [id])
   patient               OPD_REG      @relation(fields: [patient_id], references: [patient_id])
+  call_logs             CallLog[]
 
   @@index([organizationId])
   @@index([status])
@@ -4379,11 +4382,51 @@ model CallLog {
   duration_seconds Int?
   notes            String?
   created_at       DateTime     @default(now())
-  organization     Organization @relation(fields: [organizationId], references: [id])
+
+  // ── AI voice-assistant additions (additive, nullable/defaulted) ──
+  channel             String    @default("manual")    // manual | voice_ai
+  direction           String?                          // inbound | outbound
+  provider            String?                          // vapi | twilio
+  provider_call_id    String?   @unique                // Vapi call id — idempotency key
+  from_number         String?
+  to_number           String?
+  status              String    @default("completed")  // ringing | in_progress | completed | failed | transferred | abandoned
+  language            String?                          // en | hi
+  patient_id          String?                          // set once verified/registered
+  verification_status String?   @default("unverified") // unverified | phone_matched | name_confirmed
+  handoff_status      String?                          // none | transfer_attempted | transferred | callback_created
+  callback_lead_id    String?                          // CRMLead.id when a callback is logged
+  started_at          DateTime?
+  ended_at            DateTime?
+
+  organization Organization    @relation(fields: [organizationId], references: [id])
+  patient      OPD_REG?        @relation(fields: [patient_id], references: [patient_id])
+  appointment  appointments?   @relation(fields: [appointment_id], references: [appointment_id])
+  transcript   CallTranscript?
 
   @@index([organizationId])
   @@index([agent_id])
   @@index([patient_phone])
+  @@index([patient_id])
+  @@index([provider_call_id])
+  @@index([organizationId, created_at])
+}
+
+// Transcript-only PHI store for AI voice calls. One row per call; audio is never
+// persisted (see AI Voice Call Assistant plan — transcript-only decision).
+model CallTranscript {
+  id             String       @id @default(uuid())
+  call_log_id    String       @unique
+  organizationId String
+  turns          Json         @default("[]") // [{ role: "assistant" | "caller", text, ts }]
+  summary        String?
+  language       String?
+  created_at     DateTime     @default(now())
+  call_log       CallLog      @relation(fields: [call_log_id], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([call_log_id])
 }
 
 model AdmissionBooking {

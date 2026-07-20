@@ -80,7 +80,7 @@ const TENANT_SCOPED_MODELS = new Set([
     // Pharmacy Enhancements
     'NarcoticRegister',
     // OPD Enhancements
-    'CounsellingSession', 'DoctorLeave', 'CallLog',
+    'CounsellingSession', 'DoctorLeave', 'CallLog', 'CallTranscript',
     // GAP models
     'NursingAssessmentAlert', 'ClinicalOrder', 'PhysicianOrder',
     'ActiveMedication', 'OrderSet', 'DoctorInvestigationFavorite',
