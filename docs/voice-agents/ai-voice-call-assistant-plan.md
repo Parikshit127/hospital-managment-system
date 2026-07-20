@@ -9,7 +9,7 @@
 | **Tenancy** | Single organization (this deployment) |
 | **Storage** | **Transcript-only** — call audio is discarded after STT; no recordings persisted |
 | **Availability** | 24/7 full service |
-| **Status** | Phases 0–5 DONE & verified. Next: Phase 6 (admin viewer + retention). |
+| **Status** | Phases 0–6 COMPLETE & verified. Feature build done. |
 | **Author date** | 2026-07-20 |
 
 > This plan **extends existing infrastructure**; it is not greenfield. Read §1 before starting so we reuse, not duplicate.
@@ -195,7 +195,7 @@ Each phase is a reviewable unit ending in a manual test. **Do not start the next
 - [ ] Triggers: caller asks for a human, repeated STT misunderstanding, unsupported request, or after-hours transfer.
 - **Test:** transfer answered → `transferred`; transfer timeout/after-hours → callback lead created; call never drops silently.
 
-### Phase 6 — Admin call-log viewer + retention
+### Phase 6 — Admin call-log viewer + retention ✅ DONE
 - [ ] Full call detail page: metadata, verification, linked appointment/patient, **transcript viewer**, callback link.
 - [ ] Role-gate `/call-center/**` in `proxy.ts` (`ROLE_ROUTES`/`PERMISSION_ROUTES`) — transcripts contain PHI; restrict to admin/reception/call-center.
 - [ ] Retention purge job (cron pattern like `app/api/cron/*` + `CRON_SECRET`) deleting `CallTranscript` older than the retention window (**default 1 year**).
