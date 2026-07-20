@@ -37,7 +37,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
   // Master Billing — orchestrates across reception, ipd, finance, admin
   "/billing": ["admin", "finance", "ipd_manager", "receptionist", "opd_manager"],
   // Call Center — call logs + transcripts contain PHI; restrict to front-desk/admin
-  "/call-center": ["admin", "receptionist", "opd_manager"],
+  "/call-center": ["admin", "call_center", "receptionist", "opd_manager"],
 };
 
 // Route -> required module permission (granular permission check)

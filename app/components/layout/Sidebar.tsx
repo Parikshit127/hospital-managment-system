@@ -219,7 +219,14 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "AI Triage", href: "/reception/triage", icon: Brain },
       ],
     },
-
+    {
+      title: "Call Center",
+      items: [
+        { label: "Call Dashboard", href: "/call-center/dashboard", icon: Phone },
+        { label: "Book by Phone", href: "/call-center/book", icon: CalendarPlus },
+        { label: "Call Logs", href: "/call-center/logs", icon: FileText },
+      ],
+    },
     {
       title: "Reports",
       items: [
