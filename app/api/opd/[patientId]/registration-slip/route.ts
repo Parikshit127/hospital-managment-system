@@ -123,22 +123,15 @@ function renderOpdSlipHtml(patient: any, appt: any, b: BillBranding, org: any, d
     const accent = hospital.accentColor;
     const secondary = hospital.secondaryColor;
 
-    // Formatting date as "24 May 2026, 01:41 PM"
-    let visitDate = '';
-    const rawDate = appt?.appointment_date || patient.created_at;
-    if (rawDate) {
-        const dt = new Date(rawDate);
-        if (!isNaN(dt.getTime())) {
-            visitDate = dt.toLocaleString('en-IN', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
-            });
-        }
-    }
+    // Formatting date as "24 May 2026, 01:41 PM" — always the print time, not the visit/bill date.
+    const visitDate = new Date().toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    });
 
     const tokenOrAppt = appt?.appointment_id || '';
     const doctor = doctorName || '';

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getBillBranding } from '@/app/lib/bill-branding';
-import { canonicalTender, tenderVariants } from '@/app/lib/payment-tender';
+import { canonicalTender, tenderVariants, isDepositSettlement } from '@/app/lib/payment-tender';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist'];
 
@@ -210,7 +210,7 @@ export async function GET(req: NextRequest) {
 
         // Process completed payments
         payments.forEach(p => {
-            if (p.payment_method === 'Deposit') return; // Skip deposits applied to bills to avoid double counting
+            if (isDepositSettlement(p)) return; // Skip deposits applied to bills to avoid double counting
 
             // Prefer the cashier stored on the payment; fall back to the audit log; then 'system'.
             const cashierUser = (p as any).received_by || paymentCashierMap.get(p.receipt_number) || 'Not recorded';

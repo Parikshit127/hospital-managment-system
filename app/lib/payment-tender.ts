@@ -54,3 +54,19 @@ export function tenderVariants(method: string | null | undefined): string[] {
     }
     return [...set].filter(Boolean);
 }
+
+/**
+ * True for payments created by applying an advance/deposit to a bill — an
+ * internal ledger transfer (the cash was already counted when the deposit
+ * was collected), not new money. Collection reports must exclude these or
+ * the same amount is counted twice.
+ *
+ * Checks `receipt_number` (always `RCP-DEP-*`, never reassigned) rather than
+ * relying solely on `payment_method === 'Deposit'` — the payment-edit screen
+ * lets finance/admin users change a receipt's method after the fact, which
+ * would otherwise let an edited settlement row silently re-appear as a fresh
+ * receipt.
+ */
+export function isDepositSettlement(payment: { payment_method?: string | null; receipt_number?: string | null }): boolean {
+    return payment.payment_method === 'Deposit' || (payment.receipt_number || '').startsWith('RCP-DEP-');
+}

@@ -47,6 +47,7 @@ import {
 } from "@/app/actions/master-billing-actions";
 import { recordPayment, getMyRole, updatePayment, reversePayment, getInvoiceHistory, finalizeAndLockInvoice, revertInvoiceToDraft, reconcilePatientOverpayments } from "@/app/actions/finance-actions";
 import { collectDeposit } from "@/app/actions/deposit-actions";
+import { isDepositSettlement } from "@/app/lib/payment-tender";
 import { getCashComplianceConfig } from "@/app/actions/cash-compliance-actions";
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan, resolveRegisteredPan } from "@/app/lib/cash-compliance";
 import { EditInvoiceModal } from "@/app/components/finance/EditInvoiceModal";
@@ -608,6 +609,7 @@ function EditPaymentModal({ payment, onClose, onSaved }: { payment: any; onClose
   
   const [date, setDate] = useState(formatDatetimeLocal(payment.created_at));
   const [saving, setSaving] = useState(false);
+  const isDepositReceipt = isDepositSettlement(payment);
 
   const handleSave = async () => {
     const numAmount = Number(amount);
@@ -616,8 +618,8 @@ function EditPaymentModal({ payment, onClose, onSaved }: { payment: any; onClose
     }
     setSaving(true);
     try {
-      const res = await updatePayment(payment.id, { 
-        payment_method: method, 
+      const res = await updatePayment(payment.id, {
+        payment_method: isDepositReceipt ? payment.payment_method : method,
         reference: reference || null, 
         notes: notes || null,
         amount: numAmount,
@@ -668,11 +670,20 @@ function EditPaymentModal({ payment, onClose, onSaved }: { payment: any; onClose
             </div>
             <div>
               <label className="text-[11px] font-bold text-gray-500 uppercase">Method</label>
-              <select className="w-full mt-1 p-2 border border-gray-200 rounded text-sm" value={method} onChange={(e) => setMethod(e.target.value)}>
-                {["Cash", "Card", "UPI", "Bank", "NEFT_RTGS", "Cheque", "Online"].map(m => (
-                  <option key={m} value={m}>{m === 'NEFT_RTGS' ? 'NEFT/RTGS' : m}</option>
-                ))}
-              </select>
+              {isDepositReceipt ? (
+                <div className="w-full mt-1 p-2 border border-gray-200 rounded text-sm bg-gray-50 text-gray-500">
+                  Deposit (applied to bill)
+                </div>
+              ) : (
+                <select className="w-full mt-1 p-2 border border-gray-200 rounded text-sm" value={method} onChange={(e) => setMethod(e.target.value)}>
+                  {["Cash", "Card", "UPI", "Bank", "NEFT_RTGS", "Cheque", "Online"].map(m => (
+                    <option key={m} value={m}>{m === 'NEFT_RTGS' ? 'NEFT/RTGS' : m}</option>
+                  ))}
+                </select>
+              )}
+              {isDepositReceipt && (
+                <p className="text-[10px] text-gray-400 mt-1">This receipt records an advance deposit applied to the bill — its tender can&apos;t be changed.</p>
+              )}
             </div>
             <div>
               <label className="text-[11px] font-bold text-gray-500 uppercase">Reference</label>

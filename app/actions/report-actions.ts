@@ -3,7 +3,7 @@
 import { requireTenantContext } from '@/backend/tenant';
 import { resolveIncomeHeadCode, incomeHeadName } from '@/app/lib/gl-income-head-map';
 import { formatDoctorName } from '@/app/lib/format-name';
-import { canonicalTender, tenderVariants } from '@/app/lib/payment-tender';
+import { canonicalTender, tenderVariants, isDepositSettlement } from '@/app/lib/payment-tender';
 
 type MISPaymentBreakup = {
     cash_amount: number;
@@ -135,7 +135,11 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
 
         const totals = enrichedPayments.reduce((acc: any, p: any) => {
             if (p.status === 'Completed') {
-                const method = p.payment_method;
+                // Bucket under the 'Deposit' pseudo-tender by receipt number, not the
+                // raw payment_method — the payment-edit screen can change a settlement
+                // row's method after the fact, and this bucket must stay stable so the
+                // `received` calculation below keeps excluding it (see isDepositSettlement).
+                const method = isDepositSettlement(p) ? 'Deposit' : p.payment_method;
                 acc[method] = (acc[method] || 0) + Number(p.amount);
                 acc.total = (acc.total || 0) + Number(p.amount);
             }
@@ -179,7 +183,7 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
         // so the source deposit is in depositRows for the same period.
         const depByNumber = new Map<string, any>(depositRows.map((d: any) => [d.deposit_number, d]));
         for (const p of enrichedPayments as any[]) {
-            if (p.payment_method !== 'Deposit') continue;
+            if (!isDepositSettlement(p)) continue;
             const m = /deposit\s+(\S+)/i.exec(p.notes || '');
             const src = m ? depByNumber.get(m[1]) : null;
             p.deposit_tender = src?.payment_method ?? null;

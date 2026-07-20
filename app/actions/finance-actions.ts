@@ -13,6 +13,7 @@ import { recomputeInvoiceCommission } from '@/app/lib/referral-commission';
 import { recomputeInvoiceDoctorCommission } from '@/app/lib/doctor-commission';
 import { dispensingKey } from '@/app/lib/pharmacy-bill-group';
 import { isPrivilegedBillingRole, canEditBill, canFinalizeInvoice, BILL_FINALIZED_INTENT_MSG } from '@/app/lib/bill-status';
+import { isDepositSettlement } from '@/app/lib/payment-tender';
 
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
@@ -2235,6 +2236,18 @@ export async function updatePayment(paymentId: number, updates: { amount?: numbe
         const result = await db.$transaction(async (tx: any) => {
             const payment = await tx.payments.findUnique({ where: { id: paymentId }, include: { invoice: true } });
             if (!payment) throw new Error('Payment not found');
+
+            // Deposit-application receipts (RCP-DEP-*) carry the 'Deposit' sentinel
+            // tender so collection reports can exclude them as an internal ledger
+            // transfer, not new money. Reassigning the tender here would make that
+            // money silently reappear as a fresh receipt in those reports.
+            if (
+                typeof updates.payment_method !== 'undefined' &&
+                updates.payment_method !== payment.payment_method &&
+                isDepositSettlement(payment)
+            ) {
+                throw new Error('This receipt records a deposit applied to the bill — its payment method cannot be changed.');
+            }
 
             const data: any = {};
             if (typeof updates.payment_method !== 'undefined') data.payment_method = updates.payment_method;
