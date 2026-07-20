@@ -182,7 +182,7 @@ export function TallyIntegration() {
                         <input value={form.tally_url} onChange={(e) => setForm({ ...form, tally_url: e.target.value })} placeholder="http://localhost:9000" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10" />
                     </Field>
                     <Field label="Tally Company Name">
-                        <input value={form.tally_company} onChange={(e) => setForm({ ...form, tally_company: e.target.value })} placeholder="e.g. Axten Hospitals Pvt Ltd" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10" />
+                        <input value={form.tally_company} onChange={(e) => setForm({ ...form, tally_company: e.target.value })} placeholder="e.g. Your Hospital Pvt Ltd" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10" />
                     </Field>
                     <Field label="Username (optional)">
                         <input value={form.tally_username} onChange={(e) => setForm({ ...form, tally_username: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10" />

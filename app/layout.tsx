@@ -5,6 +5,7 @@ import { ChunkErrorReload } from "@/app/components/ChunkErrorReload";
 import { ThemeProvider } from "next-themes";
 import { DM_Sans, Playfair_Display } from "next/font/google";
 import { Toaster } from "react-hot-toast";
+import { getDefaultBranding } from "@/app/lib/get-portal-branding";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -21,11 +22,19 @@ const playfairDisplay = Playfair_Display({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "Axten Hospitals — Intelligence Platform",
-  description: "Next-generation Hospital Operating Intelligence System with AI-powered triage, real-time analytics, and comprehensive patient management.",
-  keywords: "hospital management, AI triage, patient management, healthcare analytics, HIPAA compliant",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const branding = await getDefaultBranding();
+  return {
+    // Constant subtitle so live's tab title stays exactly "<Org> — Intelligence Platform"
+    // (matches the previous hardcoded title; only the org name is DB-driven).
+    title: `${branding.portalTitle} — Intelligence Platform`,
+    description: "Next-generation Hospital Operating Intelligence System with AI-powered triage, real-time analytics, and comprehensive patient management.",
+    keywords: "hospital management, AI triage, patient management, healthcare analytics, HIPAA compliant",
+    // Favicon from the org logo when set (demo → Avani); otherwise Next falls back
+    // to the file-based app/favicon.ico (live is unchanged).
+    ...(branding.logoUrl ? { icons: { icon: branding.logoUrl } } : {}),
+  };
+}
 
 export default function RootLayout({
   children,

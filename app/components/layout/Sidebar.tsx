@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { logout } from "@/app/login/actions";
 import { getPortalBranding, type PortalBranding } from "@/app/lib/get-portal-branding";
 import { ChangePasswordModal } from "@/app/components/ChangePasswordModal";
+import BrandWordmark from "@/app/components/ui/BrandWordmark";
 import {
   LayoutDashboard,
   Users,
@@ -816,7 +817,8 @@ export function Sidebar({ session }: SidebarProps) {
           <span className="text-white font-bold text-[14px] leading-tight truncate" style={{ maxWidth: 150 }}>
             {branding.orgName}
           </span>
-        ) : (
+        ) : (branding?.primaryColor || '').toLowerCase() === '#f97316' ? (
+          /* Default (Axten) — original SVG so live is pixel-identical */
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 80" style={{ height: '44px', width: 'auto', flexShrink: 0 }} aria-label="Axten Hospitals">
             <text x="0" y="52" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="56" fill="#ffffff" letterSpacing="-1">Axten</text>
             <rect x="0" y="62" width="52" height="7" fill="#f97316" rx="2"/>
@@ -824,6 +826,15 @@ export function Sidebar({ session }: SidebarProps) {
             <rect x="192" y="62" width="52" height="7" fill="#f97316" rx="2"/>
             <text x="0" y="82" fontFamily="Arial, sans-serif" fontWeight="400" fontSize="9" fill="#94a3b8" letterSpacing="0.3">A Unit of TAH Global Healthcare Pvt. Ltd.</text>
           </svg>
+        ) : (
+          <BrandWordmark
+            name={branding?.orgName || 'Hospital'}
+            accent={branding?.primaryColor || '#f97316'}
+            textColor="#ffffff"
+            tagline={branding?.tagline || null}
+            taglineColor="#94a3b8"
+            height={44}
+          />
         )}
         {!collapsed && (
           <div className="overflow-hidden">

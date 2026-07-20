@@ -9,10 +9,14 @@ import { Building2, LogOut, ChevronLeft, ChevronRight, Menu, X, ChevronDown, Key
 import PortalSwitcher from './PortalSwitcher';
 import { ADMIN_NAV_SECTIONS } from '@/lib/navigation/admin-nav';
 import { ChangePasswordModal } from '@/app/components/ChangePasswordModal';
+import BrandWordmark from '@/app/components/ui/BrandWordmark';
 
 export default function AdminSidebar() {
     const pathname = usePathname();
     const branding = useBranding();
+    // Default (Axten) branding renders the ORIGINAL Axten SVG so live is pixel-identical;
+    // a branded org uses its DB logo image (or a name wordmark as a last resort).
+    const isAxtenDefault = (branding.primary_color || '').toLowerCase() === '#f97316';
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
@@ -63,23 +67,39 @@ export default function AdminSidebar() {
                 className="flex items-center gap-3 px-4 h-[60px] shrink-0"
                 style={{ borderBottom: '1px solid var(--admin-sidebar-border)' }}
             >
-                {/* Axten logo */}
+                {/* Organization logo — DB image when set; original Axten SVG for the
+                    default org (keeps live identical); name wordmark otherwise. */}
                 {collapsed ? (
                     <div className="shrink-0 flex items-center justify-center w-9 h-9">
-                        <svg width="36" height="36" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="26" cy="26" r="24" stroke="#1e3a6e" strokeWidth="2.5"/>
-                            <circle cx="26" cy="26" r="19" stroke="#1e3a6e" strokeWidth="1"/>
-                            <rect x="21" y="14" width="10" height="24" rx="2" stroke="#f97316" strokeWidth="2.5" fill="none"/>
-                            <rect x="14" y="21" width="24" height="10" rx="2" stroke="#f97316" strokeWidth="2.5" fill="none"/>
-                        </svg>
+                        {branding.logo_url ? (
+                            <img src={branding.logo_url} alt={branding.portal_title} style={{ width: 36, height: 36, objectFit: 'contain' }} />
+                        ) : isAxtenDefault ? (
+                            <svg width="36" height="36" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="26" cy="26" r="24" stroke="#1e3a6e" strokeWidth="2.5"/>
+                                <circle cx="26" cy="26" r="19" stroke="#1e3a6e" strokeWidth="1"/>
+                                <rect x="21" y="14" width="10" height="24" rx="2" stroke="#f97316" strokeWidth="2.5" fill="none"/>
+                                <rect x="14" y="21" width="24" height="10" rx="2" stroke="#f97316" strokeWidth="2.5" fill="none"/>
+                            </svg>
+                        ) : (
+                            <div
+                                className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-white text-lg"
+                                style={{ backgroundColor: branding.primary_color }}
+                            >
+                                {(branding.portal_title || 'H').trim().charAt(0).toUpperCase()}
+                            </div>
+                        )}
                     </div>
-                ) : (
+                ) : branding.logo_url ? (
+                    <img src={branding.logo_url} alt={branding.portal_title} style={{ height: 36, width: 'auto', maxWidth: 170, objectFit: 'contain', flexShrink: 0 }} />
+                ) : isAxtenDefault ? (
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" style={{ height: '36px', width: 'auto', flexShrink: 0 }} aria-label="Axten Hospitals">
                         <text x="10" y="72" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="68" fill="#1e3a6e" letterSpacing="-2">Axten</text>
                         <rect x="10" y="80" width="60" height="8" fill="#f97316" rx="2"/>
                         <rect x="130" y="80" width="120" height="8" fill="#f97316" rx="2"/>
                         <text x="75" y="89" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="16" fill="#1e3a6e" letterSpacing="6">HOSPITALS</text>
                     </svg>
+                ) : (
+                    <BrandWordmark name={branding.portal_title} accent={branding.primary_color} textColor="#1c1917" height={34} />
                 )}
                 {!collapsed && (
                     <div className="overflow-hidden">

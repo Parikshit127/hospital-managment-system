@@ -398,7 +398,7 @@ export default function BillSettingsPage() {
                                 value={branding.tagline || ''}
                                 onChange={(e) => setBranding((p: any) => ({ ...p, tagline: e.target.value }))}
                                 className={inputCls}
-                                placeholder="e.g. A Unit of TAH Global Healthcare Pvt. Ltd."
+                                placeholder="e.g. A Unit of Your Healthcare Pvt. Ltd."
                             />
                             <p className="text-[10px] text-gray-400 mt-1">Shown below hospital name on bills without letterhead image</p>
                         </div>

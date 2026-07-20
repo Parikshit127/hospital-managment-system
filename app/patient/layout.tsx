@@ -8,6 +8,8 @@ import Link from 'next/link';
 import { PatientBottomNav } from './PatientBottomNav';
 import { PatientNotificationBell } from './PatientNotificationBell';
 import { ToastProvider } from '@/app/components/ui/Toast';
+import { getPortalBranding } from '@/app/lib/get-portal-branding';
+import BrandWordmark from '@/app/components/ui/BrandWordmark';
 
 
 export default async function PatientLayout({
@@ -20,6 +22,8 @@ export default async function PatientLayout({
     if (!session) {
         return <>{children}</>;
     }
+
+    const branding = await getPortalBranding();
 
     const primaryNav = [
         { label: 'Home', href: '/patient/dashboard', icon: Home },
@@ -55,13 +59,20 @@ export default async function PatientLayout({
                         <div className="flex justify-between items-center h-16">
                             <div className="flex items-center gap-6">
                                 <Link href="/patient/dashboard" className="flex items-center gap-3">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" style={{ height: '36px', width: 'auto' }} aria-label="Axten Hospitals">
-                                        <text x="10" y="72" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="68" fill="#1e3a6e" letterSpacing="-2">Axten</text>
-                                        <rect x="10" y="80" width="60" height="8" fill="#f97316" rx="2"/>
-                                        <rect x="130" y="80" width="120" height="8" fill="#f97316" rx="2"/>
-                                        <text x="75" y="89" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="16" fill="#1e3a6e" letterSpacing="6">HOSPITALS</text>
-                                    </svg>
-                                    <span className="text-[10px] font-bold tracking-widest uppercase hidden sm:block" style={{ color: '#f97316' }}>
+                                    {branding.logoUrl ? (
+                                        <img src={branding.logoUrl} alt={branding.orgName} style={{ height: 36, width: 'auto', maxWidth: 170, objectFit: 'contain' }} />
+                                    ) : (branding.primaryColor || '').toLowerCase() === '#f97316' ? (
+                                        /* Default (Axten) — original SVG so live is pixel-identical */
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" style={{ height: '36px', width: 'auto' }} aria-label="Axten Hospitals">
+                                            <text x="10" y="72" fontFamily="Arial Black, Arial, sans-serif" fontWeight="900" fontSize="68" fill="#1e3a6e" letterSpacing="-2">Axten</text>
+                                            <rect x="10" y="80" width="60" height="8" fill="#f97316" rx="2"/>
+                                            <rect x="130" y="80" width="120" height="8" fill="#f97316" rx="2"/>
+                                            <text x="75" y="89" fontFamily="Arial, sans-serif" fontWeight="700" fontSize="16" fill="#1e3a6e" letterSpacing="6">HOSPITALS</text>
+                                        </svg>
+                                    ) : (
+                                        <BrandWordmark name={branding.orgName} accent={branding.primaryColor} textColor="#1e293b" height={34} />
+                                    )}
+                                    <span className="text-[10px] font-bold tracking-widest uppercase hidden sm:block" style={{ color: branding.primaryColor }}>
                                         Patient Portal
                                     </span>
                                 </Link>

@@ -127,7 +127,7 @@ function packageAcceptanceHTML(admission: any, admPkg: any, org: any, branding: 
         <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${branding.accentColor};padding-bottom:14px;margin-bottom:18px;">
             <div>
                 <h1>${hospitalName}</h1>
-                <p style="font-size:10px;color:#6b7280;margin-top:2px;">A Unit of TAH Global Healthcare Pvt. Ltd.</p>
+                <p style="font-size:10px;color:#6b7280;margin-top:2px;">${branding.tagline || 'A Unit of TAH Global Healthcare Pvt. Ltd.'}</p>
                 <p style="font-size:10px;color:#6b7280;">GSTIN: ${gstin}</p>
             </div>
             <div style="text-align:right;">
