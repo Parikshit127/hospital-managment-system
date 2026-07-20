@@ -21,6 +21,7 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/backend/db';
+import { handleVapiToolCalls } from '@/app/lib/voice/vapi-tools';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -267,6 +268,12 @@ export async function POST(request: Request) {
     const msg = body?.message;
     const type: string | undefined = msg?.type;
     if (!type) return NextResponse.json({ received: true });
+
+    // Tool calls must return a { results: [...] } body the assistant can use.
+    if (type === 'tool-calls') {
+      const toolResponse = await handleVapiToolCalls(msg, organizationId);
+      return NextResponse.json(toolResponse);
+    }
 
     switch (type) {
       case 'status-update':
