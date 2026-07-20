@@ -122,10 +122,10 @@ async function isDoctorOnLeave(db: any, doctorId: string, dateStr: string): Prom
 
 // ── Individual tools (each returns a speakable result for the assistant) ──────
 
-async function lookupCaller(organizationId: string, callerPhone: string | null) {
-  const phone = normalizePhone(callerPhone);
+async function lookupCaller(organizationId: string, callerPhone: string | null, phoneArg?: string) {
+  const phone = normalizePhone(phoneArg ?? callerPhone);
   if (!phone) {
-    return { found: false, message: 'No caller ID available. Ask the caller for their phone number and name to look them up.' };
+    return { found: false, message: 'No caller ID available. Ask the caller for their 10-digit phone number and their name to look them up.' };
   }
   const db = getTenantPrisma(organizationId);
   const matches = await db.oPD_REG.findMany({
@@ -144,10 +144,10 @@ async function lookupCaller(organizationId: string, callerPhone: string | null) 
   };
 }
 
-async function verifyCallerName(organizationId: string, callerPhone: string | null, spokenName?: string, callId?: string | null) {
-  const phone = normalizePhone(callerPhone);
+async function verifyCallerName(organizationId: string, callerPhone: string | null, spokenName?: string, callId?: string | null, phoneArg?: string) {
+  const phone = normalizePhone(phoneArg ?? callerPhone);
   if (!phone || !spokenName?.trim()) {
-    return { verified: false, message: 'Need both the caller ID and a spoken name to verify.' };
+    return { verified: false, message: 'Need both a 10-digit phone number and a spoken name to verify. Ask the caller for whichever is missing.' };
   }
   const db = getTenantPrisma(organizationId);
   const matches = await db.oPD_REG.findMany({
@@ -289,9 +289,9 @@ async function runTool(name: string, args: Record<string, any>, ctx: VoiceCtx) {
   switch (name) {
     // ── Read-only (Phase 3) ──
     case 'lookup_caller':
-      return lookupCaller(ctx.organizationId, ctx.callerPhone);
+      return lookupCaller(ctx.organizationId, ctx.callerPhone, args?.phone);
     case 'verify_caller_name':
-      return verifyCallerName(ctx.organizationId, ctx.callerPhone, args?.name, ctx.callId);
+      return verifyCallerName(ctx.organizationId, ctx.callerPhone, args?.name, ctx.callId, args?.phone);
     case 'get_hospital_info':
       return getHospitalInfo(ctx.organizationId);
     case 'find_doctors':
@@ -302,7 +302,7 @@ async function runTool(name: string, args: Record<string, any>, ctx: VoiceCtx) {
     case 'book_appointment':
       return bookAppointment(ctx, { doctorName: args?.doctorName, date: args?.date, time: args?.time, reason: args?.reason });
     case 'register_patient':
-      return registerPatientTool(ctx, { fullName: args?.fullName, email: args?.email });
+      return registerPatientTool(ctx, { fullName: args?.fullName, email: args?.email, phone: args?.phone });
     case 'reschedule_appointment':
       return rescheduleAppointment(ctx, { newDate: args?.newDate, newTime: args?.newTime, doctorName: args?.doctorName });
     case 'cancel_appointment':

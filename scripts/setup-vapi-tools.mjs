@@ -32,15 +32,22 @@ const server = { url: WEBHOOK_URL, headers: { 'x-vapi-secret': SECRET } };
 const TOOLS = [
   {
     name: 'lookup_caller',
-    description: "Check whether the current caller's phone number matches an existing patient record. Returns whether a record exists WITHOUT revealing the patient's name. Call this first for any caller.",
-    parameters: { type: 'object', properties: {}, required: [] },
+    description: "Check whether the caller's phone number matches an existing patient record. Returns whether a record exists WITHOUT revealing the patient's name. The number is taken from caller ID automatically; only pass 'phone' if caller ID is unavailable and the caller gives their number.",
+    parameters: {
+      type: 'object',
+      properties: { phone: { type: 'string', description: "Optional 10-digit number, only if caller ID isn't available" } },
+      required: [],
+    },
   },
   {
     name: 'verify_caller_name',
     description: "Verify the caller's identity by matching a full name they speak against the patient record on their phone number. Only proceed to help or disclose details once verified.",
     parameters: {
       type: 'object',
-      properties: { name: { type: 'string', description: 'The full name the caller says' } },
+      properties: {
+        name: { type: 'string', description: 'The full name the caller says' },
+        phone: { type: 'string', description: "Optional 10-digit number, only if caller ID isn't available" },
+      },
       required: ['name'],
     },
   },
@@ -86,12 +93,13 @@ const TOOLS = [
   },
   {
     name: 'register_patient',
-    description: "Register a NEW patient during the call when their number has no record or their name didn't match. The phone number is taken automatically from caller ID — do NOT ask for it. Ask for full name (required) and email (optional).",
+    description: "Register a NEW patient during the call when their number has no record or their name didn't match. The phone number is taken from caller ID automatically; only ask for and pass 'phone' if caller ID is unavailable (e.g. a web test call). Ask for full name (required) and email (optional), and read the email/number back to confirm.",
     parameters: {
       type: 'object',
       properties: {
         fullName: { type: 'string', description: "The caller's full name" },
-        email: { type: 'string', description: 'Optional email address' },
+        email: { type: 'string', description: 'Optional email address (read it back to confirm)' },
+        phone: { type: 'string', description: "10-digit number — only if caller ID isn't available" },
       },
       required: ['fullName'],
     },

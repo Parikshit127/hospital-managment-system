@@ -180,11 +180,30 @@ export async function bookAppointment(ctx: VoiceCtx, args: { doctorName?: string
   };
 }
 
-export async function registerPatient(ctx: VoiceCtx, args: { fullName?: string; email?: string }) {
+function normalizeEmail(raw?: string): string | null {
+  if (!raw) return null;
+  // STT often inserts spaces or spells "at"/"dot" — collapse the obvious cases.
+  const e = raw.trim().toLowerCase().replace(/\s+/g, '').replace(/\(at\)|\sat\s/g, '@').replace(/\(dot\)|\sdot\s/g, '.');
+  return e || null;
+}
+
+function isValidEmail(e: string): boolean {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e);
+}
+
+export async function registerPatient(ctx: VoiceCtx, args: { fullName?: string; email?: string; phone?: string }) {
   const db = getTenantPrisma(ctx.organizationId);
-  const phone = normalizePhone(ctx.callerPhone);
+  // Prefer caller ID; fall back to a spoken number (needed for web test calls).
+  const phone = normalizePhone(args.phone ?? ctx.callerPhone);
   if (!args.fullName?.trim()) return { message: 'What is your full name, so I can register you?' };
-  if (!phone) return { message: 'I could not read your phone number. Please tell me your 10-digit mobile number.' };
+  if (!phone || phone.length !== 10) {
+    return { message: 'I need a valid 10-digit mobile number. Please say it slowly, digit by digit.' };
+  }
+
+  const email = normalizeEmail(args.email);
+  if (email && !isValidEmail(email)) {
+    return { message: `I heard the email as "${email}", which doesn't look right. Could you spell your email address for me, or we can skip it?` };
+  }
 
   const cfg = await db.organizationConfig.findUnique({ where: { organizationId: ctx.organizationId }, select: { uhid_prefix: true } }).catch(() => null);
   const uhid = await generateUHID(db as any, cfg?.uhid_prefix || 'AVN');
@@ -194,7 +213,7 @@ export async function registerPatient(ctx: VoiceCtx, args: { fullName?: string; 
       patient_id: uhid,
       full_name: args.fullName.trim(),
       phone,
-      email: args.email?.trim() || null,
+      email: email || null,
       organizationId: ctx.organizationId,
       registration_consent: true,
       preferred_language: 'en',
@@ -210,7 +229,10 @@ export async function registerPatient(ctx: VoiceCtx, args: { fullName?: string; 
     outcome: 'Registered',
   });
 
-  return { message: `Thank you, ${args.fullName.trim()}. You are now registered as a new patient. Would you like to book an appointment now?` };
+  const emailPart = email ? ` I have your email as ${email}.` : '';
+  return {
+    message: `Thank you, ${args.fullName.trim()}. You're registered with mobile number ${phone}.${emailPart} Please confirm those are correct, then tell me which doctor and time you'd like to book.`,
+  };
 }
 
 export async function rescheduleAppointment(ctx: VoiceCtx, args: { newDate?: string; newTime?: string; doctorName?: string }) {
