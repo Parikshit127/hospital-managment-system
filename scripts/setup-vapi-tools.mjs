@@ -188,8 +188,8 @@ async function main() {
   }
 
   // 1b. Native call-transfer tool — only when a real staff number is configured.
-  const staff = process.env.STAFF_TRANSFER_NUMBER ?? '';
-  const staffValid = /^\+?\d{8,15}$/.test(staff) && staff !== '+910000000000' && staff !== '+910000000';
+  const staff = (process.env.STAFF_TRANSFER_NUMBER ?? '').replace(/[^\d+]/g, '');
+  const staffValid = /^\+\d{10,15}$/.test(staff) && staff !== '+910000000000' && staff !== '+910000000';
   if (staffValid) {
     const transferPayload = {
       type: 'transferCall',

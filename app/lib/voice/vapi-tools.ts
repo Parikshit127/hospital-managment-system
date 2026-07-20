@@ -31,8 +31,8 @@ import {
 
 /** True when a real staff transfer number is configured (not the placeholder). */
 function staffTransferConfigured(): boolean {
-  const n = process.env.STAFF_TRANSFER_NUMBER ?? '';
-  return /^\+?\d{8,15}$/.test(n) && n !== '+910000000000' && n !== '+910000000';
+  const n = (process.env.STAFF_TRANSFER_NUMBER ?? '').replace(/[^\d+]/g, '');
+  return /^\+\d{10,15}$/.test(n) && n !== '+910000000000' && n !== '+910000000';
 }
 
 /** OPD open? (Asia/Kolkata, default 9am–6pm) + whether a live transfer is possible now. */
