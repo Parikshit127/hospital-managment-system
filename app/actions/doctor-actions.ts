@@ -10,6 +10,7 @@ import { prescriptionReadyMsg, admissionConfirmedMsg, icuDailyUpdateMsg } from "
 import { getTodayRange, getOrgTimezone } from "@/app/lib/timezone";
 import { sendAdmissionEmail, sendPrescriptionEmail } from "@/backend/email";
 import { resolveOPDConfig } from "@/app/lib/opd-config";
+import { generateIndentNumber } from "@/app/lib/sequence-generator";
 
 export async function getPatientQueue(options?: {
   doctor_id?: string;
@@ -464,9 +465,12 @@ export async function createPharmacyOrder(
   try {
     const { db, organizationId } = await requireTenantContext();
 
+    const indentNumber = await generateIndentNumber(organizationId, db);
+
     // 1. Create Local Order (Pending)
     const order = await db.pharmacy_orders.create({
       data: {
+        indent_number: indentNumber,
         patient_id: patientId,
         doctor_id: doctorId,
         status: "Pending",

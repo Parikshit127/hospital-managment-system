@@ -887,14 +887,14 @@ export async function getPharmacyQueue() {
             where: { admission_id: { in: admissionIds } },
             select: {
                 admission_id: true,
-                bed: { select: { bed_number: true, wards: { select: { ward_name: true } } } },
+                bed: { select: { bed_name: true, wards: { select: { ward_name: true } } } },
                 ward: { select: { ward_name: true } },
             },
         }) : [];
         const wardByAdmission = new Map<string, string>();
         for (const a of admissions) {
             const wardName = a.ward?.ward_name || a.bed?.wards?.ward_name || '';
-            const bed = a.bed?.bed_number ? ` - Bed ${a.bed.bed_number}` : '';
+            const bed = a.bed?.bed_name ? ` - ${a.bed.bed_name}` : '';
             wardByAdmission.set(a.admission_id, `${wardName}${bed}`.trim() || '—');
         }
 

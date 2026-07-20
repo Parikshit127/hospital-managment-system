@@ -993,7 +993,11 @@ export default function PharmacyPage() {
                                                 {order.is_ipd_linked && (
                                                     <span className="bg-blue-500/10 text-blue-500 px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border border-blue-500/20">IPD</span>
                                                 )}
-                                                <span className="text-[10px] text-gray-300 font-mono">#{String(order.id).padStart(6, '0')}</span>
+                                                {order.indent_number ? (
+                                                    <span className="text-[11px] text-teal-700 font-black font-mono bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-lg">{order.indent_number}</span>
+                                                ) : (
+                                                    <span className="text-[10px] text-gray-300 font-mono">#{String(order.id).padStart(6, '0')}</span>
+                                                )}
                                             </div>
                                             <h3 className="font-bold text-gray-700 text-lg">
                                                 {order.patient?.full_name || 'Unknown Patient'}
@@ -1001,6 +1005,9 @@ export default function PharmacyPage() {
                                             </h3>
                                             <p className="text-sm text-gray-500 flex items-center gap-2 mt-1">
                                                 <span className="bg-gray-100 px-2 py-0.5 rounded text-xs font-bold text-gray-500 border border-gray-200">{order.requested_by_name ? `Nurse: ${order.requested_by_name}` : `Dr. ${order.doctor_id}`}</span>
+                                                {order.ward && order.ward !== '—' && (
+                                                    <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-xs font-bold border border-indigo-100">{order.ward}</span>
+                                                )}
                                                 <span className="text-gray-300">|</span>
                                                 <Clock className="h-3 w-3 text-gray-400" />
                                                 <span className="text-xs">{new Date(order.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>

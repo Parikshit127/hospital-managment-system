@@ -524,7 +524,7 @@ export async function createPharmacyIndent(data: {
                 status: 'Pending',
                 total_items_requested: data.items.length,
                 items_dispensed: 0,
-                items_missing: data.items.filter((i) => i.quantityApproved < i.quantityRequested).length,
+                items_missing: 0,  // pharmacist determines shortfalls at dispensing time
                 total_amount: 0,
                 organizationId,
                 items: {
@@ -532,12 +532,10 @@ export async function createPharmacyIndent(data: {
                         medicine_id: item.medicineId,
                         medicine_name: item.medicineName,
                         quantity_requested: item.quantityRequested,
-                        quantity_dispensed: item.quantityApproved,
-                        status: item.quantityApproved === 0
-                            ? 'OutOfStock'
-                            : item.quantityApproved < item.quantityRequested
-                            ? 'PartialStock'
-                            : 'Pending',
+                        quantity_dispensed: 0,   // pharmacist fills this on dispense
+                        // Always start as Pending — the pharmacist confirms stock
+                        // availability and sets the final status during dispensing.
+                        status: 'Pending',
                     })),
                 },
             },
@@ -545,7 +543,7 @@ export async function createPharmacyIndent(data: {
 
         revalidatePath('/nurse/patients');
         revalidatePath('/pharmacy');
-        return { success: true, orderId: order.id };
+        return { success: true, orderId: order.id, indentNumber: order.indent_number };
     } catch (error) {
         console.error('Create Pharmacy Indent Error:', error);
         return { success: false, error: 'Failed to create pharmacy indent' };

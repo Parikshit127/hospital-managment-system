@@ -359,8 +359,8 @@ export default function NursePatientsPage() {
                 setIndentLines([]);
                 setIndentSuccess(
                     shortItems.length > 0
-                        ? `Indent #${res.orderId} submitted. ⚠️ ${shortItems.map((l) => l.medicineName).join(', ')} had insufficient stock — pharmacy notified.`
-                        : `Indent #${res.orderId} submitted successfully to pharmacy.`
+                        ? `Indent #${res.indentNumber || res.orderId} submitted. ⚠️ ${shortItems.map((l) => l.medicineName).join(', ')} had insufficient stock — pharmacy notified.`
+                        : `Indent #${res.indentNumber || res.orderId} submitted successfully to pharmacy.`
                 );
                 // Refresh history
                 getPatientIndentHistory(selectedPatient.patientId).then(h => {
@@ -811,7 +811,7 @@ export default function NursePatientsPage() {
                                                     <div key={order.id} className="border border-gray-200 rounded-xl p-3 bg-gray-50/50">
                                                         <div className="flex items-center justify-between mb-2">
                                                             <div className="flex items-center gap-2">
-                                                                <span className="text-[10px] font-mono font-bold text-gray-500">#{order.id}</span>
+                                                                <span className="text-[10px] font-mono font-bold text-gray-500">{order.indent_number || `#${order.id}`}</span>
                                                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                                                                     order.status === 'Completed' || order.status === 'Dispensed'
                                                                         ? 'bg-emerald-100 text-emerald-700'
