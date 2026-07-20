@@ -504,7 +504,7 @@ function renderOpdSlipHtml(patient: any, appt: any, b: BillBranding, org: any, d
                 </div>
             </div>
             <div class="footer-badges-row">
-                <div class="validity-text">पर्चा केवल 7 दिन के लिए मान्य है। / Valid for 7 days only.</div>
+                <div class="validity-text">पर्चा केवल 3 दिन के लिए मान्य है। / Valid for 3 days only.</div>
                 <div class="legal-badge">NOT VALID FOR MEDICO LEGAL PURPOSE</div>
             </div>
             <div class="footer-accent-bar"></div>
