@@ -93,6 +93,9 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/api/zealthix/") ||
     pathname.startsWith("/api/public/") ||
     pathname.startsWith("/api/patient/self-register") ||
+    // AI voice call assistant — Vapi webhook authenticates via VAPI_WEBHOOK_SECRET
+    // in the route handler itself.
+    pathname.startsWith("/api/webhooks/") ||
     // Track B & Track A API routes for AI voice booking / registration
     pathname.startsWith("/api/voice/") ||
     pathname.startsWith("/api/organisations") ||
