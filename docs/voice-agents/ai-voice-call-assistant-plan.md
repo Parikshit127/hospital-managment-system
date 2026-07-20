@@ -9,7 +9,7 @@
 | **Tenancy** | Single organization (this deployment) |
 | **Storage** | **Transcript-only** — call audio is discarded after STT; no recordings persisted |
 | **Availability** | 24/7 full service |
-| **Status** | Phases 0–4 DONE & verified. Next: Phase 5 (fallback/human handoff). |
+| **Status** | Phases 0–5 DONE & verified. Next: Phase 6 (admin viewer + retention). |
 | **Author date** | 2026-07-20 |
 
 > This plan **extends existing infrastructure**; it is not greenfield. Read §1 before starting so we reuse, not duplicate.
@@ -189,7 +189,7 @@ Each phase is a reviewable unit ending in a manual test. **Do not start the next
 - [ ] Fire-and-forget SMS/WhatsApp confirmation via `notify-patient.ts`.
 - **Test:** existing-patient book; new-caller register-then-book; reschedule frees old slot; double-book blocked (409/`P2002`); appointment visible on **both** patient + doctor portals; emergency advisory fires.
 
-### Phase 5 — Fallback / human handoff (transfer-first, never drop)
+### Phase 5 — Fallback / human handoff (transfer-first, never drop) ✅ DONE
 - [ ] `transferToStaff` tool — during OPD hours, warm-transfer to `STAFF_TRANSFER_NUMBER`; on no-answer within `STAFF_TRANSFER_TIMEOUT_SECONDS` (default 20) → fall through to callback. Set `handoff_status`.
 - [ ] `requestCallback` tool — create a `CRMLead` via `createLead()` (source `voice_ai`); set `callback_lead_id`, `outcome:'Callback'`, `handoff_status:'callback_created'`.
 - [ ] Triggers: caller asks for a human, repeated STT misunderstanding, unsupported request, or after-hours transfer.
