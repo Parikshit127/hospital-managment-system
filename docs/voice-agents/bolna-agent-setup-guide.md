@@ -39,8 +39,8 @@ Throughout this guide, replace `<hims-host>` with your deployed/tunnel host and 
 
 Bolna is a **managed platform** — the assistant, prompt, and functions are configured in the Bolna dashboard (or via its API). The repo mainly **version-controls that config** so it's reproducible; there's **no always-on server** to host.
 
-1. Create an empty repo `avani-voice-agent` (GitHub).
-2. Suggested structure:
+1. ✅ **Repo created:** [`github.com/shlokdhawan/avani-voice-agent`](https://github.com/shlokdhawan/avani-voice-agent) — holds the system prompt, `functions.json` (all 11 tools), `assistant.json`, and `.env.example`.
+2. Structure:
    ```
    avani-voice-agent/
    ├── README.md                # this setup + how to redeploy the agent
@@ -72,7 +72,7 @@ Bolna is a **managed platform** — the assistant, prompt, and functions are con
 In the Bolna dashboard → create a new assistant:
 
 1. **Name:** `Avani Hospital Receptionist`.
-2. **Language / voice:** choose **Hindi + English (Indian)** using Bolna's **Sarvam** speech models (strong on Indian accents). Pick a natural Indian voice.
+2. **Language / voice:** **Hindi + English (Indian)**. Use **Sarvam** for speech-to-text (strong on Indian accents) and a natural Indian TTS voice — we used **ElevenLabs Multilingual v2 · "Viraj"**.
 3. **LLM:** GPT-4o (or Bolna's default good model) — function-calling must be enabled.
 4. **Recording:** **OFF** (we are transcript-only for PHI compliance — the transcript comes through `call-events`).
 5. **First message:** e.g. *"Hello, this is the AI assistant for Avani Hospital. This call is handled by an automated assistant. How can I help you today?"* (self-identify as AI — DPDP consent).
@@ -114,13 +114,18 @@ Keep replies short for a phone call; offer only a few options at a time.
 
 ## Part E — Functions / tools (the 11 endpoints)
 
-Create **one function per HIMS endpoint**. For every function set:
-- **URL:** `https://<hims-host>/api/voice/v1/<path>`
-- **Method:** as listed below.
-- **Header:** `Authorization: Bearer <VOICE_API_KEY>`
-- **Body:** the LLM-provided parameters (schema below) **plus two call-context fields** — `call_id` and `caller_phone` — mapped from **Bolna's call variables** (so the caller's number and the call id come from the call, not the model). Use Bolna's variable syntax for these (e.g. the call id and customer number from the call context). If Bolna can't template them into the body, it's fine to omit `caller_phone` and let the assistant ask for the number (the endpoints handle both).
+Create **one custom tool per HIMS endpoint** (Bolna dashboard → **Tools → Add a Custom Tool → Write manually**, paste one JSON object, Submit). Bolna's custom-tool JSON shape:
+- **`key`:** `"custom_task"`.
+- **`value.url`:** `https://<hims-host>/api/voice/v1/<path>` (`${HIMS_BASE_URL}` in the repo).
+- **`value.method`:** as listed below.
+- **`value.api_token`:** the `VOICE_API_KEY` (Bolna sends it as the bearer token).
+- **`value.headers`:** `{ "Content-Type": "application/json" }`.
+- **`value.param`:** maps each argument to a Bolna template var, e.g. `"department": "%(department)s"`.
+- **`parameters`:** the JSON-schema of the LLM args (tables below).
 
-> `call_id` links every action to one CallLog row for the call. `caller_phone` is the caller ID. Neither should be supplied by the LLM.
+**Identity:** pass the caller's number as a **`caller_phone` LLM parameter** — the assistant collects it and reads it back; the endpoint accepts it as the caller ID. On real PSTN calls Bolna *additionally* passes its own call id to the endpoint, which HIMS uses to tie every action to one CallLog row (no LLM involvement, confirmed in testing).
+
+> 📦 **The authoritative, ready-to-paste JSON for all 11 tools lives in the agent repo:** [`avani-voice-agent/agent/functions.json`](https://github.com/shlokdhawan/avani-voice-agent/blob/main/agent/functions.json). It uses `${HIMS_BASE_URL}` / `${VOICE_API_KEY}` placeholders — substitute the real values when pasting into Bolna.
 
 ### Read tools
 
@@ -143,46 +148,57 @@ Create **one function per HIMS endpoint**. For every function set:
 | `cancel_appointment` | POST `/cancel-appointment` | `reason` (string, optional) | — |
 | `request_callback` | POST `/request-callback` | `reason` (string), `department` (string, optional) | — |
 
-**Example function definition** (`book_appointment`) — the shape to replicate for each:
+**Example custom tool** (`book_appointment`) — the real Bolna shape to replicate for each:
 ```json
 {
   "name": "book_appointment",
   "description": "Book an OPD appointment for the identified caller. The caller must be verified or freshly registered. Confirm the doctor, date and time first.",
-  "method": "POST",
-  "url": "https://<hims-host>/api/voice/v1/book-appointment",
-  "headers": { "Authorization": "Bearer <VOICE_API_KEY>", "Content-Type": "application/json" },
-  "body": {
-    "call_id": "{{call_id}}",
-    "caller_phone": "{{caller_number}}",
-    "doctorName": "{{doctorName}}",
-    "date": "{{date}}",
-    "time": "{{time}}",
-    "reason": "{{reason}}"
-  },
+  "pre_call_message": "Let me book that for you.",
   "parameters": {
     "type": "object",
     "properties": {
       "doctorName": { "type": "string", "description": "Doctor to book with, e.g. Dr. Vikas Kumar Jha" },
       "date": { "type": "string", "description": "YYYY-MM-DD, or 'today' / 'tomorrow'" },
       "time": { "type": "string", "description": "Chosen start time, e.g. 10:00 AM" },
-      "reason": { "type": "string", "description": "Optional reason for the visit" }
+      "reason": { "type": "string", "description": "Optional reason for the visit" },
+      "caller_phone": { "type": "string", "description": "The caller's 10-digit mobile number (only if caller ID is unavailable)" }
     },
     "required": ["doctorName", "time"]
+  },
+  "key": "custom_task",
+  "value": {
+    "method": "POST",
+    "param": {
+      "doctorName": "%(doctorName)s",
+      "date": "%(date)s",
+      "time": "%(time)s",
+      "reason": "%(reason)s",
+      "caller_phone": "%(caller_phone)s"
+    },
+    "url": "${HIMS_BASE_URL}/api/voice/v1/book-appointment",
+    "api_token": "${VOICE_API_KEY}",
+    "headers": { "Content-Type": "application/json" }
   }
 }
 ```
-> `{{call_id}}` / `{{caller_number}}` are placeholders for **Bolna's** call-context variables — use whatever names Bolna exposes for the call id and caller number. Every response is JSON with a `message` string the assistant reads aloud, plus structured fields (see the Appendix).
+> Replace `${HIMS_BASE_URL}` and `${VOICE_API_KEY}` with the real host + key when pasting into Bolna. `%(name)s` is Bolna's template syntax for an LLM argument. Every response is JSON with a `message` string the assistant reads aloud, plus structured fields (see the Appendix).
 
 ---
 
 ## Part F — Call-events webhook (transcript logging)
 
-1. In the assistant/webhook settings, set the **call-events / end-of-call webhook** to:
-   `https://<hims-host>/api/voice/v1/call-events`
-2. **Signing:** HMAC-SHA256 of the raw body with `VOICE_WEBHOOK_SECRET`, sent as header **`X-Voice-Signature`** (hex or base64). If Bolna signs with a different header/scheme, tell us the exact one — the verifier in `api-auth.ts` is a one-line change.
-3. HIMS writes a `CallLog` (`provider='bolna'`) + `CallTranscript` and it appears in **Call Center → Call Logs**.
+1. In the Bolna dashboard, open the agent's **Analytics** tab → **Webhook Configuration**.
+2. **Webhook URL:** `https://<hims-host>/api/voice/v1/call-events`.
+3. Turn on **Add headers** and set **Headers (JSON)** to:
+   ```json
+   {"X-Voice-Token": "<VOICE_WEBHOOK_SECRET>"}
+   ```
+   Bolna can only attach **static** headers (it does not sign the body), so `call-events` authenticates with the raw `VOICE_WEBHOOK_SECRET` sent as **`X-Voice-Token`**. (The endpoint *also* still accepts an HMAC `X-Voice-Signature` for our own signed tests.)
+4. **Trigger on statuses:** *All statuses (default)* is fine — the handler is idempotent on the Bolna call id.
+5. **Save agent**, then click **Send test** to POST a sample `completed` payload (expect HTTP 200).
+6. HIMS writes a `CallLog` (`provider='bolna'`) + `CallTranscript`, visible in **Call Center → Call Logs** with the transcript.
 
-> ⚠️ The `call-events` payload mapper (`bolna-events.ts`) is defensive but built against assumed field names. **Send us one real Bolna call-events payload** so we can lock the mapping (plan §8).
+> ✅ The real Bolna `completed` payload has been captured and `bolna-events.ts` is **locked to it**: it parses the newline `"role: text"` transcript string into turns and maps `user_number` / `telephony_data` (from/to, recording_url) / `summary` / `created_at_str` / `updated_at_str`. The caller's collected phone is also backfilled onto the CallLog by the tool calls.
 
 ---
 
@@ -231,6 +247,6 @@ All tool endpoints: `Authorization: Bearer <VOICE_API_KEY>`; body may include `c
 | POST `/reschedule-appointment` | **`newTime`**, `newDate?`, `doctorName?` | `{ message }` |
 | POST `/cancel-appointment` | `reason?` | `{ message }` |
 | POST `/request-callback` | `reason?`, `department?` | `{ callbackLeadId?, message }` |
-| POST `/call-events` | Bolna webhook (HMAC `X-Voice-Signature`) | `{ received, callLogId?, status?, turns? }` |
+| POST `/call-events` | Bolna webhook (static `X-Voice-Token`, or HMAC `X-Voice-Signature`) | `{ received, callLogId?, status?, turns? }` |
 
-*Auth: tool endpoints use `VOICE_API_KEY` (bearer); `call-events` uses `VOICE_WEBHOOK_SECRET` (HMAC). Org resolved server-side from `VOICE_AI_ORG_ID`.*
+*Auth: tool endpoints use `VOICE_API_KEY` (bearer via `api_token`); `call-events` uses `VOICE_WEBHOOK_SECRET` — sent by Bolna as the static `X-Voice-Token` header, or as an HMAC `X-Voice-Signature` for signed tests. Org resolved server-side from `VOICE_AI_ORG_ID`.*

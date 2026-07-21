@@ -80,7 +80,7 @@ Each phase is a reviewable unit ending in a test. Commit per logical unit **on `
 
 ### Phase 5 — `call-events` (call logging + transcript) ✅ DONE
 - [ ] `POST /api/voice/v1/call-events` — HMAC-verify; handle Bolna's status + end-of-call payloads; upsert `CallLog` (`provider='bolna'`, `channel='voice_ai'`, idempotent on Bolna call id) + `CallTranscript` (transcript-only); write a `VOICE_CALL_RECEIVED` audit row.
-- [ ] Map Bolna's transcript/message shape → our `turns` format (adapter, once Bolna's payload is confirmed — flag as an open item in §10).
+- [x] Map Bolna's transcript/message shape → our `turns` format — **done & confirmed against a real Bolna payload** (see §8).
 - **Test:** simulated Bolna payloads create/finalize a `CallLog` + `CallTranscript`; replay is idempotent; row shows in Call Center UI.
 
 ### Phase 6 — Retire Vapi glue + cleanup ✅ DONE
@@ -129,10 +129,11 @@ The agent lives in a **new repo** (e.g. `avani-voice-agent`). It is **not on hol
 ---
 
 ## 8. Risks / open items (PRD §12)
-- **Bolna `call-events` payload shape** must be confirmed before finalizing the Phase-5 adapter (transcript/message fields). Build against a documented sample; keep the mapper isolated.
-- Confirm Bolna's **function-call auth** mechanism (custom header vs. bearer) so the endpoint auth matches — the endpoints already accept a bearer/custom-key, so low risk.
-- **Consent/PHI wording** for callers — confirm with hospital admin (reuse transcript-only + retention policy already in place).
-- Transcript **retention** — already handled (`VOICE_TRANSCRIPT_RETENTION_DAYS` + purge cron); no new work.
+- ✅ **Bolna `call-events` payload shape** — **RESOLVED.** A real Bolna `completed` payload was captured and `bolna-events.ts` is locked to it (newline `"role: text"` transcript → `turns`; `user_number` / `telephony_data` / `summary` / `recording_url` / `created_at_str` / `updated_at_str` mapped).
+- ✅ **Bolna function-call / webhook auth** — **RESOLVED.** Tool endpoints take `VOICE_API_KEY` as `api_token` (bearer). `call-events` accepts Bolna's **static `X-Voice-Token`** header (Bolna cannot sign the body), alongside the existing HMAC `X-Voice-Signature` path.
+- ⏳ **Consent/PHI wording** for callers — **still open**; confirm with hospital admin. (Transcript-only + retention already in place; the first message self-identifies as an AI assistant.)
+- ✅ Transcript **retention** — already handled (`VOICE_TRANSCRIPT_RETENTION_DAYS` + purge cron); no new work.
+- ℹ️ **SMS/WhatsApp confirmation** is out of v1 scope (PRD §4), but the booking tool message currently says "confirmation sent by SMS" while no SMS gateway is configured — either wire `SMS_GATEWAY_URL`/`SMS_API_KEY` (+ DLT) or soften that line.
 
 ---
 
