@@ -19,6 +19,7 @@ import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { generateSequentialNumber, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
 import { postReceiptAllocationToGL, ensureTpaGlAccounts, postShortPayWriteOffToGL, postShortPayRecoverToGL } from './insurance-gl-actions';
+import { reverseJournalEntry } from './gl-actions';
 
 function serialize<T>(data: T): T {
   return JSON.parse(JSON.stringify(data, (_, v) =>
@@ -596,6 +597,9 @@ export async function reverseInsuranceReceipt(receiptId: number, reason: string)
     if (!receipt) return { success: false, error: 'Receipt not found' };
     if (receipt.status === 'Reversed') return { success: false, error: 'Receipt already reversed' };
 
+    const allocationIds: number[] = receipt.allocations.map((a: any) => a.id);
+    const shortPayIds: number[] = []; // captured before deletion so their GL can be reversed
+
     await db.$transaction(async (tx: any) => {
       for (const a of receipt.allocations) {
         const invoice = await tx.invoices.findFirst({ where: { id: a.invoice_id, organizationId } });
@@ -609,16 +613,15 @@ export async function reverseInsuranceReceipt(receiptId: number, reason: string)
           const approved = Number(invoice.tpa_approved_amount || 0);
           const newPaid = Math.max(0, round2(Number(invoice.paid_amount || 0) - allocated));
           const netAmount = Number(invoice.net_amount || 0);
-          // Option B (gross settlement) may have moved part of the disallowance to the
-          // patient (disposition = ToRecover). On reversal, take that back off the
-          // patient's due so no phantom balance is left. NOTE: reversing the underlying
-          // GL postings (allocation + write-off/recover) is a separate, pre-existing gap
-          // — this reversal resets invoice state but does not unwind the ledger.
-          const recoverSps = await tx.claimShortPay.findMany({
-            where: { organizationId, invoice_id: a.invoice_id, disposition: 'ToRecover' },
-            select: { amount: true },
+          // Gross settlement (Option B) may have moved part of the disallowance to the
+          // patient (disposition = ToRecover); restore the patient's due. Collect this
+          // bill's short-pays so their GL is reversed below (single settlement per bill).
+          const sps = await tx.claimShortPay.findMany({
+            where: { organizationId, invoice_id: a.invoice_id },
+            select: { id: true, amount: true, disposition: true },
           });
-          const recoverAmt = round2(recoverSps.reduce((s: number, r: any) => s + Number(r.amount || 0), 0));
+          const recoverAmt = round2(sps.filter((s: any) => s.disposition === 'ToRecover').reduce((t: number, s: any) => t + Number(s.amount || 0), 0));
+          for (const s of sps) shortPayIds.push(s.id);
           await tx.invoices.update({
             where: { id: invoice.id },
             data: {
@@ -634,19 +637,15 @@ export async function reverseInsuranceReceipt(receiptId: number, reason: string)
               version: { increment: 1 },
             },
           });
+          // Drop this bill's short-pays (pending + dispositioned); their GL is reversed
+          // below. Assumes one settlement per bill (the Option B model) — a bill carrying
+          // an unrelated manual write-off would have it removed too.
+          await tx.claimShortPay.deleteMany({ where: { organizationId, invoice_id: a.invoice_id } });
         }
         // Void the payment row.
         if (a.payment_id) {
           await tx.payments.update({ where: { id: a.payment_id }, data: { status: 'Reversed' } }).catch(() => {});
         }
-        // Remove pending short-pays, and the gross-settlement "recover" rows (which
-        // pair with the patient_payable restore above) so no phantom patient due is
-        // left. Write-off rows are intentionally left as-is (they may be manual
-        // dispositions), and any GL posted is not unwound here — see the reversal-GL
-        // gap noted above.
-        await tx.claimShortPay.deleteMany({
-          where: { organizationId, invoice_id: a.invoice_id, disposition: { in: ['PendingReview', 'ToRecover'] } },
-        });
       }
 
       await tx.insuranceReceipt.update({
@@ -664,9 +663,26 @@ export async function reverseInsuranceReceipt(receiptId: number, reason: string)
       });
     });
 
+    // Unwind the ledger: reverse each allocation's posting (Bank/TDS/Receivable) and
+    // each short-pay's posting (write-off expense or patient reclassification) so the GL
+    // matches the reversed receipt. reverseJournalEntry finds the JE by reference and
+    // books a swapped reversing entry; the short-pay rows are gone but their JEs remain.
+    const glWarnings: string[] = [];
+    const reverseRef = async (refType: string, refId: string) => {
+      const je = await db.gL_JournalEntry.findFirst({
+        where: { organizationId, reference_type: refType, reference_id: refId, status: { not: 'Reversed' } },
+        select: { id: true },
+      });
+      if (!je) return;
+      const r: any = await reverseJournalEntry(je.id, `Insurance receipt ${receipt.receipt_number} reversed: ${reason}`, session?.username || session?.name || undefined);
+      if (!r?.success) glWarnings.push(`GL reverse failed for ${refType} ${refId}: ${r?.error || 'unknown'}`);
+    };
+    for (const allocId of allocationIds) await reverseRef('InsuranceReceiptAllocation', String(allocId));
+    for (const spId of shortPayIds) await reverseRef('ClaimShortPay', String(spId));
+
     revalidatePath('/admin/finance/tpa-insurance');
     revalidatePath('/billing');
-    return { success: true };
+    return { success: true, glWarnings: glWarnings.length ? glWarnings : undefined };
   } catch (error: any) {
     console.error('reverseInsuranceReceipt error:', error);
     return { success: false, error: error.message };

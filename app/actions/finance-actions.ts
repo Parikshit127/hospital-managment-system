@@ -1614,16 +1614,54 @@ export async function reversePayment(paymentId: number, reason: string) {
             const approved = Number(invoice.tpa_approved_amount || 0);
             const disallowed = Number(invoice.tpa_disallowed_amount || 0);
             const tds = Number(invoice.tpa_tds_amount || 0);
-            const newTpaPayable = Math.max(0, approved - remainingTpaSettled - disallowed - tds);
-            const fullyAccounted = remainingTpaSettled + disallowed + tds >= approved - 0.01;
-            await db.invoices.update({
-                where: { id: payment.invoice_id },
-                data: {
-                    tpa_settled_amount: remainingTpaSettled,
-                    tpa_payable: newTpaPayable,
-                    tpa_claim_status: remainingTpaSettled > 0 ? (fullyAccounted ? 'settled' : 'partially_settled') : 'approved',
-                },
-            });
+            // Gross-settled (Option B) bills account received + disallowed + TDS against
+            // the full bill, so settled+disallowed+tds exceeds the approved figure. That
+            // settlement is atomic, so voiding its cash un-does the whole thing: clear the
+            // disallowance/TDS, take back any amount moved to the patient, and unwind the
+            // GL — mirroring reverseInsuranceReceipt. Legacy (approved-based) bills keep
+            // the original recompute.
+            const wasGrossSettled = Math.round((Number(invoice.tpa_settled_amount || 0) + disallowed + tds) * 100) / 100 > approved + 0.01;
+            if (wasGrossSettled) {
+                const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+                const recoverSps = await db.claimShortPay.findMany({
+                    where: { organizationId, invoice_id: payment.invoice_id, disposition: 'ToRecover' },
+                    select: { amount: true },
+                });
+                const recoverAmt = r2(recoverSps.reduce((t: number, s: any) => t + Number(s.amount || 0), 0));
+                await db.invoices.update({
+                    where: { id: payment.invoice_id },
+                    data: {
+                        tpa_settled_amount: remainingTpaSettled,
+                        tpa_disallowed_amount: 0,
+                        tpa_tds_amount: 0,
+                        tpa_payable: Math.max(0, r2(approved - remainingTpaSettled)),
+                        tpa_claim_status: remainingTpaSettled > 0 ? 'partially_settled' : 'approved',
+                        patient_payable: Math.max(0, r2(Number(invoice.patient_payable || 0) - recoverAmt)),
+                        tpa_settled_at: null,
+                    },
+                });
+                // Unwind the settlement's short-pay rows and reverse the linked GL.
+                const alloc = await db.insuranceReceiptAllocation.findFirst({ where: { organizationId, payment_id: payment.id }, select: { id: true } });
+                const sps = await db.claimShortPay.findMany({ where: { organizationId, invoice_id: payment.invoice_id }, select: { id: true } });
+                await db.claimShortPay.deleteMany({ where: { organizationId, invoice_id: payment.invoice_id } });
+                const revRef = async (t: string, id: string) => {
+                    const je = await db.gL_JournalEntry.findFirst({ where: { organizationId, reference_type: t, reference_id: id, status: { not: 'Reversed' } }, select: { id: true } });
+                    if (je) await reverseJournalEntry(je.id, `TPA settlement payment voided: ${reason}`, session?.username || session?.name || undefined);
+                };
+                if (alloc) await revRef('InsuranceReceiptAllocation', String(alloc.id));
+                for (const s of sps) await revRef('ClaimShortPay', String(s.id));
+            } else {
+                const newTpaPayable = Math.max(0, approved - remainingTpaSettled - disallowed - tds);
+                const fullyAccounted = remainingTpaSettled + disallowed + tds >= approved - 0.01;
+                await db.invoices.update({
+                    where: { id: payment.invoice_id },
+                    data: {
+                        tpa_settled_amount: remainingTpaSettled,
+                        tpa_payable: newTpaPayable,
+                        tpa_claim_status: remainingTpaSettled > 0 ? (fullyAccounted ? 'settled' : 'partially_settled') : 'approved',
+                    },
+                });
+            }
         }
 
         try {
