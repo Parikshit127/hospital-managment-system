@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { Pill, CheckCircle, Search, ArrowLeft, Save, AlertTriangle } from 'lucide-react';
-import { getPharmacyOrderDetails, dispenseMedicine, checkInteractions } from '@/app/actions/pharmacy-actions';
+import { Pill, CheckCircle, Search, ArrowLeft, Save, AlertTriangle, SlidersHorizontal, X, Loader2 } from 'lucide-react';
+import { getPharmacyOrderDetails, dispenseMedicine, checkInteractions, adjustStock } from '@/app/actions/pharmacy-actions';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -18,6 +18,37 @@ export default function DispensePage() {
 
     const [dispenseList, setDispenseList] = useState<any[]>([]);
     const [interactions, setInteractions] = useState<any>(null);
+
+    // Stock Correction State
+    const [adjustStockItem, setAdjustStockItem] = useState<any>(null);
+    const [adjustStockQty, setAdjustStockQty] = useState('');
+    const [adjustStockReason, setAdjustStockReason] = useState('Dispensing stock correction');
+    const [adjustingStock, setAdjustingStock] = useState(false);
+
+    const handleSaveStockAdjustment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!adjustStockItem || adjustStockQty === '') return;
+        const targetQty = Number(adjustStockQty);
+        if (isNaN(targetQty) || targetQty < 0) return alert('Please enter a valid non-negative stock quantity');
+
+        setAdjustingStock(true);
+        try {
+            const res = await adjustStock({
+                medicine_id: adjustStockItem.medicine_id,
+                batch_id: adjustStockItem.batch_id,
+                target_stock_qty: targetQty,
+                reason: adjustStockReason.trim() || 'Dispensing stock correction',
+            });
+            if (res.success) {
+                setAdjustStockItem(null);
+                await loadOrder();
+            } else {
+                alert(res.error || 'Failed to update stock');
+            }
+        } finally {
+            setAdjustingStock(false);
+        }
+    };
 
     const loadOrder = async () => {
         setLoading(true);
@@ -130,9 +161,33 @@ export default function DispensePage() {
                                 <div className="md:col-span-3">
                                     <p className="font-bold text-gray-900 text-sm">{item.medicine_name}</p>
                                     <p className="text-[10px] text-gray-500 font-medium">Req: {item.requested_qty} • {item.instructions}</p>
-                                    <span className={`inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${item.total_stock === 0 ? 'bg-rose-100 text-rose-700' : item.total_stock <= item.requested_qty ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                        Stock: {item.total_stock}
-                                    </span>
+                                    <div className="flex items-center gap-1.5 mt-1">
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${item.total_stock === 0 ? 'bg-rose-100 text-rose-700' : item.total_stock <= item.requested_qty ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                            Stock: {item.total_stock}
+                                        </span>
+                                        {item.available_batches?.length > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const selectedBatch = item.available_batches.find((b: any) => b.batch_no === item.batch_no) || item.available_batches[0];
+                                                    if (!selectedBatch) return;
+                                                    setAdjustStockItem({
+                                                        medicine_id: item.medicine_id,
+                                                        medicine_name: item.medicine_name,
+                                                        batch_id: selectedBatch.id,
+                                                        batch_no: selectedBatch.batch_no,
+                                                        stock_count: selectedBatch.stock,
+                                                    });
+                                                    setAdjustStockQty(String(selectedBatch.stock));
+                                                    setAdjustStockReason('Dispensing stock correction');
+                                                }}
+                                                className="text-gray-400 hover:text-amber-600 p-0.5 rounded hover:bg-amber-50 transition-all"
+                                                title="Correct / Edit Batch Stock"
+                                            >
+                                                <SlidersHorizontal className="h-3.5 w-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="md:col-span-3">
                                     <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Batch No. *</label>
@@ -199,6 +254,72 @@ export default function DispensePage() {
                     </div>
                 </div>
             </div>
+            {/* STOCK ADJUSTMENT / CORRECTION MODAL */}
+            {adjustStockItem && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md">
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden text-left">
+                        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                            <div>
+                                <h3 className="text-base font-black text-gray-900">Correct Medicine Stock</h3>
+                                <p className="text-xs text-gray-500 font-medium">{adjustStockItem.medicine_name} {adjustStockItem.batch_no ? `(${adjustStockItem.batch_no})` : ''}</p>
+                            </div>
+                            <button onClick={() => setAdjustStockItem(null)}>
+                                <X className="h-5 w-5 text-gray-400 hover:text-gray-700 transition-colors" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSaveStockAdjustment} className="p-6 space-y-4">
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 flex items-center justify-between">
+                                <span>Current Recorded Stock:</span>
+                                <span className="font-mono font-black text-sm">{adjustStockItem.stock_count} units</span>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">New Actual Stock Quantity</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    required
+                                    value={adjustStockQty}
+                                    onChange={(e) => setAdjustStockQty(e.target.value)}
+                                    className="w-full p-3 bg-white border border-gray-300 rounded-xl text-lg font-bold text-gray-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none"
+                                    placeholder="Enter correct total stock"
+                                />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Reason for Correction</label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={adjustStockReason}
+                                    onChange={(e) => setAdjustStockReason(e.target.value)}
+                                    className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm font-medium text-gray-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none"
+                                    placeholder="e.g. Physical count correction, stock discrepancy"
+                                />
+                            </div>
+
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setAdjustStockItem(null)}
+                                    className="flex-1 py-3 text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={adjustingStock}
+                                    className="flex-1 py-3 text-sm font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-lg shadow-amber-600/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {adjustingStock ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                    Update Stock
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </AppShell>
     );
 }

@@ -6,9 +6,9 @@ import {
     Pill, Search, Plus, Minus, Receipt, ShoppingCart,
     Trash2, AlertTriangle, CheckCircle, Package, Printer, X, Loader2,
     CreditCard, Banknote, Smartphone, Clock, IndianRupee, FileText,
-    Pencil, Save, BedDouble
+    Pencil, Save, BedDouble, SlidersHorizontal
 } from 'lucide-react';
-import { getInventoryPage, generateInvoice, getPharmacyQueue, markOrderAsPaid, addInventoryBatch, processDoctorOrder } from '@/app/actions/pharmacy-actions';
+import { getInventoryPage, generateInvoice, getPharmacyQueue, markOrderAsPaid, addInventoryBatch, processDoctorOrder, adjustStock } from '@/app/actions/pharmacy-actions';
 import { useDebouncedValue } from '@/app/lib/hooks/useDebouncedValue';
 import { searchPatientsForBilling, removeInvoiceItem, updateInvoiceItem } from '@/app/actions/finance-actions';
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
@@ -131,12 +131,47 @@ export default function PharmacyPage() {
         hsn_sac_code: ''
     });
 
+    // ── Direct Stock Correction / Adjustment state ──
+    const [adjustStockItem, setAdjustStockItem] = useState<any>(null);
+    const [adjustStockQty, setAdjustStockQty] = useState('');
+    const [adjustStockReason, setAdjustStockReason] = useState('Dispensing stock correction');
+    const [adjustingStock, setAdjustingStock] = useState(false);
+
+    const handleSaveStockAdjustment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!adjustStockItem || adjustStockQty === '') return;
+        const targetQty = Number(adjustStockQty);
+        if (isNaN(targetQty) || targetQty < 0) {
+            alert('Please enter a valid non-negative stock quantity');
+            return;
+        }
+
+        setAdjustingStock(true);
+        try {
+            const res = await adjustStock({
+                medicine_id: adjustStockItem.medicine_id,
+                batch_id: adjustStockItem.db_batch_id,
+                target_stock_qty: targetQty,
+                reason: adjustStockReason.trim() || 'Dispensing stock correction',
+            });
+            if (res.success) {
+                setAdjustStockItem(null);
+                await loadInventory(search);
+            } else {
+                alert(res.error || 'Failed to update stock');
+            }
+        } finally {
+            setAdjustingStock(false);
+        }
+    };
+
     const debouncedSearch = useDebouncedValue(search, 250);
 
     const loadInventory = useCallback(async (query: string = '') => {
         const res = await getInventoryPage({ search: query, limit: 50 });
         if (res.success) {
             const mappedData = res.data.map((item: any) => ({
+                db_batch_id: item.id,
                 batch_id: item.batch_no,
                 medicine_name: item.medicine?.brand_name || 'Unknown Medicine',
                 medicine_id: item.medicine_id,
@@ -1237,9 +1272,23 @@ export default function PharmacyPage() {
                                                                             {item.is_catalog ? (
                                                                                 <span className="px-2 py-0.5 rounded-lg text-xs font-bold border bg-indigo-50 text-indigo-600 border-indigo-200">No Stock</span>
                                                                             ) : (
-                                                                                <span className={`px-2 py-0.5 rounded-lg text-xs font-bold border ${item.stock_count <= 0 ? 'bg-red-50 text-red-500 border-red-200' : item.stock_count < 10 ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                                                                                    {item.stock_count}
-                                                                                </span>
+                                                                                <div className="flex items-center gap-1.5">
+                                                                                    <span className={`px-2 py-0.5 rounded-lg text-xs font-bold border ${item.stock_count <= 0 ? 'bg-red-50 text-red-500 border-red-200' : item.stock_count < 10 ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                                                                                        {item.stock_count}
+                                                                                    </span>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => {
+                                                                                            setAdjustStockItem(item);
+                                                                                            setAdjustStockQty(String(item.stock_count));
+                                                                                            setAdjustStockReason('Dispensing stock correction');
+                                                                                        }}
+                                                                                        className="p-1 hover:bg-amber-50 text-gray-400 hover:text-amber-600 rounded transition-all"
+                                                                                        title="Edit / Correct Stock Quantity"
+                                                                                    >
+                                                                                        <Pencil className="h-3 w-3" />
+                                                                                    </button>
+                                                                                </div>
                                                                             )}
                                                                         </td>
                                                                         <td className="px-4 py-3 whitespace-nowrap">
@@ -1255,14 +1304,30 @@ export default function PharmacyPage() {
                                                                             <span className="text-xs text-gray-500 font-medium">{item.gst_percent}%</span>
                                                                         </td>
                                                                         <td className="px-4 py-3 whitespace-nowrap">
-                                                                            <button
-                                                                                onClick={() => addToCart(item)}
-                                                                                disabled={!item.is_catalog && (item.stock_count <= 0 || isExpired)}
-                                                                                className="bg-orange-50 border border-orange-200 hover:bg-orange-100 text-orange-600 p-1.5 rounded-lg transition-all disabled:opacity-20 disabled:cursor-not-allowed"
-                                                                                title="Add to bill"
-                                                                            >
-                                                                                <Plus className="h-3.5 w-3.5" />
-                                                                            </button>
+                                                                            <div className="flex items-center gap-1">
+                                                                                <button
+                                                                                    onClick={() => addToCart(item)}
+                                                                                    disabled={!item.is_catalog && (item.stock_count <= 0 || isExpired)}
+                                                                                    className="bg-orange-50 border border-orange-200 hover:bg-orange-100 text-orange-600 p-1.5 rounded-lg transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                                                                                    title="Add to bill"
+                                                                                >
+                                                                                    <Plus className="h-3.5 w-3.5" />
+                                                                                </button>
+                                                                                {!item.is_catalog && (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => {
+                                                                                            setAdjustStockItem(item);
+                                                                                            setAdjustStockQty(String(item.stock_count));
+                                                                                            setAdjustStockReason('Dispensing stock correction');
+                                                                                        }}
+                                                                                        className="bg-amber-50 border border-amber-200 hover:bg-amber-100 text-amber-700 p-1.5 rounded-lg transition-all"
+                                                                                        title="Correct / Adjust Batch Stock"
+                                                                                    >
+                                                                                        <SlidersHorizontal className="h-3.5 w-3.5" />
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
                                                                         </td>
                                                                     </tr>
                                                                 );
@@ -2135,6 +2200,72 @@ export default function PharmacyPage() {
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+            {/* STOCK ADJUSTMENT / CORRECTION MODAL */}
+            {adjustStockItem && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md">
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                            <div>
+                                <h3 className="text-base font-black text-gray-900">Correct Medicine Stock</h3>
+                                <p className="text-xs text-gray-500 font-medium">{adjustStockItem.medicine_name} {adjustStockItem.batch_id ? `(${adjustStockItem.batch_id})` : ''}</p>
+                            </div>
+                            <button onClick={() => setAdjustStockItem(null)}>
+                                <X className="h-5 w-5 text-gray-400 hover:text-gray-700 transition-colors" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSaveStockAdjustment} className="p-6 space-y-4">
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 flex items-center justify-between">
+                                <span>Current Recorded Stock:</span>
+                                <span className="font-mono font-black text-sm">{adjustStockItem.stock_count} units</span>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">New Actual Stock Quantity</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    required
+                                    value={adjustStockQty}
+                                    onChange={(e) => setAdjustStockQty(e.target.value)}
+                                    className="w-full p-3 bg-white border border-gray-300 rounded-xl text-lg font-bold text-gray-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none"
+                                    placeholder="Enter correct total stock"
+                                />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Reason for Correction</label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={adjustStockReason}
+                                    onChange={(e) => setAdjustStockReason(e.target.value)}
+                                    className="w-full p-3 bg-white border border-gray-300 rounded-xl text-sm font-medium text-gray-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none"
+                                    placeholder="e.g. Physical count correction, stock discrepancy"
+                                />
+                            </div>
+
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setAdjustStockItem(null)}
+                                    className="flex-1 py-3 text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={adjustingStock}
+                                    className="flex-1 py-3 text-sm font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-lg shadow-amber-600/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {adjustingStock ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                    Update Stock
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

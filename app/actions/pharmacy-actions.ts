@@ -2794,7 +2794,7 @@ export async function getPharmacyOrderDetails(orderId: number) {
             const totalStock = batches.reduce((sum: number, b: any) => sum + b.current_stock, 0);
             return {
                 ...item,
-                available_batches: batches.map((b: any) => ({ batch_no: b.batch_no, stock: b.current_stock, expiry: b.expiry_date })),
+                available_batches: batches.map((b: any) => ({ id: b.id, batch_no: b.batch_no, stock: b.current_stock, expiry: b.expiry_date })),
                 total_stock: totalStock,
             };
         });
@@ -3921,7 +3921,8 @@ export async function getPurchaseInvoices(filters?: { status?: string; vendor_id
 export async function adjustStock(data: {
     medicine_id: number;
     batch_id: number;
-    adjustment_qty: number; // positive = add, negative = deduct
+    adjustment_qty?: number; // positive = add, negative = deduct
+    target_stock_qty?: number; // direct target stock count (e.g. 50)
     reason: string;
 }) {
     try {
@@ -3930,7 +3931,12 @@ export async function adjustStock(data: {
         const batch = await db.pharmacy_batch_inventory.findUnique({ where: { id: data.batch_id } });
         if (!batch) return { success: false, error: 'Batch not found' };
 
-        const newStock = batch.current_stock + data.adjustment_qty;
+        let adjQty = data.adjustment_qty ?? 0;
+        if (data.target_stock_qty !== undefined) {
+            adjQty = data.target_stock_qty - batch.current_stock;
+        }
+
+        const newStock = batch.current_stock + adjQty;
         if (newStock < 0) return { success: false, error: 'Adjustment would result in negative stock' };
 
         const updated = await db.pharmacy_batch_inventory.update({
@@ -3944,8 +3950,8 @@ export async function adjustStock(data: {
                 medicine_id: data.medicine_id,
                 batch_id: data.batch_id,
                 movement_type: 'ADJUSTMENT',
-                quantity_in: data.adjustment_qty > 0 ? data.adjustment_qty : 0,
-                quantity_out: data.adjustment_qty < 0 ? Math.abs(data.adjustment_qty) : 0,
+                quantity_in: adjQty > 0 ? adjQty : 0,
+                quantity_out: adjQty < 0 ? Math.abs(adjQty) : 0,
                 unit_cost: Number(batch.actual_cost || batch.cost_price || 0),
                 balance_after: updated.current_stock,
                 source_type: 'ADJUSTMENT',
