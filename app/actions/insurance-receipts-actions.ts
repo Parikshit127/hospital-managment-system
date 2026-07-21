@@ -609,6 +609,16 @@ export async function reverseInsuranceReceipt(receiptId: number, reason: string)
           const approved = Number(invoice.tpa_approved_amount || 0);
           const newPaid = Math.max(0, round2(Number(invoice.paid_amount || 0) - allocated));
           const netAmount = Number(invoice.net_amount || 0);
+          // Option B (gross settlement) may have moved part of the disallowance to the
+          // patient (disposition = ToRecover). On reversal, take that back off the
+          // patient's due so no phantom balance is left. NOTE: reversing the underlying
+          // GL postings (allocation + write-off/recover) is a separate, pre-existing gap
+          // — this reversal resets invoice state but does not unwind the ledger.
+          const recoverSps = await tx.claimShortPay.findMany({
+            where: { organizationId, invoice_id: a.invoice_id, disposition: 'ToRecover' },
+            select: { amount: true },
+          });
+          const recoverAmt = round2(recoverSps.reduce((s: number, r: any) => s + Number(r.amount || 0), 0));
           await tx.invoices.update({
             where: { id: invoice.id },
             data: {
@@ -619,6 +629,7 @@ export async function reverseInsuranceReceipt(receiptId: number, reason: string)
               tpa_claim_status: 'approved',
               paid_amount: newPaid,
               balance_due: Math.max(0, round2(netAmount - newPaid)),
+              patient_payable: Math.max(0, round2(Number(invoice.patient_payable || 0) - recoverAmt)),
               tpa_settled_at: null,
               version: { increment: 1 },
             },
@@ -628,9 +639,13 @@ export async function reverseInsuranceReceipt(receiptId: number, reason: string)
         if (a.payment_id) {
           await tx.payments.update({ where: { id: a.payment_id }, data: { status: 'Reversed' } }).catch(() => {});
         }
-        // Remove any short-pay that is still pending (not yet dispositioned/posted).
+        // Remove pending short-pays, and the gross-settlement "recover" rows (which
+        // pair with the patient_payable restore above) so no phantom patient due is
+        // left. Write-off rows are intentionally left as-is (they may be manual
+        // dispositions), and any GL posted is not unwound here — see the reversal-GL
+        // gap noted above.
         await tx.claimShortPay.deleteMany({
-          where: { organizationId, invoice_id: a.invoice_id, disposition: 'PendingReview', gl_posted: false },
+          where: { organizationId, invoice_id: a.invoice_id, disposition: { in: ['PendingReview', 'ToRecover'] } },
         });
       }
 
