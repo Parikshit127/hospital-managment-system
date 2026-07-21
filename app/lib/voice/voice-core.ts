@@ -2,8 +2,7 @@
  * app/lib/voice/voice-core.ts — AI Voice Receptionist · provider-neutral core
  * ─────────────────────────────────────────────────────────────────────────────
  * The hospital business logic the voice agent uses, with NO telephony/provider
- * envelope. Consumed by the `/api/voice/v1/*` REST endpoints (Bolna) and — during
- * the transition — by the legacy Vapi adapter (`vapi-tools.ts`, retired in Phase 6).
+ * envelope. Consumed by the `/api/voice/v1/*` REST endpoints (called by Bolna).
  *
  * Every function takes an explicit `VoiceCtx` (organizationId + the provider's
  * call id + the caller's phone) and returns a structured, speakable result. All

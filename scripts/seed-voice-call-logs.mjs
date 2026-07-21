@@ -43,7 +43,7 @@ async function main() {
       duration_seconds, notes, created_at, channel, direction, provider, provider_call_id, from_number,
       status, language, verification_status, started_at, ended_at)
     VALUES (${id1}, ${org.id}, 'sample-seed', '9876543210', 'Ramesh Kumar', 'Inbound', 'Booked',
-      92, 'Sample — AI booked an OPD appointment', now(), 'voice_ai', 'inbound', 'vapi', ${'sample-' + id1},
+      92, 'Sample — AI booked an OPD appointment', now(), 'voice_ai', 'inbound', 'bolna', ${'sample-' + id1},
       '+919876543210', 'completed', 'en', 'name_confirmed', now() - interval '2 minutes', now())`;
 
   // 2) AI voice — callback created (unresolved)
@@ -53,7 +53,7 @@ async function main() {
       status, language, verification_status, handoff_status)
     VALUES (${id2}, ${org.id}, 'sample-seed', '9812345678', NULL, 'Inbound', 'Callback',
       45, 'Sample — caller asked for a human; callback logged', now() - interval '1 hour', 'voice_ai',
-      'inbound', 'vapi', ${'sample-' + id2}, '+919812345678', 'completed', 'hi', 'unverified', 'callback_created')`;
+      'inbound', 'bolna', ${'sample-' + id2}, '+919812345678', 'completed', 'hi', 'unverified', 'callback_created')`;
 
   // 3) Manual staff call — enquiry
   await prisma.$executeRaw`

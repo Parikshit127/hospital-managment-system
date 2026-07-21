@@ -1,5 +1,11 @@
 # AI Voice Call Assistant — Implementation Plan
 
+> ⚠️ **SUPERSEDED (2026-07-21).** This Vapi + Twilio plan is retired — Vapi cannot
+> hold an Indian number under TRAI. The current direction is Bolna; see
+> [`ai-voice-agent-prd.md`](./ai-voice-agent-prd.md) and
+> [`ai-voice-agent-implementation-plan.md`](./ai-voice-agent-implementation-plan.md).
+> Kept for history only.
+
 | Field | Value |
 |---|---|
 | **Feature** | Inbound AI voice call assistant (answer calls, resolve queries, book/reschedule/check appointments, register new patients) |
