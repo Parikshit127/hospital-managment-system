@@ -164,10 +164,23 @@ function generateTpaBillHTML(
     // than letting the "claimed" headline shrink to the outstanding balance. Falls
     // back to the net-minus-copay claim when the insurer hasn't approved yet — the
     // original behaviour for fresh drafts, so existing bills are unchanged.
-    const patientCopay = Number(invoice.patient_payable || 0);
     const claimedFromTpa = tpaApproved > 0
         ? round2(Number(invoice.tpa_payable || 0) + tpaReceived + tpaDisallowedAtSettlement + tpaTds)
-        : (Number(invoice.tpa_payable || 0) > 0 ? Number(invoice.tpa_payable) : Math.max(0, net - patientCopay));
+        : (Number(invoice.tpa_payable || 0) > 0 ? Number(invoice.tpa_payable) : Math.max(0, net - Number(invoice.patient_payable || 0)));
+    // Co-pay shown so the leading box always reconciles (Actual − Co-pay = Claimed).
+    // Once the insurer has set an approved amount the non-claimed portion is derived
+    // from the claimed figure — 0 for a gross-settled (Option B) bill, where any
+    // patient-recoverable disallowance is shown separately in the settlement summary
+    // and on the patient's own bill. Before approval it is the invoice's own split.
+    const patientCopay = tpaApproved > 0
+        ? Math.max(0, round2(net - claimedFromTpa))
+        : Number(invoice.patient_payable || 0);
+    // Portion of the disallowance the biller chose to recover from the patient
+    // (rather than write off) — surfaced from the invoice's residual balance once
+    // the TPA side is fully settled, so the claim bill notes what the patient owes.
+    const recoverableFromPatient = tpaApproved > 0 && Number(invoice.tpa_payable || 0) <= 0.01
+        ? Math.max(0, Number(invoice.balance_due || 0))
+        : 0;
 
     const tpaBalance = tpaApproved > 0
         ? Math.max(0, Number(invoice.tpa_payable || 0))
@@ -358,8 +371,9 @@ function generateTpaBillHTML(
                         <tr><td style="padding:4px 8px;font-size:11px;width:230px;font-weight:700;">Bill Amount (Claimed from TPA)</td><td style="padding:4px 8px;font-size:11px;font-weight:700;text-align:right;">${claimedFromTpa.toFixed(2)}</td></tr>
                         <tr style="background:#f0fdf4;"><td style="padding:4px 8px;font-size:11px;font-weight:700;">Received from TPA</td><td style="padding:4px 8px;font-size:11px;font-weight:700;text-align:right;color:#166534;">${tpaReceived.toFixed(2)}</td></tr>
                         ${tpaTds > 0 ? `<tr><td style="padding:4px 8px;font-size:11px;color:#991b1b;">Less: TDS deducted by TPA (10%)</td><td style="padding:4px 8px;font-size:11px;text-align:right;color:#991b1b;">${tpaTds.toFixed(2)}</td></tr>` : ''}
-                        ${tpaDisallowedAtSettlement > 0 ? `<tr><td style="padding:4px 8px;font-size:11px;color:#991b1b;">Less: Disallowed / written off</td><td style="padding:4px 8px;font-size:11px;text-align:right;color:#991b1b;">${tpaDisallowedAtSettlement.toFixed(2)}</td></tr>` : ''}
+                        ${tpaDisallowedAtSettlement > 0 ? `<tr><td style="padding:4px 8px;font-size:11px;color:#991b1b;">Less: Disallowed by TPA</td><td style="padding:4px 8px;font-size:11px;text-align:right;color:#991b1b;">${tpaDisallowedAtSettlement.toFixed(2)}</td></tr>` : ''}
                         <tr style="border-top:1px solid #000;"><td style="padding:6px 8px;font-size:12px;font-weight:800;">Balance Recoverable from TPA</td><td style="padding:6px 8px;font-size:12px;font-weight:800;text-align:right;color:${tpaBalance > 0.01 ? '#92400e' : '#166534'};">${tpaBalance.toFixed(2)}</td></tr>
+                        ${recoverableFromPatient > 0.01 ? `<tr><td style="padding:4px 8px;font-size:11px;font-weight:700;color:#92400e;">Of which, recoverable from patient</td><td style="padding:4px 8px;font-size:11px;font-weight:700;text-align:right;color:#92400e;">${recoverableFromPatient.toFixed(2)}</td></tr>` : ''}
                     </tbody>
                 </table>
                 <p style="font-size:9px;color:#9ca3af;margin-bottom:10px;">Disallowed / short-paid amounts are the portion the insurer will not settle. Recover from the patient or write off per policy; they are not part of the balance recoverable from the TPA.</p>` : `

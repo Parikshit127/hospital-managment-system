@@ -285,14 +285,17 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   const [advices, setAdvices] = useState<any[]>([]);
   const [advLoading, setAdvLoading] = useState(false);
   // The biller enters only the cash RECEIVED per bill. TDS (10%) and the
-  // disallowed/written-off remainder are derived, so recording a receipt fully
-  // settles the bill:  Bill (claimed from TPA) = Received + TDS + Disallowed.
+  // disallowed remainder are derived, so recording a receipt fully settles the
+  // GROSS bill:  Bill = Received + TDS + Disallowed. For each bill the biller also
+  // picks what happens to the disallowed gap — write it off, or recover it from
+  // the patient.
   const [received, setReceived] = useState<Record<number, string>>({});
+  const [dispo, setDispo] = useState<Record<number, 'WriteOff' | 'ToRecover'>>({});
 
   // Load this payer's approved bills awaiting receipt whenever the payer changes.
   useEffect(() => {
-    if (!form.provider_id) { setAdvices([]); setReceived({}); return; }
-    setAdvLoading(true); setReceived({});
+    if (!form.provider_id) { setAdvices([]); setReceived({}); setDispo({}); return; }
+    setAdvLoading(true); setReceived({}); setDispo({});
     getPendingAdvices(Number(form.provider_id))
       .then((r: any) => { if (r?.success) setAdvices(r.data || []); })
       .finally(() => setAdvLoading(false));
@@ -302,14 +305,15 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
   const TDS_RATE = 0.10;
 
-  // Bill = amount claimed from / due from the TPA for this bill (tpa_payable).
+  // Bill = the GROSS hospital bill (net_amount).
   const rowCalc = (a: any) => {
-    const bill = Number(a.tpa_payable || 0);
+    const bill = Number(a.net_amount || 0);
     const rcv = num(received[a.id]);
     const tds = round2(rcv * TDS_RATE);
     const disallowed = round2(Math.max(0, bill - rcv - tds));
+    const disposition: 'WriteOff' | 'ToRecover' = dispo[a.id] || 'WriteOff';
     const invalid = rcv > 0 && rcv + tds - bill > 0.01; // received (+10% TDS) can't exceed the bill
-    return { bill, rcv, tds, disallowed, invalid };
+    return { bill, rcv, tds, disallowed, disposition, invalid };
   };
 
   const rows = advices.map((a: any) => ({ a, ...rowCalc(a) }));
@@ -318,6 +322,8 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   const totalReceived = round2(active.reduce((s, r) => s + r.rcv, 0));
   const totalTds = round2(active.reduce((s, r) => s + r.tds, 0));
   const totalDisallowed = round2(active.reduce((s, r) => s + r.disallowed, 0));
+  const totalRecover = round2(active.reduce((s, r) => s + (r.disposition === 'ToRecover' ? r.disallowed : 0), 0));
+  const totalWriteOff = round2(totalDisallowed - totalRecover);
   const anyInvalid = rows.some((r) => r.invalid);
 
   const manualReceived = num(form.manual_received); // fallback when the payer has no mapped bills yet
@@ -332,6 +338,7 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
       allocated_amount: r.rcv,
       disallowed_amount: r.disallowed,
       tds_amount: r.tds,
+      disposition: r.disposition,
     }));
 
     const res: any = await recordAndAllocateReceipt({
@@ -341,6 +348,7 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
       total_amount: receiptTotal,
       claim_amount: totalBill, sanctioned_amount: totalBill, tds_amount: totalTds, service_charge: 0,
       remarks: form.remarks,
+      settle_gross: true,
       lines: payload,
     });
     setSaving(false);
@@ -402,10 +410,11 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
                       <th className="px-2 py-1.5 text-right font-bold text-[11px]">Received</th>
                       <th className="px-2 py-1.5 text-right font-bold text-[11px]">TDS (10%)</th>
                       <th className="px-2 py-1.5 text-right font-bold text-[11px]">Disallowed</th>
+                      <th className="px-2 py-1.5 text-left font-bold text-[11px]">Disallowed gap →</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {rows.map(({ a, bill, rcv, tds, disallowed, invalid }) => (
+                    {rows.map(({ a, bill, rcv, tds, disallowed, disposition, invalid }) => (
                       <tr key={a.id} className={invalid ? 'bg-red-50' : ''}>
                         <td className="px-2 py-1 font-mono text-[11px]">{a.invoice_number}</td>
                         <td className="px-2 py-1 text-xs">{a.patient?.full_name || a.patient_id}</td>
@@ -416,6 +425,15 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
                         </td>
                         <td className="px-2 py-1 text-right text-xs text-gray-500">{rcv > 0 ? fmt(tds) : '—'}</td>
                         <td className="px-2 py-1 text-right text-xs text-rose-600">{rcv > 0 ? fmt(disallowed) : '—'}</td>
+                        <td className="px-2 py-1">
+                          {rcv > 0 && disallowed > 0 ? (
+                            <select className="rounded border border-gray-300 px-1 py-0.5 text-[11px]"
+                              value={disposition} onChange={(e) => setDispo((p) => ({ ...p, [a.id]: e.target.value as 'WriteOff' | 'ToRecover' }))}>
+                              <option value="WriteOff">Write off</option>
+                              <option value="ToRecover">Recover from patient</option>
+                            </select>
+                          ) : <span className="text-gray-300 text-[11px]">—</span>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -428,7 +446,9 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
                   <span>Received <strong className="text-gray-900">{fmt(totalReceived)}</strong></span>
                   <span>TDS <strong>{fmt(totalTds)}</strong></span>
                   <span>Disallowed <strong className="text-rose-600">{fmt(totalDisallowed)}</strong></span>
-                  <span className="text-green-600 font-bold">· bill fully settled</span>
+                  {totalWriteOff > 0 && <span>· written off <strong>{fmt(totalWriteOff)}</strong></span>}
+                  {totalRecover > 0 && <span>· from patient <strong className="text-amber-700">{fmt(totalRecover)}</strong></span>}
+                  <span className="text-green-600 font-bold">· bill settled</span>
                 </div>
               )}
             </>
