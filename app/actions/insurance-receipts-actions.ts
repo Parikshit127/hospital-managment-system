@@ -354,6 +354,65 @@ export async function allocateReceipt(input: {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RECORD + ALLOCATE in one step (the "smooth" biller flow)
+// ─────────────────────────────────────────────────────────────────────────────
+// Historically a biller recorded a lump-sum receipt on one screen, then had to
+// return to a second screen to map it to patient bills. This wraps both so the
+// money is recorded AND mapped to patient(s) in a single action. If the header
+// saves but the mapping fails, the receipt is left Open (recoverable) and the
+// caller is told exactly why — money is never lost.
+export async function recordAndAllocateReceipt(input: {
+  payer_type: 'tpa_insurance' | 'corporate';
+  provider_id?: number;
+  corporate_id?: string;
+  instrument: string;
+  reference_number: string;
+  receipt_date: string;
+  total_amount: number;
+  claim_amount?: number;
+  sanctioned_amount?: number;
+  tds_amount?: number;
+  service_charge?: number;
+  remarks?: string;
+  lines?: Array<{
+    invoice_id: number;
+    allocated_amount: number;
+    disallowed_amount?: number;
+    tds_amount?: number;
+    disallowance_reason?: string;
+  }>;
+}) {
+  const { lines, ...header } = input;
+  const created: any = await createInsuranceReceipt(header);
+  if (!created?.success) return created;
+  const receiptId = created.data?.id;
+
+  const validLines = (lines || []).filter(
+    (l) => l && l.invoice_id && (Number(l.allocated_amount || 0) + Number(l.disallowed_amount || 0) + Number(l.tds_amount || 0)) > 0,
+  );
+  if (validLines.length === 0 || !receiptId) {
+    return { success: true, data: created.data, allocated: 0, receipt_number: created.data?.receipt_number };
+  }
+
+  const alloc: any = await allocateReceipt({
+    receipt_id: receiptId,
+    lines: validLines.map((l) => ({ ...l, is_partial: true })),
+  });
+  if (!alloc?.success) {
+    // Header is saved; mapping failed. Surface it so the biller can retry the
+    // allocation from the receipt without re-entering the money.
+    return { success: true, data: created.data, allocated: 0, receipt_number: created.data?.receipt_number, allocationError: alloc?.error || 'Allocation failed' };
+  }
+  return {
+    success: true,
+    data: created.data,
+    receipt_number: created.data?.receipt_number,
+    allocated: alloc.allocations,
+    glWarnings: alloc.glWarnings,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // LIST / DETAIL / SUMMARY
 // ─────────────────────────────────────────────────────────────────────────────
 export async function listInsuranceReceipts(filters?: {

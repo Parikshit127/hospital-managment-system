@@ -77,7 +77,12 @@ export function letterheadBackgroundHtml(b: BillBranding): string {
 
 export function letterheadCss(b: BillBranding): string {
     return `
-        .letterhead-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+        /* On screen the letterhead graphic is centred to the same page width as the
+           content (800px), so the logo/header and the footer band line up with the
+           bill column instead of stretching across the whole browser window. Print
+           restores full-bleed so the A4 letterhead still fills the page. */
+        html, body { overflow-x: hidden; }
+        .letterhead-bg { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 800px; height: 100%; z-index: -1; pointer-events: none; }
         .letterhead-bg img { width: 100%; height: 100%; object-fit: fill; }
         .print-layout-table { width: 100%; border-collapse: collapse; }
         .print-layout-header-spacer { height: ${b.letterheadUrl ? b.headerHeight : 0}px; }
@@ -87,6 +92,7 @@ export function letterheadCss(b: BillBranding): string {
         @media print {
             @page { margin: 0; }
             body { margin: 0; background: white; }
+            .letterhead-bg { left: 0; transform: none; max-width: none; }
             .bill-container { max-width: 100%; margin: 0; padding: 0 60px; }
             .no-print { display: none !important; }
             .watermark { opacity: 0.06; }

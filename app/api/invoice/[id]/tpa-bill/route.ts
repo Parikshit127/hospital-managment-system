@@ -143,15 +143,41 @@ function generateTpaBillHTML(
     // ── The amounts ────────────────────────────────────────────────────────────
     // `net` is the ACTUAL bill amount (gross − discount + tax), recomputed from the
     // line items so it always matches the charges shown.
-    const { gross: total, discount: totalDiscount, net, tpaApproved, tpaReceived, tpaOutstanding } = deriveInvoiceTotals(invoice);
+    const { gross: total, discount: totalDiscount, net, tpaApproved, tpaReceived } = deriveInvoiceTotals(invoice);
 
     // Patient co-pay / non-payable portion carved out of the actual amount. When the
     // split hasn't been set on the invoice yet (e.g. a fresh draft), assume a fully
     // cashless claim — the whole actual amount is claimed from the TPA.
+    // ── Full settlement waterfall ───────────────────────────────────────────────
+    // A partial sanction / partial payment has several numbers a biller must see,
+    // not just the approved figure: what the insurer APPROVED, what it DISALLOWED
+    // (short-pay), the TDS it deducted, what we've RECEIVED, and the BALANCE still
+    // recoverable. All are derived from the invoice's stored TPA settlement fields
+    // so this matches Bill-Wise Sanction exactly.
+    const round2 = (n: number) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+    const tpaDisallowedAtSettlement = Number(invoice.tpa_disallowed_amount || 0); // short-pay recorded on receipt
+    const tpaTds = Number(invoice.tpa_tds_amount || 0);
+
+    // Amount claimed from the TPA. `tpa_payable` starts at the approved amount and
+    // is drawn down as the claim settles, so once settlement has begun we reconstruct
+    // the stable baseline (payable + everything already accounted == approved) rather
+    // than letting the "claimed" headline shrink to the outstanding balance. Falls
+    // back to the net-minus-copay claim when the insurer hasn't approved yet — the
+    // original behaviour for fresh drafts, so existing bills are unchanged.
     const patientCopay = Number(invoice.patient_payable || 0);
-    const claimedFromTpa = Number(invoice.tpa_payable || 0) > 0
-        ? Number(invoice.tpa_payable)
-        : Math.max(0, net - patientCopay);
+    const claimedFromTpa = tpaApproved > 0
+        ? round2(Number(invoice.tpa_payable || 0) + tpaReceived + tpaDisallowedAtSettlement + tpaTds)
+        : (Number(invoice.tpa_payable || 0) > 0 ? Number(invoice.tpa_payable) : Math.max(0, net - patientCopay));
+
+    const tpaBalance = tpaApproved > 0
+        ? Math.max(0, Number(invoice.tpa_payable || 0))
+        : Math.max(0, round2(tpaApproved - tpaReceived - tpaDisallowedAtSettlement - tpaTds));
+    const claimStatus = String(invoice.tpa_claim_status || '');
+    // Show the full settlement waterfall only once the insurer has actually
+    // responded. A claim that is merely submitted / under review shows an
+    // "awaiting approval" note instead of a misleading "Approved 0.00" row.
+    const insurerResponded = tpaApproved > 0 || tpaReceived > 0 || tpaDisallowedAtSettlement > 0
+        || tpaTds > 0 || ['approved', 'partially_settled', 'settled', 'rejected'].includes(claimStatus);
 
     const tpaPill = deriveTpaStatusPill(invoice.tpa_claim_status, tpaApproved, tpaReceived);
     const pillColors: Record<string, { bg: string; fg: string; border: string }> = {
@@ -320,20 +346,24 @@ function generateTpaBillHTML(
                 </table>
                 <p style="font-size:11px;margin-bottom:12px;"><strong>In words:</strong> ${numberToWords(claimedFromTpa)} (claimed)</p>
 
-                ${tpaApproved > 0 ? `
-                <!-- Settlement tracking (once the insurer has responded) -->
+                ${insurerResponded ? `
+                <!-- Full settlement waterfall — the complete story of a partial sanction / partial payment -->
                 <table style="width:100%;border-collapse:collapse;margin-bottom:12px;border:1px solid #f59e0b;">
                     <thead>
                         <tr style="background:#fef3c7;">
-                            <th colspan="2" style="padding:6px 8px;text-align:left;font-size:11px;font-weight:800;color:#92400e;border-bottom:1px solid #f59e0b;">TPA SETTLEMENT STATUS</th>
+                            <th colspan="2" style="padding:6px 8px;text-align:left;font-size:11px;font-weight:800;color:#92400e;border-bottom:1px solid #f59e0b;">CLAIM SETTLEMENT SUMMARY</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr><td style="padding:4px 8px;font-size:11px;width:200px;">TPA Approved</td><td style="padding:4px 8px;font-size:11px;text-align:right;">${tpaApproved.toFixed(2)}</td></tr>
-                        <tr><td style="padding:4px 8px;font-size:11px;">Received from TPA</td><td style="padding:4px 8px;font-size:11px;text-align:right;">${tpaReceived.toFixed(2)}</td></tr>
-                        <tr><td style="padding:4px 8px;font-size:11px;font-weight:700;">TPA Outstanding</td><td style="padding:4px 8px;font-size:11px;font-weight:700;text-align:right;color:${tpaOutstanding > 0 ? '#92400e' : '#166534'};">${tpaOutstanding.toFixed(2)}</td></tr>
+                        <tr><td style="padding:4px 8px;font-size:11px;width:230px;font-weight:700;">Approved / Sanctioned by TPA</td><td style="padding:4px 8px;font-size:11px;font-weight:700;text-align:right;">${tpaApproved.toFixed(2)}</td></tr>
+                        ${tpaDisallowedAtSettlement > 0 ? `<tr><td style="padding:4px 8px;font-size:11px;color:#991b1b;">Less: Short-paid / disallowed by TPA</td><td style="padding:4px 8px;font-size:11px;text-align:right;color:#991b1b;">${tpaDisallowedAtSettlement.toFixed(2)}</td></tr>` : ''}
+                        ${tpaTds > 0 ? `<tr><td style="padding:4px 8px;font-size:11px;color:#991b1b;">Less: TDS deducted by TPA</td><td style="padding:4px 8px;font-size:11px;text-align:right;color:#991b1b;">${tpaTds.toFixed(2)}</td></tr>` : ''}
+                        <tr style="background:#f0fdf4;"><td style="padding:4px 8px;font-size:11px;font-weight:700;">Received from TPA</td><td style="padding:4px 8px;font-size:11px;font-weight:700;text-align:right;color:#166534;">${tpaReceived.toFixed(2)}</td></tr>
+                        <tr style="border-top:1px solid #000;"><td style="padding:6px 8px;font-size:12px;font-weight:800;">Balance Recoverable from TPA</td><td style="padding:6px 8px;font-size:12px;font-weight:800;text-align:right;color:${tpaBalance > 0.01 ? '#92400e' : '#166534'};">${tpaBalance.toFixed(2)}</td></tr>
                     </tbody>
-                </table>` : ''}
+                </table>
+                <p style="font-size:9px;color:#9ca3af;margin-bottom:10px;">Disallowed / short-paid amounts are the portion the insurer will not settle. Recover from the patient or write off per policy; they are not part of the balance recoverable from the TPA.</p>` : `
+                <p style="font-size:10px;color:#6b7280;margin-bottom:12px;padding:6px 8px;background:#f9fafb;border:1px dashed #d1d5db;border-radius:6px;">Claim not yet submitted or awaiting insurer approval — settlement figures will appear here once the TPA responds.</p>`}
 
                 <p style="font-size:10px;text-align:right;color:#666;margin-bottom:10px;">(All figures are in Rupees (INR) only)</p>
                 <p style="font-size:9px;color:#9ca3af;margin-bottom:10px;">This is the hospital's claim bill addressed to the insurer/TPA, reflecting the actual treatment charges. The patient's own bill is issued separately.</p>
