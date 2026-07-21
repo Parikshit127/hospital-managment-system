@@ -5,7 +5,7 @@
 | **Implements** | [`ai-voice-agent-prd.md`](./ai-voice-agent-prd.md) (Bolna direction; supersedes the Vapi+Twilio plan) |
 | **Branch** | `feature/voice-agent-bolna` (off `feature/ai-voice-assistant`; never merge to `main` without review) |
 | **Scope of THIS plan** | The **HIMS repo** work only — the `/api/voice/v1/*` API surface + `call-events`, plus refactor/retire of the Vapi glue. The Bolna agent config lives in a **separate repo** (coordination only, not built here). |
-| **On hold (do later, on your signal)** | **Only** the **Telephony — Indian DID (Plivo/Exotel) + KYC** (the long-pole KYC item), in §9. Everything else — the HIMS endpoints **and the Bolna agent (§6)** — is in scope now. |
+| **On hold (do later, on your signal)** | **Only** the **Telephony — Indian DID (Plivo/Exotel) + KYC** (the long-pole KYC item), in §9. **HIMS Phases 0–6 are built & committed.** Everything else — the HIMS endpoints **and the Bolna agent (§6)** — is in scope now. |
 | **Author date** | 2026-07-21 |
 
 > Follows the PRD exactly. Reuses the existing booking engine, data model, and Call Center UI; only the thin Vapi "envelope" is replaced by clean REST endpoints. No assumptions — every reuse target below was verified to exist on `feature/ai-voice-assistant`.
@@ -57,33 +57,33 @@ Each phase is a reviewable unit ending in a test. Commit per logical unit **on `
 - [ ] **Env plan:** add `VOICE_API_KEY`, `VOICE_WEBHOOK_SECRET`; keep `VOICE_AI_ORG_ID`, `STAFF_TRANSFER_NUMBER`, `VOICE_TRANSCRIPT_RETENTION_DAYS`. Mark `VAPI_*`/`TWILIO_*` for retirement (Phase 6).
 - **Exit:** decisions recorded; env keys listed in `.env.example`.
 
-### Phase 1 — Provider-neutral core (refactor, no behavior change)
+### Phase 1 — Provider-neutral core (refactor, no behavior change) ✅ DONE
 - [ ] Extract the pure logic from `vapi-booking.ts` + `vapi-tools.ts` into a provider-agnostic module (e.g. `app/lib/voice/core/`), each function typed `(input) → result` with **no Vapi envelope** and no telephony-metadata coupling (caller phone + call id become explicit inputs).
 - [ ] Keep return shapes structured (`{ ok, data, message }`) so both REST and the legacy webhook can call them during transition.
 - **Test:** existing simulated-call behavior still passes via the core functions (unit-level); typecheck + lint clean.
 
-### Phase 2 — API foundation + auth
+### Phase 2 — API foundation + auth ✅ DONE
 - [ ] `app/lib/voice/api-auth.ts` — verify `VOICE_API_KEY` (constant-time), resolve `organizationId` from `VOICE_AI_ORG_ID`; a separate HMAC verify for `call-events`.
 - [ ] `app/api/voice/v1/health/route.ts` — unauthenticated `GET` returning `{ status:'ok' }` for connectivity checks (like the old webhook health).
 - [ ] Confirm `/api/voice/` proxy exemption already covers `/api/voice/v1/*` (it does — no change).
 - **Test:** health reachable; a protected stub returns 401 without the key, 200 with it.
 
-### Phase 3 — Read endpoints
+### Phase 3 — Read endpoints ✅ DONE
 - [ ] `POST lookup-caller`, `POST verify-name`, `GET hospital-info`, `POST find-doctors`, `POST doctor-availability`, `GET clinic-status` — each validates the key, parses body, calls the Phase-1 core, returns JSON.
 - [ ] Carry over the existing behaviors: no name leak on lookup, DoctorLeave-aware availability, IST clinic hours, spoken-phone tolerance.
 - **Test:** integration tests hitting each endpoint against real DB data (verify true/false, multi-match, no-match, real doctors/slots); zero appointment/patient writes.
 
-### Phase 4 — Write endpoints
+### Phase 4 — Write endpoints ✅ DONE
 - [ ] `POST register-patient`, `book-appointment`, `reschedule-appointment`, `cancel-appointment`, `request-callback` — call the reused engine (`createVoiceAppointment` with `bookingChannel:'voice_ai'`; reschedule/cancel free the old slot; callback → `CRMLead`).
 - [ ] Identity + `CallLog` linkage keyed on the Bolna `call_id` passed in the request (replaces `provider_call_id` from the Vapi envelope).
 - **Test:** end-to-end register→book→reschedule→cancel + callback against DB with cleanup (mirror the Phase-4 Vapi test we already have); appointments visible on patient + doctor portals; idempotent.
 
-### Phase 5 — `call-events` (call logging + transcript)
+### Phase 5 — `call-events` (call logging + transcript) ✅ DONE
 - [ ] `POST /api/voice/v1/call-events` — HMAC-verify; handle Bolna's status + end-of-call payloads; upsert `CallLog` (`provider='bolna'`, `channel='voice_ai'`, idempotent on Bolna call id) + `CallTranscript` (transcript-only); write a `VOICE_CALL_RECEIVED` audit row.
 - [ ] Map Bolna's transcript/message shape → our `turns` format (adapter, once Bolna's payload is confirmed — flag as an open item in §10).
 - **Test:** simulated Bolna payloads create/finalize a `CallLog` + `CallTranscript`; replay is idempotent; row shows in Call Center UI.
 
-### Phase 6 — Retire Vapi glue + cleanup
+### Phase 6 — Retire Vapi glue + cleanup ✅ DONE
 - [ ] Delete `app/api/webhooks/vapi/route.ts` and `scripts/setup-vapi-tools.mjs`; the core logic they used now lives in Phase-1 module + Phase 3–4 endpoints.
 - [ ] Adapt `scripts/test-vapi-webhook.mjs` + `scripts/seed-voice-call-logs.mjs` to the new endpoints (rename to `test-voice-api.mjs` / keep seed).
 - [ ] `.env` / `.env.example`: retire `VAPI_*`, `TWILIO_*`, US `VOICE_AI_DID`; document `VOICE_API_KEY`, `VOICE_WEBHOOK_SECRET`.
