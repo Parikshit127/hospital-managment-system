@@ -275,10 +275,8 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
 export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId }: any) {
   const [form, setForm] = useState({
     provider_id: defaultProviderId ? String(defaultProviderId) : '', instrument: 'NEFT', reference_number: '',
-    receipt_date: new Date().toISOString().slice(0, 10),
-    claim_amount: '', sanctioned_amount: '', tds_amount: '', service_charge: '', total_amount: '', remarks: '',
+    receipt_date: new Date().toISOString().slice(0, 10), manual_received: '', remarks: '',
   });
-  const [autoReceived, setAutoReceived] = useState(true); // received auto-derived until the user overrides it
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [partialMsg, setPartialMsg] = useState(''); // receipt saved but mapping failed → recoverable
@@ -286,67 +284,62 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   // ── Patient-bill mapping (merged in from the old separate "Allocate" step) ──
   const [advices, setAdvices] = useState<any[]>([]);
   const [advLoading, setAdvLoading] = useState(false);
-  const [lines, setLines] = useState<Record<number, { allocated: string; disallowed: string; tds: string }>>({});
+  // The biller enters only the cash RECEIVED per bill. TDS (10%) and the
+  // disallowed/written-off remainder are derived, so recording a receipt fully
+  // settles the bill:  Bill (claimed from TPA) = Received + TDS + Disallowed.
+  const [received, setReceived] = useState<Record<number, string>>({});
 
-  // Load this payer's approved bills awaiting receipt whenever the payer changes,
-  // so the biller can map the money to patient(s) right here.
+  // Load this payer's approved bills awaiting receipt whenever the payer changes.
   useEffect(() => {
-    if (!form.provider_id) { setAdvices([]); setLines({}); return; }
-    setAdvLoading(true); setLines({});
+    if (!form.provider_id) { setAdvices([]); setReceived({}); return; }
+    setAdvLoading(true); setReceived({});
     getPendingAdvices(Number(form.provider_id))
       .then((r: any) => { if (r?.success) setAdvices(r.data || []); })
       .finally(() => setAdvLoading(false));
   }, [form.provider_id]);
 
   const num = (v: string) => Number(v) || 0;
-  const sanctioned = num(form.sanctioned_amount);
-  const claim = num(form.claim_amount);
-  const tds = num(form.tds_amount);
-  const svc = num(form.service_charge);
-  const disallowed = Math.max(0, claim - sanctioned);
-  const computedReceived = Math.max(0, sanctioned - tds - svc);
-  // Keep "received" in sync with sanctioned − tds − service charge unless the user typed their own.
-  const received = autoReceived && sanctioned > 0 ? computedReceived : num(form.total_amount);
+  const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+  const TDS_RATE = 0.10;
 
-  const setLine = (id: number, field: 'allocated' | 'disallowed' | 'tds', val: string) =>
-    setLines((p) => ({ ...p, [id]: { ...(p[id] ?? { allocated: '', disallowed: '', tds: '' }), [field]: val } }));
-
-  const allocatedSum = Object.values(lines).reduce((s, l) => s + num(l.allocated), 0);
-  const unmapped = Math.round((received - allocatedSum + Number.EPSILON) * 100) / 100;
-  const overAllocated = allocatedSum - received > 0.01;
-
-  // Spread the received cash across the outstanding dues, top-down, so the common
-  // "one payment covers these bills" case is one click.
-  const autoFill = () => {
-    let remaining = received;
-    const next: Record<number, { allocated: string; disallowed: string; tds: string }> = {};
-    for (const a of advices) {
-      const due = Number(a.tpa_payable || 0);
-      const give = Math.max(0, Math.min(due, Math.round((remaining + Number.EPSILON) * 100) / 100));
-      const prev = lines[a.id] ?? { allocated: '', disallowed: '', tds: '' };
-      next[a.id] = { ...prev, allocated: give > 0 ? String(give) : '' };
-      remaining = Math.round((remaining - give + Number.EPSILON) * 100) / 100;
-    }
-    setLines(next);
+  // Bill = amount claimed from / due from the TPA for this bill (tpa_payable).
+  const rowCalc = (a: any) => {
+    const bill = Number(a.tpa_payable || 0);
+    const rcv = num(received[a.id]);
+    const tds = round2(rcv * TDS_RATE);
+    const disallowed = round2(Math.max(0, bill - rcv - tds));
+    const invalid = rcv > 0 && rcv + tds - bill > 0.01; // received (+10% TDS) can't exceed the bill
+    return { bill, rcv, tds, disallowed, invalid };
   };
+
+  const rows = advices.map((a: any) => ({ a, ...rowCalc(a) }));
+  const active = rows.filter((r) => r.rcv > 0);
+  const totalBill = round2(active.reduce((s, r) => s + r.bill, 0));
+  const totalReceived = round2(active.reduce((s, r) => s + r.rcv, 0));
+  const totalTds = round2(active.reduce((s, r) => s + r.tds, 0));
+  const totalDisallowed = round2(active.reduce((s, r) => s + r.disallowed, 0));
+  const anyInvalid = rows.some((r) => r.invalid);
+
+  const manualReceived = num(form.manual_received); // fallback when the payer has no mapped bills yet
+  const hasAdvices = advices.length > 0;
+  const receiptTotal = hasAdvices ? totalReceived : manualReceived;
+  const canSave = !!form.provider_id && !!form.reference_number && !anyInvalid && receiptTotal > 0;
 
   const save = async () => {
     setError(''); setPartialMsg(''); setSaving(true);
-    const payload = Object.entries(lines)
-      .map(([invId, v]) => ({
-        invoice_id: Number(invId),
-        allocated_amount: num(v.allocated),
-        disallowed_amount: num(v.disallowed),
-        tds_amount: num(v.tds),
-      }))
-      .filter((l) => l.allocated_amount + l.disallowed_amount + l.tds_amount > 0);
+    const payload = active.map((r) => ({
+      invoice_id: r.a.id,
+      allocated_amount: r.rcv,
+      disallowed_amount: r.disallowed,
+      tds_amount: r.tds,
+    }));
 
     const res: any = await recordAndAllocateReceipt({
       payer_type: 'tpa_insurance', provider_id: Number(form.provider_id),
       instrument: form.instrument, reference_number: form.reference_number,
       receipt_date: form.receipt_date,
-      total_amount: received,
-      claim_amount: claim, sanctioned_amount: sanctioned, tds_amount: tds, service_charge: svc,
+      total_amount: receiptTotal,
+      claim_amount: totalBill, sanctioned_amount: totalBill, tds_amount: totalTds, service_charge: 0,
       remarks: form.remarks,
       lines: payload,
     });
@@ -382,47 +375,21 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
           <Field label="Receipt Date"><input type="date" className={INPUT} value={form.receipt_date} onChange={(e) => setForm({ ...form, receipt_date: e.target.value })} /></Field>
         </div>
 
-        {/* Settlement advice breakdown */}
-        <div className="rounded-xl border border-gray-200 bg-slate-50/60 p-3 space-y-3">
-          <p className="text-[11px] font-black uppercase tracking-wider text-gray-500">Settlement Advice</p>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Claim Amount"><input type="number" className={INPUT} value={form.claim_amount} onChange={(e) => setForm({ ...form, claim_amount: e.target.value })} /></Field>
-            <Field label="Sanctioned"><input type="number" className={INPUT} value={form.sanctioned_amount} onChange={(e) => setForm({ ...form, sanctioned_amount: e.target.value })} /></Field>
-            <Field label="TDS"><input type="number" className={INPUT} value={form.tds_amount} onChange={(e) => setForm({ ...form, tds_amount: e.target.value })} /></Field>
-            <Field label="Service Charge"><input type="number" className={INPUT} value={form.service_charge} onChange={(e) => setForm({ ...form, service_charge: e.target.value })} /></Field>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg bg-white border border-gray-200 px-3 py-2">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Disallowed (Claim − Sanctioned)</p>
-              <p className="text-sm font-black text-rose-600">{fmt(disallowed)}</p>
-            </div>
-            <Field label="Amount Received *">
-              <input type="number" className={INPUT}
-                value={autoReceived && sanctioned > 0 ? String(computedReceived) : form.total_amount}
-                onChange={(e) => { setAutoReceived(false); setForm({ ...form, total_amount: e.target.value }); }} />
-            </Field>
-          </div>
-          {sanctioned > 0 && !autoReceived && Math.abs(received - computedReceived) > 0.01 && (
-            <p className="text-[11px] text-amber-600">Heads up: received ({fmt(received)}) ≠ sanctioned − TDS − service charge ({fmt(computedReceived)}).</p>
-          )}
-        </div>
-
-        {/* Map to patient bills — merged from the old separate Allocate step */}
+        {/* Map to patient bills — enter Received; TDS (10%) and Disallowed are derived */}
         <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-3 space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-black uppercase tracking-wider text-blue-700">Map to Patient Bills</p>
-            {advices.length > 0 && received > 0 && (
-              <button type="button" onClick={autoFill} className="rounded-md border border-blue-300 bg-white px-2 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100">
-                Auto-fill from received
-              </button>
-            )}
+            <p className="text-[10px] text-gray-500">Bill = Received + TDS (10%) + Disallowed</p>
           </div>
           {!form.provider_id ? (
             <p className="text-xs text-gray-400">Select a payer to see its approved bills awaiting receipt.</p>
           ) : advLoading ? (
             <div className="py-3"><Loader2 className="mx-auto h-4 w-4 animate-spin text-gray-400" /></div>
-          ) : advices.length === 0 ? (
-            <p className="text-xs text-amber-600">No approved bills for this payer yet — the receipt will be saved unallocated; you can map it later via the RECEIPT button.</p>
+          ) : !hasAdvices ? (
+            <div className="space-y-2">
+              <p className="text-xs text-amber-600">No approved bills for this payer yet — record the money as unallocated and map it later via the RECEIPT button.</p>
+              <Field label="Amount Received *"><input type="number" className={INPUT} value={form.manual_received} onChange={(e) => setForm({ ...form, manual_received: e.target.value })} /></Field>
+            </div>
           ) : (
             <>
               <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white max-h-[30vh]">
@@ -431,35 +398,39 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
                     <tr>
                       <th className="px-2 py-1.5 text-left font-bold text-[11px]">Bill #</th>
                       <th className="px-2 py-1.5 text-left font-bold text-[11px]">Patient</th>
-                      <th className="px-2 py-1.5 text-right font-bold text-[11px]">Approved</th>
-                      <th className="px-2 py-1.5 text-right font-bold text-[11px]">Due</th>
+                      <th className="px-2 py-1.5 text-right font-bold text-[11px]">Bill Amount</th>
                       <th className="px-2 py-1.5 text-right font-bold text-[11px]">Received</th>
+                      <th className="px-2 py-1.5 text-right font-bold text-[11px]">TDS (10%)</th>
                       <th className="px-2 py-1.5 text-right font-bold text-[11px]">Disallowed</th>
-                      <th className="px-2 py-1.5 text-right font-bold text-[11px]">TDS</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {advices.map((a: any) => (
-                      <tr key={a.id}>
+                    {rows.map(({ a, bill, rcv, tds, disallowed, invalid }) => (
+                      <tr key={a.id} className={invalid ? 'bg-red-50' : ''}>
                         <td className="px-2 py-1 font-mono text-[11px]">{a.invoice_number}</td>
                         <td className="px-2 py-1 text-xs">{a.patient?.full_name || a.patient_id}</td>
-                        <td className="px-2 py-1 text-right text-xs">{fmt(a.tpa_approved_amount)}</td>
-                        <td className="px-2 py-1 text-right text-xs">{fmt(a.tpa_payable)}</td>
-                        <td className="px-2 py-1"><input className="w-24 rounded border border-gray-300 px-1.5 py-0.5 text-right text-xs" value={lines[a.id]?.allocated || ''} onChange={(e) => setLine(a.id, 'allocated', e.target.value)} /></td>
-                        <td className="px-2 py-1"><input className="w-24 rounded border border-gray-300 px-1.5 py-0.5 text-right text-xs" value={lines[a.id]?.disallowed || ''} onChange={(e) => setLine(a.id, 'disallowed', e.target.value)} /></td>
-                        <td className="px-2 py-1"><input className="w-20 rounded border border-gray-300 px-1.5 py-0.5 text-right text-xs" value={lines[a.id]?.tds || ''} onChange={(e) => setLine(a.id, 'tds', e.target.value)} /></td>
+                        <td className="px-2 py-1 text-right text-xs font-semibold">{fmt(bill)}</td>
+                        <td className="px-2 py-1">
+                          <input type="number" className={`w-24 rounded border px-1.5 py-0.5 text-right text-xs ${invalid ? 'border-red-400' : 'border-gray-300'}`}
+                            value={received[a.id] || ''} onChange={(e) => setReceived((p) => ({ ...p, [a.id]: e.target.value }))} />
+                        </td>
+                        <td className="px-2 py-1 text-right text-xs text-gray-500">{rcv > 0 ? fmt(tds) : '—'}</td>
+                        <td className="px-2 py-1 text-right text-xs text-rose-600">{rcv > 0 ? fmt(disallowed) : '—'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-gray-600">Mapped <strong>{fmt(allocatedSum)}</strong> of received <strong>{fmt(received)}</strong></span>
-                <span className={unmapped > 0.01 ? 'text-amber-600 font-bold' : 'text-green-600 font-bold'}>
-                  {unmapped > 0.01 ? `${fmt(unmapped)} unmapped` : 'Fully mapped'}
-                </span>
-              </div>
-              {overAllocated && <p className="text-[11px] text-red-600">Mapped cash exceeds the amount received — reduce the allocations.</p>}
+              {anyInvalid && <p className="text-[11px] text-red-600">Received + 10% TDS cannot exceed the bill amount — reduce the received value.</p>}
+              {totalReceived > 0 && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-600">
+                  <span>Bill <strong>{fmt(totalBill)}</strong></span>
+                  <span>Received <strong className="text-gray-900">{fmt(totalReceived)}</strong></span>
+                  <span>TDS <strong>{fmt(totalTds)}</strong></span>
+                  <span>Disallowed <strong className="text-rose-600">{fmt(totalDisallowed)}</strong></span>
+                  <span className="text-green-600 font-bold">· bill fully settled</span>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -469,7 +440,7 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
       <div className="mt-4 flex justify-end gap-2">
         <button onClick={partialMsg ? onSaved : onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold">{partialMsg ? 'Close' : 'Cancel'}</button>
         {!partialMsg && (
-          <button onClick={save} disabled={saving || !form.provider_id || !form.reference_number || received <= 0 || overAllocated}
+          <button onClick={save} disabled={saving || !canSave}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Receipt'}
           </button>

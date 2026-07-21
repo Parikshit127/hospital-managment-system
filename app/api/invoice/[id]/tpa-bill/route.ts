@@ -355,10 +355,10 @@ function generateTpaBillHTML(
                         </tr>
                     </thead>
                     <tbody>
-                        <tr><td style="padding:4px 8px;font-size:11px;width:230px;font-weight:700;">Approved / Sanctioned by TPA</td><td style="padding:4px 8px;font-size:11px;font-weight:700;text-align:right;">${tpaApproved.toFixed(2)}</td></tr>
-                        ${tpaDisallowedAtSettlement > 0 ? `<tr><td style="padding:4px 8px;font-size:11px;color:#991b1b;">Less: Short-paid / disallowed by TPA</td><td style="padding:4px 8px;font-size:11px;text-align:right;color:#991b1b;">${tpaDisallowedAtSettlement.toFixed(2)}</td></tr>` : ''}
-                        ${tpaTds > 0 ? `<tr><td style="padding:4px 8px;font-size:11px;color:#991b1b;">Less: TDS deducted by TPA</td><td style="padding:4px 8px;font-size:11px;text-align:right;color:#991b1b;">${tpaTds.toFixed(2)}</td></tr>` : ''}
+                        <tr><td style="padding:4px 8px;font-size:11px;width:230px;font-weight:700;">Bill Amount (Claimed from TPA)</td><td style="padding:4px 8px;font-size:11px;font-weight:700;text-align:right;">${claimedFromTpa.toFixed(2)}</td></tr>
                         <tr style="background:#f0fdf4;"><td style="padding:4px 8px;font-size:11px;font-weight:700;">Received from TPA</td><td style="padding:4px 8px;font-size:11px;font-weight:700;text-align:right;color:#166534;">${tpaReceived.toFixed(2)}</td></tr>
+                        ${tpaTds > 0 ? `<tr><td style="padding:4px 8px;font-size:11px;color:#991b1b;">Less: TDS deducted by TPA (10%)</td><td style="padding:4px 8px;font-size:11px;text-align:right;color:#991b1b;">${tpaTds.toFixed(2)}</td></tr>` : ''}
+                        ${tpaDisallowedAtSettlement > 0 ? `<tr><td style="padding:4px 8px;font-size:11px;color:#991b1b;">Less: Disallowed / written off</td><td style="padding:4px 8px;font-size:11px;text-align:right;color:#991b1b;">${tpaDisallowedAtSettlement.toFixed(2)}</td></tr>` : ''}
                         <tr style="border-top:1px solid #000;"><td style="padding:6px 8px;font-size:12px;font-weight:800;">Balance Recoverable from TPA</td><td style="padding:6px 8px;font-size:12px;font-weight:800;text-align:right;color:${tpaBalance > 0.01 ? '#92400e' : '#166534'};">${tpaBalance.toFixed(2)}</td></tr>
                     </tbody>
                 </table>
