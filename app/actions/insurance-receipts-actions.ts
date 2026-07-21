@@ -18,7 +18,8 @@
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { generateSequentialNumber, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
-import { postReceiptAllocationToGL, ensureTpaGlAccounts } from './insurance-gl-actions';
+import { postReceiptAllocationToGL, ensureTpaGlAccounts, postShortPayWriteOffToGL, postShortPayRecoverToGL } from './insurance-gl-actions';
+import { reverseJournalEntry } from './gl-actions';
 
 function serialize<T>(data: T): T {
   return JSON.parse(JSON.stringify(data, (_, v) =>
@@ -129,12 +130,18 @@ export async function createInsuranceReceipt(input: {
 // ─────────────────────────────────────────────────────────────────────────────
 export async function allocateReceipt(input: {
   receipt_id: number;
+  // Option B: when true, each bill is settled against its GROSS amount (net_amount)
+  // rather than the TPA-approved amount, and each disallowance is dispositioned
+  // (written off or recovered from the patient) at settlement time. Opt-in so the
+  // legacy allocate flow is unchanged.
+  settle_gross?: boolean;
   lines: Array<{
     invoice_id: number;
     allocated_amount: number;      // cash applied to this bill
     disallowed_amount?: number;    // short-pay / disallowance
     tds_amount?: number;           // TDS deducted by payer
     disallowance_reason?: string;  // DenialReason.code
+    disposition?: 'WriteOff' | 'ToRecover'; // gross-settlement only; default WriteOff
     is_partial?: boolean;
   }>;
 }) {
@@ -156,6 +163,8 @@ export async function allocateReceipt(input: {
     }
 
     const createdAllocationIds: number[] = [];
+    const createdShortPays: Array<{ id: number; disposition: 'WriteOff' | 'ToRecover' }> = [];
+    const settleGross = !!input.settle_gross;
 
     await db.$transaction(async (tx: any) => {
       let runningCash = 0;
@@ -165,6 +174,7 @@ export async function allocateReceipt(input: {
         const allocated = round2(Number(line.allocated_amount || 0));
         const disallowed = round2(Number(line.disallowed_amount || 0));
         const tds = round2(Number(line.tds_amount || 0));
+        const lineDisposition: 'WriteOff' | 'ToRecover' = line.disposition === 'ToRecover' ? 'ToRecover' : 'WriteOff';
         if (allocated < 0 || disallowed < 0 || tds < 0) throw new Error('Amounts cannot be negative');
         if (allocated + disallowed + tds <= 0) continue;
 
@@ -215,19 +225,27 @@ export async function allocateReceipt(input: {
             throw new Error(`Invoice ${invoice.invoice_number}: cannot record receipt when claim status is '${status}' (must be approved)`);
           }
           const approved = Number(invoice.tpa_approved_amount || 0);
+          const netAmount = Number(invoice.net_amount || 0);
+          // Option B settles against the GROSS bill; legacy against the approved amount.
+          const base = settleGross ? netAmount : approved;
           const newSettled = round2(Number(invoice.tpa_settled_amount || 0) + allocated);
           const newDisallowed = round2(Number(invoice.tpa_disallowed_amount || 0) + disallowed);
           const newTds = round2(Number(invoice.tpa_tds_amount || 0) + tds);
           const accountedTotal = round2(newSettled + newDisallowed + newTds);
-          if (accountedTotal > approved + TOL) {
-            throw new Error(`Invoice ${invoice.invoice_number}: settled+disallowed+TDS (${accountedTotal}) exceeds approved (${approved})`);
+          if (accountedTotal > base + TOL) {
+            throw new Error(`Invoice ${invoice.invoice_number}: settled+disallowed+TDS (${accountedTotal}) exceeds ${settleGross ? 'bill amount' : 'approved'} (${base})`);
           }
           const newPaid = round2(Number(invoice.paid_amount || 0) + allocated);
-          const netAmount = Number(invoice.net_amount || 0);
-          const newBalance = Math.max(0, round2(netAmount - newPaid));
-          const fullyAccounted = accountedTotal >= approved - TOL;
-          const newTpaPayable = Math.max(0, round2(approved - accountedTotal));
+          const fullyAccounted = accountedTotal >= base - TOL;
+          const newTpaPayable = Math.max(0, round2(base - accountedTotal));
           const newClaimStatus = fullyAccounted ? 'settled' : 'partially_settled';
+
+          // Option B: split the disallowance — the recoverable part becomes the
+          // patient's due (moved to their ledger after the tx); the written-off part
+          // is expensed. The bill's remaining balance is therefore the recoverable
+          // portion only. Legacy path keeps balance = net − cash paid, untouched.
+          const recoverPortion = settleGross && lineDisposition === 'ToRecover' ? disallowed : 0;
+          const writtenOffPortion = settleGross ? round2(disallowed - recoverPortion) : 0;
 
           const upd: any = {
             tpa_settled_amount: newSettled,
@@ -236,9 +254,14 @@ export async function allocateReceipt(input: {
             tpa_payable: newTpaPayable,
             tpa_claim_status: newClaimStatus,
             paid_amount: newPaid,
-            balance_due: newBalance,
             version: { increment: 1 },
           };
+          if (settleGross) {
+            upd.balance_due = Math.max(0, round2(netAmount - newSettled - newTds - writtenOffPortion));
+            if (recoverPortion > 0) upd.patient_payable = round2(Number(invoice.patient_payable || 0) + recoverPortion);
+          } else {
+            upd.balance_due = Math.max(0, round2(netAmount - newPaid));
+          }
           if (fullyAccounted && !invoice.tpa_settled_at) upd.tpa_settled_at = new Date();
           await tx.invoices.update({ where: { id: invoice.id }, data: upd });
 
@@ -280,18 +303,21 @@ export async function allocateReceipt(input: {
           }
         }
 
-        // Short-pay ledger entry for any disallowance.
+        // Short-pay ledger entry for any disallowance. In gross-settlement mode the
+        // biller has already chosen the disposition (write-off vs recover), so record
+        // it and post its GL after the tx; the legacy path leaves it PendingReview.
         if (disallowed > 0) {
-          await tx.claimShortPay.create({
+          const sp = await tx.claimShortPay.create({
             data: {
               claim_id: claim?.id ?? null,
               invoice_id: invoice.id,
               amount: disallowed,
               denial_reason_code: line.disallowance_reason || null,
-              disposition: 'PendingReview',
+              disposition: settleGross ? lineDisposition : 'PendingReview',
               organizationId,
             },
           });
+          if (settleGross) createdShortPays.push({ id: sp.id, disposition: lineDisposition });
         }
 
         // The allocation row itself.
@@ -343,6 +369,16 @@ export async function allocateReceipt(input: {
         glWarnings.push(`GL post failed for allocation ${allocId}: ${message}`);
       }
     }
+    // Gross-settlement dispositions: write-off → expense; recover → move to patient.
+    for (const sp of createdShortPays) {
+      const r = sp.disposition === 'ToRecover'
+        ? await postShortPayRecoverToGL(sp.id)
+        : await postShortPayWriteOffToGL(sp.id);
+      if (!r?.success) {
+        const message = r && 'error' in r ? r.error : 'unknown';
+        glWarnings.push(`GL post failed for short-pay ${sp.id} (${sp.disposition}): ${message}`);
+      }
+    }
 
     revalidatePath('/admin/finance/tpa-insurance');
     revalidatePath('/billing');
@@ -374,15 +410,17 @@ export async function recordAndAllocateReceipt(input: {
   tds_amount?: number;
   service_charge?: number;
   remarks?: string;
+  settle_gross?: boolean;
   lines?: Array<{
     invoice_id: number;
     allocated_amount: number;
     disallowed_amount?: number;
     tds_amount?: number;
     disallowance_reason?: string;
+    disposition?: 'WriteOff' | 'ToRecover';
   }>;
 }) {
-  const { lines, ...header } = input;
+  const { lines, settle_gross, ...header } = input;
   const created: any = await createInsuranceReceipt(header);
   if (!created?.success) return created;
   const receiptId = created.data?.id;
@@ -396,6 +434,7 @@ export async function recordAndAllocateReceipt(input: {
 
   const alloc: any = await allocateReceipt({
     receipt_id: receiptId,
+    settle_gross,
     lines: validLines.map((l) => ({ ...l, is_partial: true })),
   });
   if (!alloc?.success) {
@@ -558,6 +597,9 @@ export async function reverseInsuranceReceipt(receiptId: number, reason: string)
     if (!receipt) return { success: false, error: 'Receipt not found' };
     if (receipt.status === 'Reversed') return { success: false, error: 'Receipt already reversed' };
 
+    const allocationIds: number[] = receipt.allocations.map((a: any) => a.id);
+    const shortPayIds: number[] = []; // captured before deletion so their GL can be reversed
+
     await db.$transaction(async (tx: any) => {
       for (const a of receipt.allocations) {
         const invoice = await tx.invoices.findFirst({ where: { id: a.invoice_id, organizationId } });
@@ -571,6 +613,15 @@ export async function reverseInsuranceReceipt(receiptId: number, reason: string)
           const approved = Number(invoice.tpa_approved_amount || 0);
           const newPaid = Math.max(0, round2(Number(invoice.paid_amount || 0) - allocated));
           const netAmount = Number(invoice.net_amount || 0);
+          // Gross settlement (Option B) may have moved part of the disallowance to the
+          // patient (disposition = ToRecover); restore the patient's due. Collect this
+          // bill's short-pays so their GL is reversed below (single settlement per bill).
+          const sps = await tx.claimShortPay.findMany({
+            where: { organizationId, invoice_id: a.invoice_id },
+            select: { id: true, amount: true, disposition: true },
+          });
+          const recoverAmt = round2(sps.filter((s: any) => s.disposition === 'ToRecover').reduce((t: number, s: any) => t + Number(s.amount || 0), 0));
+          for (const s of sps) shortPayIds.push(s.id);
           await tx.invoices.update({
             where: { id: invoice.id },
             data: {
@@ -581,19 +632,20 @@ export async function reverseInsuranceReceipt(receiptId: number, reason: string)
               tpa_claim_status: 'approved',
               paid_amount: newPaid,
               balance_due: Math.max(0, round2(netAmount - newPaid)),
+              patient_payable: Math.max(0, round2(Number(invoice.patient_payable || 0) - recoverAmt)),
               tpa_settled_at: null,
               version: { increment: 1 },
             },
           });
+          // Drop this bill's short-pays (pending + dispositioned); their GL is reversed
+          // below. Assumes one settlement per bill (the Option B model) — a bill carrying
+          // an unrelated manual write-off would have it removed too.
+          await tx.claimShortPay.deleteMany({ where: { organizationId, invoice_id: a.invoice_id } });
         }
         // Void the payment row.
         if (a.payment_id) {
           await tx.payments.update({ where: { id: a.payment_id }, data: { status: 'Reversed' } }).catch(() => {});
         }
-        // Remove any short-pay that is still pending (not yet dispositioned/posted).
-        await tx.claimShortPay.deleteMany({
-          where: { organizationId, invoice_id: a.invoice_id, disposition: 'PendingReview', gl_posted: false },
-        });
       }
 
       await tx.insuranceReceipt.update({
@@ -611,9 +663,26 @@ export async function reverseInsuranceReceipt(receiptId: number, reason: string)
       });
     });
 
+    // Unwind the ledger: reverse each allocation's posting (Bank/TDS/Receivable) and
+    // each short-pay's posting (write-off expense or patient reclassification) so the GL
+    // matches the reversed receipt. reverseJournalEntry finds the JE by reference and
+    // books a swapped reversing entry; the short-pay rows are gone but their JEs remain.
+    const glWarnings: string[] = [];
+    const reverseRef = async (refType: string, refId: string) => {
+      const je = await db.gL_JournalEntry.findFirst({
+        where: { organizationId, reference_type: refType, reference_id: refId, status: { not: 'Reversed' } },
+        select: { id: true },
+      });
+      if (!je) return;
+      const r: any = await reverseJournalEntry(je.id, `Insurance receipt ${receipt.receipt_number} reversed: ${reason}`, session?.username || session?.name || undefined);
+      if (!r?.success) glWarnings.push(`GL reverse failed for ${refType} ${refId}: ${r?.error || 'unknown'}`);
+    };
+    for (const allocId of allocationIds) await reverseRef('InsuranceReceiptAllocation', String(allocId));
+    for (const spId of shortPayIds) await reverseRef('ClaimShortPay', String(spId));
+
     revalidatePath('/admin/finance/tpa-insurance');
     revalidatePath('/billing');
-    return { success: true };
+    return { success: true, glWarnings: glWarnings.length ? glWarnings : undefined };
   } catch (error: any) {
     console.error('reverseInsuranceReceipt error:', error);
     return { success: false, error: error.message };

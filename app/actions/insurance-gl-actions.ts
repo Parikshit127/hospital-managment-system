@@ -222,6 +222,66 @@ export async function postShortPayWriteOffToGL(shortPayId: number) {
 }
 
 /**
+ * Post a recoverable short-pay (disposition = ToRecover).
+ *   Dr Patient Receivable
+ *   Cr Insurance / TPA Receivable
+ * Reclassifies a disallowed amount from the payer to the patient — no expense,
+ * the debt simply moves to the patient's ledger. Call when the short-pay
+ * disposition is ToRecover (Option B "recover the gap from the patient").
+ */
+export async function postShortPayRecoverToGL(shortPayId: number) {
+  try {
+    const sp = await prisma.claimShortPay.findUnique({
+      where: { id: shortPayId },
+      include: { invoice: { select: { invoice_number: true, billing_patient_type: true } } },
+    });
+    if (!sp) return { success: false, error: 'Short-pay not found' };
+    if (sp.disposition !== 'ToRecover') return { success: false, error: 'Short-pay is not marked ToRecover' };
+
+    const existing = await prisma.gL_JournalEntry.findFirst({
+      where: { reference_type: 'ClaimShortPay', reference_id: String(shortPayId), status: { not: 'Reversed' } },
+    });
+    if (existing) return { success: true, message: 'Recovery already posted', journal: existing };
+
+    const orgId = sp.organizationId;
+    await ensureTpaGlAccounts(orgId);
+
+    const amount = round2(Number(sp.amount || 0));
+    if (amount <= 0) return { success: true, message: 'Nothing to recover' };
+
+    const patientRec = await resolveAccount(orgId, receivableCode('cash'), '1130');
+    const payerType = sp.invoice?.billing_patient_type || 'tpa_insurance';
+    const payerRec = await resolveAccount(orgId, receivableCode(payerType), '1150');
+    if (!patientRec || !payerRec) return { success: false, error: 'Required GL accounts (patient/payer receivable) not found' };
+
+    const billRef = sp.invoice?.invoice_number;
+    const lines: any[] = [
+      { account_id: patientRec.id, debit_amount: amount, credit_amount: 0, description: `Disallowance recoverable from patient — ${billRef || ''}`, bill_reference: billRef, bill_alloc_type: billRef ? 'Agst Ref' : undefined },
+      { account_id: payerRec.id, debit_amount: 0, credit_amount: amount, description: billRef ? `Reclassify to patient — ${billRef}` : 'Disallowance reclassified to patient', bill_reference: billRef, bill_alloc_type: billRef ? 'Agst Ref' : undefined },
+    ];
+
+    const result = await createJournalEntry({
+      organizationId: orgId,
+      entry_date: new Date(),
+      entry_type: 'Adjustment',
+      narration: `Insurance disallowance recoverable from patient — ${billRef || ''}`,
+      lines,
+      reference_type: 'ClaimShortPay',
+      reference_id: String(shortPayId),
+      reference_number: billRef || undefined,
+    });
+
+    if (result?.success) {
+      await prisma.claimShortPay.update({ where: { id: shortPayId }, data: { gl_posted: true } });
+    }
+    return result;
+  } catch (error: any) {
+    console.error('postShortPayRecoverToGL error:', error);
+    return { success: false, error: 'Failed to post recovery to GL' };
+  }
+}
+
+/**
  * Optional: post an unapplied (received-but-not-yet-allocated) receipt amount.
  *   Dr Bank   Cr Unapplied Insurance Receipts (liability)
  * Use only when the org banks money ahead of allocation; the default flow posts
