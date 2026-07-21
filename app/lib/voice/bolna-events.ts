@@ -2,12 +2,17 @@
  * app/lib/voice/bolna-events.ts — Bolna call-events → CallLog + CallTranscript
  * ─────────────────────────────────────────────────────────────────────────────
  * Persists the call lifecycle + transcript from Bolna's webhook. Transcript-only
- * (no audio). Idempotent on the Bolna call id (stored as CallLog.provider_call_id).
+ * (no audio). Idempotent on the Bolna execution id (stored as CallLog.provider_call_id).
  *
- * ⚠️ Bolna's exact payload field names are not yet confirmed (plan §8). This
- * mapper is deliberately defensive — it accepts several common shapes. Once a
- * real Bolna payload sample is available, tighten the `pick*`/`mapTranscript`
- * helpers below; nothing else needs to change.
+ * Payload shape confirmed from a real Bolna "completed" webhook (2026):
+ *   { id, agent_id, status, conversation_duration, summary, error_message,
+ *     transcript: "assistant: ...\nuser: ...\n",         // a NEWLINE STRING, not an array
+ *     user_number, agent_number, created_at_str, updated_at_str,
+ *     extracted_data: { user_name, ... },
+ *     context_details: { recipient_data: { name }, recipient_phone_number },
+ *     telephony_data: { from_number, to_number, recording_url, provider_call_id,
+ *                       call_type, provider, ... } }
+ * The pick* helpers keep defensive fallbacks so a schema tweak won't break ingest.
  */
 
 import { prisma } from '@/backend/db';
@@ -15,23 +20,51 @@ import { prisma } from '@/backend/db';
 const AGENT_ID = 'ai-voice-assistant';
 
 function pickCallId(b: any): string | null {
-  return b?.id ?? b?.call_id ?? b?.callId ?? b?.execution_id ?? b?.conversation_id ?? null;
+  return (
+    b?.id ??
+    b?.telephony_data?.provider_call_id ??
+    b?.call_id ??
+    b?.callId ??
+    b?.execution_id ??
+    b?.conversation_id ??
+    null
+  );
 }
 
 function pickNumbers(b: any): { from: string | null; to: string | null } {
   const t = b?.telephony_data ?? b?.telephony ?? {};
+  // Inbound: caller = user_number = telephony from_number; hospital = agent_number = to_number.
   return {
-    from: b?.from_number ?? b?.from ?? t?.from_number ?? t?.from ?? b?.customer?.number ?? null,
-    to: b?.to_number ?? b?.to ?? t?.to_number ?? t?.to ?? null,
+    from: b?.user_number ?? t?.from_number ?? b?.from_number ?? b?.from ?? b?.context_details?.recipient_phone_number ?? null,
+    to: b?.agent_number ?? t?.to_number ?? b?.to_number ?? b?.to ?? null,
   };
+}
+
+function pickName(b: any): string | null {
+  const n = b?.extracted_data?.user_name ?? b?.context_details?.recipient_data?.name ?? b?.patient_name ?? null;
+  const s = (n ?? '').toString().trim();
+  return s.length ? s : null;
 }
 
 function pickDuration(b: any): number | null {
   const t = b?.telephony_data ?? {};
-  const d = b?.duration ?? b?.conversation_duration ?? b?.call_duration ?? t?.duration ?? t?.conversation_duration;
+  const d = b?.conversation_duration ?? b?.duration ?? b?.call_duration ?? t?.duration;
   if (d == null) return null;
   const n = typeof d === 'number' ? d : Number(d);
   return isNaN(n) ? null : Math.round(n);
+}
+
+/** ISO-ish string → Date, tolerant of Bolna's microsecond, tz-less timestamps. */
+function toDate(v: any): Date | null {
+  if (!v) return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function mapRole(raw: string): 'caller' | 'assistant' {
+  const r = raw.toLowerCase();
+  if (r === 'user' || r === 'human' || r === 'caller' || r === 'customer') return 'caller';
+  return 'assistant'; // assistant | agent | bot | system → assistant side
 }
 
 function mapStatus(s?: string): string {
@@ -43,34 +76,47 @@ function mapStatus(s?: string): string {
   return 'in_progress';
 }
 
-/** Map Bolna's transcript (array of turns or a plain string) → our turns + summary. */
+/** Parse Bolna's "role: text" newline transcript into turns; also accepts an array. */
 function mapTranscript(b: any): { turns: Array<{ role: string; text: string }>; summary: string | null } {
-  const summary = b?.summary ?? b?.analysis?.summary ?? b?.extracted_data?.summary ?? null;
+  const summary = (b?.summary ?? b?.analysis?.summary ?? null) || null;
   const raw = b?.transcript ?? b?.messages ?? b?.conversation ?? null;
 
   if (Array.isArray(raw)) {
     const turns = raw
-      .map((m: any) => {
-        const role = (m?.role ?? m?.speaker ?? '').toString().toLowerCase();
-        const text = m?.content ?? m?.text ?? m?.message ?? '';
-        const mapped =
-          role === 'user' || role === 'human' || role === 'caller' ? 'caller'
-          : role === 'assistant' || role === 'agent' || role === 'bot' ? 'assistant'
-          : role || 'assistant';
-        return { role: mapped, text: String(text) };
-      })
-      .filter((t) => t.text.trim().length > 0);
+      .map((m: any) => ({
+        role: mapRole((m?.role ?? m?.speaker ?? '').toString()),
+        text: String(m?.content ?? m?.text ?? m?.message ?? '').trim(),
+      }))
+      .filter((t) => t.text.length > 0);
     return { turns, summary };
   }
+
   if (typeof raw === 'string' && raw.trim()) {
-    return { turns: [], summary: summary ?? raw.trim() };
+    const roleRe = /^(assistant|agent|bot|system|user|human|caller|customer)\s*:\s*(.*)$/i;
+    const turns: Array<{ role: string; text: string }> = [];
+    for (const line of raw.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      const m = line.match(roleRe);
+      if (m) {
+        turns.push({ role: mapRole(m[1]), text: m[2] });
+      } else if (turns.length) {
+        turns[turns.length - 1].text += '\n' + line; // continuation of previous turn
+      }
+    }
+    const cleaned = turns.map((t) => ({ role: t.role, text: t.text.trim() })).filter((t) => t.text.length > 0);
+    return { turns: cleaned, summary };
   }
-  return { turns: [], summary: summary ?? null };
+
+  return { turns: [], summary };
 }
 
-function isCompletion(b: any, turns: number, hasSummary: boolean): boolean {
-  const s = (b?.status ?? '').toString().toLowerCase();
-  return ['completed', 'ended', 'call_ended', 'hangup'].includes(s) || turns > 0 || hasSummary || !!b?.end_time || !!b?.ended_at;
+function buildNotes(b: any): string | null {
+  const rec = b?.telephony_data?.recording_url ?? b?.recording_url ?? null;
+  const err = (b?.error_message ?? '').toString().trim();
+  const parts: string[] = [];
+  if (rec) parts.push(`recording: ${rec}`);
+  if (err) parts.push(`error: ${err}`);
+  return parts.length ? parts.join(' | ') : null;
 }
 
 export async function handleBolnaCallEvent(body: any, organizationId: string) {
@@ -78,12 +124,18 @@ export async function handleBolnaCallEvent(body: any, organizationId: string) {
   if (!callId) return { received: true, note: 'no call id in payload' };
 
   const { from, to } = pickNumbers(body);
+  const name = pickName(body);
   const { turns, summary } = mapTranscript(body);
-  const completion = isCompletion(body, turns.length, !!summary);
-  const status = completion ? 'completed' : mapStatus(body?.status);
+  const status = mapStatus(body?.status);
   const duration = pickDuration(body);
-  const startedAt = body?.start_time ?? body?.started_at ?? null;
-  const endedAt = body?.end_time ?? body?.ended_at ?? (completion ? new Date().toISOString() : null);
+  const notes = buildNotes(body);
+
+  const callType = (body?.telephony_data?.call_type ?? 'inbound').toString().toLowerCase();
+  const direction = callType === 'outbound' ? 'outbound' : 'inbound';
+
+  const startedAt = toDate(body?.created_at_str ?? body?.initiated_at ?? body?.start_time ?? body?.started_at);
+  const endedAt =
+    toDate(body?.updated_at_str ?? body?.end_time ?? body?.ended_at) ?? (status === 'completed' ? new Date() : null);
 
   const callLog = await prisma.callLog.upsert({
     where: { provider_call_id: callId },
@@ -91,26 +143,30 @@ export async function handleBolnaCallEvent(body: any, organizationId: string) {
       organizationId,
       agent_id: AGENT_ID,
       channel: 'voice_ai',
-      direction: 'inbound',
+      direction,
       provider: 'bolna',
       provider_call_id: callId,
       patient_phone: from ?? 'unknown',
+      patient_name: name,
       from_number: from ?? null,
       to_number: to ?? null,
-      call_type: 'Inbound',
-      outcome: 'Enquiry', // neutral default; the write tools set the real outcome mid-call
+      call_type: direction === 'outbound' ? 'Outbound' : 'Inbound',
+      outcome: 'Enquiry', // neutral default; refined once call_id is threaded into the tool calls
       status,
       duration_seconds: duration,
-      started_at: startedAt ? new Date(startedAt) : null,
-      ended_at: endedAt ? new Date(endedAt) : null,
+      notes,
+      started_at: startedAt,
+      ended_at: endedAt,
     },
     update: {
       status,
       ...(from ? { from_number: from, patient_phone: from } : {}),
       ...(to ? { to_number: to } : {}),
+      ...(name ? { patient_name: name } : {}),
       ...(duration != null ? { duration_seconds: duration } : {}),
-      ...(startedAt ? { started_at: new Date(startedAt) } : {}),
-      ...(endedAt ? { ended_at: new Date(endedAt) } : {}),
+      ...(notes ? { notes } : {}),
+      ...(startedAt ? { started_at: startedAt } : {}),
+      ...(endedAt ? { ended_at: endedAt } : {}),
     },
   });
 

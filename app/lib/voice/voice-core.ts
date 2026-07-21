@@ -129,10 +129,15 @@ export function staffTransferConfigured(): boolean {
   return /^\+\d{10,15}$/.test(n) && n !== '+910000000000' && n !== '+910000000';
 }
 
-async function updateCallLog(db: any, callId: string | null, data: Record<string, any>) {
-  if (!callId) return;
+async function updateCallLog(db: any, ctx: VoiceCtx, data: Record<string, any>) {
+  if (!ctx.callId) return;
+  // Backfill the caller's phone the agent collected (caller_phone) onto the log —
+  // the webhook only has it when the telephony provider passes a PSTN caller-ID,
+  // which web/test calls don't. `data` still wins if it ever sets these itself.
+  const phone = normalizePhone(ctx.callerPhone);
+  const merged = phone ? { patient_phone: phone, from_number: phone, ...data } : data;
   try {
-    await db.callLog.updateMany({ where: { provider_call_id: callId }, data });
+    await db.callLog.updateMany({ where: { provider_call_id: ctx.callId }, data: merged });
   } catch (e) {
     console.error('[VoiceCore] CallLog update failed:', e);
   }
@@ -211,7 +216,7 @@ export async function verifyCallerName(ctx: VoiceCtx, args: { name?: string; pho
     };
   }
   // Persist the verified identity on this call so writes act on the right record.
-  await updateCallLog(db, ctx.callId, { patient_id: hit.patient_id, patient_name: hit.full_name, verification_status: 'name_confirmed' });
+  await updateCallLog(db, ctx, { patient_id: hit.patient_id, patient_name: hit.full_name, verification_status: 'name_confirmed' });
   return {
     verified: true,
     patientId: hit.patient_id,
@@ -359,7 +364,7 @@ export async function bookAppointment(ctx: VoiceCtx, args: { doctorName?: string
 
   if (!result.success) return { message: result.error ?? 'The booking could not be completed. Please try another time.' };
 
-  await updateCallLog(db, ctx.callId, {
+  await updateCallLog(db, ctx, {
     appointment_id: result.appointmentId,
     patient_id: patient.patientId,
     patient_name: patient.name,
@@ -427,7 +432,7 @@ export async function registerPatient(ctx: VoiceCtx, args: { fullName?: string; 
     },
   });
 
-  await updateCallLog(db, ctx.callId, {
+  await updateCallLog(db, ctx, {
     patient_id: uhid,
     patient_name: args.fullName.trim(),
     verification_status: 'name_confirmed',
@@ -490,7 +495,7 @@ export async function rescheduleAppointment(ctx: VoiceCtx, args: { newDate?: str
     return { message: 'The reschedule could not be completed. Please try another time.' };
   }
 
-  await updateCallLog(db, ctx.callId, { appointment_id: appt.appointment_id, patient_id: patient.patientId, outcome: 'Rescheduled' });
+  await updateCallLog(db, ctx, { appointment_id: appt.appointment_id, patient_id: patient.patientId, outcome: 'Rescheduled' });
 
   const hospital = await orgName(db, ctx.organizationId);
   void notifyPatient(
@@ -530,7 +535,7 @@ export async function cancelAppointment(ctx: VoiceCtx, args: { reason?: string }
     return { message: 'The cancellation could not be completed right now.' };
   }
 
-  await updateCallLog(db, ctx.callId, { appointment_id: appt.appointment_id, patient_id: patient.patientId, outcome: 'Cancelled' });
+  await updateCallLog(db, ctx, { appointment_id: appt.appointment_id, patient_id: patient.patientId, outcome: 'Cancelled' });
 
   return { message: `Your appointment with ${appt.doctor_name ?? 'the doctor'} has been cancelled. Is there anything else I can help with?` };
 }
@@ -577,7 +582,7 @@ export async function requestCallback(ctx: VoiceCtx, args: { reason?: string; de
     },
   });
 
-  await updateCallLog(db, ctx.callId, { callback_lead_id: lead.id, outcome: 'Callback', handoff_status: 'callback_created' });
+  await updateCallLog(db, ctx, { callback_lead_id: lead.id, outcome: 'Callback', handoff_status: 'callback_created' });
 
   return { callbackLeadId: lead.id, message: 'I have logged a callback request, and our staff will call you back shortly. Is there anything else I can help you with?' };
 }
