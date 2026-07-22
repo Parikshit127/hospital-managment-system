@@ -5,7 +5,7 @@ import {
     collectDeposit, getPatientDeposits, getActiveDeposits,
     applyDepositToInvoice, refundDeposit, getDepositStats, cancelDeposit, updateDeposit,
 } from '@/app/actions/deposit-actions';
-import { getInvoices, searchPatientsForBilling } from '@/app/actions/finance-actions';
+import { getInvoices, searchPatientsForBilling, getMyRole } from '@/app/actions/finance-actions';
 import { getRegisteredPanForPatient } from '@/app/actions/deposit-actions';
 import { getCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan } from '@/app/lib/cash-compliance';
@@ -68,7 +68,13 @@ export function DepositsContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) 
     const [editLoading, setEditLoading] = useState(false);
     const [editError, setEditError] = useState<string | null>(null);
 
+    // Correcting a deposit is Admin/Finance-only — the front desk collects
+    // deposits but shouldn't be able to alter one after the fact.
+    const [myRole, setMyRole] = useState<string | null>(null);
+    const canEditDeposit = ['admin', 'finance', 'superadmin'].includes(myRole || '');
+
     useEffect(() => { loadData(); }, []);
+    useEffect(() => { getMyRole().then((r) => setMyRole(r.role)); }, []);
 
     useEffect(() => {
         getCashComplianceConfig().then((res) => {
@@ -428,8 +434,9 @@ export function DepositsContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) 
                                                                 </button>
                                                             </>
                                                         )}
-                                                        {d.status === 'Active' && Number(d.applied_amount || 0) === 0 && Number(d.refunded_amount || 0) === 0 && (
+                                                        {canEditDeposit && d.status === 'Active' && Number(d.applied_amount || 0) === 0 && Number(d.refunded_amount || 0) === 0 && (
                                                             <button onClick={() => openEditModal(d)}
+                                                                title="Edit deposit (Admin/Finance only)"
                                                                 className="px-2.5 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition flex items-center gap-1">
                                                                 <Pencil className="h-3 w-3" /> Edit
                                                             </button>

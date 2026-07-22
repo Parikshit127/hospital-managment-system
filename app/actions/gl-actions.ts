@@ -10,6 +10,14 @@ import {
   GST_CODE, GST_FALLBACK, round2,
 } from '@/app/lib/gl-income-head-map';
 
+function serialize<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data, (_, value) =>
+    typeof value === 'object' && value !== null && value.constructor?.name === 'Decimal'
+      ? Number(value)
+      : value
+  ));
+}
+
 // ========================================
 // Types & Interfaces
 // ========================================
@@ -89,7 +97,7 @@ export async function createGLAccount(data: GLAccountInput) {
     });
 
     revalidatePath('/finance/chart-of-accounts');
-    return { success: true, account };
+    return { success: true, account: serialize(account) };
   } catch (error) {
     console.error('Error creating GL account:', error);
     return { success: false, error: 'Failed to create account' };
@@ -114,7 +122,7 @@ export async function updateGLAccount(
     });
 
     revalidatePath('/finance/chart-of-accounts');
-    return { success: true, account };
+    return { success: true, account: serialize(account) };
   } catch (error) {
     console.error('Error updating GL account:', error);
     return { success: false, error: 'Failed to update account' };
@@ -137,7 +145,7 @@ export async function getGLAccounts(organizationId: string, filters?: {
       orderBy: { account_code: 'asc' },
     });
 
-    return { success: true, accounts };
+    return { success: true, accounts: serialize(accounts) };
   } catch (error) {
     console.error('Error fetching GL accounts:', error);
     return { success: false, error: 'Failed to fetch accounts', accounts: [] };
@@ -157,7 +165,7 @@ export async function getAccountHierarchy(organizationId: string) {
     // Build tree structure
     const rootAccounts = accounts.filter((acc: any) => !acc.parent_id);
 
-    return { success: true, accounts: rootAccounts };
+    return { success: true, accounts: serialize(rootAccounts) };
   } catch (error) {
     console.error('Error fetching account hierarchy:', error);
     return { success: false, error: 'Failed to fetch hierarchy', accounts: [] };
@@ -282,7 +290,7 @@ export async function createJournalEntry(data: CreateJournalEntryInput) {
     // a failed cache invalidation never rolls back an already-committed journal entry.
     try { revalidatePath('/finance/journal-entries'); } catch { /* non-critical */ }
     try { revalidatePath('/finance/gl-reports'); } catch { /* non-critical */ }
-    return { success: true, journal: result };
+    return { success: true, journal: serialize(result) };
   } catch (error) {
     console.error('Error creating journal entry:', error);
     return { success: false, error: 'Failed to create journal entry' };
@@ -372,7 +380,7 @@ export async function getJournalEntries(organizationId: string, filters?: {
       orderBy: { entry_date: 'desc' },
     });
 
-    return { success: true, entries };
+    return { success: true, entries: serialize(entries) };
   } catch (error) {
     console.error('Error fetching journal entries:', error);
     return { success: false, error: 'Failed to fetch entries', entries: [] };
@@ -393,7 +401,7 @@ export async function getJournalEntryDetails(journalId: string) {
       },
     });
 
-    return { success: true, journal };
+    return { success: true, journal: serialize(journal) };
   } catch (error) {
     console.error('Error fetching journal details:', error);
     return { success: false, error: 'Failed to fetch journal details' };
@@ -432,7 +440,7 @@ export async function postInvoiceToGL(invoiceId: number) {
     });
 
     if (existingEntry) {
-      return { success: true, message: 'Invoice already posted to GL', journal: existingEntry };
+      return { success: true, message: 'Invoice already posted to GL', journal: serialize(existingEntry) };
     }
 
     const orgId = invoice.organizationId;
@@ -556,7 +564,7 @@ export async function postPaymentToGL(paymentId: number) {
     });
 
     if (existingEntry) {
-      return { success: true, message: 'Payment already posted to GL', journal: existingEntry };
+      return { success: true, message: 'Payment already posted to GL', journal: serialize(existingEntry) };
     }
 
     // Get accounts based on payment method
@@ -642,7 +650,7 @@ export async function postExpenseToGL(expenseId: number) {
     });
 
     if (existingEntry) {
-      return { success: true, message: 'Expense already posted to GL', journal: existingEntry };
+      return { success: true, message: 'Expense already posted to GL', journal: serialize(existingEntry) };
     }
 
     // Resolve the ledger account from the expense's category; fall back to the
@@ -712,7 +720,7 @@ export async function postExpensePaymentToGL(expenseId: number, paymentMethod: s
       },
     });
     if (existingPaymentEntry) {
-      return { success: true, message: 'Expense payment already posted to GL', journal: existingPaymentEntry };
+      return { success: true, message: 'Expense payment already posted to GL', journal: serialize(existingPaymentEntry) };
     }
 
     const payableAccount = await getAccountByCode(expense.organizationId, '3110'); // Vendors Payable
@@ -883,7 +891,7 @@ export async function getAccountBalance(accountId: string, asOfDate?: Date) {
       return {
         success: true,
         balance: account.current_balance.toNumber(),
-        account,
+        account: serialize(account),
       };
     }
 
@@ -910,7 +918,7 @@ export async function getAccountBalance(accountId: string, asOfDate?: Date) {
       }
     }
 
-    return { success: true, balance, account };
+    return { success: true, balance, account: serialize(account) };
   } catch (error) {
     console.error('Error getting account balance:', error);
     return { success: false, error: 'Failed to get balance' };
@@ -1061,9 +1069,9 @@ export async function getBalanceSheet(organizationId: string, filters?: {
     return {
       success: true,
       balance_sheet: {
-        assets,
-        liabilities,
-        equity,
+        assets: serialize(assets),
+        liabilities: serialize(liabilities),
+        equity: serialize(equity),
         total_assets: totalAssets,
         total_liabilities: totalLiabilities,
         total_equity: totalEquity,
@@ -1136,8 +1144,8 @@ export async function getProfitLossStatement(organizationId: string, filters?: {
     return {
       success: true,
       profit_loss: {
-        revenue_accounts: revenueAccounts,
-        expense_accounts: expenseAccounts,
+        revenue_accounts: serialize(revenueAccounts),
+        expense_accounts: serialize(expenseAccounts),
         total_revenue: totalRevenue,
         total_expenses: totalExpenses,
         net_income: netIncome,
@@ -1210,7 +1218,7 @@ export async function getLedgerReport(accountId: string, filters?: {
 
     return {
       success: true,
-      account,
+      account: serialize(account),
       opening_balance: account.opening_balance.toNumber(),
       transactions,
       closing_balance: runningBalance,
@@ -1233,7 +1241,7 @@ export async function closePeriod(periodId: number) {
     });
 
     revalidatePath('/finance');
-    return { success: true, period };
+    return { success: true, period: serialize(period) };
   } catch (error) {
     console.error('Error closing period:', error);
     return { success: false, error: 'Failed to close period' };
@@ -1248,7 +1256,7 @@ export async function lockPeriod(periodId: number) {
     });
 
     revalidatePath('/finance');
-    return { success: true, period };
+    return { success: true, period: serialize(period) };
   } catch (error) {
     console.error('Error locking period:', error);
     return { success: false, error: 'Failed to lock period' };

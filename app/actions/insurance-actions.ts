@@ -981,7 +981,14 @@ export async function getProviderPerformance() {
     }
 }
 
-// Auto-submit claim for a specific invoice (finds patient's active policy and submits)
+// Auto-submit claim for a specific invoice (finds patient's active policy and submits).
+// Only job here is picking the policy + claim amount; everything else (period lock,
+// net-amount guard, invoice.tpa_claim_status sync, audit log) is delegated to
+// submitInsuranceClaim so the two paths can't drift out of sync again — a prior
+// version of this function wrote directly to insurance_claims and never touched
+// invoices.tpa_claim_status, so an "auto-submitted" invoice kept reappearing in the
+// Revenue Leakage list (which reads tpa_claim_status) and could be auto-submitted
+// again, risking duplicate claims.
 export async function autoSubmitClaim(invoiceId: number) {
     try {
         const { db } = await requireTenantContext();
@@ -998,27 +1005,12 @@ export async function autoSubmitClaim(invoiceId: number) {
         const claimAmount = Math.min(Number(invoice.net_amount), Number(policy.remaining_limit || 0));
         if (claimAmount <= 0) return { success: false, error: 'No remaining coverage available' };
 
-        const claim = await db.insurance_claims.create({
-            data: {
-                claim_number: generateClaimNumber(),
-                policy_id: policy.id,
-                invoice_id: invoiceId,
-                claimed_amount: claimAmount,
-                status: 'Submitted',
-            },
+        return await submitInsuranceClaim({
+            policy_id: policy.id,
+            invoice_id: invoiceId,
+            admission_id: invoice.admission_id ?? undefined,
+            claimed_amount: claimAmount,
         });
-
-        await db.system_audit_logs.create({
-            data: {
-                action: 'AUTO_SUBMIT_CLAIM',
-                module: 'insurance',
-                entity_type: 'claim',
-                entity_id: claim.claim_number,
-                details: JSON.stringify({ invoice_id: invoiceId, policy_id: policy.id, amount: claimAmount }),
-            },
-        });
-
-        return { success: true, data: serialize(claim) };
     } catch (error: any) {
         console.error('autoSubmitClaim error:', error);
         return { success: false, error: error.message };

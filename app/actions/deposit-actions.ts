@@ -1,6 +1,6 @@
 'use server';
 
-import { requireTenantContext } from '@/backend/tenant';
+import { requireTenantContext, requireRoleAndTenant } from '@/backend/tenant';
 import { generateDepositNumber as genDepNum } from '@/app/lib/sequence-generator';
 import { postDepositToGL } from './gl-actions';
 import {
@@ -358,7 +358,9 @@ export async function updateDeposit(
     reason: string,
 ) {
     try {
-        const { db, organizationId, session } = await requireTenantContext();
+        // Correcting a deposit after the fact is an Admin/Finance action — the
+        // front desk collects deposits but shouldn't be able to alter them post-hoc.
+        const { db, organizationId, session } = await requireRoleAndTenant(['admin', 'finance', 'superadmin']);
 
         if (!reason?.trim()) return { success: false, error: 'A reason for the correction is required.' };
 
