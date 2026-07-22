@@ -7,7 +7,7 @@
   },
   "scripts": {
     "prepare": "next-ws patch",
-    "predev": "node scripts/check-deps-sync.js && prisma generate",
+    "predev": "node scripts/install-hooks.js && node scripts/check-deps-sync.js && prisma generate",
     "dev": "next dev",
     "dev:clean": "npm run clean && npm run dev",
     "dev:fresh": "npm run clean && npm install && npm run dev",

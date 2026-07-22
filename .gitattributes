@@ -1,0 +1,7 @@
+# Shell scripts must keep LF endings. Git on Windows checks files out as CRLF by
+# default, and /bin/sh cannot run a script whose shebang line ends in CR — it
+# fails with "bad interpreter: /bin/sh^M". For a pre-commit hook that failure
+# mode is worse than having no hook at all, because a hook that errors blocks
+# every commit on that machine.
+.githooks/** text eol=lf
+*.sh text eol=lf

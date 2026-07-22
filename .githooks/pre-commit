@@ -1,0 +1,39 @@
+#!/bin/sh
+#
+# Refuse to commit unresolved merge-conflict markers.
+#
+# 3d48eca committed a `git stash pop` that had not been resolved. The markers
+# are a syntax error, so typecheck and `next build` both failed and main stayed
+# red until someone noticed. That is worse than a normal broken build here: the
+# deploy runs `npm ci` on the hospital's box BEFORE `npm run build`, so a commit
+# that cannot compile takes the server down with node_modules already replaced.
+#
+# Checks staged content, not the working tree, so a marker you have already
+# fixed but not staged does not block you.
+#
+# Genuine emergency: git commit --no-verify
+
+marker_re='^(<<<<<<<|>>>>>>>) '
+
+# Only ACM — a deleted file has no content to inspect. -z plus read -d keeps
+# paths with spaces intact.
+found=$(
+    git diff --cached --name-only --diff-filter=ACM -z |
+    while IFS= read -r -d '' file; do
+        # -I makes grep treat binary files as non-matching, so images and PDFs
+        # are skipped rather than producing noise.
+        if git show ":$file" 2>/dev/null | grep -IqE "$marker_re"; then
+            printf '  %s\n' "$file"
+        fi
+    done
+)
+
+if [ -n "$found" ]; then
+    printf '\n\033[31mCommit blocked: unresolved conflict markers staged.\033[0m\n\n'
+    printf '%s\n' "$found"
+    printf '\nResolve the conflict, `git add` the file, and commit again.\n'
+    printf 'To find them:  git diff --cached -U0 | grep -n "^+<<<<<<<\\|^+>>>>>>>"\n\n'
+    exit 1
+fi
+
+exit 0
