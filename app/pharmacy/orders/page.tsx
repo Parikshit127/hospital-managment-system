@@ -29,9 +29,12 @@ export default function PharmacyOrdersPage() {
         const q = searchQuery.toLowerCase();
         setFilteredOrders(orders.filter(o =>
             (o.patient?.full_name?.toLowerCase().includes(q)) ||
+            (o.requested_by_name?.toLowerCase().includes(q)) ||
             (o.doctor_id?.toLowerCase().includes(q))
         ));
     }, [searchQuery, orders]);
+
+    const pendingCount = orders.filter(o => o.status === 'Pending').length;
 
     const getStatusStyle = (status: string) => {
         switch (status) {
@@ -49,17 +52,22 @@ export default function PharmacyOrdersPage() {
             refreshing={refreshing}
         >
             <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
-                <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row gap-4 justify-between bg-gray-50/50">
+                <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row gap-4 sm:items-center justify-between bg-gray-50/50">
                     <div className="relative max-w-sm w-full">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input
                             type="text"
-                            placeholder="Search by patient name..."
+                            placeholder="Search by patient or doctor..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                         />
                     </div>
+                    <span className="inline-flex items-center gap-2 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg whitespace-nowrap self-start sm:self-auto">
+                        <ClipboardList className="h-3.5 w-3.5" />
+                        {pendingCount} pending
+                        {searchQuery && ` • ${filteredOrders.length} shown`}
+                    </span>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -134,7 +142,14 @@ export default function PharmacyOrdersPage() {
                                 <tr>
                                     <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                                         <Pill className="h-8 w-8 mx-auto text-gray-300 mb-2" />
-                                        <p className="font-medium">No pending pharmacy orders.</p>
+                                        {searchQuery ? (
+                                            <>
+                                                <p className="font-medium">No orders match &ldquo;{searchQuery}&rdquo;.</p>
+                                                <button onClick={() => setSearchQuery('')} className="mt-2 text-xs font-bold text-orange-600 hover:text-orange-700">Clear search</button>
+                                            </>
+                                        ) : (
+                                            <p className="font-medium">No pending pharmacy orders.</p>
+                                        )}
                                     </td>
                                 </tr>
                             )}

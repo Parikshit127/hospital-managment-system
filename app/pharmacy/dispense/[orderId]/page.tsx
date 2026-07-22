@@ -5,16 +5,29 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { Pill, CheckCircle, Search, ArrowLeft, Save, AlertTriangle, SlidersHorizontal, X, Loader2 } from 'lucide-react';
 import { getPharmacyOrderDetails, dispenseMedicine, checkInteractions, adjustStock } from '@/app/actions/pharmacy-actions';
 import { useParams, useRouter } from 'next/navigation';
+import { useToast } from '@/app/components/ui/Toast';
 import Link from 'next/link';
+
+// Stock available for a given batch_no within an item's available_batches.
+// Returns the item's total stock when no specific batch is selected yet.
+function batchStockFor(item: any): number {
+    if (item.batch_no && item.available_batches?.length) {
+        const b = item.available_batches.find((x: any) => x.batch_no === item.batch_no);
+        if (b) return Number(b.stock) || 0;
+    }
+    return Number(item.total_stock) || 0;
+}
 
 export default function DispensePage() {
     const params = useParams();
     const orderId = Number(params.orderId);
     const router = useRouter();
+    const toast = useToast();
 
     const [order, setOrder] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [checkingInteractions, setCheckingInteractions] = useState(false);
 
     const [dispenseList, setDispenseList] = useState<any[]>([]);
     const [interactions, setInteractions] = useState<any>(null);
@@ -29,7 +42,7 @@ export default function DispensePage() {
         e.preventDefault();
         if (!adjustStockItem || adjustStockQty === '') return;
         const targetQty = Number(adjustStockQty);
-        if (isNaN(targetQty) || targetQty < 0) return alert('Please enter a valid non-negative stock quantity');
+        if (isNaN(targetQty) || targetQty < 0) return toast.error('Please enter a valid non-negative stock quantity');
 
         setAdjustingStock(true);
         try {
@@ -40,10 +53,11 @@ export default function DispensePage() {
                 reason: adjustStockReason.trim() || 'Dispensing stock correction',
             });
             if (res.success) {
+                toast.success(`Stock updated for ${adjustStockItem.medicine_name}`);
                 setAdjustStockItem(null);
                 await loadOrder();
             } else {
-                alert(res.error || 'Failed to update stock');
+                toast.error(res.error || 'Failed to update stock');
             }
         } finally {
             setAdjustingStock(false);
@@ -55,20 +69,29 @@ export default function DispensePage() {
         const res = await getPharmacyOrderDetails(orderId);
         if (res.success && res.data) {
             setOrder(res.data);
-            // Pre-fill dispense list with asked quantities, but batch_no empty
-            setDispenseList(res.data.items.map((it: any) => ({
-                id: it.id,
-                // Carried so handleDispense can identify the medicine. Without one of
-                // these, dispenseMedicine can't resolve it and throws.
-                medicine_id: it.medicine_id,
-                medicine_name: it.medicine_name,
-                requested_qty: it.quantity_requested || it.quantity,
-                dispense_qty: it.quantity_requested || it.quantity,
-                batch_no: '',
-                instructions: it.instructions,
-                available_batches: it.available_batches || [],
-                total_stock: it.total_stock ?? 0,
-            })));
+            // Pre-fill dispense list with asked quantities and auto-pick a batch
+            // using FEFO (First-Expiry-First-Out) — the earliest-expiring batch that
+            // still has stock. This saves the pharmacist a manual selection on every
+            // line while following standard dispensing practice; they can still change it.
+            setDispenseList(res.data.items.map((it: any) => {
+                const batches = it.available_batches || [];
+                const fefoBatch = [...batches]
+                    .filter((b: any) => (Number(b.stock) || 0) > 0)
+                    .sort((a: any, b: any) => new Date(a.expiry).getTime() - new Date(b.expiry).getTime())[0];
+                return {
+                    id: it.id,
+                    // Carried so handleDispense can identify the medicine. Without one of
+                    // these, dispenseMedicine can't resolve it and throws.
+                    medicine_id: it.medicine_id,
+                    medicine_name: it.medicine_name,
+                    requested_qty: it.quantity_requested || it.quantity,
+                    dispense_qty: it.quantity_requested || it.quantity,
+                    batch_no: fefoBatch?.batch_no || '',
+                    instructions: it.instructions,
+                    available_batches: batches,
+                    total_stock: it.total_stock ?? 0,
+                };
+            }));
         }
         setLoading(false);
     };
@@ -77,18 +100,38 @@ export default function DispensePage() {
         if (orderId) loadOrder();
     }, [orderId]);
 
+    // Let Escape close the stock-correction modal, matching common modal UX.
+    useEffect(() => {
+        if (!adjustStockItem) return;
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setAdjustStockItem(null); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [adjustStockItem]);
+
     const handleInteractionCheck = async () => {
         const drugNames = dispenseList.map(item => item.medicine_name);
-        if (drugNames.length > 1) {
+        if (drugNames.length < 2) {
+            toast.info('At least two medicines are needed to check for interactions.');
+            return;
+        }
+        setCheckingInteractions(true);
+        try {
             const result = await checkInteractions(drugNames);
             if (result.success) setInteractions(result.data);
+            else toast.error('Could not check interactions. Please try again.');
+        } finally {
+            setCheckingInteractions(false);
         }
     };
 
     const handleDispense = async () => {
         // Validation
         for (const item of dispenseList) {
-            if (!item.batch_no) return alert('Please assign a batch number for all medicines');
+            if (!item.batch_no) return toast.error(`Assign a batch number for ${item.medicine_name}`);
+            if (!(Number(item.dispense_qty) > 0)) return toast.error(`Enter a dispense quantity for ${item.medicine_name}`);
+            if (Number(item.dispense_qty) > batchStockFor(item)) {
+                return toast.error(`Dispense quantity for ${item.medicine_name} exceeds available stock (${batchStockFor(item)})`);
+            }
         }
 
         setSaving(true);
@@ -107,11 +150,12 @@ export default function DispensePage() {
 
         const res = await dispenseMedicine(orderId, toDispense);
         if (res.success) {
+            toast.success('Medicines dispensed successfully');
             router.push('/pharmacy/orders');
         } else {
-            alert(res.error || 'Failed to dispense');
+            toast.error(res.error || 'Failed to dispense');
+            setSaving(false);
         }
-        setSaving(false);
     };
 
     if (loading) return <AppShell pageTitle="Loading"><div className="p-12 text-center">Loading...</div></AppShell>;
@@ -132,8 +176,9 @@ export default function DispensePage() {
                     <p className="text-sm font-medium text-gray-500 mb-4">Doctor: {order.doctor_id} • Ordered: {new Date(order.created_at).toLocaleString()}</p>
 
                     <div className="flex gap-4">
-                        <button onClick={handleInteractionCheck} className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg text-xs transition-colors border border-indigo-200">
-                            Check Drug Interactions
+                        <button onClick={handleInteractionCheck} disabled={checkingInteractions} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg text-xs transition-colors border border-indigo-200 disabled:opacity-50">
+                            {checkingInteractions && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                            {checkingInteractions ? 'Checking…' : 'Check Drug Interactions'}
                         </button>
                     </div>
 
@@ -225,16 +270,29 @@ export default function DispensePage() {
                                 </div>
                                 <div className="md:col-span-2">
                                     <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Dispense Qty</label>
-                                    <input
-                                        type="number"
-                                        value={item.dispense_qty}
-                                        onChange={(e) => {
-                                            const newList = [...dispenseList];
-                                            newList[index].dispense_qty = Number(e.target.value);
-                                            setDispenseList(newList);
-                                        }}
-                                        className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-orange-500"
-                                    />
+                                    {(() => {
+                                        const overStock = Number(item.dispense_qty) > batchStockFor(item);
+                                        return (
+                                            <>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    value={item.dispense_qty}
+                                                    onChange={(e) => {
+                                                        const newList = [...dispenseList];
+                                                        newList[index].dispense_qty = Number(e.target.value);
+                                                        setDispenseList(newList);
+                                                    }}
+                                                    className={`w-full px-3 py-1.5 bg-white border rounded-lg text-sm focus:outline-none ${overStock ? 'border-rose-400 focus:border-rose-500 text-rose-700' : 'border-gray-200 focus:border-orange-500'}`}
+                                                />
+                                                {overStock && (
+                                                    <p className="mt-1 text-[10px] font-bold text-rose-600 flex items-center gap-1">
+                                                        <AlertTriangle className="h-3 w-3" /> Only {batchStockFor(item)} in stock
+                                                    </p>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         ))}
@@ -249,7 +307,8 @@ export default function DispensePage() {
                             disabled={saving || order.status === 'Completed'}
                             className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white font-bold py-2 px-6 rounded-xl shadow-md transition-all disabled:opacity-50"
                         >
-                            <Save className="h-4 w-4" /> Complete & Dispense
+                            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                            {saving ? 'Dispensing…' : 'Complete & Dispense'}
                         </button>
                     </div>
                 </div>

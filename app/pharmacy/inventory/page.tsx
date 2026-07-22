@@ -6,6 +6,7 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { Package, Search, Plus, X, SlidersHorizontal, Pencil } from 'lucide-react';
 import { getInventoryPage, getInventoryCategories, addInventoryBatch, adjustStock, updateBatchDetails } from '@/app/actions/pharmacy-actions';
 import { useDebouncedValue } from '@/app/lib/hooks/useDebouncedValue';
+import { useToast } from '@/app/components/ui/Toast';
 
 const EMPTY_SUMMARY = { totalValue: 0, lowStockCount: 0, expiringSoonCount: 0, outOfStockCount: 0 };
 
@@ -22,6 +23,7 @@ function expiryClass(expiryDate: string | null) {
 }
 
 export default function PharmacyInventoryPage() {
+    const toast = useToast();
     const [rows, setRows] = useState<any[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -64,11 +66,12 @@ export default function PharmacyInventoryPage() {
                 reason: adjustReason.trim(),
             });
             if (res.success) {
+                toast.success('Stock adjusted');
                 setAdjustRow(null);
                 setAdjustQty('');
                 setAdjustReason('');
                 loadInventory();
-            } else alert(res.error || 'Failed to adjust stock');
+            } else toast.error(res.error || 'Failed to adjust stock');
         } finally {
             setAdjusting(false);
         }
@@ -104,9 +107,10 @@ export default function PharmacyInventoryPage() {
                 cost_price: editForm.cost_price ? Number(editForm.cost_price) : undefined,
             });
             if (res.success) {
+                toast.success('Batch updated');
                 setEditRow(null);
                 loadInventory();
-            } else alert(res.error || 'Failed to update batch');
+            } else toast.error(res.error || 'Failed to update batch');
         } finally {
             setEditing(false);
         }
@@ -141,6 +145,17 @@ export default function PharmacyInventoryPage() {
         getInventoryCategories().then(res => { if (res.success) setCategories(res.data as string[]); });
     }, []);
 
+    // Close any open modal with Escape.
+    useEffect(() => {
+        if (!modalOpen && !adjustRow && !editRow) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return;
+            setModalOpen(false); setAdjustRow(null); setEditRow(null);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [modalOpen, adjustRow, editRow]);
+
     useEffect(() => {
         setCursor(undefined);
         loadInventory();
@@ -160,9 +175,10 @@ export default function PharmacyInventoryPage() {
         };
         const res = await addInventoryBatch(payload);
         if (res.success) {
+            toast.success('Stock added');
             setModalOpen(false);
             loadInventory();
-        } else alert(res.error || 'Failed');
+        } else toast.error(res.error || 'Failed to add stock');
     };
 
     return (
