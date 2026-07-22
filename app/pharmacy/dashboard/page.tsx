@@ -5,7 +5,7 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import {
     Activity, Clock, AlertTriangle, IndianRupee, Bell, PackageOpen,
     TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Package,
-    Pill, BarChart3, Truck, RotateCcw, Shield
+    Pill, BarChart3, Truck, RotateCcw, Shield, CreditCard
 } from 'lucide-react';
 import { getPharmacyAnalytics } from '@/app/actions/pharmacy-actions';
 import { SkeletonCard } from '@/app/components/ui/Skeleton';
@@ -29,6 +29,7 @@ export default function PharmacyDashboardPage() {
         { label: 'Pending Orders', value: data.pendingOrders, sub: `${data.ordersCompleted30d} completed (30d)`, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', link: '/pharmacy/orders' },
         { label: 'Stock Value', value: `₹${Math.round(data.totalStockValue).toLocaleString('en-IN')}`, sub: `${data.outOfStockCount} out of stock`, icon: Package, color: 'text-blue-600', bg: 'bg-blue-50', link: '/pharmacy/inventory' },
         { label: 'Gross Margin', value: `${data.grossMarginPct}%`, sub: `30-day revenue: ₹${Math.round(data.revenue30d).toLocaleString('en-IN')}`, icon: TrendingUp, color: 'text-violet-600', bg: 'bg-violet-50', link: '/pharmacy/reports' },
+        { label: 'Total Outstanding', value: `₹${Math.round(data.pharmacyOutstanding ?? 0).toLocaleString('en-IN')}`, sub: `${data.pharmacyOutstandingCount ?? 0} unpaid pharma bill${(data.pharmacyOutstandingCount ?? 0) !== 1 ? 's' : ''} (excl. IPD)`, icon: CreditCard, color: 'text-rose-600', bg: 'bg-rose-50', link: '/pharmacy/billing' },
     ] : [];
 
     return (

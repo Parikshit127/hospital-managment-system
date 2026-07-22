@@ -3007,6 +3007,7 @@ export async function getPharmacyAnalytics() {
             pendingCount,
             returns30d,
             purchaseOrders30d,
+            pharmOutstandingRows,
         ] = await Promise.all([
             // Total stock value + low/out-of-stock counts in one SQL pass.
             db.$queryRaw<Array<{ total_stock_value: number; low_stock_count: bigint; out_of_stock_count: bigint }>>`
@@ -3096,6 +3097,20 @@ export async function getPharmacyAnalytics() {
                 select: { id: true, total_amount: true },
                 take: 500,
             }),
+            // Pharmacy-only outstanding: standalone PHARMACY invoices with balance > 0
+            // This intentionally excludes IPD invoices (admission_id IS NOT NULL)
+            // so the dashboard shows only meds billed from the pharmacy portal.
+            db.$queryRaw<Array<{ outstanding: number; count: bigint }>>`
+                SELECT
+                    COALESCE(SUM(GREATEST(balance_due::numeric, 0)), 0)::float AS outstanding,
+                    COUNT(*)::bigint AS count
+                FROM "invoices"
+                WHERE "organizationId" = ${organizationId}
+                  AND invoice_type IN ('Pharmacy', 'PHARMACY')
+                  AND admission_id IS NULL
+                  AND status NOT IN ('Cancelled', 'Paid')
+                  AND balance_due > 0
+            `,
         ]);
 
         // -- Revenue metrics --
@@ -3184,6 +3199,10 @@ export async function getPharmacyAnalytics() {
 
                 // Orders
                 ordersCompleted30d: completedOrders30d.length,
+
+                // Pharmacy-only outstanding (OPD/standalone pharma invoices only — no IPD)
+                pharmacyOutstanding: Number((pharmOutstandingRows as any[])[0]?.outstanding || 0),
+                pharmacyOutstandingCount: Number((pharmOutstandingRows as any[])[0]?.count || 0),
             }
         };
     } catch (error) {
@@ -3974,10 +3993,10 @@ export async function adjustStock(data: {
                     medicine_id: medicine.id,
                     batch_no: batch.batch_no,
                     batch_id: batch.id,
-                    quantity_in: data.adjustment_qty > 0 ? data.adjustment_qty : 0,
-                    quantity_out: data.adjustment_qty < 0 ? Math.abs(data.adjustment_qty) : 0,
-                    balance: (lastEntry?.balance || 0) + data.adjustment_qty,
-                    transaction_type: data.adjustment_qty > 0 ? 'IN' : 'OUT',
+                    quantity_in: adjQty > 0 ? adjQty : 0,
+                    quantity_out: adjQty < 0 ? Math.abs(adjQty) : 0,
+                    balance: (lastEntry?.balance || 0) + adjQty,
+                    transaction_type: adjQty > 0 ? 'IN' : 'OUT',
                     source_type: 'ADJUSTMENT',
                     notes: `Stock adjustment: ${data.reason}`,
                 }
