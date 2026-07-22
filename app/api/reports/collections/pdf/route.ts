@@ -114,10 +114,10 @@ export async function GET(req: NextRequest) {
             orderBy: { created_at: 'asc' }
         });
 
-        // Enrich refunds with the ORIGINAL payment's tender + patient details.
-        // A refund is paid back through the same channel it was received, so its
-        // mode follows the linked payment's payment_method (not a hardcoded Cash),
-        // and the patient name/MRN come from the linked invoice.
+        // Enrich refunds with patient details. Prefer the tender staff actually
+        // recorded when processing the refund; for legacy refunds (recorded before
+        // that field existed) fall back to the linked payment's original tender,
+        // then Cash. Patient name/MRN come from the linked invoice.
         const refundPaymentIds = [...new Set(
             refunds.map(r => Number(r.payment_id)).filter(n => Number.isFinite(n))
         )];
@@ -306,9 +306,7 @@ export async function GET(req: NextRequest) {
             const cashierName = userMap.get(cashierUser.toLowerCase()) || cashierUser;
             const linkedPayment = refundPaymentMap.get(String(r.payment_id)) || null;
             const linkedInvoice = linkedPayment?.invoice || refundInvoiceMap.get(String(r.invoice_id)) || null;
-            // The hospital pays every refund out as a bank transfer, so refunds are
-            // always reported under NEFT/RTGS regardless of the original tender.
-            const mode = 'NEFT/RTGS';
+            const mode = canonicalTender((r as any).payment_method || linkedPayment?.payment_method || 'Cash');
             const patientName = linkedInvoice?.patient?.full_name || 'Refund Payout';
             const patientId = linkedInvoice?.patient?.patient_id || '-';
             const dept = linkedInvoice ? getDept(linkedInvoice.invoice_type || 'OPD') : 'OP/ER';

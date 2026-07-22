@@ -45,7 +45,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
         const total = items.reduce((s, i) => s + i.amount, 0);
         const byCategory: Record<string, number> = {};
         for (const i of items) byCategory[i.category] = (byCategory[i.category] || 0) + i.amount;
-        const packageName = admPkg?.package?.package_name || '';
+        const packageName = admPkg?.applied_package_name || admPkg?.package?.package_name || '';
         const packageAmount = admPkg ? Number(admPkg.applied_amount) : 0;
 
         const rows = items.map((i, idx) => `

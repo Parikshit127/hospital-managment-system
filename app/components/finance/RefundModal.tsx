@@ -86,6 +86,7 @@ export function RefundModal({
     // Refund form
     const [amount, setAmount] = useState("");
     const [reason, setReason] = useState("");
+    const [method, setMethod] = useState("Cash");
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<{ receipt_number: string } | null>(null);
@@ -98,6 +99,7 @@ export function RefundModal({
         setSelectedPayment(null);
         setAmount("");
         setReason("");
+        setMethod("Cash");
         if (initialPatient) {
             setPatient(initialPatient);
             setStep("receipt");
@@ -148,10 +150,13 @@ export function RefundModal({
 
     const refundable = selectedPayment?.pay.refundable_amount || 0;
 
+    const REFUND_METHODS = ["Cash", "Card", "UPI", "Bank", "NEFT_RTGS", "Cheque", "Online"];
+
     function selectPayment(inv: InvoiceRow, pay: PaymentRow) {
         setSelectedPayment({ inv, pay });
         setAmount(pay.refundable_amount.toString());
         setReason("");
+        setMethod(REFUND_METHODS.includes(pay.payment_method) ? pay.payment_method : "Cash");
         setError(null);
         setStep("confirm");
     }
@@ -178,6 +183,7 @@ export function RefundModal({
             payment_id: selectedPayment.pay.id,
             amount: amt,
             reason: reason.trim(),
+            payment_method: method,
         });
         setSubmitting(false);
         if (!res.success) {
@@ -403,6 +409,21 @@ export function RefundModal({
                                     onChange={(e) => setAmount(e.target.value)}
                                     className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:border-rose-400 focus:ring-2 focus:ring-rose-400/10 outline-none"
                                 />
+                            </div>
+
+                            <div>
+                                <label className="block text-[11px] uppercase tracking-widest font-bold text-gray-500 mb-1">
+                                    Refund paid back via
+                                </label>
+                                <select
+                                    value={method}
+                                    onChange={(e) => setMethod(e.target.value)}
+                                    className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:border-rose-400 focus:ring-2 focus:ring-rose-400/10 outline-none"
+                                >
+                                    {REFUND_METHODS.map((m) => (
+                                        <option key={m} value={m}>{m === "NEFT_RTGS" ? "NEFT/RTGS" : m}</option>
+                                    ))}
+                                </select>
                             </div>
 
                             <div>

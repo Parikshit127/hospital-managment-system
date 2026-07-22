@@ -9,6 +9,7 @@ import {
   listLabTests, createLabTest, updateLabTest, deleteLabTest,
   listPackages, createPackage, updatePackage, deletePackage,
   listPackageTpaRates, bulkUpsertPackageTpaRates,
+  createExclusivePackage, updateExclusivePackage, deleteExclusivePackage,
   listRadiologyImaging, createRadiologyImaging, updateRadiologyImaging, deleteRadiologyImaging,
   exportRadiologyImaging,
 } from '@/app/actions/service-master-actions';
@@ -96,13 +97,21 @@ export default function ServiceMasterPage() {
   const [pkgView, setPkgView] = useState<'list' | 'tpa_rates'>('list');
   const [tpaProviders, setTpaProviders] = useState<{ id: number; provider_name: string; provider_code?: string | null }[]>([]);
   const [tpaRateProviderId, setTpaRateProviderId] = useState<number | ''>('');
-  const [tpaRateRows, setTpaRateRows] = useState<{ package_id: number; package_code: string; package_name: string; total_amount: number; tpa_amount: number | null }[]>([]);
-  const [tpaRateEdits, setTpaRateEdits] = useState<Record<number, string>>({}); // package_id -> raw input value
+  const [tpaRateRows, setTpaRateRows] = useState<{ package_id: number; package_code: string; package_name: string; total_amount: number; tpa_amount: number | null; tpa_package_name: string | null }[]>([]);
+  const [tpaRateEdits, setTpaRateEdits] = useState<Record<number, string>>({}); // package_id -> raw rate input value
+  const [tpaNameEdits, setTpaNameEdits] = useState<Record<number, string>>({}); // package_id -> raw TPA name input value
   const [tpaRateLoading, setTpaRateLoading] = useState(false);
   const [tpaRateSaving, setTpaRateSaving] = useState(false);
   const [tpaRateExporting, setTpaRateExporting] = useState(false);
   const [tpaRateImporting, setTpaRateImporting] = useState(false);
   const tpaRateFileRef = useRef<HTMLInputElement>(null);
+
+  // ---- Exclusive packages (belong to one TPA only) ----
+  const [tpaExclusiveRows, setTpaExclusiveRows] = useState<{ id: number; package_code: string; package_name: string; total_amount: number; validity_days?: number; description?: string | null }[]>([]);
+  const [excPkgMode, setExcPkgMode] = useState<'idle' | 'create' | 'edit'>('idle');
+  const [excPkgEditingId, setExcPkgEditingId] = useState<number | null>(null);
+  const [excPkgForm, setExcPkgForm] = useState({ package_code: '', package_name: '', total_amount: 0, validity_days: 7, description: '' });
+  const [excPkgSubmitting, setExcPkgSubmitting] = useState(false);
 
   // ---- Radiology/Imaging state ----
   const [radRows, setRadRows] = useState<any[]>([]);
@@ -208,8 +217,11 @@ export default function ServiceMasterPage() {
     setTpaRateLoading(true);
     const res = await listPackageTpaRates(providerId);
     if (res.success) {
-      setTpaRateRows((res.data as any[]) || []);
+      const data = res.data as any;
+      setTpaRateRows(data?.rows || []);
+      setTpaExclusiveRows(data?.exclusivePackages || []);
       setTpaRateEdits({});
+      setTpaNameEdits({});
     } else {
       toast.error(res.error || 'Failed to load TPA rates');
     }
@@ -385,20 +397,31 @@ export default function ServiceMasterPage() {
   };
 
   // ---- TPA Rates handlers ----
-  const tpaRateEditCount = Object.keys(tpaRateEdits).length;
+  const tpaRateEditCount = new Set([...Object.keys(tpaRateEdits), ...Object.keys(tpaNameEdits)]).size;
 
   const setTpaRateEdit = (packageId: number, raw: string) => {
     setTpaRateEdits(prev => ({ ...prev, [packageId]: raw }));
+  };
+  const setTpaNameEdit = (packageId: number, raw: string) => {
+    setTpaNameEdits(prev => ({ ...prev, [packageId]: raw }));
   };
 
   const saveTpaRates = async () => {
     if (tpaRateProviderId === '' || tpaRateEditCount === 0) return;
     setTpaRateSaving(true);
     try {
-      const rates = Object.entries(tpaRateEdits).map(([packageIdStr, raw]) => ({
-        package_id: Number(packageIdStr),
-        tpa_amount: raw.trim() === '' ? null : Number(raw),
-      }));
+      const packageIds = new Set([...Object.keys(tpaRateEdits), ...Object.keys(tpaNameEdits)].map(Number));
+      const byId = new Map(tpaRateRows.map(r => [r.package_id, r]));
+      const rates = Array.from(packageIds).map(packageId => {
+        const row = byId.get(packageId);
+        const rawAmount = tpaRateEdits[packageId] ?? (row?.tpa_amount != null ? String(row.tpa_amount) : '');
+        const rawName = tpaNameEdits[packageId] ?? (row?.tpa_package_name || '');
+        return {
+          package_id: packageId,
+          tpa_amount: rawAmount.trim() === '' ? null : Number(rawAmount),
+          tpa_package_name: rawName.trim() === '' ? null : rawName.trim(),
+        };
+      });
       const res = await bulkUpsertPackageTpaRates(Number(tpaRateProviderId), rates);
       if (res.success) {
         toast.success(`Saved ${(res.data as any).upserted} rate(s)`);
@@ -413,6 +436,54 @@ export default function ServiceMasterPage() {
     }
   };
 
+  // ---- Exclusive package handlers ----
+  const openCreateExcPkg = () => { setExcPkgForm({ package_code: '', package_name: '', total_amount: 0, validity_days: 7, description: '' }); setExcPkgEditingId(null); setExcPkgMode('create'); };
+  const openEditExcPkg = (row: any) => {
+    setExcPkgEditingId(row.id);
+    setExcPkgForm({
+      package_code: row.package_code, package_name: row.package_name,
+      total_amount: Number(row.total_amount ?? 0), validity_days: Number(row.validity_days ?? 7),
+      description: row.description || '',
+    });
+    setExcPkgMode('edit');
+  };
+  const closeExcPkg = () => { setExcPkgMode('idle'); setExcPkgEditingId(null); };
+
+  const submitExcPkg = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (tpaRateProviderId === '') return;
+    setExcPkgSubmitting(true);
+    try {
+      const payload = {
+        ...excPkgForm,
+        total_amount: Number(excPkgForm.total_amount),
+        validity_days: Number(excPkgForm.validity_days),
+      };
+      const res = excPkgMode === 'create'
+        ? await createExclusivePackage(Number(tpaRateProviderId), payload)
+        : await updateExclusivePackage(excPkgEditingId!, payload);
+      if (res.success) {
+        toast.success(excPkgMode === 'create' ? 'Exclusive package created' : 'Exclusive package updated');
+        closeExcPkg();
+        await loadTpaRates(Number(tpaRateProviderId));
+      } else {
+        toast.error(res.error || 'Failed to save package');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Network error — please check server status');
+    } finally {
+      setExcPkgSubmitting(false);
+    }
+  };
+
+  const deleteExcPkgHandler = async (id: number) => {
+    if (tpaRateProviderId === '') return;
+    if (!confirm('Permanently delete this exclusive package? This cannot be undone.')) return;
+    const res = await deleteExclusivePackage(id);
+    if (res.success) { toast.success('Package deleted'); await loadTpaRates(Number(tpaRateProviderId)); }
+    else toast.error(res.error || 'Failed to delete');
+  };
+
   // Export the current provider's rate sheet to .xlsx. Columns mirror the
   // import format 1:1 (Package Code / Package Name / Cash Rate / TPA Rate) so
   // an exported file can be edited offline and re-imported without remapping.
@@ -421,7 +492,7 @@ export default function ServiceMasterPage() {
     setTpaRateExporting(true);
     try {
       const provider = tpaProviders.find(p => p.id === Number(tpaRateProviderId));
-      const headers = ['Package Code', 'Package Name', 'Cash Rate', 'TPA Rate'];
+      const headers = ['Package Code', 'Package Name', 'Cash Rate', 'TPA Rate', 'TPA Package Name'];
       const data = tpaRateRows.map(r => ({
         'Package Code': r.package_code,
         'Package Name': r.package_name,
@@ -431,6 +502,9 @@ export default function ServiceMasterPage() {
         'TPA Rate': tpaRateEdits[r.package_id] !== undefined
           ? (tpaRateEdits[r.package_id].trim() === '' ? '' : Number(tpaRateEdits[r.package_id]))
           : (r.tpa_amount != null ? Number(r.tpa_amount) : ''),
+        'TPA Package Name': tpaNameEdits[r.package_id] !== undefined
+          ? tpaNameEdits[r.package_id]
+          : (r.tpa_package_name || ''),
       }));
       const ws = XLSX.utils.json_to_sheet(data, { header: headers });
       ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 16) }));
@@ -475,7 +549,8 @@ export default function ServiceMasterPage() {
       if (rows.length === 0) throw new Error('The uploaded file contains no data rows');
 
       const byCode = new Map(tpaRateRows.map(r => [r.package_code.trim().toLowerCase(), r]));
-      const edits: Record<number, string> = {};
+      const rateEdits: Record<number, string> = {};
+      const nameEdits: Record<number, string> = {};
       const errors: string[] = [];
       let matched = 0;
 
@@ -493,7 +568,8 @@ export default function ServiceMasterPage() {
           errors.push(`Row ${rowNum}: "${rawRate}" is not a valid TPA Rate`);
           return;
         }
-        edits[pkg.package_id] = rawRate;
+        rateEdits[pkg.package_id] = rawRate;
+        nameEdits[pkg.package_id] = String(row['TPA Package Name'] ?? '').trim();
         matched += 1;
       });
 
@@ -508,9 +584,10 @@ export default function ServiceMasterPage() {
       // Stage the matches as pending edits, then save immediately — mirrors the
       // manual-edit flow (edits state -> saveTpaRates) rather than a separate
       // import codepath, so the same bulk-upsert action and audit log apply.
-      const rates = Object.entries(edits).map(([packageIdStr, raw]) => ({
+      const rates = Object.entries(rateEdits).map(([packageIdStr, raw]) => ({
         package_id: Number(packageIdStr),
         tpa_amount: raw.trim() === '' ? null : Number(raw),
+        tpa_package_name: nameEdits[Number(packageIdStr)]?.trim() || null,
       }));
       setTpaRateSaving(true);
       const res = await bulkUpsertPackageTpaRates(Number(tpaRateProviderId), rates);
@@ -1133,6 +1210,12 @@ export default function ServiceMasterPage() {
                       onChange={e => { const f = e.target.files?.[0]; if (f) importTpaRates(f); }}
                     />
                     <button
+                      onClick={openCreateExcPkg}
+                      className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 border border-blue-200 bg-blue-50 rounded-xl hover:bg-blue-100"
+                    >
+                      <Plus className="h-4 w-4" /> Add Package
+                    </button>
+                    <button
                       onClick={exportTpaRates}
                       disabled={tpaRateLoading || tpaRateRows.length === 0 || tpaRateExporting}
                       className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-50 disabled:opacity-50"
@@ -1163,20 +1246,50 @@ export default function ServiceMasterPage() {
               {tpaRateProviderId === '' ? (
                 <div className="text-center py-16 text-gray-400 text-sm">Select a provider to view or edit its package rates.</div>
               ) : (
+                <>
+                {tpaExclusiveRows.length > 0 && (
+                  <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-gray-200 bg-amber-50 text-[11px] font-bold text-amber-700 uppercase tracking-wide">
+                      Exclusive packages — only offered to this TPA
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-200 bg-gray-50/80">
+                          {['Code', 'Name', 'Rate', ''].map(h => (
+                            <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {tpaExclusiveRows.map(r => (
+                          <tr key={r.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 font-mono text-xs text-gray-600">{r.package_code}</td>
+                            <td className="px-4 py-3 font-semibold text-gray-900">{r.package_name}</td>
+                            <td className="px-4 py-3 text-gray-600">₹{Number(r.total_amount).toFixed(2)}</td>
+                            <td className="px-4 py-3 flex gap-2">
+                              <button onClick={() => openEditExcPkg(r)} className="p-1.5 hover:bg-gray-100 rounded-lg"><Pencil className="h-4 w-4 text-blue-600" /></button>
+                              <button onClick={() => deleteExcPkgHandler(r.id)} className="p-1.5 hover:bg-red-50 rounded-lg" title="Delete permanently"><Trash2 className="h-4 w-4 text-red-500" /></button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
                 <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-200 bg-gray-50/80">
-                        {['Code', 'Name', 'Cash Rate', 'TPA Rate'].map(h => (
+                        {['Code', 'Name', 'Cash Rate', 'TPA Rate', 'TPA Name'].map(h => (
                           <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {tpaRateLoading ? (
-                        <tr><td colSpan={4} className="text-center py-16"><Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" /></td></tr>
+                        <tr><td colSpan={5} className="text-center py-16"><Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" /></td></tr>
                       ) : tpaRateRows.length === 0 ? (
-                        <tr><td colSpan={4} className="text-center py-12 text-gray-400">No active packages found</td></tr>
+                        <tr><td colSpan={5} className="text-center py-12 text-gray-400">No active packages found</td></tr>
                       ) : tpaRateRows.map(r => (
                         <tr key={r.package_id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 font-mono text-xs text-gray-600">{r.package_code}</td>
@@ -1191,11 +1304,22 @@ export default function ServiceMasterPage() {
                               className="w-32 p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                             />
                           </td>
+                          <td className="px-4 py-3">
+                            <input
+                              type="text"
+                              value={tpaNameEdits[r.package_id] ?? (r.tpa_package_name || '')}
+                              onChange={e => setTpaNameEdit(r.package_id, e.target.value)}
+                              placeholder={r.package_name}
+                              maxLength={100}
+                              className="w-40 p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                            />
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
             </div>
           ) : (
@@ -1245,7 +1369,14 @@ export default function ServiceMasterPage() {
                 ) : pkgRows.map(r => (
                   <tr key={r.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono text-xs text-gray-600">{r.package_code}</td>
-                    <td className="px-4 py-3 font-semibold text-gray-900">{r.package_name}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-900">
+                      {r.package_name}
+                      {r.exclusive_provider && (
+                        <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                          {r.exclusive_provider.provider_name} only
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-gray-600">₹{Number(r.total_amount).toFixed(2)}</td>
                     <td className="px-4 py-3 text-gray-600">{r.validity_days}</td>
                     <td className="px-4 py-3">
@@ -1254,8 +1385,14 @@ export default function ServiceMasterPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 flex gap-2">
-                      <button onClick={() => openEditPkg(r)} className="p-1.5 hover:bg-gray-100 rounded-lg"><Pencil className="h-4 w-4 text-blue-600" /></button>
-                      <button onClick={() => deletePkgHandler(r.id)} className="p-1.5 hover:bg-red-50 rounded-lg" title="Delete permanently"><Trash2 className="h-4 w-4 text-red-500" /></button>
+                      {r.exclusive_provider ? (
+                        <span className="text-[10px] text-gray-400 italic px-1.5 py-1.5">Manage in TPA Rates</span>
+                      ) : (
+                        <>
+                          <button onClick={() => openEditPkg(r)} className="p-1.5 hover:bg-gray-100 rounded-lg"><Pencil className="h-4 w-4 text-blue-600" /></button>
+                          <button onClick={() => deletePkgHandler(r.id)} className="p-1.5 hover:bg-red-50 rounded-lg" title="Delete permanently"><Trash2 className="h-4 w-4 text-red-500" /></button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1371,6 +1508,62 @@ export default function ServiceMasterPage() {
             </div>
           )}
           </>
+          )}
+
+          {excPkgMode !== 'idle' && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-lg max-h-[90vh] overflow-y-auto">
+                <h2 className="text-lg font-bold mb-1">{excPkgMode === 'create' ? 'Add Exclusive Package' : 'Edit Exclusive Package'}</h2>
+                <p className="text-xs text-gray-500 mb-4">
+                  Only visible to {tpaProviders.find(p => p.id === Number(tpaRateProviderId))?.provider_name || 'this provider'}.
+                </p>
+                <form onSubmit={submitExcPkg} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Package Code *</label>
+                    <input type="text" required value={excPkgForm.package_code}
+                      onChange={e => setExcPkgForm(p => ({ ...p, package_code: e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 30) }))}
+                      maxLength={30}
+                      pattern="[A-Z0-9_-]{2,30}"
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Package Name *</label>
+                    <input type="text" required value={excPkgForm.package_name}
+                      onChange={e => setExcPkgForm(p => ({ ...p, package_name: sanitizeText(e.target.value) }))}
+                      maxLength={100}
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">Rate (₹) *</label>
+                      <input type="number" required min={0} step="0.01" value={excPkgForm.total_amount}
+                        onChange={e => setExcPkgForm(p => ({ ...p, total_amount: Number(sanitizeMoney(e.target.value)) }))}
+                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">Validity (days)</label>
+                      <input type="number" min={1} value={excPkgForm.validity_days}
+                        onChange={e => setExcPkgForm(p => ({ ...p, validity_days: Number(sanitizeInteger(e.target.value) || '1') }))}
+                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Description</label>
+                    <textarea rows={2} value={excPkgForm.description}
+                      onChange={e => setExcPkgForm(p => ({ ...p, description: e.target.value }))}
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none" />
+                  </div>
+                  <div className="flex gap-3 mt-2">
+                    <button type="button" onClick={closeExcPkg}
+                      className="flex-1 py-2 px-4 border border-gray-300 rounded-lg text-gray-700 font-semibold hover:bg-gray-50">Cancel</button>
+                    <button type="submit" disabled={excPkgSubmitting}
+                      className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">
+                      {excPkgSubmitting ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
           )}
         </>
       )}

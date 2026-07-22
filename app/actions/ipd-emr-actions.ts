@@ -400,7 +400,7 @@ export async function checkVisitBillability(admissionId: string, doctorId: strin
             // Package inclusions stored in JSON — check for visit_count field
             const inclusions = pkg.inclusions as Record<string, unknown> | null;
             includedVisits = (inclusions?.visit_count as number) || 0;
-            packageName = pkg.package_name;
+            packageName = admissionPackage.applied_package_name || pkg.package_name;
         }
 
         const billableVisits = Math.max(0, totalVisits - includedVisits);

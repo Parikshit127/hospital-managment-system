@@ -5,6 +5,15 @@ import { notifyPatient } from '@/app/lib/notify-patient';
 import OpenAI from 'openai';
 import { generateInvoiceNumber as genInvNum } from '@/app/lib/sequence-generator';
 
+// Rounds to 2 decimals (paise) so balance_due/net_amount never persist with
+// float residue (e.g. 9e-13) from summing invoice_items / subtracting
+// paid_amount — that residue makes a fully-paid bill look "> 0" outstanding
+// in reports like A/R Aging.
+function round2(n: number): number {
+    const r = Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+    return Object.is(r, -0) ? 0 : r;
+}
+
 export async function dischargePatient(patientId: string) {
     try {
         const { db, organizationId } = await requireTenantContext();
@@ -164,22 +173,22 @@ export async function processDischarge(patientId: string, patientName: string, n
                 const allItems = await db.invoice_items.findMany({
                     where: { invoice_id: invoice.id },
                 });
-                const recalcTotal = allItems.reduce(
+                const recalcTotal = round2(allItems.reduce(
                     (sum: number, it: any) => sum + Number(it.net_price || it.total_price || 0),
                     0,
-                );
+                ));
                 const alreadyPaid = await db.payments.aggregate({
                     where: { invoice_id: invoice.id, status: 'Completed' },
                     _sum: { amount: true },
                 });
-                const paidAmount = Number(alreadyPaid._sum?.amount || 0);
+                const paidAmount = round2(Number(alreadyPaid._sum?.amount || 0));
 
                 await db.invoices.update({
                     where: { id: invoice.id },
                     data: {
                         total_amount: recalcTotal,
                         net_amount: recalcTotal,
-                        balance_due: Math.max(0, recalcTotal - paidAmount),
+                        balance_due: Math.max(0, round2(recalcTotal - paidAmount)),
                         status: 'Final',
                         finalized_at: new Date(),
                     }

@@ -117,7 +117,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
             </table>
 
             <div class="summary">
-                <div><span>Package</span><strong>${escapeHtml(admPkg.package?.package_name || '')}</strong></div>
+                <div><span>Package</span><strong>${escapeHtml(admPkg.applied_package_name || admPkg.package?.package_name || '')}</strong></div>
                 <div><span>Package Amount (billed / claimed)</span><strong>${inr(packageAmount)}</strong></div>
                 <div><span>Services consumed under package</span><strong>${inr(consumedTotal)} (${utilizationPct}%)</strong></div>
                 <div><span>Margin / headroom</span><strong>${inr(roundMoney(packageAmount - consumedTotal))}</strong></div>

@@ -16,6 +16,16 @@ function formatIsoDate(d: Date): string {
     return d.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
+// Rounds to 2 decimals (paise). Summing many invoice_items in JS floats and
+// subtracting paid_amount can leave balance_due/net_amount with residue like
+// 9e-13 instead of an exact 0 — round before persisting so downstream `> 0`
+// balance filters (e.g. the A/R Aging report) don't treat fully-paid bills
+// as still outstanding.
+function round2(n: number): number {
+    const r = Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+    return Object.is(r, -0) ? 0 : r;
+}
+
 /**
  * Extract a canonical YYYY-MM-DD key from an invoice item description,
  * regardless of the format the description uses.
@@ -359,12 +369,12 @@ export async function ensureIPDRoomChargesAccrued(admissionId: string) {
 
         // Recalculate invoice totals
         const items = await db.invoice_items.findMany({ where: { invoice_id: invoice.id } });
-        const totalDiscount = items.reduce((s: number, it: any) => s + Number(it.discount || 0), 0);
-        const totalTax = items.reduce((s: number, it: any) => s + Number(it.tax_amount || 0), 0);
-        const totalPrice = items.reduce((s: number, it: any) => s + Number(it.total_price || 0), 0);
-        const totalNet = items.reduce((s: number, it: any) => s + Number(it.net_price || 0), 0);
-        const netAmount = totalNet + totalTax;
-        const paid = Number(invoice.paid_amount || 0);
+        const totalDiscount = round2(items.reduce((s: number, it: any) => s + Number(it.discount || 0), 0));
+        const totalTax = round2(items.reduce((s: number, it: any) => s + Number(it.tax_amount || 0), 0));
+        const totalPrice = round2(items.reduce((s: number, it: any) => s + Number(it.total_price || 0), 0));
+        const totalNet = round2(items.reduce((s: number, it: any) => s + Number(it.net_price || 0), 0));
+        const netAmount = round2(totalNet + totalTax);
+        const paid = round2(Number(invoice.paid_amount || 0));
 
         await db.invoices.update({
             where: { id: invoice.id },
@@ -373,9 +383,9 @@ export async function ensureIPDRoomChargesAccrued(admissionId: string) {
                 total_discount: totalDiscount,
                 total_tax: totalTax,
                 net_amount: netAmount,
-                cgst_amount: totalTax / 2,
-                sgst_amount: totalTax / 2,
-                balance_due: netAmount - paid,
+                cgst_amount: round2(totalTax / 2),
+                sgst_amount: round2(totalTax / 2),
+                balance_due: Math.max(0, round2(netAmount - paid)),
             },
         });
 

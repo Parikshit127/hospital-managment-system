@@ -756,16 +756,16 @@ async function recalculateInvoiceWithGstTx(db: any, invoiceId: number) {
         where: { invoice_id: invoiceId },
     });
 
-    const total_amount = items.reduce((sum: number, item: any) => sum + Number(item.total_price), 0);
-    const total_discount = items.reduce((sum: number, item: any) => sum + Number(item.discount), 0);
-    const net_items = items.reduce((sum: number, item: any) => sum + Number(item.net_price), 0);
-    const total_tax = items.reduce((sum: number, item: any) => sum + Number(item.tax_amount || 0), 0);
+    const total_amount = roundMoney(items.reduce((sum: number, item: any) => sum + Number(item.total_price), 0));
+    const total_discount = roundMoney(items.reduce((sum: number, item: any) => sum + Number(item.discount), 0));
+    const net_items = roundMoney(items.reduce((sum: number, item: any) => sum + Number(item.net_price), 0));
+    const total_tax = roundMoney(items.reduce((sum: number, item: any) => sum + Number(item.tax_amount || 0), 0));
 
     const invoice = await db.invoices.findUnique({ where: { id: invoiceId } });
     const isInterState = invoice?.is_inter_state || false;
-    const paid_amount = Number(invoice?.paid_amount || 0);
-    const net_amount = net_items + total_tax;
-    const balance_due = net_amount - paid_amount;
+    const paid_amount = roundMoney(Number(invoice?.paid_amount || 0));
+    const net_amount = roundMoney(net_items + total_tax);
+    const balance_due = roundMoney(net_amount - paid_amount);
 
     await db.invoices.update({
         where: { id: invoiceId },
@@ -774,8 +774,8 @@ async function recalculateInvoiceWithGstTx(db: any, invoiceId: number) {
             total_discount,
             net_amount,
             total_tax,
-            cgst_amount: isInterState ? 0 : total_tax / 2,
-            sgst_amount: isInterState ? 0 : total_tax / 2,
+            cgst_amount: isInterState ? 0 : roundMoney(total_tax / 2),
+            sgst_amount: isInterState ? 0 : roundMoney(total_tax / 2),
             igst_amount: isInterState ? total_tax : 0,
             balance_due: balance_due > 0 ? balance_due : 0,
         },
@@ -798,13 +798,14 @@ async function resolvePackagePrice(
     patientId: string,
     packageId: number,
     fallbackAmount: number,
-): Promise<{ amount: number; providerId: number | null; isTpaRate: boolean }> {
+    fallbackName: string,
+): Promise<{ amount: number; name: string; providerId: number | null; isTpaRate: boolean }> {
     const policy = await db.insurance_policies.findFirst({
         where: { patient_id: patientId, status: 'Active' },
         orderBy: { created_at: 'desc' },
         select: { provider_id: true },
     });
-    if (!policy) return { amount: fallbackAmount, providerId: null, isTpaRate: false };
+    if (!policy) return { amount: fallbackAmount, name: fallbackName, providerId: null, isTpaRate: false };
 
     const rate = await db.ipdPackageTpaRate.findUnique({
         where: {
@@ -816,8 +817,13 @@ async function resolvePackagePrice(
         },
     });
     return rate
-        ? { amount: Number(rate.tpa_amount), providerId: policy.provider_id, isTpaRate: true }
-        : { amount: fallbackAmount, providerId: policy.provider_id, isTpaRate: false };
+        ? {
+            amount: Number(rate.tpa_amount),
+            name: rate.tpa_package_name?.trim() || fallbackName,
+            providerId: policy.provider_id,
+            isTpaRate: true,
+        }
+        : { amount: fallbackAmount, name: fallbackName, providerId: policy.provider_id, isTpaRate: false };
 }
 
 export async function applyPackageToAdmission(admissionId: string, packageId: number) {
@@ -826,6 +832,30 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
 
         const pkg = await db.ipdPackage.findUnique({ where: { id: packageId } });
         if (!pkg) return { success: false, error: 'Package not found' };
+
+        const admissionForPricing = await db.admissions.findUnique({
+            where: { admission_id: admissionId },
+            select: { patient_id: true },
+        });
+
+        // Exclusive packages only belong to the one TPA they were created for —
+        // reject if this patient's active policy isn't with that provider (also
+        // covers cash/no-policy patients), even though the picker already filters
+        // these out, so a stale client can't post a cross-TPA package.
+        if (pkg.exclusive_provider_id) {
+            const exclusivityPolicy = await db.insurance_policies.findFirst({
+                where: { patient_id: admissionForPricing?.patient_id ?? '', status: 'Active' },
+                orderBy: { created_at: 'desc' },
+                select: { provider_id: true },
+            });
+            if (exclusivityPolicy?.provider_id !== pkg.exclusive_provider_id) {
+                const provider = await db.insurance_providers.findUnique({
+                    where: { id: pkg.exclusive_provider_id },
+                    select: { provider_name: true },
+                });
+                return { success: false, error: `This package is exclusive to ${provider?.provider_name ?? 'a specific TPA'} patients` };
+            }
+        }
 
         // Only one active package per admission (multi-package is a V2 concern).
         const existing = await db.ipdAdmissionPackage.findFirst({
@@ -841,14 +871,11 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
             return { success: false, error: BILL_FINALIZED_INTENT_MSG };
         }
 
-        const admissionForPricing = await db.admissions.findUnique({
-            where: { admission_id: admissionId },
-            select: { patient_id: true },
-        });
         const priceResolution = await resolvePackagePrice(
-            db, organizationId, admissionForPricing?.patient_id ?? '', packageId, Number(pkg.total_amount),
+            db, organizationId, admissionForPricing?.patient_id ?? '', packageId, Number(pkg.total_amount), pkg.package_name,
         );
         const resolvedAmount = priceResolution.amount;
+        const resolvedName = priceResolution.name;
 
         // Create admission package record
         const admPkg = await db.ipdAdmissionPackage.create({
@@ -856,6 +883,7 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
                 admission_id: admissionId,
                 package_id: packageId,
                 applied_amount: resolvedAmount,
+                applied_package_name: resolvedName,
                 applied_by: session.id,
                 status: ADMISSION_PACKAGE_STATUS.ACTIVE,
                 organizationId,
@@ -871,7 +899,7 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
             admission_id: admissionId,
             source_module: 'package',
             source_ref_id: String(admPkg.id),
-            description: `Package: ${pkg.package_name}`,
+            description: `Package: ${resolvedName}`,
             quantity: 1,
             unit_price: resolvedAmount,
             tax_rate: packageTaxRate,
@@ -898,7 +926,7 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
             migration = await db.$transaction(async (tx: any) => {
                 await createInvoiceSnapshotTx(
                     tx, organizationId, session, invoice, invoice.items,
-                    `Package "${pkg.package_name}" applied — billed services moved to package consumption`,
+                    `Package "${resolvedName}" applied — billed services moved to package consumption`,
                 );
                 const result = await absorbBilledItemsIntoPackageTx(
                     tx, organizationId, session, invoice, admissionId, admPkgFull,
@@ -915,6 +943,7 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
             entity_id: String(admPkg.id),
             details: JSON.stringify({
                 package_name: pkg.package_name,
+                resolved_package_name: resolvedName,
                 amount: resolvedAmount,
                 cash_amount: Number(pkg.total_amount),
                 tpa_provider_id: priceResolution.providerId,
@@ -954,33 +983,49 @@ export async function getPackagesForAdmission(admissionId: string) {
             },
         });
 
+        // Shared packages (everyone) plus, if the patient has an active TPA
+        // policy, that TPA's exclusive packages. Packages exclusive to a
+        // *different* provider are never fetched, so they can't leak into the
+        // "standard rate" fallback bucket below.
         const packages = await db.ipdPackage.findMany({
-            where: { organizationId, is_active: true },
+            where: {
+                organizationId, is_active: true,
+                OR: [
+                    { exclusive_provider_id: null },
+                    ...(policy ? [{ exclusive_provider_id: policy.provider_id }] : []),
+                ],
+            },
             orderBy: { package_name: 'asc' },
         });
 
-        let ratesByPackageId = new Map<number, number>();
+        let ratesByPackageId = new Map<number, { amount: number; name: string | null }>();
         if (policy) {
             const rates = await db.ipdPackageTpaRate.findMany({
                 where: { organizationId, provider_id: policy.provider_id },
-                select: { package_id: true, tpa_amount: true },
+                select: { package_id: true, tpa_amount: true, tpa_package_name: true },
             });
-            ratesByPackageId = new Map(rates.map((r: any) => [r.package_id, Number(r.tpa_amount)]));
+            ratesByPackageId = new Map(
+                rates.map((r: any) => [r.package_id, { amount: Number(r.tpa_amount), name: r.tpa_package_name }]),
+            );
         }
 
         const data = packages.map((pkg: any) => {
             const cashAmount = Number(pkg.total_amount);
-            const tpaRate = policy ? ratesByPackageId.get(pkg.id) : undefined;
-            const isTpaRate = tpaRate !== undefined;
+            const rate = policy ? ratesByPackageId.get(pkg.id) : undefined;
+            const isTpaRate = rate !== undefined;
             return {
                 id: pkg.id,
                 package_code: pkg.package_code,
-                package_name: pkg.package_name,
+                package_name: (isTpaRate && rate!.name?.trim()) || pkg.package_name,
                 validity_days: pkg.validity_days,
                 total_amount: cashAmount,
-                resolved_amount: isTpaRate ? tpaRate : cashAmount,
+                resolved_amount: isTpaRate ? rate!.amount : cashAmount,
                 is_tpa_rate: isTpaRate,
+                is_exclusive: pkg.exclusive_provider_id != null,
                 tpa_provider_name: policy?.provider?.provider_name ?? null,
+                // 'tpa' = this patient's TPA bucket (exclusive or rated shared
+                // package); 'standard' = shared package with no rate for them.
+                bucket: isTpaRate ? 'tpa' : 'standard',
             };
         });
 
@@ -1175,7 +1220,7 @@ export async function getPackageUtilization(admissionId: string) {
             success: true,
             data: serialize({
                 admission_package_id: admPkg.id,
-                package_name: admPkg.package?.package_name,
+                package_name: admPkg.applied_package_name || admPkg.package?.package_name,
                 package_amount: packageAmount,
                 status: admPkg.status,
                 is_broken_open: admPkg.is_broken_open,
@@ -1888,7 +1933,10 @@ export async function getIpdOutstanding() {
             where: {
                 invoice_type: 'IPD',
                 status: { in: ['Draft', 'Final'] },
-                balance_due: { gt: 0 },
+                // Coarse pre-filter only — balance_due can carry sub-paisa float
+                // residue (e.g. 9e-13) on otherwise fully-paid bills. The
+                // authoritative check is the rounded `> 0` filter applied below.
+                balance_due: { gt: 0.001 },
             },
             include: {
                 patient: { select: { full_name: true, phone: true } },
@@ -1898,24 +1946,27 @@ export async function getIpdOutstanding() {
         });
 
         const now = new Date();
-        const enriched = invoices.map((inv: any) => {
-            const ageDays = Math.floor((now.getTime() - new Date(inv.created_at).getTime()) / (1000 * 60 * 60 * 24));
-            return {
-                invoice_id: inv.id,
-                invoice_number: inv.invoice_number,
-                patient_name: inv.patient?.full_name || 'Unknown',
-                patient_phone: inv.patient?.phone || '-',
-                admission_id: inv.admission?.admission_id,
-                doctor_name: inv.admission?.doctor_name || '-',
-                admission_status: inv.admission?.status || '-',
-                net_amount: Number(inv.net_amount),
-                paid_amount: Number(inv.paid_amount),
-                balance_due: Number(inv.balance_due),
-                age_days: ageDays,
-                aging_bucket: ageDays <= 30 ? '0-30' : ageDays <= 60 ? '31-60' : '60+',
-                status: inv.status,
-            };
-        });
+        const enriched = invoices
+            .map((inv: any) => ({ ...inv, balance_due: roundMoney(Number(inv.balance_due)) }))
+            .filter((inv: any) => inv.balance_due > 0)
+            .map((inv: any) => {
+                const ageDays = Math.floor((now.getTime() - new Date(inv.created_at).getTime()) / (1000 * 60 * 60 * 24));
+                return {
+                    invoice_id: inv.id,
+                    invoice_number: inv.invoice_number,
+                    patient_name: inv.patient?.full_name || 'Unknown',
+                    patient_phone: inv.patient?.phone || '-',
+                    admission_id: inv.admission?.admission_id,
+                    doctor_name: inv.admission?.doctor_name || '-',
+                    admission_status: inv.admission?.status || '-',
+                    net_amount: Number(inv.net_amount),
+                    paid_amount: Number(inv.paid_amount),
+                    balance_due: inv.balance_due,
+                    age_days: ageDays,
+                    aging_bucket: ageDays <= 30 ? '0-30' : ageDays <= 60 ? '31-60' : '60+',
+                    status: inv.status,
+                };
+            });
 
         return { success: true, data: serialize(enriched) };
     } catch (error: any) {
@@ -2119,9 +2170,9 @@ export async function settleAndDischarge(data: {
             const allPayments = await db.payments.findMany({
                 where: { invoice_id: invoice.id, status: 'Completed' },
             });
-            const totalPaid = allPayments.reduce((s: number, p: any) => s + Number(p.amount), 0);
-            const netAmount = Number(invoice.net_amount || 0);
-            const balance = netAmount - totalPaid;
+            const totalPaid = roundMoney(allPayments.reduce((s: number, p: any) => s + Number(p.amount), 0));
+            const netAmount = roundMoney(Number(invoice.net_amount || 0));
+            const balance = roundMoney(netAmount - totalPaid);
 
             await db.invoices.update({
                 where: { id: invoice.id },
@@ -2224,9 +2275,9 @@ export async function settleAndDischarge(data: {
             const allPayments = await db.payments.findMany({
                 where: { invoice_id: invoice.id, status: 'Completed' },
             });
-            const totalPaid = allPayments.reduce((s: number, p: any) => s + Number(p.amount), 0);
-            const netAmount = Number(invoice.net_amount || 0);
-            const balance = netAmount - totalPaid;
+            const totalPaid = roundMoney(allPayments.reduce((s: number, p: any) => s + Number(p.amount), 0));
+            const netAmount = roundMoney(Number(invoice.net_amount || 0));
+            const balance = roundMoney(netAmount - totalPaid);
 
             await db.invoices.update({
                 where: { id: invoice.id },

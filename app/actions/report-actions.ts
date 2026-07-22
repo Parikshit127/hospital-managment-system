@@ -24,6 +24,15 @@ function emptyMISPaymentBreakup(): MISPaymentBreakup {
     return { cash_amount: 0, upi_amount: 0, card_amount: 0, bank_transfer_amount: 0 };
 }
 
+// Rounds to 2 decimals (paise) and snaps floating-point residue near zero down to
+// exactly 0. Stored balance_due values can drift to values like 9e-13 from repeated
+// float arithmetic upstream (net_amount - paid_amount across many write paths), which
+// a naive `> 0` DB filter treats as truthy even though the bill is fully paid.
+function round2(n: number): number {
+    const r = Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+    return Object.is(r, -0) ? 0 : r;
+}
+
 function misPaymentBreakupKey(method: string | null | undefined): keyof MISPaymentBreakup | null {
     const tender = canonicalTender(method);
     if (tender === 'Cash') return 'cash_amount';
@@ -230,13 +239,13 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
                 created_at: { gte: fromDate, lte: toDate },
                 status: { in: ['Approved', 'Processed'] }
             },
-            select: { id: true, invoice_id: true, payment_id: true, amount: true, processed_by: true, created_at: true },
+            select: { id: true, invoice_id: true, payment_id: true, amount: true, processed_by: true, created_at: true, payment_method: true },
             orderBy: { created_at: 'asc' }
         });
 
-        // Resolve each refund's original tender + patient. A refund is paid back
-        // through the same channel it was received, so its mode follows the linked
-        // payment's payment_method, and the patient comes from the linked invoice.
+        // Resolve each refund's patient. Prefer the tender staff actually recorded
+        // when processing the refund; for legacy refunds (recorded before that
+        // field existed) fall back to the linked payment's original tender, then Cash.
         const refundPaymentIds = [...new Set(
             refundRows.map((r: any) => Number(r.payment_id)).filter((n: number) => Number.isFinite(n))
         )];
@@ -284,9 +293,7 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
                 ...r,
                 cashier_username: username,
                 cashier_name: fullName,
-                // The hospital pays every refund out as a bank transfer, so refunds
-                // are always reported under NEFT/RTGS regardless of the original tender.
-                payment_method: 'NEFT/RTGS',
+                payment_method: r.payment_method || linkedPayment?.payment_method || 'Cash',
                 invoice_type: linkedInvoice?.invoice_type || null,
                 patient_name: linkedInvoice?.patient?.full_name || null,
                 patient_id: linkedInvoice?.patient?.patient_id || null
@@ -316,7 +323,14 @@ export async function getARAgingReport(filters?: { invoiceType?: string; admissi
         const { db } = await requireTenantContext();
         const where: any = {
             status: 'Final',
-            balance_due: { gt: 0 },
+            // DB-level filter is a coarse pre-filter only — balance_due can carry
+            // floating-point residue (e.g. 9e-13) from upstream arithmetic on
+            // otherwise fully-paid bills, so a raw `gt: 0` lets those through. Use a
+            // sub-paisa threshold here (permissive, excludes only float dust) and let
+            // the rounded-to-paise check in JS below be the authoritative filter —
+            // that way a genuinely small real balance (e.g. 0.01) is never dropped
+            // at this stage.
+            balance_due: { gt: 0.001 },
             invoice_type: filters?.invoiceType
                 ? filters.invoiceType
                 : { notIn: ['Pharmacy', 'PHARMACY'] },
@@ -329,13 +343,19 @@ export async function getARAgingReport(filters?: { invoiceType?: string; admissi
         });
 
         const now = new Date();
-        const aged = invoices.map((inv: any) => {
-            const days = Math.floor((now.getTime() - new Date(inv.created_at).getTime()) / (1000 * 60 * 60 * 24));
-            let bucket = '0-30';
-            if (days > 60) bucket = '60+';
-            else if (days > 30) bucket = '30-60';
-            return { ...inv, days_overdue: days, aging_bucket: bucket };
-        });
+        const aged = invoices
+            .map((inv: any) => ({ ...inv, balance_due: round2(Number(inv.balance_due)) }))
+            // Belt-and-braces: re-check balance > 0 after rounding to paise so any
+            // remaining float dust that slipped past the DB threshold (or a bill
+            // sitting just under it, e.g. 0.005) never renders as a ₹0 row.
+            .filter((inv: any) => inv.balance_due > 0)
+            .map((inv: any) => {
+                const days = Math.floor((now.getTime() - new Date(inv.created_at).getTime()) / (1000 * 60 * 60 * 24));
+                let bucket = '0-30';
+                if (days > 60) bucket = '60+';
+                else if (days > 30) bucket = '30-60';
+                return { ...inv, days_overdue: days, aging_bucket: bucket };
+            });
 
         const summary = {
             '0-30': aged.filter((i: any) => i.aging_bucket === '0-30').reduce((s: number, i: any) => s + Number(i.balance_due), 0),

@@ -2335,9 +2335,11 @@ export default function AdmissionDetailPage() {
                                                     />
                                                     {showPkgDropdown && (
                                                         <div className="absolute top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-40">
-                                                            {packages
-                                                                .filter(p => !pkgSearch || p.package_name?.toLowerCase().includes(pkgSearch.toLowerCase()) || p.package_code?.toLowerCase().includes(pkgSearch.toLowerCase()))
-                                                                .map((pkg: any) => (
+                                                            {(() => {
+                                                                const matches = packages.filter(p => !pkgSearch || p.package_name?.toLowerCase().includes(pkgSearch.toLowerCase()) || p.package_code?.toLowerCase().includes(pkgSearch.toLowerCase()));
+                                                                const tpaGroup = matches.filter(p => p.is_tpa_rate);
+                                                                const standardGroup = matches.filter(p => !p.is_tpa_rate);
+                                                                const renderPkgOption = (pkg: any) => (
                                                                     <button
                                                                         key={pkg.id}
                                                                         type="button"
@@ -2381,10 +2383,33 @@ export default function AdmissionDetailPage() {
                                                                             </div>
                                                                         </div>
                                                                     </button>
-                                                                ))}
-                                                            {packages.filter(p => !pkgSearch || p.package_name?.toLowerCase().includes(pkgSearch.toLowerCase())).length === 0 && (
-                                                                <div className="px-3 py-2 text-xs text-gray-400">No packages found</div>
-                                                            )}
+                                                                );
+                                                                if (matches.length === 0) {
+                                                                    return <div className="px-3 py-2 text-xs text-gray-400">No packages found</div>;
+                                                                }
+                                                                return (
+                                                                    <>
+                                                                        {tpaGroup.length > 0 && (
+                                                                            <>
+                                                                                <div className="px-3 py-1.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 uppercase tracking-wide">
+                                                                                    {tpaGroup[0].tpa_provider_name} packages
+                                                                                </div>
+                                                                                {tpaGroup.map(renderPkgOption)}
+                                                                            </>
+                                                                        )}
+                                                                        {standardGroup.length > 0 && (
+                                                                            <>
+                                                                                {tpaGroup.length > 0 && (
+                                                                                    <div className="px-3 py-1.5 text-[10px] font-bold text-gray-500 bg-gray-50 uppercase tracking-wide">
+                                                                                        Other packages (standard rate)
+                                                                                    </div>
+                                                                                )}
+                                                                                {standardGroup.map(renderPkgOption)}
+                                                                            </>
+                                                                        )}
+                                                                    </>
+                                                                );
+                                                            })()}
                                                         </div>
                                                     )}
                                                 </div>

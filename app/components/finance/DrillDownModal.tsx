@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { X, Loader2, ExternalLink } from 'lucide-react';
+import { X, Loader2, ExternalLink, Download } from 'lucide-react';
 import { getDrillDownData, DrillDownType } from '@/app/actions/finance-actions';
 import Link from 'next/link';
 
@@ -55,14 +55,39 @@ export function DrillDownModal({ type, filters, onClose }: DrillDownModalProps) 
 
     const exportCsv = () => {
         if (!data) return;
-        const rowKeys = data.rows[0] ? Object.keys(data.rows[0]).filter(k => k !== 'invoiceId') : [];
+        const rowKeys = filteredRows[0] ? Object.keys(filteredRows[0]).filter(k => !HIDDEN_KEYS.has(k)) : [];
         const headers = data.columns.join(',');
-        const rows = data.rows.map(r => rowKeys.map(k => `"${String(r[k] ?? '').replace(/"/g, '""')}"`).join(','));
+        const rows = filteredRows.map(r => rowKeys.map(k => `"${String(r[k] ?? '').replace(/"/g, '""')}"`).join(','));
         const csv = [headers, ...rows].join('\n');
         const blob = new Blob([csv], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href = url; a.download = `${type}-drilldown.csv`; a.click();
         URL.revokeObjectURL(url);
+    };
+
+    const [exportingExcel, setExportingExcel] = useState(false);
+    const exportExcel = async () => {
+        if (!data || filteredRows.length === 0) return;
+        setExportingExcel(true);
+        try {
+            const rowKeys = Object.keys(filteredRows[0]).filter(k => !HIDDEN_KEYS.has(k));
+            const sheetRows = filteredRows.map(r => {
+                const obj: Record<string, any> = {};
+                rowKeys.forEach((k, i) => { obj[data.columns[i]] = r[k] ?? ''; });
+                return obj;
+            });
+            const xlsxModule = await import('xlsx');
+            const XLSX = (xlsxModule as any).default ?? xlsxModule;
+            const ws = XLSX.utils.json_to_sheet(sheetRows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Report');
+            XLSX.writeFile(wb, `${type}-drilldown.xlsx`);
+        } catch (err) {
+            console.error('Excel export failed:', err);
+            alert('Export failed. Please try again.');
+        } finally {
+            setExportingExcel(false);
+        }
     };
 
     return (
@@ -74,10 +99,17 @@ export function DrillDownModal({ type, filters, onClose }: DrillDownModalProps) 
                     <h2 className="text-base font-black text-gray-900">{data?.title || 'Loading...'}</h2>
                     <div className="flex items-center gap-2">
                         {data && data.rows.length > 0 && (
-                            <button onClick={exportCsv}
-                                className="px-3 py-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition">
-                                Export CSV
-                            </button>
+                            <>
+                                <button onClick={exportExcel} disabled={exportingExcel}
+                                    className="px-3 py-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition disabled:opacity-50 flex items-center gap-1.5">
+                                    {exportingExcel ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                                    Export Excel
+                                </button>
+                                <button onClick={exportCsv}
+                                    className="px-3 py-1.5 text-xs font-bold text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition">
+                                    Export CSV
+                                </button>
+                            </>
                         )}
                         <button onClick={onClose}
                             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">

@@ -1405,6 +1405,7 @@ model insurance_providers {
   sla_configs        PayerSlaConfig[]
   preauths           InsurancePreAuth[]
   package_rates      IpdPackageTpaRate[]
+  exclusive_packages IpdPackage[]         @relation("PackageExclusiveProvider")
 
   @@index([organizationId])
 }
@@ -2114,6 +2115,7 @@ model Refund {
   amount         Float
   reason         String
   status         String       @default("Pending")
+  payment_method String?
   processed_by   String?
   organizationId String
   created_at     DateTime     @default(now())
@@ -2915,15 +2917,21 @@ model IpdPackage {
   inclusions         Json                  @default("[]")
   exclusions         Json                  @default("[]")
   is_active          Boolean               @default(true)
+  // When set, this package belongs exclusively to one TPA — hidden from other
+  // providers' rate views, the cash/standard package list, and cash patients'
+  // picker. Null = shared package (today's default behavior).
+  exclusive_provider_id Int?
   organizationId     String
   created_at         DateTime              @default(now())
   updated_at         DateTime              @updatedAt
   admission_packages IpdAdmissionPackage[]
   tpa_rates          IpdPackageTpaRate[]
   organization       Organization          @relation(fields: [organizationId], references: [id])
+  exclusive_provider  insurance_providers?  @relation("PackageExclusiveProvider", fields: [exclusive_provider_id], references: [id])
 
   @@unique([package_code, organizationId])
   @@index([organizationId])
+  @@index([exclusive_provider_id])
   @@map("ipd_packages")
 }
 
@@ -2932,6 +2940,10 @@ model IpdAdmissionPackage {
   admission_id   String
   package_id     Int
   applied_amount Decimal
+  // Snapshot of the resolved display name (TPA override or master name) at the
+  // moment this package was applied — so later name edits don't retroactively
+  // change already-billed paperwork. Null on rows applied before this field existed.
+  applied_package_name String?
   is_broken_open Boolean      @default(false)
   broken_at      DateTime?
   applied_by     String?
@@ -2963,6 +2975,9 @@ model IpdPackageTpaRate {
   package_id     Int
   provider_id    Int
   tpa_amount     Decimal
+  // This TPA's own name for the package. Null/blank falls back to
+  // IpdPackage.package_name when displaying/printing for this provider.
+  tpa_package_name String?
   organizationId String
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt

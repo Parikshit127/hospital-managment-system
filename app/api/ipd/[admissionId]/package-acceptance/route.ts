@@ -74,6 +74,7 @@ function noPackageHTML(admission: any, org: any, branding: BillBranding): string
 function packageAcceptanceHTML(admission: any, admPkg: any, org: any, branding: BillBranding): string {
     const patient = admission.patient || {};
     const pkg = admPkg.package;
+    const displayName = admPkg.applied_package_name || pkg.package_name;
     const rawInclusions: any[] = Array.isArray(pkg.inclusions) ? pkg.inclusions : [];
     const inclusions = rawInclusions.map((x: any) => {
         if (typeof x === 'string') return { name: x, amount: 0 };
@@ -161,7 +162,7 @@ function packageAcceptanceHTML(admission: any, admPkg: any, org: any, branding: 
                 </div>
                 <span style="font-size:18px;font-weight:900;color:#065f46;">₹${amount.toLocaleString('en-IN')}</span>
             </div>
-            <p style="font-size:13px;font-weight:600;color:#065f46;">${pkg.package_name}</p>
+            <p style="font-size:13px;font-weight:600;color:#065f46;">${displayName}</p>
             <p style="font-size:10px;color:#047857;margin-top:4px;">Package validity: ${pkg.validity_days || 7} day(s) from date of surgery</p>
         </div>
 
@@ -181,7 +182,7 @@ function packageAcceptanceHTML(admission: any, admPkg: any, org: any, branding: 
         <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;margin-bottom:18px;background:#fffbeb;">
             <h3 style="font-size:13px;font-weight:800;color:#92400e;margin-bottom:8px;">Declaration by Patient / Relative</h3>
             <p style="font-size:11px;line-height:1.7;color:#374151;">
-                I confirm that I have read and understood the package <strong>${pkg.package_code} — ${pkg.package_name}</strong>
+                I confirm that I have read and understood the package <strong>${pkg.package_code} — ${displayName}</strong>
                 priced at <strong>₹${amount.toLocaleString('en-IN')}</strong>, including the inclusions and exclusions listed above.
                 I understand that any services, tests, medicines, or consumables outside the listed inclusions will be charged separately.
                 I accept the terms and authorize ${hospitalName} to proceed with treatment under this package.

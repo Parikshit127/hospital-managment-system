@@ -276,13 +276,13 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
     const admissionPackages = admissionIds.length
       ? await db.ipdAdmissionPackage.findMany({
           where: { admission_id: { in: admissionIds }, status: 'active', organizationId },
-          select: { admission_id: true, applied_amount: true, package: { select: { package_name: true } } },
+          select: { admission_id: true, applied_amount: true, applied_package_name: true, package: { select: { package_name: true } } },
         })
       : [];
     const packageMap = new Map<string, { package_name: string; applied_amount: number }>();
     for (const ap of admissionPackages) {
       packageMap.set(ap.admission_id, {
-        package_name: ap.package?.package_name ?? '',
+        package_name: ap.applied_package_name || ap.package?.package_name || '',
         applied_amount: decToNum(ap.applied_amount),
       });
     }

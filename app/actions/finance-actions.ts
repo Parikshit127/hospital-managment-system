@@ -1787,6 +1787,7 @@ async function getHospitalOutstandingSnapshot(db: any, options?: { takeRows?: nu
             total_amount: true,
             total_discount: true,
             total_tax: true,
+            doctor_name: true,
             patient: { select: { full_name: true } },
             payments: {
                 where: { status: 'Completed' },
@@ -2247,7 +2248,7 @@ export async function getCashClosures() {
     }
 }
 
-export async function requestRefund(data: { invoice_id: string; payment_id?: string; amount: number; reason: string; }) {
+export async function requestRefund(data: { invoice_id: string; payment_id?: string; amount: number; reason: string; payment_method?: string; }) {
     try {
         const { db, organizationId, session } = await requireTenantContext();
         const refund = await db.refund.create({
@@ -2256,6 +2257,7 @@ export async function requestRefund(data: { invoice_id: string; payment_id?: str
                 payment_id: data.payment_id,
                 amount: data.amount,
                 reason: data.reason,
+                payment_method: data.payment_method,
                 processed_by: session.username,
                 organizationId
             }
@@ -2451,12 +2453,14 @@ export async function processRefund(input: {
     payment_id: number;
     amount: number;
     reason: string;
+    payment_method: string;
 }) {
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
         if (!input.payment_id) return { success: false, error: 'Payment is required.' };
         if (!input.reason?.trim()) return { success: false, error: 'Reason is required.' };
+        if (!input.payment_method?.trim()) return { success: false, error: 'Refund payout method is required.' };
         const amount = Number(input.amount);
         if (!Number.isFinite(amount) || amount <= 0) {
             return { success: false, error: 'Refund amount must be greater than zero.' };
@@ -2494,6 +2498,7 @@ export async function processRefund(input: {
                     amount,
                     reason: input.reason.trim(),
                     status: 'Processed',
+                    payment_method: input.payment_method.trim(),
                     processed_by: session.username,
                     organizationId,
                 },
@@ -3690,10 +3695,11 @@ export async function getDrillDownData(type: DrillDownType, filters: Record<stri
             return {
                 success: true, data: {
                     title: titleByType[type],
-                    columns: ['Invoice #', 'Patient', 'Type', 'Net Amount', 'Received', 'Outstanding', 'Age (days)'],
+                    columns: ['Invoice #', 'Patient', 'Doctor', 'Type', 'Net Amount', 'Received', 'Outstanding', 'Age (days)'],
                     rows: serialize(filtered).map((inv: any) => ({
                         invoice: inv.invoice_number,
                         patient: inv.patient?.full_name || inv.patient_id,
+                        doctor: inv.doctor_name || '-',
                         type: inv.invoice_type,
                         amount: fmt(Number(inv.netAmount)),
                         received: fmt(Number(inv.receivedAmount)),
